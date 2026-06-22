@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: hris-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: hris_enterprise
+      MYSQL_USER: hris_user
+      MYSQL_PASSWORD: hris_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=200
+      - --innodb_buffer_pool_size=1G
+      - --innodb_log_file_size=256M
+      - --innodb_flush_log_at_trx_commit=2
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: hris-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hris-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=mysql://hris_user:hris_password@mysql:3306/hris_enterprise
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - upload_data:/app/uploads
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hris-worker
+    restart: unless-stopped
+    command: npx tsx src/worker.ts
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=mysql://hris_user:hris_password@mysql:3306/hris_enterprise
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  nginx:
+    image: nginx:alpine
+    container_name: hris-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/sites:/etc/nginx/sites-enabled
+      - ./frontend/dist:/var/www/html
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:
+  redis_data:
+  upload_data:
