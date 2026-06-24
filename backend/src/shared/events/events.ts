@@ -47,6 +47,34 @@ export const DomainEvents = {
   PERMISSION_ASSIGNED: 'rbac.permission.assigned',
   ROLE_ASSIGNED: 'rbac.role.assigned',
 
+  // Payroll events
+  PAYROLL_RUN_CREATED: 'payroll.run.created',
+  PAYROLL_RUN_APPROVED: 'payroll.run.approved',
+  PAYROLL_RUN_DISBURSED: 'payroll.run.disbursed',
+
+  // Benefit events
+  BENEFIT_PLAN_CREATED: 'benefit.plan.created',
+  BENEFIT_ENROLLMENT_CREATED: 'benefit.enrollment.created',
+
+  // Performance events
+  REVIEW_CREATED: 'performance.review.created',
+  REVIEW_SUBMITTED: 'performance.review.submitted',
+  REVIEW_APPROVED: 'performance.review.approved',
+  GOAL_CREATED: 'performance.goal.created',
+  FEEDBACK_SUBMITTED: 'performance.feedback.submitted',
+
+  // Training events
+  COURSE_CREATED: 'training.course.created',
+  ENROLLMENT_CREATED: 'training.enrollment.created',
+  ENROLLMENT_COMPLETED: 'training.enrollment.completed',
+
+  // Recruitment events
+  JOB_POSTING_CREATED: 'recruitment.job-posting.created',
+  JOB_POSTING_PUBLISHED: 'recruitment.job-posting.published',
+  APPLICATION_SUBMITTED: 'recruitment.application.submitted',
+  APPLICATION_STATUS_CHANGED: 'recruitment.application.status-changed',
+  INTERVIEW_SCHEDULED: 'recruitment.interview.scheduled',
+
   // Audit events
   SENSITIVE_DATA_ACCESSED: 'audit.sensitive_data_accessed',
   DATA_EXPORTED: 'audit.data_exported',

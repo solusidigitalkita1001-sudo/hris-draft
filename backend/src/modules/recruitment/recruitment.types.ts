@@ -1,0 +1,26 @@
+export enum PostingStatus {
+  DRAFT = 'DRAFT',
+  PUBLISHED = 'PUBLISHED',
+  ON_HOLD = 'ON_HOLD',
+  CLOSED = 'CLOSED',
+  FILLED = 'FILLED',
+}
+
+export enum ApplicationStatus {
+  NEW = 'NEW',
+  SCREENING = 'SCREENING',
+  INTERVIEW = 'INTERVIEW',
+  OFFER = 'OFFER',
+  HIRED = 'HIRED',
+  REJECTED = 'REJECTED',
+  WITHDRAWN = 'WITHDRAWN',
+}
+
+export enum InterviewStatus {
+  SCHEDULED = 'SCHEDULED',
+  CONFIRMED = 'CONFIRMED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  NO_SHOW = 'NO_SHOW',
+}

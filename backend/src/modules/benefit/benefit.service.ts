@@ -1,0 +1,119 @@
+import { benefitRepository } from './benefit.repository';
+import {
+  CreateBenefitPlanDTO,
+  UpdateBenefitPlanDTO,
+  CreateBenefitEnrollmentDTO,
+  UpdateBenefitEnrollmentDTO,
+} from './benefit.dto';
+import { eventBus } from '@/shared/events/EventBus';
+import { DomainEvents } from '@/shared/events/events';
+import { logger } from '@/shared/logger/WinstonLogger';
+import { NotFoundError, ConflictError } from '@/shared/exceptions/AppError';
+import { v4 as uuidv4 } from 'uuid';
+
+export class BenefitService {
+  // ==================== Benefit Plans ====================
+
+  async findAllPlans(companyId: string) {
+    return benefitRepository.findAllPlans(companyId);
+  }
+
+  async findPlanById(id: string) {
+    const plan = await benefitRepository.findPlanById(id);
+    if (!plan) throw new NotFoundError('Benefit plan not found');
+    return plan;
+  }
+
+  async createPlan(data: CreateBenefitPlanDTO) {
+    // Check for duplicate code
+    const existing = await benefitRepository.findPlanByCode(data.companyId, data.code);
+    if (existing) throw new ConflictError('Benefit plan code already exists');
+
+    const plan = await benefitRepository.createPlan(data);
+
+    await eventBus.publish({
+      name: DomainEvents.BENEFIT_PLAN_CREATED,
+      aggregateId: plan.id,
+      aggregateType: 'BenefitPlan',
+      data: { code: plan.code, type: plan.type },
+      metadata: {
+        eventId: uuidv4(),
+        occurredAt: new Date(),
+      },
+    });
+
+    logger.info('Benefit plan created', { planId: plan.id, code: plan.code });
+    return plan;
+  }
+
+  async updatePlan(id: string, data: UpdateBenefitPlanDTO) {
+    await this.findPlanById(id);
+    const plan = await benefitRepository.updatePlan(id, data);
+
+    logger.info('Benefit plan updated', { planId: id });
+    return plan;
+  }
+
+  async deletePlan(id: string) {
+    await this.findPlanById(id);
+    await benefitRepository.softDeletePlan(id);
+
+    logger.info('Benefit plan deleted', { planId: id });
+  }
+
+  // ==================== Benefit Enrollments ====================
+
+  async findAllEnrollments(companyId: string, employeeId?: string) {
+    return benefitRepository.findAllEnrollments(companyId, employeeId);
+  }
+
+  async findEnrollmentById(id: string) {
+    const enrollment = await benefitRepository.findEnrollmentById(id);
+    if (!enrollment) throw new NotFoundError('Enrollment not found');
+    return enrollment;
+  }
+
+  async createEnrollment(data: CreateBenefitEnrollmentDTO) {
+    // Check for duplicate active enrollment
+    const existing = await benefitRepository.findActiveEnrollment(data.employeeId, data.benefitPlanId);
+    if (existing) {
+      throw new ConflictError('Employee already has an active enrollment in this benefit plan');
+    }
+
+    const enrollment = await benefitRepository.createEnrollment(data);
+
+    await eventBus.publish({
+      name: DomainEvents.BENEFIT_ENROLLMENT_CREATED,
+      aggregateId: enrollment.id,
+      aggregateType: 'BenefitEnrollment',
+      data: {
+        employeeId: data.employeeId,
+        benefitPlanId: data.benefitPlanId,
+      },
+      metadata: {
+        eventId: uuidv4(),
+        occurredAt: new Date(),
+      },
+    });
+
+    logger.info('Benefit enrollment created', {
+      enrollmentId: enrollment.id,
+      employeeId: data.employeeId,
+      planId: data.benefitPlanId,
+    });
+
+    return enrollment;
+  }
+
+  async updateEnrollment(id: string, data: UpdateBenefitEnrollmentDTO) {
+    await this.findEnrollmentById(id);
+    return benefitRepository.updateEnrollment(id, data);
+  }
+
+  async cancelEnrollment(id: string) {
+    await this.findEnrollmentById(id);
+    return benefitRepository.updateEnrollment(id, { status: 'CANCELLED' as any });
+  }
+}
+
+export const benefitService = new BenefitService();

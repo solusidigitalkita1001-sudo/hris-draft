@@ -59,15 +59,33 @@ model Company {
   updatedAt      DateTime @updatedAt @map("updated_at")
   deletedAt      DateTime? @map("deleted_at")
 
-  group           CompanyGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  branches        Branch[]
-  divisions       Division[]
-  departments     Department[]
-  positions       Position[]
-  employees       Employee[]
-  roles           Role[]
-  companySettings CompanySetting[]
-  auditLogs       AuditLog[]
+  group             CompanyGroup        @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  branches          Branch[]
+  divisions         Division[]
+  departments       Department[]
+  positions         Position[]
+  employees         Employee[]
+  roles             Role[]
+  companySettings   CompanySetting[]
+  auditLogs         AuditLog[]
+  salaryComponents    SalaryComponent[]
+  employeeSalaries    EmployeeSalary[]
+  payrollPeriods      PayrollPeriod[]
+  payrollRuns         PayrollRun[]
+  payslips            Payslip[]
+  benefitPlans        BenefitPlan[]
+  benefitEnrollments  BenefitEnrollment[]
+  reviewCycles        ReviewCycle[]
+  performanceReviews  PerformanceReview[]
+  feedbackRequests    FeedbackRequest[]
+  goals               Goal[]
+  trainingCategories  TrainingCategory[]
+  trainingCourses     TrainingCourse[]
+  trainingEnrollments TrainingEnrollment[]
+  jobPostings         JobPosting[]
+  candidates          Candidate[]
+  jobApplications     JobApplication[]
+  interviews          Interview[]
 
   @@index([groupId])
   @@index([code])
@@ -146,6 +164,7 @@ model Department {
   subDepartments SubDepartment[]
   positions      Position[]
   employees      Employee[]
+  jobPostings    JobPosting[]
 
   @@index([divisionId])
   @@index([companyId])
@@ -199,11 +218,734 @@ model Position {
   reportsTo    Position?   @relation("PositionHierarchy", fields: [reportsToId], references: [id], onDelete: SetNull)
   subordinates Position[]  @relation("PositionHierarchy")
   employees    Employee[]
+  jobPostings  JobPosting[]
 
   @@index([departmentId])
   @@index([companyId])
   @@index([code])
   @@map("positions")
+}
+
+// ============================================================
+// COMPENSATION: SALARY COMPONENTS & PAYROLL
+// ============================================================
+
+/// Master data for salary components (Gaji Pokok, Tunjangan Makan, BPJS, etc)
+model SalaryComponent {
+  id          String     @id @default(uuid()) @db.VarChar(36)
+  companyId   String     @map("company_id") @db.VarChar(36)
+  name        String     @db.VarChar(255)
+  code        String     @unique @db.VarChar(50)
+  type        SalaryType @default(ALLOWANCE)
+  calculationMethod String @default("FIXED") @map("calculation_method") @db.VarChar(50)
+  amount      Decimal?   @db.Decimal(15, 2)
+  ratePercent Decimal?   @map("rate_percent") @db.Decimal(5, 2)
+  isTaxable   Boolean    @default(true) @map("is_taxable")
+  isProrated  Boolean    @default(false) @map("is_prorated")
+  isActive    Boolean    @default(true) @map("is_active")
+  description String?    @db.Text
+  sortOrder   Int        @default(0) @map("sort_order")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  deletedAt   DateTime?  @map("deleted_at")
+
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employeeSalaries   EmployeeSalaryComponent[]
+  payslipComponents  PayslipComponent[]
+
+  @@index([companyId])
+  @@index([code])
+  @@index([type])
+  @@map("salary_components")
+}
+
+/// Employee salary structure (which components apply to which employee)
+model EmployeeSalary {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  employeeId String   @map("employee_id") @db.VarChar(36)
+  companyId  String   @map("company_id") @db.VarChar(36)
+  effectiveDate DateTime @map("effective_date")
+  baseSalary Decimal  @map("base_salary") @db.Decimal(15, 2)
+  currency   String   @default("IDR") @db.VarChar(10)
+  isActive   Boolean  @default(true) @map("is_active")
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  employee   Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company    Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  components EmployeeSalaryComponent[]
+  payslips   Payslip[]
+
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([effectiveDate])
+  @@map("employee_salaries")
+}
+
+/// Many-to-many: EmployeeSalary x SalaryComponent with amount
+model EmployeeSalaryComponent {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  employeeSalaryId   String   @map("employee_salary_id") @db.VarChar(36)
+  salaryComponentId  String   @map("salary_component_id") @db.VarChar(36)
+  amount             Decimal  @db.Decimal(15, 2)
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  employeeSalary  EmployeeSalary  @relation(fields: [employeeSalaryId], references: [id], onDelete: Cascade)
+  salaryComponent SalaryComponent @relation(fields: [salaryComponentId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeSalaryId, salaryComponentId])
+  @@map("employee_salary_components")
+}
+
+/// Payroll periods (monthly, biweekly, etc)
+model PayrollPeriod {
+  id          String          @id @default(uuid()) @db.VarChar(36)
+  companyId   String          @map("company_id") @db.VarChar(36)
+  name        String          @db.VarChar(255)
+  code        String          @unique @db.VarChar(50)
+  frequency   PayrollFrequency @default(MONTHLY)
+  startDate   DateTime        @map("start_date")
+  endDate     DateTime        @map("end_date")
+  payDate     DateTime        @map("pay_date")
+  status      PayrollStatus   @default(DRAFT)
+  notes       String?         @db.Text
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  deletedAt   DateTime?       @map("deleted_at")
+
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payrollRuns PayrollRun[]
+
+  @@index([companyId])
+  @@index([code])
+  @@index([status])
+  @@map("payroll_periods")
+}
+
+/// Payroll run — generated from a period
+model PayrollRun {
+  id              String       @id @default(uuid()) @db.VarChar(36)
+  periodId        String       @map("period_id") @db.VarChar(36)
+  companyId       String       @map("company_id") @db.VarChar(36)
+  name            String       @db.VarChar(255)
+  runNumber       Int          @map("run_number")
+  totalEmployees  Int          @default(0) @map("total_employees")
+  totalEarnings   Decimal      @default(0) @map("total_earnings") @db.Decimal(15, 2)
+  totalDeductions Decimal      @default(0) @map("total_deductions") @db.Decimal(15, 2)
+  totalNetPay     Decimal      @default(0) @map("total_net_pay") @db.Decimal(15, 2)
+  status          PayrollRunStatus @default(DRAFT)
+  approvedBy      String?      @map("approved_by") @db.VarChar(36)
+  approvedAt      DateTime?    @map("approved_at")
+  disbursedBy     String?      @map("disbursed_by") @db.VarChar(36)
+  disbursedAt     DateTime?    @map("disbursed_at")
+  notes           String?      @db.Text
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  deletedAt       DateTime?    @map("deleted_at")
+
+  period  PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payslips Payslip[]
+
+  @@index([periodId])
+  @@index([companyId])
+  @@index([status])
+  @@map("payroll_runs")
+}
+
+/// Payslip — one per employee per payroll run
+model Payslip {
+  id              String       @id @default(uuid()) @db.VarChar(36)
+  payrollRunId    String       @map("payroll_run_id") @db.VarChar(36)
+  employeeId      String       @map("employee_id") @db.VarChar(36)
+  companyId       String       @map("company_id") @db.VarChar(36)
+  employeeSalaryId String?     @map("employee_salary_id") @db.VarChar(36)
+  baseSalary      Decimal      @map("base_salary") @db.Decimal(15, 2)
+  totalEarnings   Decimal      @default(0) @map("total_earnings") @db.Decimal(15, 2)
+  totalDeductions Decimal      @default(0) @map("total_deductions") @db.Decimal(15, 2)
+  netPay          Decimal      @default(0) @map("net_pay") @db.Decimal(15, 2)
+  workDays        Int          @default(0) @map("work_days")
+  presentDays     Int          @default(0) @map("present_days")
+  leaveDays       Int          @default(0) @map("leave_days")
+  absentDays      Int          @default(0) @map("absent_days")
+  overtimeHours   Decimal      @default(0) @map("overtime_hours") @db.Decimal(10, 2)
+  status          PayslipStatus @default(DRAFT)
+  notes           String?      @db.Text
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  payrollRun       PayrollRun         @relation(fields: [payrollRunId], references: [id], onDelete: Restrict)
+  employee         Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employeeSalary   EmployeeSalary?    @relation(fields: [employeeSalaryId], references: [id], onDelete: SetNull)
+  components       PayslipComponent[]
+  benefitDeductions BenefitDeduction[]
+
+  @@index([payrollRunId])
+  @@index([employeeId])
+  @@index([companyId])
+  @@map("payslips")
+}
+
+/// Breakdown of each salary component on a payslip
+model PayslipComponent {
+  id                String   @id @default(uuid()) @db.VarChar(36)
+  payslipId         String   @map("payslip_id") @db.VarChar(36)
+  salaryComponentId String   @map("salary_component_id") @db.VarChar(36)
+  name              String   @db.VarChar(255)
+  type              SalaryType
+  amount            Decimal  @db.Decimal(15, 2)
+  isTaxable         Boolean  @default(true) @map("is_taxable")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  payslip         Payslip          @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  salaryComponent SalaryComponent  @relation(fields: [salaryComponentId], references: [id], onDelete: Restrict)
+
+  @@index([payslipId])
+  @@map("payslip_components")
+}
+
+// ============================================================
+// BENEFITS
+// ============================================================
+
+/// Benefit plan (BPJS, insurance, THR, etc)
+model BenefitPlan {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  companyId   String   @map("company_id") @db.VarChar(36)
+  name        String   @db.VarChar(255)
+  code        String   @unique @db.VarChar(50)
+  type        String   @db.VarChar(50)
+  description String?  @db.Text
+  provider    String?  @db.VarChar(255)
+  isTaxable   Boolean  @default(false) @map("is_taxable")
+  employeeContribution Decimal @default(0) @map("employee_contribution") @db.Decimal(5, 2)
+  employerContribution Decimal @default(0) @map("employer_contribution") @db.Decimal(5, 2)
+  maxAmount   Decimal? @map("max_amount") @db.Decimal(15, 2)
+  isActive    Boolean  @default(true) @map("is_active")
+  effectiveDate DateTime? @map("effective_date")
+  expiryDate  DateTime? @map("expiry_date")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  enrollments   BenefitEnrollment[]
+
+  @@index([companyId])
+  @@index([code])
+  @@map("benefit_plans")
+}
+
+/// Employee enrollment in a benefit plan
+model BenefitEnrollment {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  benefitPlanId String  @map("benefit_plan_id") @db.VarChar(36)
+  employeeId   String   @map("employee_id") @db.VarChar(36)
+  companyId    String   @map("company_id") @db.VarChar(36)
+  enrollmentDate DateTime @default(now()) @map("enrollment_date")
+  effectiveDate DateTime @map("effective_date")
+  expiryDate   DateTime? @map("expiry_date")
+  status       BenefitEnrollmentStatus @default(ACTIVE)
+  coverageDetails String? @map("coverage_details") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  benefitPlan      BenefitPlan        @relation(fields: [benefitPlanId], references: [id], onDelete: Restrict)
+  employee         Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  benefitDeductions BenefitDeduction[]
+
+  @@index([benefitPlanId])
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([status])
+  @@map("benefit_enrollments")
+}
+
+/// Per-payslip benefit deduction (calculated amount)
+model BenefitDeduction {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  payslipId          String   @map("payslip_id") @db.VarChar(36)
+  benefitEnrollmentId String  @map("benefit_enrollment_id") @db.VarChar(36)
+  employeeAmount     Decimal  @map("employee_amount") @db.Decimal(15, 2)
+  employerAmount     Decimal  @default(0) @map("employer_amount") @db.Decimal(15, 2)
+  totalAmount        Decimal  @map("total_amount") @db.Decimal(15, 2)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  payslip           Payslip           @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  benefitEnrollment BenefitEnrollment @relation(fields: [benefitEnrollmentId], references: [id], onDelete: Restrict)
+
+  @@index([payslipId])
+  @@index([benefitEnrollmentId])
+  @@map("benefit_deductions")
+}
+
+// ============================================================
+// PERFORMANCE MANAGEMENT
+// ============================================================
+
+/// Review cycle (e.g., Q1 2026, H1 2026)
+model ReviewCycle {
+  id          String      @id @default(uuid()) @db.VarChar(36)
+  companyId   String      @map("company_id") @db.VarChar(36)
+  name        String      @db.VarChar(255)
+  code        String      @unique @db.VarChar(50)
+  type        ReviewCycleType @default(QUARTERLY)
+  startDate   DateTime    @map("start_date")
+  endDate     DateTime    @map("end_date")
+  reviewDeadline DateTime? @map("review_deadline")
+  status      ReviewCycleStatus @default(DRAFT)
+  description String?     @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  deletedAt   DateTime?   @map("deleted_at")
+
+  company Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  reviews PerformanceReview[]
+
+  @@index([companyId])
+  @@index([code])
+  @@map("review_cycles")
+}
+
+/// Performance review for an employee
+model PerformanceReview {
+  id            String        @id @default(uuid()) @db.VarChar(36)
+  cycleId       String        @map("cycle_id") @db.VarChar(36)
+  employeeId    String        @map("employee_id") @db.VarChar(36)
+  reviewerId    String?       @map("reviewer_id") @db.VarChar(36)
+  companyId     String        @map("company_id") @db.VarChar(36)
+  title         String        @db.VarChar(255)
+  type          ReviewType    @default(SELF)
+  status        ReviewStatus  @default(DRAFT)
+  overallScore  Decimal?      @map("overall_score") @db.Decimal(5, 2)
+  overallRating String?       @map("overall_rating") @db.VarChar(50)
+  strengths     String?       @db.Text
+  improvements  String?       @db.Text
+  notes         String?       @db.Text
+  submittedAt   DateTime?     @map("submitted_at")
+  completedAt   DateTime?     @map("completed_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+
+  cycle    ReviewCycle  @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  employee Employee     @relation("ReviewEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  reviewer Employee?    @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sections ReviewSection[]
+
+  @@index([cycleId])
+  @@index([employeeId])
+  @@index([reviewerId])
+  @@index([companyId])
+  @@index([status])
+  @@map("performance_reviews")
+}
+
+/// Section within a review (e.g., Competency, Goals, Values)
+model ReviewSection {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  reviewId    String   @map("review_id") @db.VarChar(36)
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  weight      Decimal  @default(100) @db.Decimal(5, 2)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  review PerformanceReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  scores ReviewScore[]
+
+  @@index([reviewId])
+  @@map("review_sections")
+}
+
+/// Score items within a section
+model ReviewScore {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  sectionId   String   @map("section_id") @db.VarChar(36)
+  criterion   String   @db.VarChar(255)
+  score       Int      @default(0)
+  maxScore    Int      @default(5) @map("max_score")
+  comment     String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  section ReviewSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+  @@map("review_scores")
+}
+
+/// 360 feedback request
+model FeedbackRequest {
+  id              String          @id @default(uuid()) @db.VarChar(36)
+  reviewId        String?         @map("review_id") @db.VarChar(36)
+  requesterId     String          @map("requester_id") @db.VarChar(36)
+  recipientId     String          @map("recipient_id") @db.VarChar(36)
+  companyId       String          @map("company_id") @db.VarChar(36)
+  relationship    String?         @db.VarChar(100)
+  message         String?         @db.Text
+  status          FeedbackStatus  @default(PENDING)
+  requestedAt     DateTime        @default(now()) @map("requested_at")
+  respondedAt     DateTime?       @map("responded_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  requester Employee @relation("FeedbackRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  recipient Employee @relation("FeedbackRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  responses FeedbackResponse[]
+
+  @@index([reviewId])
+  @@index([requesterId])
+  @@index([recipientId])
+  @@map("feedback_requests")
+}
+
+/// Response to a feedback request
+model FeedbackResponse {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  requestId   String   @map("request_id") @db.VarChar(36)
+  rating      Int?     @default(0)
+  strengths   String?  @db.Text
+  improvements String? @db.Text
+  notes       String?  @db.Text
+  isAnonymous Boolean  @default(false) @map("is_anonymous")
+  submittedAt DateTime @default(now()) @map("submitted_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  feedbackRequest FeedbackRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("feedback_responses")
+}
+
+/// Goals / OKRs
+model Goal {
+  id           String       @id @default(uuid()) @db.VarChar(36)
+  employeeId   String       @map("employee_id") @db.VarChar(36)
+  companyId    String       @map("company_id") @db.VarChar(36)
+  title        String       @db.VarChar(255)
+  description  String?      @db.Text
+  type         GoalType     @default(PERSONAL)
+  startDate    DateTime     @map("start_date")
+  endDate      DateTime?    @map("end_date")
+  progress     Int          @default(0)
+  status       GoalStatus   @default(IN_PROGRESS)
+  priority     GoalPriority @default(MEDIUM)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  deletedAt    DateTime?    @map("deleted_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  updates  GoalUpdate[]
+
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([status])
+  @@map("goals")
+}
+
+/// Goal progress updates
+model GoalUpdate {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  goalId    String   @map("goal_id") @db.VarChar(36)
+  progress  Int      @default(0)
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@map("goal_updates")
+}
+
+// ============================================================
+// TRAINING / LEARNING MANAGEMENT
+// ============================================================
+
+/// Training category
+model TrainingCategory {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  companyId   String   @map("company_id") @db.VarChar(36)
+  name        String   @db.VarChar(255)
+  code        String   @unique @db.VarChar(50)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  courses TrainingCourse[]
+
+  @@index([companyId])
+  @@index([code])
+  @@map("training_categories")
+}
+
+/// Training course
+model TrainingCourse {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  categoryId   String?  @map("category_id") @db.VarChar(36)
+  companyId    String   @map("company_id") @db.VarChar(36)
+  title        String   @db.VarChar(255)
+  code         String   @unique @db.VarChar(50)
+  description  String?  @db.Text
+  duration     Int?     @default(0)
+  durationUnit String?  @map("duration_unit") @db.VarChar(20)
+  provider     String?  @db.VarChar(255)
+  isMandatory  Boolean  @default(false) @map("is_mandatory")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  category   TrainingCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sessions   TrainingSession[]
+  materials  TrainingMaterial[]
+  enrollments TrainingEnrollment[]
+
+  @@index([categoryId])
+  @@index([companyId])
+  @@index([code])
+  @@map("training_courses")
+}
+
+/// Training session (scheduled instance of a course)
+model TrainingSession {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  courseId    String   @map("course_id") @db.VarChar(36)
+  trainer     String?  @db.VarChar(255)
+  location    String?  @db.VarChar(255)
+  startDate   DateTime @map("start_date")
+  endDate     DateTime? @map("end_date")
+  maxParticipants Int?  @default(0) @map("max_participants")
+  status      SessionStatus @default(SCHEDULED)
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  course       TrainingCourse       @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  attendances  TrainingAttendance[]
+
+  @@index([courseId])
+  @@index([status])
+  @@map("training_sessions")
+}
+
+/// Training material (file, link)
+model TrainingMaterial {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  courseId    String   @map("course_id") @db.VarChar(36)
+  title       String   @db.VarChar(255)
+  type        String   @default("FILE") @db.VarChar(50)
+  url         String?  @db.VarChar(500)
+  filePath    String?  @map("file_path") @db.VarChar(500)
+  fileSize    Int?     @map("file_size")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  course TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@map("training_materials")
+}
+
+/// Employee enrollment in a training course
+model TrainingEnrollment {
+  id          String           @id @default(uuid()) @db.VarChar(36)
+  courseId    String           @map("course_id") @db.VarChar(36)
+  employeeId  String           @map("employee_id") @db.VarChar(36)
+  companyId   String           @map("company_id") @db.VarChar(36)
+  status      EnrollmentStatus @default(ENROLLED)
+  progress    Int              @default(0)
+  completedAt DateTime?        @map("completed_at")
+  score       Decimal?         @db.Decimal(5, 2)
+  notes       String?          @db.Text
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  deletedAt   DateTime?        @map("deleted_at")
+
+  course   TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  employee Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company  Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([courseId])
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([status])
+  @@map("training_enrollments")
+}
+
+/// Training attendance record
+model TrainingAttendance {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  sessionId String   @map("session_id") @db.VarChar(36)
+  employeeId String  @map("employee_id") @db.VarChar(36)
+  status    AttendanceStatus @default(PRESENT)
+  checkIn   DateTime? @map("check_in")
+  checkOut  DateTime? @map("check_out")
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session  TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  employee Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, employeeId])
+  @@map("training_attendances")
+}
+
+// ============================================================
+// RECRUITMENT
+// ============================================================
+
+/// Job posting / requisition
+model JobPosting {
+  id              String      @id @default(uuid()) @db.VarChar(36)
+  companyId       String      @map("company_id") @db.VarChar(36)
+  departmentId    String?     @map("department_id") @db.VarChar(36)
+  positionId      String?     @map("position_id") @db.VarChar(36)
+  title           String      @db.VarChar(255)
+  code            String      @unique @db.VarChar(50)
+  employmentType  String      @default("FULL_TIME") @map("employment_type") @db.VarChar(50)
+  location        String?     @db.VarChar(255)
+  minSalary       Decimal?    @map("min_salary") @db.Decimal(15, 2)
+  maxSalary       Decimal?    @map("max_salary") @db.Decimal(15, 2)
+  currency        String      @default("IDR") @db.VarChar(10)
+  description     String?     @db.Text
+  requirements    String?     @db.Text
+  responsibilities String?    @db.Text
+  vacancies       Int         @default(1)
+  status          PostingStatus @default(DRAFT)
+  postedAt        DateTime?   @map("posted_at")
+  closedAt        DateTime?   @map("closed_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  deletedAt       DateTime?   @map("deleted_at")
+
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  department   Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position     Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  applications JobApplication[]
+
+  @@index([companyId])
+  @@index([code])
+  @@index([status])
+  @@map("job_postings")
+}
+
+/// Candidate
+model Candidate {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  companyId       String   @map("company_id") @db.VarChar(36)
+  firstName       String   @map("first_name") @db.VarChar(255)
+  lastName        String   @map("last_name") @db.VarChar(255)
+  email           String?  @db.VarChar(255)
+  phone           String?  @db.VarChar(50)
+  currentCompany  String?  @map("current_company") @db.VarChar(255)
+  currentPosition String?  @map("current_position") @db.VarChar(255)
+  resume          String?  @db.VarChar(500)
+  portfolio       String?  @db.VarChar(500)
+  source          String?  @db.VarChar(100)
+  notes           String?  @db.Text
+  status          CandidateStatus @default(ACTIVE)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  applications JobApplication[]
+  interviews   Interview[]
+
+  @@index([companyId])
+  @@index([email])
+  @@index([status])
+  @@map("candidates")
+}
+
+/// Job application (links candidate to job posting)
+model JobApplication {
+  id           String           @id @default(uuid()) @db.VarChar(36)
+  jobPostingId String           @map("job_posting_id") @db.VarChar(36)
+  candidateId  String           @map("candidate_id") @db.VarChar(36)
+  companyId    String           @map("company_id") @db.VarChar(36)
+  status       ApplicationStatus @default(NEW)
+  coverLetter  String?          @map("cover_letter") @db.Text
+  expectedSalary Decimal?       @map("expected_salary") @db.Decimal(15, 2)
+  notes        String?          @db.Text
+  appliedAt    DateTime         @default(now()) @map("applied_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  deletedAt    DateTime?        @map("deleted_at")
+
+  jobPosting JobPosting  @relation(fields: [jobPostingId], references: [id], onDelete: Restrict)
+  candidate  Candidate   @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  interviews Interview[]
+
+  @@index([jobPostingId])
+  @@index([candidateId])
+  @@index([companyId])
+  @@index([status])
+  @@map("job_applications")
+}
+
+/// Interview
+model Interview {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  applicationId   String   @map("application_id") @db.VarChar(36)
+  candidateId     String   @map("candidate_id") @db.VarChar(36)
+  interviewerId   String?  @map("interviewer_id") @db.VarChar(36)
+  companyId       String   @map("company_id") @db.VarChar(36)
+  type            String   @default("ONLINE") @db.VarChar(50)
+  title           String   @db.VarChar(255)
+  scheduledAt     DateTime @map("scheduled_at")
+  durationMinutes Int?     @default(60) @map("duration_minutes")
+  location        String?  @db.VarChar(255)
+  meetingLink     String?  @map("meeting_link") @db.VarChar(500)
+  status          InterviewStatus @default(SCHEDULED)
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  candidate   Candidate      @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  feedback    InterviewFeedback[]
+
+  @@index([applicationId])
+  @@index([candidateId])
+  @@index([interviewerId])
+  @@index([status])
+  @@map("interviews")
+}
+
+/// Interview feedback
+model InterviewFeedback {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  interviewId String   @map("interview_id") @db.VarChar(36)
+  rating      Int?     @default(0)
+  strengths   String?  @db.Text
+  weaknesses  String?  @db.Text
+  decision    String?  @db.VarChar(50)
+  notes       String?  @db.Text
+  submittedAt DateTime @default(now()) @map("submitted_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([interviewId])
+  @@map("interview_feedback")
 }
 
 // ============================================================
@@ -266,6 +1008,12 @@ model Employee {
   joinDate         DateTime?        @map("join_date")
   employmentStatus EmploymentStatus @default(ACTIVE) @map("employment_status")
   employmentType   EmploymentType   @default(PERMANENT) @map("employment_type")
+  bankName         String?          @map("bank_name") @db.VarChar(100)
+  bankAccount      String?          @map("bank_account") @db.VarChar(50)
+  bankAccountHolder String?         @map("bank_account_holder") @db.VarChar(255)
+  taxId            String?          @map("tax_id") @db.VarChar(50)
+  bpjsKetenagakerjaan String?       @map("bpjs_ketenagakerjaan") @db.VarChar(50)
+  bpjsKesehatan    String?          @map("bpjs_kesehatan") @db.VarChar(50)
   status           Status           @default(ACTIVE)
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
@@ -280,6 +1028,16 @@ model Employee {
   divisionHeads       Division[]     @relation("DivisionHead")
   departmentHeads     Department[]   @relation("DepartmentHead")
   subDepartmentHeads  SubDepartment[] @relation("SubDepartmentHead")
+  employeeSalaries    EmployeeSalary[]
+  payslips            Payslip[]
+  benefitEnrollments  BenefitEnrollment[]
+  performanceReviewsAsEmployee PerformanceReview[] @relation("ReviewEmployee")
+  performanceReviewsAsReviewer PerformanceReview[] @relation("ReviewReviewer")
+  feedbackRequestsAsRequester  FeedbackRequest[]  @relation("FeedbackRequester")
+  feedbackRequestsAsRecipient  FeedbackRequest[]  @relation("FeedbackRecipient")
+  goals                Goal[]
+  trainingEnrollments  TrainingEnrollment[]
+  trainingAttendances  TrainingAttendance[]
 
   @@index([companyId])
   @@index([employeeNumber])
@@ -543,4 +1301,170 @@ enum RoleScope {
   GLOBAL
   GROUP
   COMPANY
+}
+
+/// Salary component types
+enum SalaryType {
+  ALLOWANCE
+  DEDUCTION
+}
+
+/// Payroll period status
+enum PayrollStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+/// Payroll run status
+enum PayrollRunStatus {
+  DRAFT
+  PROCESSING
+  COMPLETED
+  APPROVED
+  DISBURSED
+}
+
+/// Payslip status
+enum PayslipStatus {
+  DRAFT
+  FINAL
+}
+
+/// Payroll frequency
+enum PayrollFrequency {
+  MONTHLY
+  BIWEEKLY
+  WEEKLY
+}
+
+/// Benefit enrollment status
+enum BenefitEnrollmentStatus {
+  ACTIVE
+  INACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+// ============================================================
+// PERFORMANCE ENUMS
+// ============================================================
+
+enum ReviewCycleType {
+  QUARTERLY
+  SEMI_ANNUAL
+  ANNUAL
+  MONTHLY
+}
+
+enum ReviewCycleStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum ReviewType {
+  SELF
+  MANAGER
+  PEER
+  SUBORDINATE
+  FULL_360
+}
+
+enum ReviewStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  COMPLETED
+}
+
+enum FeedbackStatus {
+  PENDING
+  COMPLETED
+  DECLINED
+}
+
+enum GoalType {
+  PERSONAL
+  TEAM
+  COMPANY
+}
+
+enum GoalStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum GoalPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// ============================================================
+// TRAINING ENUMS
+// ============================================================
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DROPPED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+// ============================================================
+// RECRUITMENT ENUMS
+// ============================================================
+
+enum PostingStatus {
+  DRAFT
+  PUBLISHED
+  ON_HOLD
+  CLOSED
+  FILLED
+}
+
+enum CandidateStatus {
+  ACTIVE
+  HIRED
+  REJECTED
+  WITHDRAWN
+  BLACKLISTED
+}
+
+enum ApplicationStatus {
+  NEW
+  SCREENING
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
 }

@@ -122,10 +122,64 @@ class OrganizationService {
     return response.data.data;
   }
 
+  // Departments
+  async getDepartments(companyId: string, divisionId?: string): Promise<Department[]> {
+    const params: Record<string, string> = { companyId };
+    if (divisionId) params.divisionId = divisionId;
+    const response = await api.get('/organization/departments', { params });
+    return response.data.data;
+  }
+
+  async getDepartment(id: string): Promise<Department> {
+    const response = await api.get(`/organization/departments/${id}`);
+    return response.data.data;
+  }
+
+  async createDepartment(data: Partial<Department>): Promise<Department> {
+    const response = await api.post('/organization/departments', data);
+    return response.data.data;
+  }
+
+  async updateDepartment(id: string, data: Partial<Department>): Promise<Department> {
+    const response = await api.put(`/organization/departments/${id}`, data);
+    return response.data.data;
+  }
+
+  async deleteDepartment(id: string): Promise<void> {
+    await api.delete(`/organization/departments/${id}`);
+  }
+
   // Departments with hierarchy
   async getDepartmentHierarchy(companyId: string): Promise<Department[]> {
     const response = await api.get(`/organization/departments/hierarchy/${companyId}`);
     return response.data.data;
+  }
+
+  // Positions
+  async getPositions(companyId: string, departmentId?: string): Promise<Position[]> {
+    const params: Record<string, string> = { companyId };
+    if (departmentId) params.departmentId = departmentId;
+    const response = await api.get('/organization/positions', { params });
+    return response.data.data;
+  }
+
+  async getPosition(id: string): Promise<Position> {
+    const response = await api.get(`/organization/positions/${id}`);
+    return response.data.data;
+  }
+
+  async createPosition(data: Partial<Position>): Promise<Position> {
+    const response = await api.post('/organization/positions', data);
+    return response.data.data;
+  }
+
+  async updatePosition(id: string, data: Partial<Position>): Promise<Position> {
+    const response = await api.put(`/organization/positions/${id}`, data);
+    return response.data.data;
+  }
+
+  async deletePosition(id: string): Promise<void> {
+    await api.delete(`/organization/positions/${id}`);
   }
 }
 

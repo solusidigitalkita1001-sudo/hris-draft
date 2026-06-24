@@ -11,6 +11,40 @@ import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { GroupListPage } from '@/modules/organization/pages/GroupListPage';
 import { CompanyListPage } from '@/modules/organization/pages/CompanyListPage';
+import { DepartmentListPage } from '@/modules/organization/pages/DepartmentListPage';
+import { PositionListPage } from '@/modules/organization/pages/PositionListPage';
+
+// Employee Pages
+import { EmployeeListPage } from '@/modules/employee/pages/EmployeeListPage';
+import { EmployeeDetailPage } from '@/modules/employee/pages/EmployeeDetailPage';
+
+// Payroll Pages
+import { PayrollDashboard } from '@/modules/payroll/pages/PayrollDashboard';
+import { SalaryComponentList } from '@/modules/payroll/pages/SalaryComponentList';
+import { PayrollPeriodList } from '@/modules/payroll/pages/PayrollPeriodList';
+import { PayrollRunList } from '@/modules/payroll/pages/PayrollRunList';
+import { PayrollRunDetail } from '@/modules/payroll/pages/PayrollRunDetail';
+import { PayslipDetail } from '@/modules/payroll/pages/PayslipDetail';
+
+// Benefit Pages
+import { BenefitPlanList } from '@/modules/benefit/pages/BenefitPlanList';
+import { BenefitPlanDetail } from '@/modules/benefit/pages/BenefitPlanDetail';
+
+// Recruitment Pages
+import { JobPostingList } from '@/modules/recruitment/pages/JobPostingList';
+import { JobPostingDetail } from '@/modules/recruitment/pages/JobPostingDetail';
+import { CandidateList } from '@/modules/recruitment/pages/CandidateList';
+import { ApplicationPipeline } from '@/modules/recruitment/pages/ApplicationPipeline';
+import { InterviewSchedule } from '@/modules/recruitment/pages/InterviewSchedule';
+
+// Performance Pages
+import { PerformanceDashboard } from '@/modules/performance/pages/PerformanceDashboard';
+import { ReviewList } from '@/modules/performance/pages/ReviewList';
+import { GoalList } from '@/modules/performance/pages/GoalList';
+
+// Training Pages
+import { CourseList } from '@/modules/training/pages/CourseList';
+import { CourseDetail } from '@/modules/training/pages/CourseDetail';
 
 export const router = createBrowserRouter([
   {
@@ -62,24 +96,185 @@ export const router = createBrowserRouter([
               </ProtectedRoute>
             ),
           },
+          {
+            path: 'departments',
+            element: (
+              <ProtectedRoute requiredPermissions={[{ resource: 'organization', action: 'read' }]}>
+                <DepartmentListPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'positions',
+            element: (
+              <ProtectedRoute requiredPermissions={[{ resource: 'organization', action: 'read' }]}>
+                <PositionListPage />
+              </ProtectedRoute>
+            ),
+          },
         ],
       },
-      // Placeholder routes for future modules
+      // Employee Routes
       {
         path: 'employees',
-        element: <div className="p-8 text-center text-muted-foreground">Employee Management (Coming Soon)</div>,
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
+            <EmployeeListPage />
+          </ProtectedRoute>
+        ),
       },
       {
-        path: 'attendance',
-        element: <div className="p-8 text-center text-muted-foreground">Attendance (Coming Soon)</div>,
+        path: 'employees/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
+            <EmployeeDetailPage />
+          </ProtectedRoute>
+        ),
       },
-      {
-        path: 'leave',
-        element: <div className="p-8 text-center text-muted-foreground">Leave Management (Coming Soon)</div>,
-      },
+      // Payroll Routes
       {
         path: 'payroll',
-        element: <div className="p-8 text-center text-muted-foreground">Payroll (Coming Soon)</div>,
+        element: <PayrollDashboard />,
+      },
+      {
+        path: 'payroll/salary-components',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
+            <SalaryComponentList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'payroll/periods',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
+            <PayrollPeriodList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'payroll/runs',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
+            <PayrollRunList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'payroll/runs/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
+            <PayrollRunDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'payroll/payslips/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
+            <PayslipDetail />
+          </ProtectedRoute>
+        ),
+      },
+      // Benefit Routes
+      {
+        path: 'benefits',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'benefit', action: 'read' }]}>
+            <BenefitPlanList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'benefits/plans/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'benefit', action: 'read' }]}>
+            <BenefitPlanDetail />
+          </ProtectedRoute>
+        ),
+      },
+      // Recruitment Routes
+      {
+        path: 'recruitment',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'read' }]}>
+            <JobPostingList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'recruitment/postings/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'read' }]}>
+            <JobPostingDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'recruitment/candidates',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'read' }]}>
+            <CandidateList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'recruitment/pipeline',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'read' }]}>
+            <ApplicationPipeline />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'recruitment/interviews',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'read' }]}>
+            <InterviewSchedule />
+          </ProtectedRoute>
+        ),
+      },
+      // Performance Routes
+      {
+        path: 'performance',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/reviews',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <ReviewList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/goals',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <GoalList />
+          </ProtectedRoute>
+        ),
+      },
+      // Training / LMS Routes
+      {
+        path: 'lms',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'training', action: 'read' }]}>
+            <CourseList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'lms/courses/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'training', action: 'read' }]}>
+            <CourseDetail />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'admin/roles',

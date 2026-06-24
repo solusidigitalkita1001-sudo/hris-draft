@@ -19,13 +19,14 @@ import {
   Settings,
   ChevronDown,
   Building,
-  UserCog,
   Briefcase,
   BarChart3,
   FileText,
   Bell,
   Shield,
   GitBranch,
+  Heart,
+  Target,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -54,14 +55,26 @@ const navItems: NavItem[] = [
   { label: 'Attendance', icon: <Clock size={18} />, path: '/attendance', module: 'attendance' },
   { label: 'Leave', icon: <CalendarDays size={18} />, path: '/leave', module: 'leave' },
   { label: 'Payroll', icon: <Banknote size={18} />, path: '/payroll', module: 'payroll' },
+  { label: 'Benefits', icon: <Heart size={18} />, path: '/benefits', module: 'benefit' },
   {
-    label: 'HR Management',
-    icon: <UserCog size={18} />,
+    label: 'Recruitment',
+    icon: <UserSquare2 size={18} />,
     module: 'recruitment',
     children: [
-      { label: 'Recruitment', icon: <UserSquare2 size={16} />, path: '/recruitment' },
-      { label: 'Onboarding', icon: <ClipboardList size={16} />, path: '/onboarding' },
-      { label: 'Performance', icon: <BarChart3 size={16} />, path: '/performance' },
+      { label: 'Job Postings', icon: <Briefcase size={16} />, path: '/recruitment' },
+      { label: 'Candidates', icon: <Users size={16} />, path: '/recruitment/candidates' },
+      { label: 'Pipeline', icon: <GitBranch size={16} />, path: '/recruitment/pipeline' },
+      { label: 'Interviews', icon: <CalendarDays size={16} />, path: '/recruitment/interviews' },
+    ],
+  },
+  {
+    label: 'Performance',
+    icon: <BarChart3 size={18} />,
+    module: 'performance',
+    children: [
+      { label: 'Dashboard', icon: <BarChart3 size={16} />, path: '/performance' },
+      { label: 'Reviews', icon: <ClipboardList size={16} />, path: '/performance/reviews' },
+      { label: 'Goals', icon: <Target size={16} />, path: '/performance/goals' },
     ],
   },
   { label: 'LMS', icon: <GraduationCap size={18} />, path: '/lms', module: 'lms' },

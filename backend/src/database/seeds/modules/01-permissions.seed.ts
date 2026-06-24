@@ -57,6 +57,24 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'payroll', action: 'export', name: 'Export Payroll', module: 'payroll', code: 'payroll:export' },
     { resource: 'payroll', action: 'process', name: 'Process Payroll', module: 'payroll', code: 'payroll:process' },
 
+    // Benefit
+    { resource: 'benefit', action: 'create', name: 'Create Benefit Plan', module: 'benefit', code: 'benefit:create' },
+    { resource: 'benefit', action: 'read', name: 'Read Benefit Plan', module: 'benefit', code: 'benefit:read' },
+    { resource: 'benefit', action: 'update', name: 'Update Benefit Plan', module: 'benefit', code: 'benefit:update' },
+    { resource: 'benefit', action: 'delete', name: 'Delete Benefit Plan', module: 'benefit', code: 'benefit:delete' },
+
+    // Performance
+    { resource: 'performance', action: 'create', name: 'Create Review', module: 'performance', code: 'performance:create' },
+    { resource: 'performance', action: 'read', name: 'Read Review', module: 'performance', code: 'performance:read' },
+    { resource: 'performance', action: 'update', name: 'Update Review', module: 'performance', code: 'performance:update' },
+    { resource: 'performance', action: 'approve', name: 'Approve Review', module: 'performance', code: 'performance:approve' },
+
+    // Training / LMS
+    { resource: 'training', action: 'create', name: 'Create Course', module: 'training', code: 'training:create' },
+    { resource: 'training', action: 'read', name: 'Read Course', module: 'training', code: 'training:read' },
+    { resource: 'training', action: 'update', name: 'Update Course', module: 'training', code: 'training:update' },
+    { resource: 'training', action: 'delete', name: 'Delete Course', module: 'training', code: 'training:delete' },
+
     // Recruitment
     { resource: 'recruitment', action: 'create', name: 'Create Requisition', module: 'recruitment', code: 'rec:create' },
     { resource: 'recruitment', action: 'read', name: 'Read Requisition', module: 'recruitment', code: 'rec:read' },

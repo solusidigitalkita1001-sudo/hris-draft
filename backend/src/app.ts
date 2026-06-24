@@ -17,6 +17,12 @@ import authRoutes from '@/modules/auth/auth.routes';
 import organizationRoutes from '@/modules/organization/organization.routes';
 import rbacRoutes from '@/modules/rbac/rbac.routes';
 import userRoutes from '@/modules/user/user.routes';
+import payrollRoutes from '@/modules/payroll/payroll.routes';
+import benefitRoutes from '@/modules/benefit/benefit.routes';
+import performanceRoutes from '@/modules/performance/performance.routes';
+import trainingRoutes from '@/modules/training/training.routes';
+import recruitmentRoutes from '@/modules/recruitment/recruitment.routes';
+import employeeRoutes from '@/modules/employee/employee.routes';
 
 const app = express();
 
@@ -112,6 +118,12 @@ app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/organization`, organizationRoutes);
 app.use(`${apiPrefix}/roles`, rbacRoutes);
 app.use(`${apiPrefix}/users`, userRoutes);
+app.use(`${apiPrefix}/payroll`, payrollRoutes);
+app.use(`${apiPrefix}/benefits`, benefitRoutes);
+app.use(`${apiPrefix}/performance`, performanceRoutes);
+app.use(`${apiPrefix}/training`, trainingRoutes);
+app.use(`${apiPrefix}/recruitment`, recruitmentRoutes);
+app.use(`${apiPrefix}/employees`, employeeRoutes);
 
 // ==================== 404 Handler ====================
 app.use((_req, res) => {

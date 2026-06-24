@@ -4,7 +4,7 @@ import { ForbiddenError, AuthError } from '@/shared/exceptions/AppError';
 
 export type PermissionCheck = {
   resource: string;
-  action: 'create' | 'read' | 'update' | 'delete' | 'approve' | 'export';
+  action: 'create' | 'read' | 'update' | 'delete' | 'approve' | 'export' | 'process';
 };
 
 /**
