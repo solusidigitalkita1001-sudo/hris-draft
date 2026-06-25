@@ -23,6 +23,10 @@ import performanceRoutes from '@/modules/performance/performance.routes';
 import trainingRoutes from '@/modules/training/training.routes';
 import recruitmentRoutes from '@/modules/recruitment/recruitment.routes';
 import employeeRoutes from '@/modules/employee/employee.routes';
+import attendanceRoutes from '@/modules/attendance/attendance.routes';
+import leaveRoutes from '@/modules/leave/leave.routes';
+import onboardingRoutes from '@/modules/onboarding/onboarding.routes';
+import assetRoutes from '@/modules/asset/asset.routes';
 
 const app = express();
 
@@ -124,6 +128,10 @@ app.use(`${apiPrefix}/performance`, performanceRoutes);
 app.use(`${apiPrefix}/training`, trainingRoutes);
 app.use(`${apiPrefix}/recruitment`, recruitmentRoutes);
 app.use(`${apiPrefix}/employees`, employeeRoutes);
+app.use(`${apiPrefix}/attendance`, attendanceRoutes);
+app.use(`${apiPrefix}/leave`, leaveRoutes);
+app.use(`${apiPrefix}/onboarding`, onboardingRoutes);
+app.use(`${apiPrefix}/assets`, assetRoutes);
 
 // ==================== 404 Handler ====================
 app.use((_req, res) => {

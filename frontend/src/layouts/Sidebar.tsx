@@ -27,6 +27,8 @@ import {
   GitBranch,
   Heart,
   Target,
+  LogOut,
+  Package,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -54,6 +56,8 @@ const navItems: NavItem[] = [
   { label: 'Employees', icon: <Users size={18} />, path: '/employees', module: 'employee' },
   { label: 'Attendance', icon: <Clock size={18} />, path: '/attendance', module: 'attendance' },
   { label: 'Leave', icon: <CalendarDays size={18} />, path: '/leave', module: 'leave' },
+  { label: 'Offboarding', icon: <LogOut size={18} />, path: '/offboarding', module: 'employee' },
+  { label: 'Assets', icon: <Package size={18} />, path: '/assets', module: 'employee' },
   { label: 'Payroll', icon: <Banknote size={18} />, path: '/payroll', module: 'payroll' },
   { label: 'Benefits', icon: <Heart size={18} />, path: '/benefits', module: 'benefit' },
   {

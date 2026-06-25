@@ -34,6 +34,7 @@ model CompanyGroup {
   groupPolicies GroupPolicy[]
   groupSettings GroupSetting[]
   roles         Role[]
+  assetCategories AssetCategory[]
 
   @@map("company_groups")
 }
@@ -86,6 +87,14 @@ model Company {
   candidates          Candidate[]
   jobApplications     JobApplication[]
   interviews          Interview[]
+  attendances         Attendance[]
+  overtimeRequests    OvertimeRequest[]
+  leaveTypes          LeaveType[]
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]
+  onboardingChecklists OnboardingChecklist[]
+  resignations        Resignation[]
+  assets              Asset[]
 
   @@index([groupId])
   @@index([code])
@@ -1038,6 +1047,15 @@ model Employee {
   goals                Goal[]
   trainingEnrollments  TrainingEnrollment[]
   trainingAttendances  TrainingAttendance[]
+  attendances          Attendance[]
+  overtimeRequests     OvertimeRequest[]
+  leaveBalances        LeaveBalance[]
+  leaveRequests        LeaveRequest[]
+  onboardingChecklists OnboardingChecklist[] @relation("OnboardingEmployee")
+  onboardingPIC        OnboardingChecklist[] @relation("OnboardingPIC")
+  resignations         Resignation[]         @relation("ResignationEmployee")
+  assetAssignments     AssetAssignment[]
+  exitClearancePICs    ExitClearance[]    @relation("ExitClearancePIC")
 
   @@index([companyId])
   @@index([employeeNumber])
@@ -1257,6 +1275,295 @@ model GroupPolicy {
 }
 
 // ============================================================
+// ONBOARDING & OFFBOARDING
+// ============================================================
+
+/// Onboarding checklist template per company
+model OnboardingChecklist {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  companyId     String   @map("company_id") @db.VarChar(36)
+  employeeId    String   @map("employee_id") @db.VarChar(36)
+  itemName      String   @map("item_name") @db.VarChar(150)
+  category      String   @default("Equipment") @db.VarChar(50)
+  picId         String?  @map("pic_id") @db.VarChar(36)
+  dueDate       DateTime? @map("due_date")
+  status        String   @default("PENDING") @db.VarChar(20)
+  notes         String?  @db.Text
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee Employee  @relation("OnboardingEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  pic      Employee? @relation("OnboardingPIC", fields: [picId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([picId])
+  @@index([status])
+  @@map("onboarding_checklists")
+}
+
+/// Resignation / termination request
+model Resignation {
+  id                String        @id @default(uuid()) @db.VarChar(36)
+  companyId         String        @map("company_id") @db.VarChar(36)
+  employeeId        String        @map("employee_id") @db.VarChar(36)
+  resignDate        DateTime      @map("resign_date")
+  lastWorkingDate   DateTime      @map("last_working_date")
+  reason            String?       @db.Text
+  noticePeriodDays  Int           @default(30) @map("notice_period_days")
+  status            String        @default("SUBMITTED") @db.VarChar(20)
+  approvedBy        String?       @map("approved_by") @db.VarChar(36)
+  approvedAt        DateTime?     @map("approved_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee Employee  @relation("ResignationEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  clearances ExitClearance[]
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([status])
+  @@map("resignations")
+}
+
+/// Exit clearance checklist per department
+model ExitClearance {
+  id              String     @id @default(uuid()) @db.VarChar(36)
+  resignationId   String     @map("resignation_id") @db.VarChar(36)
+  department      String     @db.VarChar(50)
+  checklistItem   String     @map("checklist_item") @db.VarChar(150)
+  picId           String?    @map("pic_id") @db.VarChar(36)
+  status          String     @default("PENDING") @db.VarChar(20)
+  notes           String?    @db.Text
+  clearedAt       DateTime?  @map("cleared_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  resignation Resignation @relation(fields: [resignationId], references: [id], onDelete: Cascade)
+  pic         Employee?   @relation("ExitClearancePIC", fields: [picId], references: [id], onDelete: SetNull)
+
+  @@index([resignationId])
+  @@index([status])
+  @@map("exit_clearances")
+}
+
+// ============================================================
+// ASSET MANAGEMENT
+// ============================================================
+
+/// Asset category (group-wide or per company)
+model AssetCategory {
+  id                  String   @id @default(uuid()) @db.VarChar(36)
+  companyId           String?  @map("company_id") @db.VarChar(36)
+  groupId             String?  @map("group_id") @db.VarChar(36)
+  name                String   @db.VarChar(100)
+  depreciationMethod  String   @default("STRAIGHT_LINE") @map("depreciation_method") @db.VarChar(50)
+  usefulLifeMonths    Int?     @map("useful_life_months")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  group CompanyGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([groupId])
+  @@map("asset_categories")
+}
+
+/// Company asset
+model Asset {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  companyId       String   @map("company_id") @db.VarChar(36)
+  categoryId      String?  @map("category_id") @db.VarChar(36)
+  assetCode       String   @unique @map("asset_code") @db.VarChar(50)
+  name            String   @db.VarChar(150)
+  serialNumber    String?  @map("serial_number") @db.VarChar(100)
+  purchaseDate    DateTime? @map("purchase_date")
+  purchaseValue   Decimal? @map("purchase_value") @db.Decimal(15, 2)
+  currentValue    Decimal? @map("current_value") @db.Decimal(15, 2)
+  status          String   @default("AVAILABLE") @db.VarChar(20)
+  branchId        String?  @map("branch_id") @db.VarChar(36)
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  assignments AssetAssignment[]
+
+  @@index([companyId])
+  @@index([assetCode])
+  @@index([status])
+  @@map("assets")
+}
+
+/// Asset assignment to employee
+model AssetAssignment {
+  id                  String   @id @default(uuid()) @db.VarChar(36)
+  assetId             String   @map("asset_id") @db.VarChar(36)
+  employeeId          String   @map("employee_id") @db.VarChar(36)
+  assignedAt          DateTime @default(now()) @map("assigned_at")
+  conditionAtAssign   String   @default("GOOD") @map("condition_at_assign") @db.VarChar(20)
+  returnedAt          DateTime? @map("returned_at")
+  conditionAtReturn   String?  @map("condition_at_return") @db.VarChar(20)
+  notes               String?  @db.Text
+  createdBy           String   @map("created_by") @db.VarChar(36)
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  asset    Asset    @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([assetId])
+  @@index([employeeId])
+  @@index([returnedAt])
+  @@map("asset_assignments")
+}
+
+// ============================================================
+// ATTENDANCE & OVERTIME
+// ============================================================
+
+/// Daily attendance record
+model Attendance {
+  id              String            @id @default(uuid()) @db.VarChar(36)
+  employeeId      String            @map("employee_id") @db.VarChar(36)
+  companyId       String            @map("company_id") @db.VarChar(36)
+  date            DateTime          @map("date") @db.Date
+  checkIn         DateTime?         @map("check_in")
+  checkOut        DateTime?         @map("check_out")
+  status          AttendanceStatus  @default(PRESENT)
+  workDuration    Int?              @default(0) @map("work_duration")
+  lateMinutes     Int?              @default(0) @map("late_minutes")
+  earlyLeaveMinutes Int?            @default(0) @map("early_leave_minutes")
+  notes           String?           @db.Text
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, date])
+  @@index([companyId])
+  @@index([date])
+  @@index([employeeId])
+  @@index([status])
+  @@map("attendances")
+}
+
+/// Overtime request
+model OvertimeRequest {
+  id              String            @id @default(uuid()) @db.VarChar(36)
+  employeeId      String            @map("employee_id") @db.VarChar(36)
+  companyId       String            @map("company_id") @db.VarChar(36)
+  date            DateTime          @map("date") @db.Date
+  startTime       DateTime          @map("start_time")
+  endTime         DateTime          @map("end_time")
+  durationHours   Decimal           @map("duration_hours") @db.Decimal(5, 2)
+  reason          String            @db.Text
+  multiplier      Decimal           @default(1.5) @db.Decimal(3, 1)
+  status          OvertimeStatus    @default(PENDING)
+  approvedBy      String?           @map("approved_by") @db.VarChar(36)
+  approvedAt      DateTime?         @map("approved_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([status])
+  @@index([date])
+  @@map("overtime_requests")
+}
+
+// ============================================================
+// LEAVE MANAGEMENT
+// ============================================================
+
+/// Leave type master data
+model LeaveType {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  companyId   String   @map("company_id") @db.VarChar(36)
+  name        String   @db.VarChar(255)
+  code        String   @unique @db.VarChar(50)
+  description String?  @db.Text
+  isPaid      Boolean  @default(true) @map("is_paid")
+  isAnnual    Boolean  @default(false) @map("is_annual")
+  maxDays     Int      @default(0) @map("max_days")
+  requiresAttachment Boolean @default(false) @map("requires_attachment")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  requests LeaveRequest[]
+  balances LeaveBalance[]
+
+  @@index([companyId])
+  @@index([code])
+  @@map("leave_types")
+}
+
+/// Employee leave balance per year
+model LeaveBalance {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  employeeId  String   @map("employee_id") @db.VarChar(36)
+  companyId   String   @map("company_id") @db.VarChar(36)
+  leaveTypeId String   @map("leave_type_id") @db.VarChar(36)
+  year        Int      @default(2026)
+  totalDays   Int      @default(0) @map("total_days")
+  usedDays    Int      @default(0) @map("used_days")
+  remainingDays Int    @default(0) @map("remaining_days")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@index([employeeId])
+  @@index([companyId])
+  @@map("leave_balances")
+}
+
+/// Leave request with approval flow
+model LeaveRequest {
+  id              String        @id @default(uuid()) @db.VarChar(36)
+  employeeId      String        @map("employee_id") @db.VarChar(36)
+  companyId       String        @map("company_id") @db.VarChar(36)
+  leaveTypeId     String        @map("leave_type_id") @db.VarChar(36)
+  startDate       DateTime      @map("start_date") @db.Date
+  endDate         DateTime      @map("end_date") @db.Date
+  totalDays       Int           @default(1) @map("total_days")
+  reason          String        @db.Text
+  attachment      String?       @db.VarChar(500)
+  status          LeaveStatus   @default(PENDING)
+  approvedBy      String?       @map("approved_by") @db.VarChar(36)
+  approvedAt      DateTime?     @map("approved_at")
+  rejectionReason String?       @map("rejection_reason") @db.Text
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
+
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([leaveTypeId])
+  @@index([status])
+  @@index([startDate])
+  @@map("leave_requests")
+}
+
+// ============================================================
 // ENUMS
 // ============================================================
 
@@ -1467,4 +1774,27 @@ enum InterviewStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+// ============================================================
+// ATTENDANCE ENUMS
+// ============================================================
+
+enum OvertimeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// ============================================================
+// LEAVE ENUMS
+// ============================================================
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  WITHDRAWN
 }

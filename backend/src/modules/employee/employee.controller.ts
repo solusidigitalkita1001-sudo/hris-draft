@@ -5,8 +5,9 @@ import { Result } from '@/shared/core/Result';
 export class EmployeeController {
   async findAll(req: Request, res: Response, next: NextFunction) {
     try {
+      const cid = req.query.companyId as string;
       const query = {
-        companyId: req.query.companyId as string,
+        companyId: cid,
         departmentId: req.query.departmentId as string | undefined,
         positionId: req.query.positionId as string | undefined,
         status: req.query.status as string | undefined,
@@ -15,12 +16,11 @@ export class EmployeeController {
         limit: parseInt(req.query.limit as string) || 20,
       };
       const result = await employeeService.findAll(query);
-      res.json(Result.success(result.data, undefined, {
-        page: result.page,
-        limit: result.limit,
-        total: result.total,
-        totalPages: result.totalPages,
-      }));
+      res.json({
+        success: true,
+        data: result.data,
+        meta: { page: result.page, limit: result.limit, total: result.total, totalPages: result.totalPages },
+      });
     } catch (error) {
       next(error);
     }
@@ -28,7 +28,7 @@ export class EmployeeController {
 
   async findById(req: Request, res: Response, next: NextFunction) {
     try {
-      const employee = await employeeService.findById(req.params.id);
+      const employee = await employeeService.findById(req.params.id as string);
       res.json(Result.success(employee));
     } catch (error) {
       next(error);
@@ -46,7 +46,7 @@ export class EmployeeController {
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const employee = await employeeService.update(req.params.id, req.body);
+      const employee = await employeeService.update(req.params.id as string, req.body);
       res.json(Result.updated(employee));
     } catch (error) {
       next(error);
@@ -55,7 +55,7 @@ export class EmployeeController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      await employeeService.delete(req.params.id);
+      await employeeService.delete(req.params.id as string);
       res.json(Result.deleted());
     } catch (error) {
       next(error);
@@ -64,7 +64,7 @@ export class EmployeeController {
 
   async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      const employee = await employeeService.updateStatus(req.params.id, req.body.status);
+      const employee = await employeeService.updateStatus(req.params.id as string, req.body.status);
       res.json(Result.updated(employee));
     } catch (error) {
       next(error);

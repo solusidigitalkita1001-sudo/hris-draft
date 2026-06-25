@@ -1,0 +1,7 @@
+export enum LeaveStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  CANCELLED = 'CANCELLED',
+  WITHDRAWN = 'WITHDRAWN',
+}

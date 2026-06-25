@@ -17,6 +17,7 @@ import { PositionListPage } from '@/modules/organization/pages/PositionListPage'
 // Employee Pages
 import { EmployeeListPage } from '@/modules/employee/pages/EmployeeListPage';
 import { EmployeeDetailPage } from '@/modules/employee/pages/EmployeeDetailPage';
+import { EmployeeFormPage } from '@/modules/employee/pages/EmployeeFormPage';
 
 // Payroll Pages
 import { PayrollDashboard } from '@/modules/payroll/pages/PayrollDashboard';
@@ -45,6 +46,13 @@ import { GoalList } from '@/modules/performance/pages/GoalList';
 // Training Pages
 import { CourseList } from '@/modules/training/pages/CourseList';
 import { CourseDetail } from '@/modules/training/pages/CourseDetail';
+
+// Attendance Pages
+import { AttendanceList } from '@/modules/attendance/pages/AttendanceList';
+
+// Leave Pages
+import { LeaveList } from '@/modules/leave/pages/LeaveList';
+import { LeaveDetail } from '@/modules/leave/pages/LeaveDetail';
 
 export const router = createBrowserRouter([
   {
@@ -120,6 +128,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
             <EmployeeListPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'employees/new',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'create' }]}>
+            <EmployeeFormPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'employees/:id/edit',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'update' }]}>
+            <EmployeeFormPage />
           </ProtectedRoute>
         ),
       },
@@ -256,6 +280,32 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
             <GoalList />
+          </ProtectedRoute>
+        ),
+      },
+      // Attendance Routes
+      {
+        path: 'attendance',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'attendance', action: 'read' }]}>
+            <AttendanceList />
+          </ProtectedRoute>
+        ),
+      },
+      // Leave Routes
+      {
+        path: 'leave',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'leave', action: 'read' }]}>
+            <LeaveList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'leave/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'leave', action: 'read' }]}>
+            <LeaveDetail />
           </ProtectedRoute>
         ),
       },

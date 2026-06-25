@@ -1,0 +1,65 @@
+import { Request, Response, NextFunction } from 'express';
+import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
+import { attendanceService } from './attendance.service';
+import { Result } from '@/shared/core/Result';
+
+export class AttendanceController {
+  async findAll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await attendanceService.findAll(req.query.companyId as string, {
+        employeeId: req.query.employeeId as string,
+        month: req.query.month as string,
+        status: req.query.status as string,
+      });
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async findById(req: Request, res: Response, next: NextFunction) {
+    try { res.json(Result.success(await attendanceService.findById(req.params.id as string))); }
+    catch (error) { next(error); }
+  }
+
+  async create(req: Request, res: Response, next: NextFunction) {
+    try { res.status(201).json(Result.created(await attendanceService.create(req.body))); }
+    catch (error) { next(error); }
+  }
+
+  async checkOut(req: Request, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await attendanceService.checkOut(req.params.id as string, req.body.checkOut))); }
+    catch (error) { next(error); }
+  }
+
+  async delete(req: Request, res: Response, next: NextFunction) {
+    try { await attendanceService.delete(req.params.id as string); res.json(Result.deleted()); }
+    catch (error) { next(error); }
+  }
+
+  // Overtime
+  async findAllOvertime(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await attendanceService.findAllOvertime(req.query.companyId as string, {
+        employeeId: req.query.employeeId as string,
+        status: req.query.status as string,
+      });
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async createOvertime(req: Request, res: Response, next: NextFunction) {
+    try { res.status(201).json(Result.created(await attendanceService.createOvertime(req.body))); }
+    catch (error) { next(error); }
+  }
+
+  async approveOvertime(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await attendanceService.approveOvertime(req.params.id as string, req.user!.id))); }
+    catch (error) { next(error); }
+  }
+
+  async rejectOvertime(req: Request, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await attendanceService.rejectOvertime(req.params.id as string))); }
+    catch (error) { next(error); }
+  }
+}
+
+export const attendanceController = new AttendanceController();
