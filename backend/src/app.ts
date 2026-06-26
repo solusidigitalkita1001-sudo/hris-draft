@@ -27,6 +27,9 @@ import attendanceRoutes from '@/modules/attendance/attendance.routes';
 import leaveRoutes from '@/modules/leave/leave.routes';
 import onboardingRoutes from '@/modules/onboarding/onboarding.routes';
 import assetRoutes from '@/modules/asset/asset.routes';
+import reportsRoutes from '@/modules/reports/reports.routes';
+import auditLogRoutes from '@/modules/audit-log/audit-log.routes';
+import workCalendarRoutes from '@/modules/work-calendar/work-calendar.routes';
 
 const app = express();
 
@@ -132,6 +135,9 @@ app.use(`${apiPrefix}/attendance`, attendanceRoutes);
 app.use(`${apiPrefix}/leave`, leaveRoutes);
 app.use(`${apiPrefix}/onboarding`, onboardingRoutes);
 app.use(`${apiPrefix}/assets`, assetRoutes);
+app.use(`${apiPrefix}/reports`, reportsRoutes);
+app.use(`${apiPrefix}/audit-logs`, auditLogRoutes);
+app.use(`${apiPrefix}/work-calendars`, workCalendarRoutes);
 
 // ==================== 404 Handler ====================
 app.use((_req, res) => {

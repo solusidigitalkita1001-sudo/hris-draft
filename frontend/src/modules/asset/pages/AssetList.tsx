@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, RefreshCw, Plus, Package, UserRound } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/utils/format';
+import { formatCurrency } from '@/utils/format';
 
 const STYLES: Record<string, string> = {
   AVAILABLE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',

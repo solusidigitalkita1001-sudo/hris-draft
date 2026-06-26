@@ -95,6 +95,8 @@ model Company {
   onboardingChecklists OnboardingChecklist[]
   resignations        Resignation[]
   assets              Asset[]
+  workCalendars       WorkCalendar[]
+  nationalHolidays    NationalHoliday[]
 
   @@index([groupId])
   @@index([code])
@@ -955,6 +957,76 @@ model InterviewFeedback {
 
   @@index([interviewId])
   @@map("interview_feedback")
+}
+
+// ============================================================
+// WORK CALENDAR
+// ============================================================
+
+/// Calendar definition (per company, branch, or department)
+model WorkCalendar {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  companyId     String   @map("company_id") @db.VarChar(36)
+  branchId      String?  @map("branch_id") @db.VarChar(36)
+  departmentId  String?  @map("department_id") @db.VarChar(36)
+  name          String   @db.VarChar(100)
+  year          Int
+  workDays      Json     @map("work_days")
+  isActive      Boolean  @default(true) @map("is_active")
+  description   String?  @db.Text
+  createdBy     String   @map("created_by") @db.VarChar(36)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  days    WorkCalendarDay[]
+
+  @@unique([companyId, branchId, departmentId, year])
+  @@index([companyId])
+  @@index([year])
+  @@map("work_calendars")
+}
+
+/// Individual day entries (only days that differ from defaults)
+model WorkCalendarDay {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  calendarId  String   @map("calendar_id") @db.VarChar(36)
+  date        DateTime @db.Date
+  dayType     String   @map("day_type") @db.VarChar(2)
+  name        String?  @db.VarChar(150)
+  notes       String?  @db.Text
+  workStart   String?  @map("work_start") @db.VarChar(5)
+  workEnd     String?  @map("work_end") @db.VarChar(5)
+  isMandatory Boolean  @default(false) @map("is_mandatory")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  calendar WorkCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, date])
+  @@index([calendarId])
+  @@index([date])
+  @@map("work_calendar_days")
+}
+
+/// Master national holidays reference
+model NationalHoliday {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  companyId   String   @map("company_id") @db.VarChar(36)
+  countryCode String   @default("ID") @map("country_code") @db.VarChar(2)
+  date        DateTime @db.Date
+  name        String   @db.VarChar(150)
+  type        String   @db.VarChar(2)
+  year        Int
+  source      String?  @db.VarChar(100)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, countryCode, date])
+  @@index([year])
+  @@map("national_holidays")
 }
 
 // ============================================================

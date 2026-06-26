@@ -27,7 +27,6 @@ import {
   GitBranch,
   Heart,
   Target,
-  LogOut,
   Package,
 } from 'lucide-react';
 import { useState } from 'react';

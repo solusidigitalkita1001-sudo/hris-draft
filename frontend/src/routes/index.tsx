@@ -54,6 +54,24 @@ import { AttendanceList } from '@/modules/attendance/pages/AttendanceList';
 import { LeaveList } from '@/modules/leave/pages/LeaveList';
 import { LeaveDetail } from '@/modules/leave/pages/LeaveDetail';
 
+// Asset Pages
+import { AssetList } from '@/modules/asset/pages/AssetList';
+
+// Onboarding / Offboarding Pages
+import { OffboardingList } from '@/modules/onboarding/pages/OffboardingList';
+import { OffboardingDetail } from '@/modules/onboarding/pages/OffboardingDetail';
+
+// Reports Pages
+import { ReportsPage } from '@/modules/reports/pages/ReportsPage';
+
+// Notification Pages
+import { NotificationsPage } from '@/modules/notifications/pages/NotificationsPage';
+
+// Admin Pages
+import { AdminUsersPage } from '@/modules/admin/pages/AdminUsersPage';
+import { AdminAuditLogPage } from '@/modules/admin/pages/AdminAuditLogPage';
+import { AdminSettingsPage } from '@/modules/admin/pages/AdminSettingsPage';
+
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -309,6 +327,50 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // Asset Routes
+      {
+        path: 'assets',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'asset', action: 'read' }]}>
+            <AssetList />
+          </ProtectedRoute>
+        ),
+      },
+      // Offboarding Routes
+      {
+        path: 'offboarding',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
+            <OffboardingList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'offboarding/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
+            <OffboardingDetail />
+          </ProtectedRoute>
+        ),
+      },
+      // Reports Routes
+      {
+        path: 'reports',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'report', action: 'read' }]}>
+            <ReportsPage />
+          </ProtectedRoute>
+        ),
+      },
+      // Notifications Route
+      {
+        path: 'notifications',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'dashboard', action: 'read' }]}>
+            <NotificationsPage />
+          </ProtectedRoute>
+        ),
+      },
       // Training / LMS Routes
       {
         path: 'lms',
@@ -327,8 +389,32 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'admin/users',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'user', action: 'read' }]}>
+            <AdminUsersPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: 'admin/roles',
         element: <div className="p-8 text-center text-muted-foreground">Role Management (Coming Soon)</div>,
+      },
+      {
+        path: 'admin/audit',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'audit-log', action: 'read' }]}>
+            <AdminAuditLogPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/settings',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'administration', action: 'read' }]}>
+            <AdminSettingsPage />
+          </ProtectedRoute>
+        ),
       },
     ],
   },
