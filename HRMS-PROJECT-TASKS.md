@@ -244,17 +244,18 @@
 
 ## 8. ❌ BELUM DISENTUH
 
-### 8.1 Self Service Request — ❌
+### 8.1 Self Service Request — ✅ Selesai
 
-> Modul untuk karyawan mengajukan berbagai request: izin, cuti, lembur, dinas luar, dll.
+> Portal untuk karyawan mengajukan & melihat status berbagai pengajuan: izin, cuti, lembur.
 
 | Sub-modul | Prisma Model | Backend | Frontend | Service |
 |-----------|:------------:|:-------:|:--------:|:-------:|
-| Request Types / Kategori | ❌ | ❌ | ❌ | ❌ |
-| Submit Request | ❌ | ❌ | ❌ | ❌ |
-| My Requests List | ❌ | ❌ | ❌ | ❌ |
-| Approve / Reject | ❌ | ❌ | ❌ | ❌ |
-| Request History | ❌ | ❌ | ❌ | ❌ |
+| Permission Types (8 jenis) | ✅ PermissionType enum | ✅ | ✅ | ✅ |
+| Submit Permission Request | ✅ PermissionRequest model | ✅ POST | ✅ PermissionForm modal | ✅ |
+| My Requests List | ✅ | ✅ GET /my | ✅ SelfServicePage (tabs + filter) | ✅ |
+| Approve / Reject | ➖ (via backend API) | ✅ PATCH approve/reject | ❌ (admin page future) | ✅ |
+| Cancel Request | ➖ | ✅ PATCH cancel | ✅ (button) | ✅ |
+| Unified Dashboard | ➖ | ➖ | ✅ Tabs: Izin, Cuti, Lembur | ✅ |
 
 ### 8.2 Employee Loan — ❌
 
@@ -347,7 +348,7 @@ ANALYTICS
 
 PENDING
 ├── 7.1 Notifications     ✅ Full-stack (baru)
-├── 8.1 Self Service      ❌ Not started
+├── 8.1 Self Service      ✅ Full-stack (baru)
 ├── 8.2 Employee Loan     ❌ Not started
 ├── 8.3 Travel & Expense  ❌ Not started
 ├── 8.4 Workflow Engine   ❌ Not started
@@ -358,11 +359,11 @@ PENDING
 
 | Kategori | Jumlah |
 |----------|:------:|
-| ✅ Full-stack (backend + frontend + service) | **16 modul** |
+| ✅ Full-stack (backend + frontend + service) | **17 modul** |
 | ⚠️ Backend ✅, Frontend Partial (via /admin) | **2 modul** (User, Audit Log) |
 | 🟡 Backend ✅, Frontend ❌ | **0 modul** |
 | 🟠 Frontend mock, Backend ❌ | **0 modul** |
-| ❌ Not started | **5 modul** |
+| ❌ Not started | **4 modul** |
 | **Total** | **23 modul** |
 
 ---
@@ -371,8 +372,7 @@ PENDING
 
 | Priority | Module | Estimasi | Alasan |
 |----------|--------|----------|--------|
-| 🥇 P1 | **Self Service Request** | 3-5 hari | Paling sering dipakai user daily |
-| 🥈 P2 | **Employee Loan** | 3-5 hari | Fitur penting untuk kesejahteraan |
+| 🥇 P1 | **Employee Loan** | 3-5 hari | Fitur penting untuk kesejahteraan |
 | 🥈 P2 | **Travel & Expense** | 4-6 hari | Butuh upload receipt dll |
 | 🥉 P3 | **Workflow Engine** | 5-7 hari | Foundation untuk approval terpusat |
 | 🥉 P3 | **Document Management** | 4-6 hari | Upload & tracking dokumen |
