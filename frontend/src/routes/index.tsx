@@ -64,6 +64,9 @@ import { OffboardingDetail } from '@/modules/onboarding/pages/OffboardingDetail'
 // Reports Pages
 import { ReportsPage } from '@/modules/reports/pages/ReportsPage';
 
+// RBAC / Roles Pages
+import { RoleListPage } from '@/modules/rbac/pages/RoleListPage';
+
 // Work Calendar Pages
 import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
 import { WorkCalendarDetailPage } from '@/modules/work-calendar/pages/WorkCalendarDetailPage';
@@ -428,7 +431,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'admin/roles',
-        element: <div className="p-8 text-center text-muted-foreground">Role Management (Coming Soon)</div>,
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'rbac', action: 'read' }]}>
+            <RoleListPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'admin/audit',
