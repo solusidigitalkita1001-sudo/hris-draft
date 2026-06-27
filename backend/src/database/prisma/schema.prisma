@@ -97,6 +97,7 @@ model Company {
   assets              Asset[]
   workCalendars       WorkCalendar[]
   nationalHolidays    NationalHoliday[]
+  notifications       Notification[]
 
   @@index([groupId])
   @@index([code])
@@ -1056,6 +1057,7 @@ model User {
   loginLogs       LoginLog[]
   loginAttempts   LoginAttempt[]
   auditLogs       AuditLog[]
+  notifications   Notification[]
 
   @@index([email])
   @@index([status])
@@ -1846,6 +1848,41 @@ enum InterviewStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+// ============================================================
+// NOTIFICATION
+// ============================================================
+
+/// User notifications for system events, approvals, reminders
+model Notification {
+  id        String            @id @default(uuid()) @db.VarChar(36)
+  companyId String            @map("company_id") @db.VarChar(36)
+  userId    String            @map("user_id") @db.VarChar(36)
+  title     String            @db.VarChar(255)
+  message   String?           @db.Text
+  type      NotificationType  @default(INFO)
+  resource  String?           @db.VarChar(100)
+  action    String?           @db.VarChar(50)
+  referenceId String?         @map("reference_id") @db.VarChar(36)
+  isRead    Boolean           @default(false) @map("is_read")
+  readAt    DateTime?         @map("read_at")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([companyId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
 }
 
 // ============================================================
