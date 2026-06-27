@@ -64,6 +64,11 @@ import { OffboardingDetail } from '@/modules/onboarding/pages/OffboardingDetail'
 // Reports Pages
 import { ReportsPage } from '@/modules/reports/pages/ReportsPage';
 
+// Work Calendar Pages
+import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
+import { WorkCalendarDetailPage } from '@/modules/work-calendar/pages/WorkCalendarDetailPage';
+import { WorkCalendarHolidaysPage } from '@/modules/work-calendar/pages/WorkCalendarHolidaysPage';
+
 // Notification Pages
 import { NotificationsPage } from '@/modules/notifications/pages/NotificationsPage';
 
@@ -350,6 +355,31 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
             <OffboardingDetail />
+          </ProtectedRoute>
+        ),
+      },
+      // Work Calendar Routes
+      {
+        path: 'work-calendar',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}>
+            <WorkCalendarListPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'work-calendar/holidays',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}>
+            <WorkCalendarHolidaysPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'work-calendar/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}>
+            <WorkCalendarDetailPage />
           </ProtectedRoute>
         ),
       },
