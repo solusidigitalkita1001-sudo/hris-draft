@@ -44,15 +44,17 @@
 | Change Password | ✅ PATCH `/users/:id/password` | ❌ | ✅ |
 | Reset Password | ✅ POST `/users/reset` | ❌ | ✅ |
 
-### 1.3 RBAC / Roles — ⚠️ Partial
+### 1.3 RBAC / Roles — ✅ Selesai
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
-| List Roles | ✅ GET `/roles` | ❌ (Coming Soon) | ❌ |
-| Detail Role | ✅ GET `/roles/:id` | ❌ | ❌ |
-| CRUD Roles | ✅ POST/PATCH/DELETE `/roles` | ❌ | ❌ |
-| Assign Permission | ✅ POST `/roles/:id/permissions` | ❌ | ❌ |
-| Revoke Permission | ✅ DELETE `/roles/:id/permissions/:permId` | ❌ | ❌ |
+| List Roles | ✅ GET `/roles` | ✅ RoleListPage (card grid) | ✅ rbac.service.ts |
+| Detail Role | ✅ GET `/roles/:id` | ✅ (via modal) | ✅ |
+| Create Role | ✅ POST `/roles` | ✅ (modal form) | ✅ |
+| Update Role | ✅ PUT `/roles/:id` | ✅ (modal form) | ✅ |
+| Delete Role | ✅ DELETE `/roles/:id` | ✅ (confirm dialog) | ✅ |
+| Assign Permission | ✅ PUT `/roles/:id/permissions` | ✅ PermissionManager modal | ✅ |
+| View Permissions | ✅ GET `/roles/:id/permissions` | ✅ (grouped checkboxes) | ✅ |
 
 ### 1.4 Organization — ✅ Selesai
 
@@ -227,14 +229,16 @@
 
 ## 7. 🟡 / 🟠 PARTIAL / REMAINING
 
-### 7.1 Notifications — 🟠 Frontend Mock, Backend ❌
+### 7.1 Notifications — ✅ Selesai
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
-| Notification List | ❌ | ✅ NotificationsPage (mock) | ❌ |
-| Mark Read | ❌ | ✅ (mock) | ❌ |
-| Real-time Push | ❌ | ❌ | ❌ |
-| Backend API | ❌ | ❌ | ❌ |
+| Notification List | ✅ GET `/notifications` | ✅ NotificationsPage | ✅ notification.service.ts |
+| Unread Count | ✅ GET `/notifications/unread-count` | ✅ (header) | ✅ |
+| Mark Read | ✅ PUT `/notifications/read` | ✅ (per item) | ✅ |
+| Mark All Read | ✅ PUT `/notifications/read-all` | ✅ (button) | ✅ |
+| Delete | ✅ DELETE `/notifications/:id` | ✅ (icon button) | ✅ |
+| Real-time Push | ❌ (future) | ❌ | ❌ |
 
 ---
 
@@ -315,7 +319,7 @@
 CORE SYSTEM
 ├── 1.1 Auth              ✅ Full-stack
 ├── 1.2 User              ✅ Full-stack
-├── 1.3 RBAC              ⚠️ Backend ✅, Frontend ❌
+├── 1.3 RBAC              ✅ Full-stack (baru)
 ├── 1.4 Organization      ✅ Full-stack
 
 HR OPERATIONS
@@ -342,7 +346,7 @@ ANALYTICS
 ├── 6.1 Reports           ✅ Full-stack
 
 PENDING
-├── 7.1 Notifications     🟠 Frontend mock, ❌ Backend
+├── 7.1 Notifications     ✅ Full-stack (baru)
 ├── 8.1 Self Service      ❌ Not started
 ├── 8.2 Employee Loan     ❌ Not started
 ├── 8.3 Travel & Expense  ❌ Not started
@@ -354,10 +358,10 @@ PENDING
 
 | Kategori | Jumlah |
 |----------|:------:|
-| ✅ Full-stack (backend + frontend + service) | **14 modul** |
+| ✅ Full-stack (backend + frontend + service) | **16 modul** |
 | ⚠️ Backend ✅, Frontend Partial (via /admin) | **2 modul** (User, Audit Log) |
-| 🟡 Backend ✅, Frontend ❌ | **1 modul** (RBAC) |
-| 🟠 Frontend mock, Backend ❌ | **1 modul** (Notifications) |
+| 🟡 Backend ✅, Frontend ❌ | **0 modul** |
+| 🟠 Frontend mock, Backend ❌ | **0 modul** |
 | ❌ Not started | **5 modul** |
 | **Total** | **23 modul** |
 
@@ -367,7 +371,6 @@ PENDING
 
 | Priority | Module | Estimasi | Alasan |
 |----------|--------|----------|--------|
-| 🥇 P1 | **Notifications Backend** | 1-2 hari | Frontend sudah jadi, tinggal backend |
 | 🥇 P1 | **Self Service Request** | 3-5 hari | Paling sering dipakai user daily |
 | 🥈 P2 | **Employee Loan** | 3-5 hari | Fitur penting untuk kesejahteraan |
 | 🥈 P2 | **Travel & Expense** | 4-6 hari | Butuh upload receipt dll |
