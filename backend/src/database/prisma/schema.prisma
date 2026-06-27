@@ -98,6 +98,7 @@ model Company {
   workCalendars       WorkCalendar[]
   nationalHolidays    NationalHoliday[]
   notifications       Notification[]
+  permissionRequests  PermissionRequest[]
 
   @@index([groupId])
   @@index([code])
@@ -1130,6 +1131,7 @@ model Employee {
   resignations         Resignation[]         @relation("ResignationEmployee")
   assetAssignments     AssetAssignment[]
   exitClearancePICs    ExitClearance[]    @relation("ExitClearancePIC")
+  permissionRequests   PermissionRequest[]
 
   @@index([companyId])
   @@index([employeeNumber])
@@ -1883,6 +1885,54 @@ enum NotificationType {
   SUCCESS
   WARNING
   ERROR
+}
+
+// ============================================================
+// PERMISSION REQUEST
+// ============================================================
+
+/// Employee permission/absence requests (izin, dinas luar, dll.)
+model PermissionRequest {
+  id          String           @id @default(uuid()) @db.VarChar(36)
+  companyId   String           @map("company_id") @db.VarChar(36)
+  employeeId  String           @map("employee_id") @db.VarChar(36)
+  type        PermissionType   @default(OTHER)
+  startDate   DateTime         @map("start_date")
+  endDate     DateTime         @map("end_date")
+  duration    Float            @default(0)
+  reason      String           @db.Text
+  status      RequestStatus    @default(PENDING)
+  notes       String?          @db.Text
+  approverId  String?          @map("approver_id") @db.VarChar(36)
+  approvedAt  DateTime?        @map("approved_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, status])
+  @@index([companyId])
+  @@index([createdAt])
+  @@map("permission_requests")
+}
+
+enum PermissionType {
+  SICK
+  PERSONAL
+  LATE
+  EARLY_LEAVE
+  LEAVE_OFFICE
+  BUSINESS_TRIP
+  WORK_FROM_HOME
+  OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 // ============================================================

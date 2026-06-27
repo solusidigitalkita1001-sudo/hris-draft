@@ -67,6 +67,9 @@ import { ReportsPage } from '@/modules/reports/pages/ReportsPage';
 // RBAC / Roles Pages
 import { RoleListPage } from '@/modules/rbac/pages/RoleListPage';
 
+// Self Service Pages
+import { SelfServicePage } from '@/modules/self-service/pages/SelfServicePage';
+
 // Work Calendar Pages
 import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
 import { WorkCalendarDetailPage } from '@/modules/work-calendar/pages/WorkCalendarDetailPage';
@@ -358,6 +361,15 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
             <OffboardingDetail />
+          </ProtectedRoute>
+        ),
+      },
+      // Self Service Route
+      {
+        path: 'self-service',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'self-service', action: 'read' }]}>
+            <SelfServicePage />
           </ProtectedRoute>
         ),
       },

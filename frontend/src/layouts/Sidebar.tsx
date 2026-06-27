@@ -8,6 +8,7 @@ import {
   Users,
   Building2,
   Clock,
+  UserCheck,
   CalendarDays,
   Calendar,
   LogOut,
@@ -53,6 +54,7 @@ const navItems: NavItem[] = [
       { label: 'Positions', icon: <Briefcase size={16} />, path: '/organization/positions' },
     ],
   },
+  { label: 'Self Service', icon: <UserCheck size={18} />, path: '/self-service', module: 'self-service' },
   { label: 'Employees', icon: <Users size={18} />, path: '/employees', module: 'employee' },
   { label: 'Attendance', icon: <Clock size={18} />, path: '/attendance', module: 'attendance' },
   {

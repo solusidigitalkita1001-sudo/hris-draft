@@ -31,6 +31,7 @@ import reportsRoutes from '@/modules/reports/reports.routes';
 import auditLogRoutes from '@/modules/audit-log/audit-log.routes';
 import workCalendarRoutes from '@/modules/work-calendar/work-calendar.routes';
 import notificationRoutes from '@/modules/notification/notification.routes';
+import permissionRequestRoutes from '@/modules/permission-request/permission-request.routes';
 
 const app = express();
 
@@ -140,6 +141,7 @@ app.use(`${apiPrefix}/reports`, reportsRoutes);
 app.use(`${apiPrefix}/audit-logs`, auditLogRoutes);
 app.use(`${apiPrefix}/work-calendars`, workCalendarRoutes);
 app.use(`${apiPrefix}/notifications`, notificationRoutes);
+app.use(`${apiPrefix}/permission-requests`, permissionRequestRoutes);
 
 // ==================== 404 Handler ====================
 app.use((_req, res) => {
