@@ -6,7 +6,7 @@ import { formatCurrency, formatDate } from '@/utils/format';
 import { employeeLoanService, type Loan, LOAN_STATUS_LABELS, INSTALLMENT_STATUS_LABELS } from '@/services/employee-loan.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCw, Banknote, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Banknote } from 'lucide-react';
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400',

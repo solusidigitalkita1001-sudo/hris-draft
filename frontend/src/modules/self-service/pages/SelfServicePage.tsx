@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Plus, RefreshCw, FileText, CalendarDays, Clock,
-  CheckCircle, XCircle, AlertCircle, Ban, ChevronDown,
+  CheckCircle, XCircle, AlertCircle, Ban,
   Send,
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
@@ -314,12 +314,12 @@ export function SelfServicePage() {
 
       {/* ─── LEAVE TAB ────────────────────────────────── */}
       {!loading && activeTab === 'leave' && (
-        <LeaveTabView />
+        <LeaveTabView companyId={companyId} />
       )}
 
       {/* ─── OVERTIME TAB ─────────────────────────────── */}
       {!loading && activeTab === 'overtime' && (
-        <OvertimeTabView />
+        <OvertimeTabView companyId={companyId} />
       )}
 
       {/* Modal */}
@@ -331,7 +331,7 @@ export function SelfServicePage() {
 }
 
 // ─── Leave Tab ──────────────────────────────────────────
-function LeaveTabView() {
+function LeaveTabView({ companyId }: { companyId: string }) {
   const [leaves, setLeaves] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -377,7 +377,7 @@ function LeaveTabView() {
 }
 
 // ─── Overtime Tab ───────────────────────────────────────
-function OvertimeTabView() {
+function OvertimeTabView({ companyId }: { companyId: string }) {
   const [overtimes, setOvertimes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

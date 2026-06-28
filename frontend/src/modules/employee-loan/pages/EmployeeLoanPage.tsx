@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  Plus, RefreshCw, Banknote, CheckCircle, XCircle, AlertCircle, Ban, Eye, Search,
+  Plus, RefreshCw, Banknote, Eye,
 } from 'lucide-react';
 
 // ─── Modal ──────────────────────────────────────────────
