@@ -7,6 +7,18 @@ export type PermissionCheck = {
   action: 'create' | 'read' | 'update' | 'delete' | 'approve' | 'export' | 'process';
 };
 
+function toLegacyPermissionCode(resource: string, action: string) {
+  const resourceAliasMap: Record<string, string> = {
+    organization: 'org',
+    attendance: 'att',
+    recruitment: 'rec',
+    dashboard: 'dash',
+    'travel-expense': 'travel',
+  };
+
+  return `${resourceAliasMap[resource] || resource}:${action}`;
+}
+
 /**
  * Authorization middleware factory - creates middleware that checks for specific permissions
  */
@@ -26,7 +38,11 @@ export function authorize(...permissions: PermissionCheck[]) {
 
     const hasAllPermissions = permissions.every((required) =>
       userPermissions.some(
-        (up) => up === `${required.resource}:${required.action}` || up === `${required.resource}:*`
+        (up) =>
+          up === `${required.resource}:${required.action}` ||
+          up === `${required.resource}:*` ||
+          up === toLegacyPermissionCode(required.resource, required.action) ||
+          up === `${toLegacyPermissionCode(required.resource, '*')}`
       )
     );
 

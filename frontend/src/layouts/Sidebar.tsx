@@ -1,7 +1,16 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/stores/ui.store';
 import { useAuthStore } from '@/stores/auth.store';
+import {
+  ADMIN_ROLES,
+  EMPLOYEE_SELF_SERVICE_ROLES,
+  OPERATIONAL_ROLES,
+  canAccess,
+  type AccessRule,
+} from '@/lib/access-control';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { cn } from '@/utils/cn';
 import {
   LayoutDashboard,
@@ -30,83 +39,231 @@ import {
   Heart,
   Target,
   Package,
+  Plane,
+  Workflow,
 } from 'lucide-react';
 import { useState } from 'react';
 
 interface NavItem {
-  label: string;
+  labelKey: TranslationKey;
   icon: React.ReactNode;
   path?: string;
   children?: NavItem[];
-  module?: string;
+  access?: AccessRule;
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/dashboard', module: 'dashboard' },
   {
-    label: 'Organization',
+    labelKey: 'sidebar.dashboard',
+    icon: <LayoutDashboard size={18} />,
+    path: '/dashboard',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
+    labelKey: 'sidebar.organization',
     icon: <Building2 size={18} />,
-    module: 'organization',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'organization', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
     children: [
-      { label: 'Company Groups', icon: <GitBranch size={16} />, path: '/organization/groups' },
-      { label: 'Companies', icon: <Building size={16} />, path: '/organization/companies' },
-      { label: 'Departments', icon: <Building2 size={16} />, path: '/organization/departments' },
-      { label: 'Positions', icon: <Briefcase size={16} />, path: '/organization/positions' },
+      { labelKey: 'sidebar.organization.groups', icon: <GitBranch size={16} />, path: '/organization/groups' },
+      { labelKey: 'sidebar.organization.companies', icon: <Building size={16} />, path: '/organization/companies' },
+      { labelKey: 'sidebar.organization.departments', icon: <Building2 size={16} />, path: '/organization/departments' },
+      { labelKey: 'sidebar.organization.positions', icon: <Briefcase size={16} />, path: '/organization/positions' },
     ],
   },
-  { label: 'Self Service', icon: <UserCheck size={18} />, path: '/self-service', module: 'self-service' },
-  { label: 'Loan', icon: <Banknote size={18} />, path: '/employee-loans', module: 'employee-loan' },
-  { label: 'Employees', icon: <Users size={18} />, path: '/employees', module: 'employee' },
-  { label: 'Attendance', icon: <Clock size={18} />, path: '/attendance', module: 'attendance' },
   {
-    label: 'Work Calendar',
+    labelKey: 'sidebar.selfService',
+    icon: <UserCheck size={18} />,
+    path: '/self-service',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
+    labelKey: 'sidebar.loan',
+    icon: <Banknote size={18} />,
+    path: '/employee-loans',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
+    labelKey: 'sidebar.travelExpense',
+    icon: <Plane size={18} />,
+    path: '/travel-expenses',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
+    labelKey: 'sidebar.workflow',
+    icon: <Workflow size={18} />,
+    path: '/workflow-engine',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'workflow', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
+  },
+  {
+    labelKey: 'sidebar.employees',
+    icon: <Users size={18} />,
+    path: '/employees',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'employee', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
+  },
+  {
+    labelKey: 'sidebar.attendance',
+    icon: <Clock size={18} />,
+    path: '/attendance',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'attendance', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
+  },
+  {
+    labelKey: 'sidebar.workCalendar',
     icon: <CalendarDays size={18} />,
-    module: 'work-calendar',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'work-calendar', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
     children: [
-      { label: 'Calendars', icon: <CalendarDays size={16} />, path: '/work-calendar' },
-      { label: 'Holidays', icon: <CalendarDays size={16} />, path: '/work-calendar/holidays' },
+      { labelKey: 'sidebar.workCalendar.calendars', icon: <CalendarDays size={16} />, path: '/work-calendar' },
+      { labelKey: 'sidebar.workCalendar.holidays', icon: <CalendarDays size={16} />, path: '/work-calendar/holidays' },
     ],
   },
-  { label: 'Leave', icon: <Calendar size={18} />, path: '/leave', module: 'leave' },
-  { label: 'Offboarding', icon: <LogOut size={18} />, path: '/offboarding', module: 'employee' },
-  { label: 'Assets', icon: <Package size={18} />, path: '/assets', module: 'employee' },
-  { label: 'Payroll', icon: <Banknote size={18} />, path: '/payroll', module: 'payroll' },
-  { label: 'Benefits', icon: <Heart size={18} />, path: '/benefits', module: 'benefit' },
   {
-    label: 'Recruitment',
+    labelKey: 'sidebar.leave',
+    icon: <Calendar size={18} />,
+    path: '/leave',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'leave', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
+  },
+  {
+    labelKey: 'sidebar.offboarding',
+    icon: <LogOut size={18} />,
+    path: '/offboarding',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'employee', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
+  },
+  {
+    labelKey: 'sidebar.assets',
+    icon: <Package size={18} />,
+    path: '/assets',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'asset', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
+  },
+  {
+    labelKey: 'sidebar.payroll',
+    icon: <Banknote size={18} />,
+    path: '/payroll',
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'payroll', action: 'read' }] },
+  },
+  {
+    labelKey: 'sidebar.benefits',
+    icon: <Heart size={18} />,
+    path: '/benefits',
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'benefit', action: 'read' }] },
+  },
+  {
+    labelKey: 'sidebar.recruitment',
     icon: <UserSquare2 size={18} />,
-    module: 'recruitment',
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'recruitment', action: 'read' }] },
     children: [
-      { label: 'Job Postings', icon: <Briefcase size={16} />, path: '/recruitment' },
-      { label: 'Candidates', icon: <Users size={16} />, path: '/recruitment/candidates' },
-      { label: 'Pipeline', icon: <GitBranch size={16} />, path: '/recruitment/pipeline' },
-      { label: 'Interviews', icon: <CalendarDays size={16} />, path: '/recruitment/interviews' },
+      { labelKey: 'sidebar.recruitment.jobs', icon: <Briefcase size={16} />, path: '/recruitment' },
+      { labelKey: 'sidebar.recruitment.candidates', icon: <Users size={16} />, path: '/recruitment/candidates' },
+      { labelKey: 'sidebar.recruitment.pipeline', icon: <GitBranch size={16} />, path: '/recruitment/pipeline' },
+      { labelKey: 'sidebar.recruitment.interviews', icon: <CalendarDays size={16} />, path: '/recruitment/interviews' },
     ],
   },
   {
-    label: 'Performance',
+    labelKey: 'sidebar.performance',
     icon: <BarChart3 size={18} />,
-    module: 'performance',
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'performance', action: 'read' }] },
     children: [
-      { label: 'Dashboard', icon: <BarChart3 size={16} />, path: '/performance' },
-      { label: 'Reviews', icon: <ClipboardList size={16} />, path: '/performance/reviews' },
-      { label: 'Goals', icon: <Target size={16} />, path: '/performance/goals' },
+      { labelKey: 'sidebar.performance.dashboard', icon: <BarChart3 size={16} />, path: '/performance' },
+      { labelKey: 'sidebar.performance.reviews', icon: <ClipboardList size={16} />, path: '/performance/reviews' },
+      { labelKey: 'sidebar.performance.goals', icon: <Target size={16} />, path: '/performance/goals' },
     ],
   },
-  { label: 'LMS', icon: <GraduationCap size={18} />, path: '/lms', module: 'lms' },
-  { label: 'Reports', icon: <FileText size={18} />, path: '/reports', module: 'report' },
   {
-    label: 'Administration',
+    labelKey: 'sidebar.lms',
+    icon: <GraduationCap size={18} />,
+    path: '/lms',
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'training', action: 'read' }] },
+  },
+  {
+    labelKey: 'sidebar.reports',
+    icon: <FileText size={18} />,
+    path: '/reports',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'report', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
+  },
+  {
+    labelKey: 'sidebar.administration',
     icon: <Shield size={18} />,
-    module: 'rbac',
+    access: { requireAuth: true, requiredRoles: ADMIN_ROLES },
     children: [
-      { label: 'Users', icon: <Users size={16} />, path: '/admin/users' },
-      { label: 'Roles', icon: <Shield size={16} />, path: '/admin/roles' },
-      { label: 'Audit Log', icon: <FileText size={16} />, path: '/admin/audit' },
-      { label: 'Settings', icon: <Settings size={16} />, path: '/admin/settings' },
+      {
+        labelKey: 'sidebar.administration.users',
+        icon: <Users size={16} />,
+        path: '/admin/users',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'user', action: 'read' }] },
+      },
+      {
+        labelKey: 'sidebar.administration.roles',
+        icon: <Shield size={16} />,
+        path: '/admin/roles',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'rbac', action: 'read' }] },
+      },
+      {
+        labelKey: 'sidebar.administration.audit',
+        icon: <FileText size={16} />,
+        path: '/admin/audit',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'audit-log', action: 'read' }] },
+      },
+      {
+        labelKey: 'sidebar.administration.settings',
+        icon: <Settings size={16} />,
+        path: '/admin/settings',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'settings', action: 'read' }] },
+      },
     ],
   },
 ];
+
+function filterNavItems(items: NavItem[], user: ReturnType<typeof useAuthStore.getState>['user']) {
+  return items.reduce<NavItem[]>((visibleItems, item) => {
+    const filteredChildren = item.children ? filterNavItems(item.children, user) : undefined;
+    const isVisible = item.access ? canAccess(user, item.access) : !!user;
+
+    if (filteredChildren?.length) {
+      visibleItems.push({ ...item, children: filteredChildren });
+      return visibleItems;
+    }
+
+    if (isVisible) {
+      visibleItems.push(item);
+    }
+
+    return visibleItems;
+  }, []);
+}
 
 function NavItemComponent({
   item,
@@ -120,6 +277,7 @@ function NavItemComponent({
   const [expanded, setExpanded] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const isActive = item.path ? location.pathname.startsWith(item.path) : false;
   const hasChildren = item.children && item.children.length > 0;
 
@@ -143,12 +301,12 @@ function NavItemComponent({
             : 'text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground',
           collapsed && 'justify-center px-2'
         )}
-        title={collapsed ? item.label : undefined}
+        title={collapsed ? t(item.labelKey) : undefined}
       >
         <span className="shrink-0">{item.icon}</span>
         {!collapsed && (
           <>
-            <span className="flex-1 text-left">{item.label}</span>
+            <span className="flex-1 text-left">{t(item.labelKey)}</span>
             {hasChildren && (
               <ChevronDown
                 size={14}
@@ -173,7 +331,9 @@ function NavItemComponent({
 export function Sidebar() {
   const navigate = useNavigate();
   const { sidebarCollapsed, toggleSidebar, sidebarMobileOpen, setSidebarMobileOpen } = useUIStore();
-  const { logout } = useAuthStore();
+  const { logout, user } = useAuthStore();
+  const { t } = useI18n();
+  const visibleNavItems = useMemo(() => filterNavItems(navItems, user), [user]);
 
   const handleLogout = useCallback(async () => {
     await logout();
@@ -222,7 +382,7 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin">
-          {navItems.map((item, idx) => (
+          {visibleNavItems.map((item, idx) => (
             <NavItemComponent key={idx} item={item} collapsed={sidebarCollapsed} />
           ))}
         </nav>
@@ -234,7 +394,7 @@ export function Sidebar() {
             onClick={() => navigate('/notifications')}
           >
             <Bell size={18} />
-            {!sidebarCollapsed && <span className="flex-1 text-left">Notifications</span>}
+            {!sidebarCollapsed && <span className="flex-1 text-left">{t('sidebar.notifications')}</span>}
           </button>
 
           <button
@@ -242,7 +402,7 @@ export function Sidebar() {
             className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground transition-colors"
           >
             <LogOut size={18} />
-            {!sidebarCollapsed && <span className="flex-1 text-left">Sign Out</span>}
+            {!sidebarCollapsed && <span className="flex-1 text-left">{t('sidebar.signOut')}</span>}
           </button>
 
           {/* Collapse toggle */}
@@ -251,7 +411,7 @@ export function Sidebar() {
             className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/50 hover:bg-sidebar-hover transition-colors"
           >
             {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            {!sidebarCollapsed && <span className="flex-1 text-left">Collapse</span>}
+            {!sidebarCollapsed && <span className="flex-1 text-left">{t('sidebar.collapse')}</span>}
           </button>
         </div>
       </aside>
@@ -278,7 +438,7 @@ export function Sidebar() {
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {navItems.map((item, idx) => (
+          {visibleNavItems.map((item, idx) => (
             <NavItemComponent key={idx} item={item} collapsed={false} />
           ))}
         </nav>
@@ -288,7 +448,7 @@ export function Sidebar() {
             className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-hover transition-colors"
           >
             <LogOut size={18} />
-            <span>Sign Out</span>
+            <span>{t('sidebar.signOut')}</span>
           </button>
         </div>
       </aside>

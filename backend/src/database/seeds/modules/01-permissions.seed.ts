@@ -88,6 +88,20 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'report', action: 'read', name: 'Read Report', module: 'report', code: 'report:read' },
     { resource: 'report', action: 'export', name: 'Export Report', module: 'report', code: 'report:export' },
 
+    // Travel & Expense
+    { resource: 'travel-expense', action: 'create', name: 'Create Travel Expense Request', module: 'travel-expense', code: 'travel:create' },
+    { resource: 'travel-expense', action: 'read', name: 'Read Travel Expense Data', module: 'travel-expense', code: 'travel:read' },
+    { resource: 'travel-expense', action: 'update', name: 'Update Travel Expense Data', module: 'travel-expense', code: 'travel:update' },
+    { resource: 'travel-expense', action: 'approve', name: 'Approve Travel Expense', module: 'travel-expense', code: 'travel:approve' },
+    { resource: 'travel-expense', action: 'process', name: 'Process Reimbursement', module: 'travel-expense', code: 'travel:process' },
+
+    // Workflow Engine
+    { resource: 'workflow', action: 'create', name: 'Create Workflow', module: 'workflow', code: 'workflow:create' },
+    { resource: 'workflow', action: 'read', name: 'Read Workflow', module: 'workflow', code: 'workflow:read' },
+    { resource: 'workflow', action: 'update', name: 'Update Workflow', module: 'workflow', code: 'workflow:update' },
+    { resource: 'workflow', action: 'delete', name: 'Delete Workflow', module: 'workflow', code: 'workflow:delete' },
+    { resource: 'workflow', action: 'approve', name: 'Approve Workflow Step', module: 'workflow', code: 'workflow:approve' },
+
     // Settings
     { resource: 'settings', action: 'read', name: 'Read Settings', module: 'settings', code: 'settings:read' },
     { resource: 'settings', action: 'update', name: 'Update Settings', module: 'settings', code: 'settings:update' },

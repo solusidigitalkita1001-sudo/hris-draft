@@ -270,32 +270,32 @@
 | Remaining Balance | ✅ field on Loan | ✅ auto-calculate | ✅ info card + progress bar | ✅ |
 | Payroll Deduction | ❌ (future) | ❌ | ❌ | ❌ |
 
-### 8.3 Travel & Expense Claim — ❌
+### 8.3 Travel & Expense Claim — ⚠️ Partial
 
 > Perjalanan dinas: pengajuan, approval, klaim biaya (transportasi, akomodasi, dll).
 
 | Sub-modul | Prisma Model | Backend | Frontend | Service |
 |-----------|:------------:|:-------:|:--------:|:-------:|
-| Travel Request | ❌ | ❌ | ❌ | ❌ |
-| Travel Approval | ❌ | ❌ | ❌ | ❌ |
-| Expense Categories | ❌ | ❌ | ❌ | ❌ |
-| Submit Claim | ❌ | ❌ | ❌ | ❌ |
-| Claim Approval | ❌ | ❌ | ❌ | ❌ |
-| Receipt Upload | ❌ | ❌ | ❌ | ❌ |
-| Reimbursement | ❌ | ❌ | ❌ | ❌ |
+| Travel Request | ✅ BusinessTrip | ✅ GET/POST `/travel-expenses/trips`, `/trips/my` | ✅ TravelExpensePage form + list | ✅ travel-expense.service.ts |
+| Travel Approval | ➖ | ✅ PATCH `/trips/:id/approve\|reject` | ✅ (approver action di page) | ✅ |
+| Expense Categories | ✅ ExpenseCategory enum | ✅ GET `/travel-expenses/categories` | ✅ (dropdown di form claim) | ✅ |
+| Submit Claim | ✅ ExpenseClaim | ✅ GET/POST `/travel-expenses/claims`, `/claims/my` | ✅ TravelExpensePage form + list | ✅ |
+| Claim Approval | ✅ ExpenseApproval | ✅ PATCH `/claims/:id/approve\|reject` | ✅ (approver action di page) | ✅ |
+| Receipt Upload | ⚠️ field `receiptFilePath` saja | ⚠️ belum multipart upload | ⚠️ input URL/path receipt | ✅ |
+| Reimbursement | ✅ Reimbursement | ✅ POST `/claims/:id/reimburse` | ✅ (approver action di page) | ✅ |
 
-### 8.4 Workflow Engine — ❌
+### 8.4 Workflow Engine — ✅ Selesai
 
 > Mesin workflow/approval yang bisa dikonfigurasi: multi-level approval, conditional routing.
 
 | Sub-modul | Prisma Model | Backend | Frontend | Service |
 |-----------|:------------:|:-------:|:--------:|:-------:|
-| Workflow Templates | ❌ | ❌ | ❌ | ❌ |
-| Approval Stages | ❌ | ❌ | ❌ | ❌ |
-| Approver Assignment | ❌ | ❌ | ❌ | ❌ |
-| Condition Rules | ❌ | ❌ | ❌ | ❌ |
-| Workflow Instance | ❌ | ❌ | ❌ | ❌ |
-| Approval Actions | ❌ | ❌ | ❌ | ❌ |
+| Workflow Templates | ✅ WorkflowTemplate | ✅ CRUD `/workflow-engine/templates` | ✅ WorkflowEnginePage | ✅ workflow-engine.service.ts |
+| Approval Stages | ✅ WorkflowStage | ✅ nested config via template API | ✅ dynamic stage builder | ✅ |
+| Approver Assignment | ✅ stage approver fields | ✅ role/user/backup approver config | ✅ form config per stage | ✅ |
+| Condition Rules | ✅ WorkflowConditionRule | ✅ nested rule config + evaluation on start instance | ✅ dynamic rule builder | ✅ |
+| Workflow Instance | ✅ WorkflowInstance + WorkflowInstanceStep + WorkflowInstanceLog | ✅ list/detail/start `/workflow-engine/instances*` | ✅ instance list + start modal | ✅ |
+| Approval Actions | ➖ | ✅ POST `/instances/:id/actions` (approve/reject/escalate) | ✅ approval inbox actions | ✅ |
 
 ### 8.5 Document Management — ❌
 
@@ -350,8 +350,8 @@ PENDING
 ├── 7.1 Notifications     ✅ Full-stack (baru)
 ├── 8.1 Self Service      ✅ Full-stack (baru)
 ├── 8.2 Employee Loan     ✅ Full-stack (baru)
-├── 8.3 Travel & Expense  ❌ Not started
-├── 8.4 Workflow Engine   ❌ Not started
+├── 8.3 Travel & Expense  ⚠️ Partial (baru)
+├── 8.4 Workflow Engine   ✅ Full-stack (baru)
 ├── 8.5 Document Mgmt     ❌ Not started
 ```
 
@@ -359,11 +359,11 @@ PENDING
 
 | Kategori | Jumlah |
 |----------|:------:|
-| ✅ Full-stack (backend + frontend + service) | **18 modul** |
-| ⚠️ Backend ✅, Frontend Partial (via /admin) | **2 modul** (User, Audit Log) |
+| ✅ Full-stack (backend + frontend + service) | **19 modul** |
+| ⚠️ Partial / masih ada gap tertentu | **3 modul** (User, Audit Log, Travel & Expense) |
 | 🟡 Backend ✅, Frontend ❌ | **0 modul** |
 | 🟠 Frontend mock, Backend ❌ | **0 modul** |
-| ❌ Not started | **3 modul** |
+| ❌ Not started | **1 modul** |
 | **Total** | **23 modul** |
 
 ---
@@ -372,6 +372,6 @@ PENDING
 
 | Priority | Module | Estimasi | Alasan |
 |----------|--------|----------|--------|
-| 🥇 P1 | **Travel & Expense** | 4-6 hari | Butuh upload receipt dll |
-| 🥈 P2 | **Workflow Engine** | 5-7 hari | Foundation untuk approval terpusat |
-| 🥉 P3 | **Document Management** | 4-6 hari | Upload & tracking dokumen |
+| 🥇 P1 | **Document Management** | 4-6 hari | Upload & tracking dokumen |
+| 🥈 P2 | **Travel & Expense Polish** | 1-2 hari | File upload receipt dan refinement approval |
+| 🥉 P3 | **Workflow Integration** | 2-4 hari | Sambungkan engine ke leave, loan, dan expense flow existing |

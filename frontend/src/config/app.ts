@@ -5,6 +5,7 @@ export const appConfig = {
   authTokenKey: 'hrms_access_token',
   refreshTokenKey: 'hrms_refresh_token',
   companyKey: 'hrms_active_company',
+  languageKey: 'hrms_language',
   themeKey: 'hrms_theme',
   pagination: {
     defaultPageSize: 20,

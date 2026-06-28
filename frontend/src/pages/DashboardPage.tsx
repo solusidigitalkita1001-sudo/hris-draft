@@ -1,50 +1,52 @@
 import { useAuthStore } from '@/stores/auth.store';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { useI18n } from '@/i18n/provider';
 import { Users, Building2, Clock, CalendarDays } from 'lucide-react';
-
-const stats = [
-  {
-    label: 'Total Employees',
-    value: '0',
-    change: '+0',
-    icon: Users,
-    color: 'text-blue-600 dark:text-blue-400',
-    bg: 'bg-blue-50 dark:bg-blue-950',
-  },
-  {
-    label: 'Departments',
-    value: '0',
-    change: '0',
-    icon: Building2,
-    color: 'text-emerald-600 dark:text-emerald-400',
-    bg: 'bg-emerald-50 dark:bg-emerald-950',
-  },
-  {
-    label: 'Present Today',
-    value: '0',
-    change: '0%',
-    icon: Clock,
-    color: 'text-amber-600 dark:text-amber-400',
-    bg: 'bg-amber-50 dark:bg-amber-950',
-  },
-  {
-    label: 'On Leave',
-    value: '0',
-    change: '0',
-    icon: CalendarDays,
-    color: 'text-violet-600 dark:text-violet-400',
-    bg: 'bg-violet-50 dark:bg-violet-950',
-  },
-];
 
 export function DashboardPage() {
   const { user } = useAuthStore();
+  const { t } = useI18n();
+
+  const stats = [
+    {
+      label: t('dashboard.stats.totalEmployees'),
+      value: '0',
+      change: '+0',
+      icon: Users,
+      color: 'text-blue-600 dark:text-blue-400',
+      bg: 'bg-blue-50 dark:bg-blue-950',
+    },
+    {
+      label: t('dashboard.stats.departments'),
+      value: '0',
+      change: '0',
+      icon: Building2,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-emerald-50 dark:bg-emerald-950',
+    },
+    {
+      label: t('dashboard.stats.presentToday'),
+      value: '0',
+      change: '0%',
+      icon: Clock,
+      color: 'text-amber-600 dark:text-amber-400',
+      bg: 'bg-amber-50 dark:bg-amber-950',
+    },
+    {
+      label: t('dashboard.stats.onLeave'),
+      value: '0',
+      change: '0',
+      icon: CalendarDays,
+      color: 'text-violet-600 dark:text-violet-400',
+      bg: 'bg-violet-50 dark:bg-violet-950',
+    },
+  ];
 
   return (
     <div>
       <PageHeader
-        title={`Welcome back, ${user?.name || user?.email}`}
-        description="Here's what's happening across your organization today."
+        title={t('dashboard.welcome', { name: user?.name || user?.email || 'User' })}
+        description={t('dashboard.description')}
       />
 
       {/* Stats Grid */}
@@ -73,20 +75,20 @@ export function DashboardPage() {
         {/* Pending Approvals */}
         <div className="lg:col-span-1 bg-card border border-border rounded-lg">
           <div className="p-4 border-b border-border">
-            <h3 className="font-medium text-sm">Pending Approvals</h3>
+            <h3 className="font-medium text-sm">{t('dashboard.pendingApprovals')}</h3>
           </div>
           <div className="p-6 text-center text-sm text-muted-foreground">
-            No pending approvals
+            {t('dashboard.noPendingApprovals')}
           </div>
         </div>
 
         {/* Recent Activity */}
         <div className="lg:col-span-2 bg-card border border-border rounded-lg">
           <div className="p-4 border-b border-border">
-            <h3 className="font-medium text-sm">Recent Activity</h3>
+            <h3 className="font-medium text-sm">{t('dashboard.recentActivity')}</h3>
           </div>
           <div className="p-6 text-center text-sm text-muted-foreground">
-            No recent activity
+            {t('dashboard.noRecentActivity')}
           </div>
         </div>
       </div>

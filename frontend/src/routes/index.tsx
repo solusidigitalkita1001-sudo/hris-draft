@@ -73,6 +73,8 @@ import { SelfServicePage } from '@/modules/self-service/pages/SelfServicePage';
 // Employee Loan Pages
 import { EmployeeLoanPage } from '@/modules/employee-loan/pages/EmployeeLoanPage';
 import { EmployeeLoanDetailPage } from '@/modules/employee-loan/pages/EmployeeLoanDetailPage';
+import { TravelExpensePage } from '@/modules/travel-expense/pages/TravelExpensePage';
+import { WorkflowEnginePage } from '@/modules/workflow-engine/pages/WorkflowEnginePage';
 
 // Work Calendar Pages
 import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
@@ -86,6 +88,7 @@ import { NotificationsPage } from '@/modules/notifications/pages/NotificationsPa
 import { AdminUsersPage } from '@/modules/admin/pages/AdminUsersPage';
 import { AdminAuditLogPage } from '@/modules/admin/pages/AdminAuditLogPage';
 import { AdminSettingsPage } from '@/modules/admin/pages/AdminSettingsPage';
+import { EMPLOYEE_SELF_SERVICE_ROLES, OPERATIONAL_ROLES } from '@/lib/access-control';
 
 export const router = createBrowserRouter([
   {
@@ -116,7 +119,11 @@ export const router = createBrowserRouter([
     children: [
       {
         path: 'dashboard',
-        element: <DashboardPage />,
+        element: (
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
+            <DashboardPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'organization',
@@ -124,7 +131,10 @@ export const router = createBrowserRouter([
           {
             path: 'groups',
             element: (
-              <ProtectedRoute requiredPermissions={[{ resource: 'organization', action: 'read' }]}>
+              <ProtectedRoute
+                requiredPermissions={[{ resource: 'organization', action: 'read' }]}
+                requiredRoles={OPERATIONAL_ROLES}
+              >
                 <GroupListPage />
               </ProtectedRoute>
             ),
@@ -132,7 +142,10 @@ export const router = createBrowserRouter([
           {
             path: 'companies',
             element: (
-              <ProtectedRoute requiredPermissions={[{ resource: 'organization', action: 'read' }]}>
+              <ProtectedRoute
+                requiredPermissions={[{ resource: 'organization', action: 'read' }]}
+                requiredRoles={OPERATIONAL_ROLES}
+              >
                 <CompanyListPage />
               </ProtectedRoute>
             ),
@@ -140,7 +153,10 @@ export const router = createBrowserRouter([
           {
             path: 'departments',
             element: (
-              <ProtectedRoute requiredPermissions={[{ resource: 'organization', action: 'read' }]}>
+              <ProtectedRoute
+                requiredPermissions={[{ resource: 'organization', action: 'read' }]}
+                requiredRoles={OPERATIONAL_ROLES}
+              >
                 <DepartmentListPage />
               </ProtectedRoute>
             ),
@@ -148,7 +164,10 @@ export const router = createBrowserRouter([
           {
             path: 'positions',
             element: (
-              <ProtectedRoute requiredPermissions={[{ resource: 'organization', action: 'read' }]}>
+              <ProtectedRoute
+                requiredPermissions={[{ resource: 'organization', action: 'read' }]}
+                requiredRoles={OPERATIONAL_ROLES}
+              >
                 <PositionListPage />
               </ProtectedRoute>
             ),
@@ -159,7 +178,10 @@ export const router = createBrowserRouter([
       {
         path: 'employees',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'employee', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <EmployeeListPage />
           </ProtectedRoute>
         ),
@@ -167,7 +189,10 @@ export const router = createBrowserRouter([
       {
         path: 'employees/new',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'create' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'employee', action: 'create' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <EmployeeFormPage />
           </ProtectedRoute>
         ),
@@ -175,7 +200,10 @@ export const router = createBrowserRouter([
       {
         path: 'employees/:id/edit',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'update' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'employee', action: 'update' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <EmployeeFormPage />
           </ProtectedRoute>
         ),
@@ -183,7 +211,10 @@ export const router = createBrowserRouter([
       {
         path: 'employees/:id',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'employee', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <EmployeeDetailPage />
           </ProtectedRoute>
         ),
@@ -191,7 +222,11 @@ export const router = createBrowserRouter([
       // Payroll Routes
       {
         path: 'payroll',
-        element: <PayrollDashboard />,
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
+            <PayrollDashboard />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'payroll/salary-components',
@@ -320,7 +355,10 @@ export const router = createBrowserRouter([
       {
         path: 'attendance',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'attendance', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'attendance', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <AttendanceList />
           </ProtectedRoute>
         ),
@@ -329,7 +367,10 @@ export const router = createBrowserRouter([
       {
         path: 'leave',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'leave', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'leave', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <LeaveList />
           </ProtectedRoute>
         ),
@@ -337,7 +378,10 @@ export const router = createBrowserRouter([
       {
         path: 'leave/:id',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'leave', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'leave', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <LeaveDetail />
           </ProtectedRoute>
         ),
@@ -346,7 +390,10 @@ export const router = createBrowserRouter([
       {
         path: 'assets',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'asset', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'asset', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <AssetList />
           </ProtectedRoute>
         ),
@@ -355,7 +402,10 @@ export const router = createBrowserRouter([
       {
         path: 'offboarding',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'employee', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <OffboardingList />
           </ProtectedRoute>
         ),
@@ -363,7 +413,10 @@ export const router = createBrowserRouter([
       {
         path: 'offboarding/:id',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'employee', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'employee', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <OffboardingDetail />
           </ProtectedRoute>
         ),
@@ -372,7 +425,7 @@ export const router = createBrowserRouter([
       {
         path: 'self-service',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'self-service', action: 'read' }]}>
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
             <SelfServicePage />
           </ProtectedRoute>
         ),
@@ -381,7 +434,7 @@ export const router = createBrowserRouter([
       {
         path: 'employee-loans',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'employee-loan', action: 'read' }]}>
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
             <EmployeeLoanPage />
           </ProtectedRoute>
         ),
@@ -389,8 +442,27 @@ export const router = createBrowserRouter([
       {
         path: 'employee-loans/:id',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'employee-loan', action: 'read' }]}>
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
             <EmployeeLoanDetailPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'travel-expenses',
+        element: (
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
+            <TravelExpensePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'workflow-engine',
+        element: (
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'workflow', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
+            <WorkflowEnginePage />
           </ProtectedRoute>
         ),
       },
@@ -398,7 +470,10 @@ export const router = createBrowserRouter([
       {
         path: 'work-calendar',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <WorkCalendarListPage />
           </ProtectedRoute>
         ),
@@ -406,7 +481,10 @@ export const router = createBrowserRouter([
       {
         path: 'work-calendar/holidays',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <WorkCalendarHolidaysPage />
           </ProtectedRoute>
         ),
@@ -414,7 +492,10 @@ export const router = createBrowserRouter([
       {
         path: 'work-calendar/:id',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <WorkCalendarDetailPage />
           </ProtectedRoute>
         ),
@@ -423,7 +504,10 @@ export const router = createBrowserRouter([
       {
         path: 'reports',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'report', action: 'read' }]}>
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'report', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
             <ReportsPage />
           </ProtectedRoute>
         ),
@@ -432,7 +516,7 @@ export const router = createBrowserRouter([
       {
         path: 'notifications',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'dashboard', action: 'read' }]}>
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
             <NotificationsPage />
           </ProtectedRoute>
         ),
@@ -481,7 +565,7 @@ export const router = createBrowserRouter([
       {
         path: 'admin/settings',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'administration', action: 'read' }]}>
+          <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
             <AdminSettingsPage />
           </ProtectedRoute>
         ),

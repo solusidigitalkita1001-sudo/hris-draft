@@ -20,6 +20,31 @@ import { AuthResponse, LoginDTO, ChangePasswordDTO } from './auth.dto';
 const logger = new WinstonLogger('AuthService');
 
 export class AuthService {
+  private buildAuthContext(user: any) {
+    const roles: string[] = user.userRoles.map((ur: any) => ur.role.code);
+    const permissions = Array.from(
+      new Set<string>(
+        user.userRoles.flatMap((ur: any) =>
+          ur.role.rolePermissions.map(
+            (rp: any) => `${rp.permission.resource}:${rp.permission.action}` as string
+          )
+        )
+      )
+    );
+
+    return {
+      id: user.id,
+      email: user.email,
+      employeeId: user.employeeId || undefined,
+      name: user.employee?.fullName,
+      roles,
+      permissions,
+      companyId: user.employee?.companyId || undefined,
+      groupId: user.employee?.company?.groupId || undefined,
+      mustChangePassword: user.mustChangePassword,
+    };
+  }
+
   /**
    * Authenticate user with email and password
    * Implements rate limiting, account lockout, and token rotation
@@ -74,7 +99,8 @@ export class AuthService {
     await authRepository.updateUserLoginSuccess(user.id);
 
     // Generate tokens
-    const tokens = await this.generateTokens(user, ipAddress, userAgent);
+    const authUser = this.buildAuthContext(user);
+    const tokens = await this.generateTokens(authUser, ipAddress, userAgent);
 
     // Create login log
     await authRepository.createLoginLog({
@@ -102,27 +128,8 @@ export class AuthService {
     });
 
     // Build response
-    const roles = user.userRoles.map((ur) => ur.role.code);
-    const permissions = [
-      ...new Set(
-        user.userRoles.flatMap((ur) =>
-          ur.role.rolePermissions.map((rp) => `${rp.permission.resource}:${rp.permission.action}`)
-        )
-      ),
-    ];
-
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        employeeId: user.employeeId || undefined,
-        name: user.employee?.fullName,
-        roles,
-        permissions,
-        companyId: user.employee?.companyId || undefined,
-        groupId: user.employee?.company?.groupId || undefined,
-        mustChangePassword: user.mustChangePassword,
-      },
+      user: authUser,
       tokens,
     };
   }
@@ -184,12 +191,8 @@ export class AuthService {
     this.validateUserStatus(user);
 
     // Generate new tokens
-    const tokens = await this.generateTokens(
-      { ...user, id: decoded.sub, email: decoded.email },
-      ipAddress,
-      userAgent,
-      decoded.family
-    );
+    const authUser = this.buildAuthContext(user);
+    const tokens = await this.generateTokens(authUser, ipAddress, userAgent, decoded.family);
 
     // Create login log
     await authRepository.createLoginLog({
@@ -212,27 +215,8 @@ export class AuthService {
       },
     });
 
-    const roles = user.userRoles.map((ur) => ur.role.code);
-    const permissions = [
-      ...new Set(
-        user.userRoles.flatMap((ur) =>
-          ur.role.rolePermissions.map((rp) => `${rp.permission.resource}:${rp.permission.action}`)
-        )
-      ),
-    ];
-
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        employeeId: user.employeeId || undefined,
-        name: user.employee?.fullName,
-        roles,
-        permissions,
-        companyId: user.employee?.companyId || undefined,
-        groupId: user.employee?.company?.groupId || undefined,
-        mustChangePassword: user.mustChangePassword,
-      },
+      user: authUser,
       tokens,
     };
   }
@@ -310,26 +294,11 @@ export class AuthService {
       throw new AuthError('User not found');
     }
 
-    const roles = user.userRoles.map((ur) => ur.role.code);
-    const permissions = [
-      ...new Set(
-        user.userRoles.flatMap((ur) =>
-          ur.role.rolePermissions.map((rp) => `${rp.permission.resource}:${rp.permission.action}`)
-        )
-      ),
-    ];
+    const authUser = this.buildAuthContext(user);
 
     return {
-      id: user.id,
-      email: user.email,
-      employeeId: user.employeeId || undefined,
-      name: user.employee?.fullName,
-      companyId: user.employee?.companyId || undefined,
+      ...authUser,
       companyName: user.employee?.company?.name || undefined,
-      groupId: user.employee?.company?.groupId || undefined,
-      roles,
-      permissions,
-      mustChangePassword: user.mustChangePassword,
       lastLoginAt: user.lastLoginAt,
     };
   }
@@ -337,7 +306,14 @@ export class AuthService {
   // ==================== Private Methods ====================
 
   private async generateTokens(
-    user: { id: string; email: string },
+    user: {
+      id: string;
+      email: string;
+      companyId?: string;
+      groupId?: string;
+      permissions: string[];
+      roles: string[];
+    },
     ipAddress?: string,
     userAgent?: string,
     existingFamily?: string
@@ -346,6 +322,10 @@ export class AuthService {
     const accessToken = jwtHandler.generateAccessToken({
       sub: user.id,
       email: user.email,
+      companyId: user.companyId,
+      groupId: user.groupId,
+      permissions: user.permissions,
+      roles: user.roles,
     });
 
     const refreshToken = jwtHandler.generateRefreshToken({

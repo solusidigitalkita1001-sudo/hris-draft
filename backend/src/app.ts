@@ -33,6 +33,8 @@ import workCalendarRoutes from '@/modules/work-calendar/work-calendar.routes';
 import notificationRoutes from '@/modules/notification/notification.routes';
 import permissionRequestRoutes from '@/modules/permission-request/permission-request.routes';
 import employeeLoanRoutes from '@/modules/employee-loan/employee-loan.routes';
+import travelExpenseRoutes from '@/modules/travel-expense/travel-expense.routes';
+import workflowEngineRoutes from '@/modules/workflow-engine/workflow-engine.routes';
 
 const app = express();
 
@@ -144,6 +146,8 @@ app.use(`${apiPrefix}/work-calendars`, workCalendarRoutes);
 app.use(`${apiPrefix}/notifications`, notificationRoutes);
 app.use(`${apiPrefix}/permission-requests`, permissionRequestRoutes);
 app.use(`${apiPrefix}/employee-loans`, employeeLoanRoutes);
+app.use(`${apiPrefix}/travel-expenses`, travelExpenseRoutes);
+app.use(`${apiPrefix}/workflow-engine`, workflowEngineRoutes);
 
 // ==================== 404 Handler ====================
 app.use((_req, res) => {

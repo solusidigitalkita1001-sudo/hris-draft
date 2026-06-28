@@ -101,6 +101,12 @@ model Company {
   permissionRequests  PermissionRequest[]
   loanTypes           LoanType[]
   loans               Loan[]
+  workflowTemplates   WorkflowTemplate[]
+  workflowInstances   WorkflowInstance[]
+  businessTrips       BusinessTrip[]
+  travelAdvances      TravelAdvance[]
+  expenseClaims       ExpenseClaim[]
+  reimbursements      Reimbursement[]
 
   @@index([groupId])
   @@index([code])
@@ -1135,6 +1141,8 @@ model Employee {
   exitClearancePICs    ExitClearance[]    @relation("ExitClearancePIC")
   permissionRequests   PermissionRequest[]
   loans                Loan[]
+  businessTrips        BusinessTrip[]
+  expenseClaims        ExpenseClaim[]
 
   @@index([companyId])
   @@index([employeeNumber])
@@ -1939,6 +1947,179 @@ enum RequestStatus {
 }
 
 // ============================================================
+// WORKFLOW ENGINE
+// ============================================================
+
+model WorkflowTemplate {
+  id           String          @id @default(uuid()) @db.VarChar(36)
+  companyId    String          @map("company_id") @db.VarChar(36)
+  name         String          @db.VarChar(255)
+  approvalType String          @map("approval_type") @db.VarChar(100)
+  resource     String?         @db.VarChar(100)
+  description  String?         @db.Text
+  isActive     Boolean         @default(true) @map("is_active")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  stages    WorkflowStage[]
+  instances WorkflowInstance[]
+
+  @@index([companyId, isActive])
+  @@index([approvalType])
+  @@map("workflow_templates")
+}
+
+model WorkflowStage {
+  id                    String                @id @default(uuid()) @db.VarChar(36)
+  templateId            String                @map("template_id") @db.VarChar(36)
+  name                  String                @db.VarChar(255)
+  level                 Int
+  approverType          WorkflowApproverType  @map("approver_type")
+  approverRoleCode      String?               @map("approver_role_code") @db.VarChar(50)
+  approverId            String?               @map("approver_id") @db.VarChar(36)
+  backupApproverRoleCode String?              @map("backup_approver_role_code") @db.VarChar(50)
+  backupApproverId      String?               @map("backup_approver_id") @db.VarChar(36)
+  slaHours              Int                   @default(72) @map("sla_hours")
+  allowEscalation       Boolean               @default(true) @map("allow_escalation")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  template       WorkflowTemplate            @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  conditionRules WorkflowConditionRule[]
+  instanceSteps  WorkflowInstanceStep[]
+
+  @@index([templateId, level])
+  @@map("workflow_stages")
+}
+
+model WorkflowConditionRule {
+  id        String           @id @default(uuid()) @db.VarChar(36)
+  stageId    String           @map("stage_id") @db.VarChar(36)
+  field      String           @db.VarChar(100)
+  operator   WorkflowOperator
+  value      String           @db.Text
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  stage WorkflowStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([stageId])
+  @@map("workflow_condition_rules")
+}
+
+model WorkflowInstance {
+  id            String                 @id @default(uuid()) @db.VarChar(36)
+  templateId     String                 @map("template_id") @db.VarChar(36)
+  companyId      String                 @map("company_id") @db.VarChar(36)
+  approvalType   String                 @map("approval_type") @db.VarChar(100)
+  referenceType  String                 @map("reference_type") @db.VarChar(100)
+  referenceId    String                 @map("reference_id") @db.VarChar(36)
+  requesterId    String                 @map("requester_id") @db.VarChar(36)
+  payload        Json?
+  status         WorkflowInstanceStatus @default(PENDING)
+  currentLevel   Int?                   @map("current_level")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  template WorkflowTemplate      @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  company  Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  steps    WorkflowInstanceStep[]
+  logs     WorkflowInstanceLog[]
+
+  @@index([companyId, status])
+  @@index([referenceType, referenceId])
+  @@index([requesterId])
+  @@map("workflow_instances")
+}
+
+model WorkflowInstanceStep {
+  id                     String                 @id @default(uuid()) @db.VarChar(36)
+  instanceId             String                 @map("instance_id") @db.VarChar(36)
+  stageId                String?                @map("stage_id") @db.VarChar(36)
+  name                   String                 @db.VarChar(255)
+  level                  Int
+  approverType           WorkflowApproverType   @map("approver_type")
+  approverRoleCode       String?                @map("approver_role_code") @db.VarChar(50)
+  approverId             String?                @map("approver_id") @db.VarChar(36)
+  backupApproverRoleCode String?                @map("backup_approver_role_code") @db.VarChar(50)
+  backupApproverId       String?                @map("backup_approver_id") @db.VarChar(36)
+  status                 WorkflowStepStatus     @default(PENDING)
+  isCurrent              Boolean                @default(false) @map("is_current")
+  actedBy                String?                @map("acted_by") @db.VarChar(36)
+  actedAt                DateTime?              @map("acted_at")
+  comment                String?                @db.Text
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+
+  instance WorkflowInstance   @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  stage    WorkflowStage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  logs     WorkflowInstanceLog[]
+
+  @@index([instanceId, isCurrent])
+  @@index([approverId])
+  @@index([approverRoleCode])
+  @@map("workflow_instance_steps")
+}
+
+model WorkflowInstanceLog {
+  id         String             @id @default(uuid()) @db.VarChar(36)
+  instanceId  String             @map("instance_id") @db.VarChar(36)
+  stepId      String?            @map("step_id") @db.VarChar(36)
+  action      WorkflowLogAction
+  actorId     String?            @map("actor_id") @db.VarChar(36)
+  comment     String?            @db.Text
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  instance WorkflowInstance     @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  step     WorkflowInstanceStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+
+  @@index([instanceId])
+  @@index([stepId])
+  @@map("workflow_instance_logs")
+}
+
+enum WorkflowApproverType {
+  ROLE
+  USER
+  AUTO
+}
+
+enum WorkflowOperator {
+  EQ
+  NEQ
+  GT
+  GTE
+  LT
+  LTE
+  IN
+  CONTAINS
+}
+
+enum WorkflowInstanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+  CANCELLED
+}
+
+enum WorkflowStepStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+  SKIPPED
+}
+
+enum WorkflowLogAction {
+  STARTED
+  APPROVED
+  REJECTED
+  ESCALATED
+  COMMENTED
+}
+
+// ============================================================
 // EMPLOYEE LOAN
 // ============================================================
 
@@ -2024,6 +2205,155 @@ enum InstallmentStatus {
   PAID
   OVERDUE
   SKIPPED
+}
+
+// ============================================================
+// TRAVEL & EXPENSE
+// ============================================================
+
+model BusinessTrip {
+  id            String             @id @default(uuid()) @db.VarChar(36)
+  companyId     String             @map("company_id") @db.VarChar(36)
+  employeeId    String             @map("employee_id") @db.VarChar(36)
+  destination   String             @db.VarChar(255)
+  purpose       String             @db.Text
+  startDate     DateTime           @map("start_date")
+  endDate       DateTime           @map("end_date")
+  estimatedCost Decimal            @map("estimated_cost") @db.Decimal(15, 2)
+  notes         String?            @db.Text
+  status        BusinessTripStatus @default(REQUESTED)
+  approvedBy    String?            @map("approved_by") @db.VarChar(36)
+  approvedAt    DateTime?          @map("approved_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  travelAdvances TravelAdvance[]
+  expenseClaims  ExpenseClaim[]
+
+  @@index([companyId, status])
+  @@index([employeeId, status])
+  @@map("business_trips")
+}
+
+model TravelAdvance {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  tripId       String   @map("trip_id") @db.VarChar(36)
+  companyId    String   @map("company_id") @db.VarChar(36)
+  amount       Decimal  @db.Decimal(15, 2)
+  disbursedAt  DateTime? @map("disbursed_at")
+  reconciled   Boolean  @default(false)
+  notes        String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  trip    BusinessTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@index([companyId])
+  @@map("travel_advances")
+}
+
+model ExpenseClaim {
+  id                 String             @id @default(uuid()) @db.VarChar(36)
+  companyId          String             @map("company_id") @db.VarChar(36)
+  employeeId         String             @map("employee_id") @db.VarChar(36)
+  tripId             String?            @map("trip_id") @db.VarChar(36)
+  category           ExpenseCategory
+  amount             Decimal            @db.Decimal(15, 2)
+  description        String?            @db.Text
+  expenseDate        DateTime           @map("expense_date")
+  receiptFilePath    String?            @map("receipt_file_path") @db.VarChar(500)
+  ocrExtractedAmount Decimal?           @map("ocr_extracted_amount") @db.Decimal(15, 2)
+  status             ExpenseClaimStatus @default(SUBMITTED)
+  notes              String?            @db.Text
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  company        Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee       Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  trip           BusinessTrip?     @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  approvals      ExpenseApproval[]
+  reimbursements Reimbursement[]
+
+  @@index([companyId, status])
+  @@index([employeeId, status])
+  @@index([tripId])
+  @@map("expense_claims")
+}
+
+model ExpenseApproval {
+  id         String              @id @default(uuid()) @db.VarChar(36)
+  claimId     String              @map("claim_id") @db.VarChar(36)
+  approverId  String              @map("approver_id") @db.VarChar(36)
+  level       Int                 @default(1)
+  status      ExpenseApprovalStatus @default(PENDING)
+  notes       String?             @db.Text
+  approvedAt  DateTime?           @map("approved_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@index([approverId])
+  @@map("expense_approvals")
+}
+
+model Reimbursement {
+  id              String              @id @default(uuid()) @db.VarChar(36)
+  claimId          String              @map("claim_id") @db.VarChar(36)
+  companyId        String              @map("company_id") @db.VarChar(36)
+  method           ReimbursementMethod
+  amount           Decimal             @db.Decimal(15, 2)
+  processedBy      String?             @map("processed_by") @db.VarChar(36)
+  processedAt      DateTime            @default(now()) @map("processed_at")
+  payrollDetailId  String?             @map("payroll_detail_id") @db.VarChar(36)
+  notes            String?             @db.Text
+  createdAt        DateTime            @default(now()) @map("created_at")
+
+  claim   ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@index([companyId])
+  @@map("reimbursements")
+}
+
+enum BusinessTripStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum ExpenseCategory {
+  TRANSPORTATION
+  HOTEL
+  MEAL
+  ENTERTAINMENT
+  OPERATIONAL
+}
+
+enum ExpenseClaimStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REIMBURSED
+  CANCELLED
+}
+
+enum ExpenseApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReimbursementMethod {
+  TRANSFER
+  PAYROLL
 }
 
 // ============================================================

@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { canAccess } from '@/lib/access-control';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -43,25 +44,14 @@ export function ProtectedRoute({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check permissions
-  if (requiredPermissions && user) {
-    const hasAllPermissions = requiredPermissions.every(({ resource, action }) => {
-      if (user.roles.includes('SUPER_ADMIN')) return true;
-      const required = `${resource}:${action}`;
-      return user.permissions.includes(required) || user.permissions.includes(`${resource}:*`);
-    });
-
-    if (!hasAllPermissions) {
-      return <Navigate to="/unauthorized" replace />;
-    }
-  }
-
-  // Check roles
-  if (requiredRoles && user) {
-    const hasRole = requiredRoles.some((role) => user.roles.includes(role));
-    if (!hasRole) {
-      return <Navigate to="/unauthorized" replace />;
-    }
+  if (
+    !canAccess(user, {
+      requireAuth: true,
+      requiredPermissions,
+      requiredRoles,
+    })
+  ) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return <>{children}</>;

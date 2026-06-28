@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthUser } from '@/services/auth.service';
 import { authService } from '@/services/auth.service';
+import { appConfig } from '@/config/app';
 
 interface AuthState {
   user: AuthUser | null;
@@ -17,6 +18,38 @@ interface AuthState {
   reset: () => void;
 }
 
+function syncUserContext(user: AuthUser | null) {
+  if (typeof window === 'undefined') return;
+
+  if (!user) {
+    localStorage.removeItem('companyId');
+    localStorage.removeItem('employeeId');
+    localStorage.removeItem('groupId');
+    localStorage.removeItem(appConfig.companyKey);
+    return;
+  }
+
+  if (user.companyId) {
+    localStorage.setItem('companyId', user.companyId);
+    localStorage.setItem(appConfig.companyKey, user.companyId);
+  } else {
+    localStorage.removeItem('companyId');
+    localStorage.removeItem(appConfig.companyKey);
+  }
+
+  if (user.employeeId) {
+    localStorage.setItem('employeeId', user.employeeId);
+  } else {
+    localStorage.removeItem('employeeId');
+  }
+
+  if (user.groupId) {
+    localStorage.setItem('groupId', user.groupId);
+  } else {
+    localStorage.removeItem('groupId');
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -24,12 +57,16 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
 
-      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      setUser: (user) => {
+        syncUserContext(user);
+        set({ user, isAuthenticated: !!user });
+      },
 
       login: async (email, password) => {
         set({ isLoading: true });
         try {
           const response = await authService.login({ email, password });
+          syncUserContext(response.user);
           set({
             user: response.user,
             isAuthenticated: true,
@@ -43,6 +80,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         await authService.logout();
+        syncUserContext(null);
         set({
           user: null,
           isAuthenticated: false,
@@ -52,8 +90,10 @@ export const useAuthStore = create<AuthState>()(
       loadProfile: async () => {
         try {
           const profile = await authService.getProfile();
+          syncUserContext(profile);
           set({ user: profile, isAuthenticated: true });
         } catch {
+          syncUserContext(null);
           set({ user: null, isAuthenticated: false });
         }
       },
@@ -73,7 +113,10 @@ export const useAuthStore = create<AuthState>()(
         return roles.some((role) => user.roles.includes(role));
       },
 
-      reset: () => set({ user: null, isAuthenticated: false }),
+      reset: () => {
+        syncUserContext(null);
+        set({ user: null, isAuthenticated: false });
+      },
     }),
     {
       name: 'hrms-auth-store',
@@ -81,6 +124,9 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        syncUserContext(state?.user || null);
+      },
     }
   )
 );

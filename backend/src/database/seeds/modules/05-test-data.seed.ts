@@ -6,6 +6,38 @@ const prisma = new PrismaClient();
 export async function seedTestData(): Promise<void> {
   console.log('\n--- Seeding test data ---\n');
 
+  const ensureUserRole = async (params: {
+    email: string;
+    roleCode: string;
+    scopeType?: 'GLOBAL' | 'GROUP' | 'COMPANY';
+    companyId?: string;
+    groupId?: string;
+  }) => {
+    const user = await prisma.user.findUnique({ where: { email: params.email } });
+    const role = await prisma.role.findUnique({ where: { code: params.roleCode } });
+
+    if (!user || !role) return null;
+
+    const existing = await prisma.userRole.findFirst({
+      where: {
+        userId: user.id,
+        roleId: role.id,
+      },
+    });
+
+    if (existing) return existing;
+
+    return prisma.userRole.create({
+      data: {
+        userId: user.id,
+        roleId: role.id,
+        companyId: params.companyId,
+        groupId: params.groupId,
+        scopeType: params.scopeType || 'COMPANY',
+      },
+    });
+  };
+
   // ===================================================
   // 1. COMPANY GROUP & COMPANY
   // ===================================================
@@ -143,6 +175,36 @@ export async function seedTestData(): Promise<void> {
   console.log(`  ✓ ${createdEmployees.length} employees created`);
 
   // ===================================================
+  // 4B. USER ROLE ASSIGNMENTS FOR SIMULATION
+  // ===================================================
+  console.log('  Assigning operational roles...');
+  await ensureUserRole({ email: 'bambang@tech.com', roleCode: 'MANAGER', companyId: company.id });
+  await ensureUserRole({ email: 'dewi@tech.com', roleCode: 'HR_MANAGER', companyId: company.id });
+  await ensureUserRole({ email: 'rina@tech.com', roleCode: 'HR_STAFF', companyId: company.id });
+  await ensureUserRole({ email: 'rudi@tech.com', roleCode: 'COMPANY_ADMIN', companyId: company.id });
+  console.log('  ✓ Role simulation assigned');
+
+  const employeeMap = new Map(createdEmployees.map((employee) => [employee.employeeNumber, employee]));
+  const bambang = employeeMap.get('EMP001');
+  const siti = employeeMap.get('EMP002');
+  const ahmad = employeeMap.get('EMP003');
+  const dewi = employeeMap.get('EMP004');
+  const rudi = employeeMap.get('EMP005');
+  const maya = employeeMap.get('EMP006');
+  const agus = employeeMap.get('EMP007');
+  const rina = employeeMap.get('EMP008');
+
+  const users = await prisma.user.findMany({
+    where: { email: { in: employees.map((employee) => employee.email) } },
+  });
+  const userByEmail = new Map(users.map((user) => [user.email, user]));
+  const bambangUser = userByEmail.get('bambang@tech.com');
+  const sitiUser = userByEmail.get('siti@tech.com');
+  const dewiUser = userByEmail.get('dewi@tech.com');
+  const rudiUser = userByEmail.get('rudi@tech.com');
+  const rinaUser = userByEmail.get('rina@tech.com');
+
+  // ===================================================
   // 5. SALARY COMPONENTS
   // ===================================================
   console.log('  Creating salary components...');
@@ -180,12 +242,13 @@ export async function seedTestData(): Promise<void> {
     const baseSalary = emp.employeeNumber === 'EMP001' ? 25000000 :
       emp.employmentType === 'INTERN' ? 5000000 :
       emp.employmentType === 'PROBATION' ? 8000000 : 12000000;
+    const salaryId = `sal-${emp.employeeNumber}`;
 
     const salary = await prisma.employeeSalary.upsert({
-      where: { id: `sal-${emp.id}` },
+      where: { id: salaryId },
       update: {},
       create: {
-        id: `sal-${emp.id}`, employeeId: emp.id, companyId: company.id,
+        id: salaryId, employeeId: emp.id, companyId: company.id,
         effectiveDate: new Date('2024-01-01'), baseSalary, isActive: true,
       },
     });
@@ -249,15 +312,21 @@ export async function seedTestData(): Promise<void> {
   const annualLeave = createdLeaveTypes.find((l) => l.code === 'ANNUAL');
   const sickLeave = createdLeaveTypes.find((l) => l.code === 'SICK');
   if (annualLeave && sickLeave && createdEmployees.length >= 2) {
-    await prisma.leaveRequest.create({
-      data: {
+    await prisma.leaveRequest.upsert({
+      where: { id: 'leave-001' },
+      update: {},
+      create: {
+        id: 'leave-001',
         employeeId: createdEmployees[1].id, companyId: company.id, leaveTypeId: annualLeave.id,
         startDate: new Date('2026-07-10'), endDate: new Date('2026-07-12'), totalDays: 3,
         reason: 'Acara keluarga', status: 'PENDING',
       },
     });
-    await prisma.leaveRequest.create({
-      data: {
+    await prisma.leaveRequest.upsert({
+      where: { id: 'leave-002' },
+      update: {},
+      create: {
+        id: 'leave-002',
         employeeId: createdEmployees[2].id, companyId: company.id, leaveTypeId: sickLeave.id,
         startDate: new Date('2026-06-20'), endDate: new Date('2026-06-21'), totalDays: 2,
         reason: 'Kurang enak badan', status: 'APPROVED', approvedAt: new Date(),
@@ -282,6 +351,38 @@ export async function seedTestData(): Promise<void> {
     });
   }
   console.log(`  ✓ ${benefitPlans.length} benefit plans created`);
+
+  const bpjsKes = await prisma.benefitPlan.findUnique({ where: { code: 'BPJS-KES' } });
+  const bpjsTk = await prisma.benefitPlan.findUnique({ where: { code: 'BPJS-TK' } });
+  const privateInsurance = await prisma.benefitPlan.findUnique({ where: { code: 'PRIV-INS' } });
+
+  // Benefit enrollments
+  if (bpjsKes && bpjsTk && privateInsurance) {
+    const benefitEnrollments = [
+      { id: 'ben-emp001-kes', employeeId: bambang?.id, planId: bpjsKes.id, details: 'Kelas 1, keluarga inti' },
+      { id: 'ben-emp002-kes', employeeId: siti?.id, planId: bpjsKes.id, details: 'Kelas 1, peserta aktif' },
+      { id: 'ben-emp004-priv', employeeId: dewi?.id, planId: privateInsurance.id, details: 'Executive inpatient plan' },
+      { id: 'ben-emp005-tk', employeeId: rudi?.id, planId: bpjsTk.id, details: 'Program JHT + JP aktif' },
+    ];
+
+    for (const enrollment of benefitEnrollments) {
+      if (!enrollment.employeeId) continue;
+      await prisma.benefitEnrollment.upsert({
+        where: { id: enrollment.id },
+        update: {},
+        create: {
+          id: enrollment.id,
+          benefitPlanId: enrollment.planId,
+          employeeId: enrollment.employeeId,
+          companyId: company.id,
+          effectiveDate: new Date('2026-01-01'),
+          status: 'ACTIVE',
+          coverageDetails: enrollment.details,
+        },
+      });
+    }
+    console.log('  ✓ Benefit enrollments created');
+  }
 
   // ===================================================
   // 10. TRAINING CATEGORIES & COURSES
@@ -308,6 +409,61 @@ export async function seedTestData(): Promise<void> {
   }
   console.log(`  ✓ ${courses.length} courses created`);
 
+  const tsCourse = await prisma.trainingCourse.findUnique({ where: { code: 'TS-101' } });
+  const leadershipCourse = await prisma.trainingCourse.findUnique({ where: { code: 'LEAD-101' } });
+  if (tsCourse && leadershipCourse) {
+    const leadershipSession = await prisma.trainingSession.upsert({
+      where: { id: 'session-lead-2026-01' },
+      update: {},
+      create: {
+        id: 'session-lead-2026-01',
+        courseId: leadershipCourse.id,
+        trainer: 'PT People Growth Advisory',
+        location: 'Jakarta Training Center',
+        startDate: new Date('2026-07-15T09:00:00+07:00'),
+        endDate: new Date('2026-07-16T17:00:00+07:00'),
+        maxParticipants: 20,
+        status: 'SCHEDULED',
+      },
+    });
+
+    const enrollments = [
+      { id: 'tenroll-emp001-ts101', courseId: tsCourse.id, employeeId: bambang?.id, progress: 100, status: 'COMPLETED', completedAt: new Date('2026-03-14') },
+      { id: 'tenroll-emp002-ts101', courseId: tsCourse.id, employeeId: siti?.id, progress: 70, status: 'IN_PROGRESS' },
+      { id: 'tenroll-emp004-lead', courseId: leadershipCourse.id, employeeId: dewi?.id, progress: 0, status: 'ENROLLED' },
+    ];
+
+    for (const enrollment of enrollments) {
+      if (!enrollment.employeeId) continue;
+      await prisma.trainingEnrollment.upsert({
+        where: { id: enrollment.id },
+        update: {},
+        create: {
+          id: enrollment.id,
+          courseId: enrollment.courseId,
+          employeeId: enrollment.employeeId,
+          companyId: company.id,
+          status: enrollment.status as any,
+          progress: enrollment.progress,
+          completedAt: enrollment.completedAt,
+        },
+      });
+    }
+
+    if (dewi?.id) {
+      await prisma.trainingAttendance.upsert({
+        where: { sessionId_employeeId: { sessionId: leadershipSession.id, employeeId: dewi.id } },
+        update: {},
+        create: {
+          sessionId: leadershipSession.id,
+          employeeId: dewi.id,
+          status: 'PRESENT',
+        },
+      });
+    }
+    console.log('  ✓ Training enrollments created');
+  }
+
   // ===================================================
   // 11. PAYROLL PERIOD
   // ===================================================
@@ -320,6 +476,91 @@ export async function seedTestData(): Promise<void> {
       startDate: new Date('2026-06-01'), endDate: new Date('2026-06-30'), payDate: new Date('2026-07-05'), status: 'ACTIVE',
     },
   });
+
+  const payrollPeriod = await prisma.payrollPeriod.findUnique({ where: { code: 'P202606' } });
+  if (payrollPeriod) {
+    const employeeSalaries = await prisma.employeeSalary.findMany({
+      where: { companyId: company.id, isActive: true },
+      include: {
+        employee: true,
+        components: {
+          include: {
+            salaryComponent: true,
+          },
+        },
+      },
+    });
+
+    const payrollRun = await prisma.payrollRun.upsert({
+      where: { id: 'prun-202606-main' },
+      update: {},
+      create: {
+        id: 'prun-202606-main',
+        periodId: payrollPeriod.id,
+        companyId: company.id,
+        name: 'Payroll Run June 2026',
+        runNumber: 1,
+        totalEmployees: employeeSalaries.length,
+        totalEarnings: 102500000,
+        totalDeductions: 11750000,
+        totalNetPay: 90750000,
+        status: 'APPROVED',
+        approvedBy: rudiUser?.id,
+        approvedAt: new Date('2026-07-03T10:00:00+07:00'),
+      },
+    });
+
+    for (const salary of employeeSalaries) {
+      const totalEarnings = salary.components
+        .filter((component) => component.salaryComponent.type === 'ALLOWANCE')
+        .reduce((sum, component) => sum + Number(component.amount), Number(salary.baseSalary));
+      const totalDeductions = salary.components
+        .filter((component) => component.salaryComponent.type === 'DEDUCTION')
+        .reduce((sum, component) => sum + Number(component.amount), 0);
+      const netPay = totalEarnings - totalDeductions;
+
+      const payslipId = `ps-${salary.employee.employeeNumber}-2606`;
+      await prisma.payslip.upsert({
+        where: { id: payslipId },
+        update: {},
+        create: {
+          id: payslipId,
+          payrollRunId: payrollRun.id,
+          employeeId: salary.employeeId,
+          companyId: company.id,
+          employeeSalaryId: salary.id,
+          baseSalary: salary.baseSalary,
+          totalEarnings,
+          totalDeductions,
+          netPay,
+          workDays: 22,
+          presentDays: 21,
+          leaveDays: salary.employee.employeeNumber === 'EMP003' ? 1 : 0,
+          absentDays: 0,
+          overtimeHours: salary.employee.employeeNumber === 'EMP002' ? 6 : 2,
+          status: 'FINAL',
+        },
+      });
+
+      for (const component of salary.components) {
+        const componentId = `psc-${salary.employee.employeeNumber}-${component.salaryComponent.code}`.slice(0, 36);
+        await prisma.payslipComponent.upsert({
+          where: { id: componentId },
+          update: {},
+          create: {
+            id: componentId,
+            payslipId,
+            salaryComponentId: component.salaryComponentId,
+            name: component.salaryComponent.name,
+            type: component.salaryComponent.type,
+            amount: component.amount,
+            isTaxable: component.salaryComponent.isTaxable,
+          },
+        });
+      }
+    }
+    console.log('  ✓ Payroll run and payslips created');
+  }
 
   // ===================================================
   // 12. PERFORMANCE REVIEW CYCLE
@@ -336,10 +577,11 @@ export async function seedTestData(): Promise<void> {
 
   // Create a sample review
   if (createdEmployees.length >= 2) {
+    const reviewId = `rev-${createdEmployees[1].employeeNumber}`;
     await prisma.performanceReview.upsert({
-      where: { id: `rev-${createdEmployees[1].id}` },
+      where: { id: reviewId },
       update: {}, create: {
-        id: `rev-${createdEmployees[1].id}`, cycleId: cycle.id, employeeId: createdEmployees[1].id,
+        id: reviewId, cycleId: cycle.id, employeeId: createdEmployees[1].id,
         companyId: company.id, title: `Q2 Review - ${createdEmployees[1].fullName}`,
         type: 'MANAGER', status: 'DRAFT',
       },
@@ -357,10 +599,13 @@ export async function seedTestData(): Promise<void> {
     { employeeId: createdEmployees[3]?.id, title: 'Update Employee Handbook', type: 'PERSONAL', priority: 'MEDIUM', progress: 100 },
   ];
 
-  for (const goal of goals) {
+  for (const [goalIndex, goal] of goals.entries()) {
     if (!goal.employeeId) continue;
-    await prisma.goal.create({
-      data: {
+    await prisma.goal.upsert({
+      where: { id: `goal-00${goalIndex + 1}` },
+      update: {},
+      create: {
+        id: `goal-00${goalIndex + 1}`,
         employeeId: goal.employeeId, companyId: company.id, title: goal.title,
         type: goal.type as any, startDate: new Date('2026-01-01'), endDate: new Date('2026-12-31'),
         progress: goal.progress, status: 'IN_PROGRESS', priority: goal.priority as any,
@@ -410,12 +655,25 @@ export async function seedTestData(): Promise<void> {
   // ===================================================
   console.log('  Creating attendance records...');
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const attendanceStartDate = new Date(today);
+  attendanceStartDate.setDate(attendanceStartDate.getDate() - 7);
+  await prisma.attendance.deleteMany({
+    where: {
+      employeeId: { in: createdEmployees.map((employee) => employee.id) },
+      date: {
+        gte: attendanceStartDate,
+        lte: today,
+      },
+    },
+  });
   let attendanceCount = 0;
 
   for (const emp of createdEmployees) {
     for (let i = 1; i <= 7; i++) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
       if (d.getDay() === 0 || d.getDay() === 6) continue; // Skip weekends
 
       const nineAM = new Date(d); nineAM.setHours(9, 0, 0, 0);
@@ -424,12 +682,15 @@ export async function seedTestData(): Promise<void> {
       const checkOut = new Date(d); checkOut.setHours(17, 0, 0, 0);
       const status = emp.employeeNumber === 'EMP002' ? 'LATE' : 'PRESENT';
 
-      await prisma.attendance.upsert({
-        where: { employeeId_date: { employeeId: emp.id, date: d } },
-        update: {},
-        create: {
-          employeeId: emp.id, companyId: company.id, date: d, checkIn, checkOut,
-          status: status as any, workDuration: 480,
+      await prisma.attendance.create({
+        data: {
+          employeeId: emp.id,
+          companyId: company.id,
+          date: d,
+          checkIn,
+          checkOut,
+          status: status as any,
+          workDuration: 480,
           lateMinutes: status === 'LATE' ? 15 : 0,
         },
       });
@@ -438,10 +699,633 @@ export async function seedTestData(): Promise<void> {
   }
   console.log(`  ✓ ${attendanceCount} attendance records created`);
 
+  // ===================================================
+  // 16. WORK CALENDAR & HOLIDAYS
+  // ===================================================
+  console.log('  Creating work calendar...');
+  const existingCalendar = await prisma.workCalendar.findFirst({
+    where: { companyId: company.id, year: 2026, branchId: null, departmentId: null },
+  });
+  const calendar = existingCalendar || await prisma.workCalendar.create({
+    data: {
+      companyId: company.id,
+      name: 'Kalender Kerja 2026',
+      year: 2026,
+      workDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
+      isActive: true,
+      description: 'Kalender kerja utama perusahaan untuk tahun 2026',
+      createdBy: rudiUser?.id || bambangUser?.id || 'system-seed',
+    },
+  });
+
+  const holidays = [
+    { id: 'nat-holiday-2601', date: new Date('2026-01-01'), name: 'Tahun Baru 2026', type: 'H' },
+    { id: 'nat-holiday-2602', date: new Date('2026-08-17'), name: 'Hari Kemerdekaan RI', type: 'H' },
+    { id: 'nat-holiday-2603', date: new Date('2026-12-25'), name: 'Hari Natal', type: 'H' },
+  ];
+  for (const holiday of holidays) {
+    await prisma.nationalHoliday.upsert({
+      where: { id: holiday.id },
+      update: {},
+      create: {
+        id: holiday.id,
+        companyId: company.id,
+        countryCode: 'ID',
+        date: holiday.date,
+        name: holiday.name,
+        type: holiday.type,
+        year: 2026,
+        source: 'seed',
+      },
+    });
+  }
+
+  const specialDays = [
+    { id: 'wcday-2601', date: new Date('2026-01-01'), dayType: 'H', name: 'Tahun Baru 2026' },
+    { id: 'wcday-2602', date: new Date('2026-08-17'), dayType: 'H', name: 'Hari Kemerdekaan RI' },
+    { id: 'wcday-2603', date: new Date('2026-12-25'), dayType: 'H', name: 'Hari Natal' },
+  ];
+  for (const day of specialDays) {
+    await prisma.workCalendarDay.upsert({
+      where: { id: day.id },
+      update: {},
+      create: {
+        id: day.id,
+        calendarId: calendar.id,
+        date: day.date,
+        dayType: day.dayType,
+        name: day.name,
+        isMandatory: false,
+      },
+    });
+  }
+  console.log('  ✓ Work calendar and holidays created');
+
+  // ===================================================
+  // 17. COMPANY / GROUP SETTINGS & POLICY
+  // ===================================================
+  await prisma.groupSetting.upsert({
+    where: { groupId_key: { groupId: group.id, key: 'default_timezone' } },
+    update: { value: 'Asia/Jakarta' },
+    create: { groupId: group.id, key: 'default_timezone', value: 'Asia/Jakarta' },
+  });
+  await prisma.companySetting.upsert({
+    where: { companyId_key: { companyId: company.id, key: 'attendance_tolerance_minutes' } },
+    update: { value: '15' },
+    create: { companyId: company.id, key: 'attendance_tolerance_minutes', value: '15' },
+  });
+  await prisma.groupPolicy.upsert({
+    where: { code: 'WFH-2026' },
+    update: {},
+    create: {
+      groupId: group.id,
+      name: 'Kebijakan Work From Home 2026',
+      code: 'WFH-2026',
+      type: 'HR_POLICY',
+      content: 'Karyawan diperbolehkan WFH maksimal 4 kali per bulan dengan persetujuan atasan.',
+      status: 'ACTIVE',
+    },
+  });
+  console.log('  ✓ Settings and policies created');
+
+  // ===================================================
+  // 18. ASSET MANAGEMENT
+  // ===================================================
+  console.log('  Creating assets...');
+  const laptopCategory = await prisma.assetCategory.upsert({
+    where: { id: 'assetcat-laptop' },
+    update: {},
+    create: {
+      id: 'assetcat-laptop',
+      companyId: company.id,
+      groupId: group.id,
+      name: 'Laptop',
+      depreciationMethod: 'STRAIGHT_LINE',
+      usefulLifeMonths: 36,
+    },
+  });
+  const phoneCategory = await prisma.assetCategory.upsert({
+    where: { id: 'assetcat-phone' },
+    update: {},
+    create: {
+      id: 'assetcat-phone',
+      companyId: company.id,
+      groupId: group.id,
+      name: 'Handphone',
+      depreciationMethod: 'STRAIGHT_LINE',
+      usefulLifeMonths: 24,
+    },
+  });
+
+  const assets = [
+    { code: 'AST-LAP-001', name: 'MacBook Pro 14', categoryId: laptopCategory.id, serialNumber: 'MBP-001', value: 32000000, status: 'ASSIGNED' },
+    { code: 'AST-LAP-002', name: 'Lenovo ThinkPad T14', categoryId: laptopCategory.id, serialNumber: 'THP-002', value: 21000000, status: 'AVAILABLE' },
+    { code: 'AST-PHN-001', name: 'iPhone 15', categoryId: phoneCategory.id, serialNumber: 'IPH-001', value: 18500000, status: 'ASSIGNED' },
+  ];
+  for (const asset of assets) {
+    await prisma.asset.upsert({
+      where: { assetCode: asset.code },
+      update: {},
+      create: {
+        companyId: company.id,
+        categoryId: asset.categoryId,
+        assetCode: asset.code,
+        name: asset.name,
+        serialNumber: asset.serialNumber,
+        purchaseDate: new Date('2026-01-10'),
+        purchaseValue: asset.value,
+        currentValue: asset.value * 0.85,
+        status: asset.status,
+        branchId: branch.id,
+      },
+    });
+  }
+
+  const macbook = await prisma.asset.findUnique({ where: { assetCode: 'AST-LAP-001' } });
+  const iphone = await prisma.asset.findUnique({ where: { assetCode: 'AST-PHN-001' } });
+  if (macbook && siti && dewiUser) {
+    await prisma.assetAssignment.upsert({
+      where: { id: 'assign-asset-001' },
+      update: {},
+      create: {
+        id: 'assign-asset-001',
+        assetId: macbook.id,
+        employeeId: siti.id,
+        assignedAt: new Date('2026-02-01'),
+        conditionAtAssign: 'GOOD',
+        createdBy: dewiUser.id,
+      },
+    });
+  }
+  if (iphone && bambang && dewiUser) {
+    await prisma.assetAssignment.upsert({
+      where: { id: 'assign-asset-002' },
+      update: {},
+      create: {
+        id: 'assign-asset-002',
+        assetId: iphone.id,
+        employeeId: bambang.id,
+        assignedAt: new Date('2026-02-10'),
+        conditionAtAssign: 'GOOD',
+        createdBy: dewiUser.id,
+      },
+    });
+  }
+  console.log('  ✓ Assets and assignments created');
+
+  // ===================================================
+  // 19. ONBOARDING / OFFBOARDING
+  // ===================================================
+  console.log('  Creating onboarding and offboarding data...');
+  if (agus?.id && rina?.id) {
+    await prisma.onboardingChecklist.upsert({
+      where: { id: 'onb-001' },
+      update: {},
+      create: {
+        id: 'onb-001',
+        companyId: company.id,
+        employeeId: agus.id,
+        itemName: 'Laptop & akun email',
+        category: 'Equipment',
+        picId: rina.id,
+        dueDate: new Date('2026-07-02'),
+        status: 'COMPLETED',
+        completedAt: new Date('2026-07-01'),
+      },
+    });
+    await prisma.onboardingChecklist.upsert({
+      where: { id: 'onb-002' },
+      update: {},
+      create: {
+        id: 'onb-002',
+        companyId: company.id,
+        employeeId: agus.id,
+        itemName: 'Orientation HR Policy',
+        category: 'Administration',
+        picId: dewi?.id,
+        dueDate: new Date('2026-07-03'),
+        status: 'PENDING',
+      },
+    });
+  }
+
+  if (maya?.id && dewi?.id && rudi?.id) {
+    await prisma.resignation.upsert({
+      where: { id: 'resign-001' },
+      update: {},
+      create: {
+        id: 'resign-001',
+        companyId: company.id,
+        employeeId: maya.id,
+        resignDate: new Date('2026-07-01'),
+        lastWorkingDate: new Date('2026-07-31'),
+        reason: 'Melanjutkan karier di industri FMCG',
+        noticePeriodDays: 30,
+        status: 'SUBMITTED',
+      },
+    });
+    await prisma.exitClearance.upsert({
+      where: { id: 'clearance-001' },
+      update: {},
+      create: {
+        id: 'clearance-001',
+        resignationId: 'resign-001',
+        department: 'IT',
+        checklistItem: 'Pengembalian akses laptop & akun',
+        picId: rudi.id,
+        status: 'PENDING',
+      },
+    });
+  }
+  console.log('  ✓ Onboarding and offboarding created');
+
+  // ===================================================
+  // 20. NOTIFICATIONS
+  // ===================================================
+  console.log('  Creating notifications...');
+  const notifications = [
+    { id: 'notif-001', userId: bambangUser?.id, title: 'Reminder approval overtime', message: 'Terdapat 2 lembur menunggu approval hari ini.', type: 'WARNING', resource: 'attendance', action: 'approve' },
+    { id: 'notif-002', userId: dewiUser?.id, title: 'Employee onboarding pending', message: 'Checklist onboarding Agus Prasetyo masih belum lengkap.', type: 'INFO', resource: 'onboarding', action: 'read' },
+    { id: 'notif-003', userId: sitiUser?.id, title: 'Payslip June 2026 tersedia', message: 'Payslip periode Juni 2026 sudah dapat diunduh.', type: 'SUCCESS', resource: 'payroll', action: 'read' },
+    { id: 'notif-004', userId: rinaUser?.id, title: 'Request izin baru', message: 'Ada pengajuan izin personal yang perlu diproses.', type: 'WARNING', resource: 'self-service', action: 'read' },
+  ];
+  for (const notification of notifications) {
+    if (!notification.userId) continue;
+    await prisma.notification.upsert({
+      where: { id: notification.id },
+      update: {},
+      create: {
+        id: notification.id,
+        companyId: company.id,
+        userId: notification.userId,
+        title: notification.title,
+        message: notification.message,
+        type: notification.type as any,
+        resource: notification.resource,
+        action: notification.action,
+      },
+    });
+  }
+  console.log('  ✓ Notifications created');
+
+  // ===================================================
+  // 21. SELF SERVICE / PERMISSION REQUESTS
+  // ===================================================
+  console.log('  Creating self-service requests...');
+  if (siti?.id && bambang?.id && agus?.id) {
+    await prisma.permissionRequest.upsert({
+      where: { id: 'perm-001' },
+      update: {},
+      create: {
+        id: 'perm-001',
+        companyId: company.id,
+        employeeId: siti.id,
+        type: 'WORK_FROM_HOME',
+        startDate: new Date('2026-06-26T09:00:00+07:00'),
+        endDate: new Date('2026-06-26T17:00:00+07:00'),
+        duration: 1,
+        reason: 'Menunggu teknisi internet di rumah',
+        status: 'APPROVED',
+        approverId: bambang.id,
+        approvedAt: new Date('2026-06-25T16:00:00+07:00'),
+      },
+    });
+    await prisma.permissionRequest.upsert({
+      where: { id: 'perm-002' },
+      update: {},
+      create: {
+        id: 'perm-002',
+        companyId: company.id,
+        employeeId: agus.id,
+        type: 'PERSONAL',
+        startDate: new Date('2026-06-28T13:00:00+07:00'),
+        endDate: new Date('2026-06-28T17:00:00+07:00'),
+        duration: 0.5,
+        reason: 'Keperluan administrasi keluarga',
+        status: 'PENDING',
+      },
+    });
+  }
+  console.log('  ✓ Self-service requests created');
+
+  // ===================================================
+  // 22. LOAN DATA
+  // ===================================================
+  console.log('  Creating loan data...');
+  const loanTypes = [
+    { name: 'Pinjaman Karyawan', amount: 15000000, installments: 12, rate: 0 },
+    { name: 'Pinjaman Darurat', amount: 5000000, installments: 6, rate: 0 },
+  ];
+  for (const [index, loanType] of loanTypes.entries()) {
+    await prisma.loanType.upsert({
+      where: { id: `loan-type-00${index + 1}` },
+      update: {},
+      create: {
+        id: `loan-type-00${index + 1}`,
+        companyId: company.id,
+        name: loanType.name,
+        maxAmount: loanType.amount,
+        maxInstallments: loanType.installments,
+        interestRate: loanType.rate,
+        description: `Produk ${loanType.name} untuk kebutuhan karyawan`,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
+  const employeeLoanType = await prisma.loanType.findUnique({ where: { id: 'loan-type-001' } });
+  const emergencyLoanType = await prisma.loanType.findUnique({ where: { id: 'loan-type-002' } });
+  if (employeeLoanType && emergencyLoanType && siti?.id && dewi?.id && ahmad?.id) {
+    await prisma.loan.upsert({
+      where: { id: 'loan-001' },
+      update: {},
+      create: {
+        id: 'loan-001',
+        companyId: company.id,
+        employeeId: siti.id,
+        loanTypeId: employeeLoanType.id,
+        amount: 12000000,
+        totalInstallments: 12,
+        installmentAmount: 1000000,
+        remainingBalance: 7000000,
+        reason: 'Renovasi rumah',
+        status: 'ACTIVE',
+        approverId: dewi.id,
+        approvedAt: new Date('2026-01-10'),
+      },
+    });
+    await prisma.loan.upsert({
+      where: { id: 'loan-002' },
+      update: {},
+      create: {
+        id: 'loan-002',
+        companyId: company.id,
+        employeeId: ahmad.id,
+        loanTypeId: emergencyLoanType.id,
+        amount: 3000000,
+        totalInstallments: 6,
+        installmentAmount: 500000,
+        remainingBalance: 3000000,
+        reason: 'Biaya kesehatan keluarga',
+        status: 'PENDING',
+      },
+    });
+
+    for (let month = 1; month <= 12; month++) {
+      await prisma.loanInstallment.upsert({
+        where: { id: `loaninst-001-${month}` },
+        update: {},
+        create: {
+          id: `loaninst-001-${month}`,
+          loanId: 'loan-001',
+          amount: 1000000,
+          dueDate: new Date(`2026-${String(month).padStart(2, '0')}-25`),
+          paidDate: month <= 5 ? new Date(`2026-${String(month).padStart(2, '0')}-25`) : undefined,
+          status: month <= 5 ? 'PAID' : month === 6 ? 'OVERDUE' : 'PENDING',
+        },
+      });
+    }
+  }
+  console.log('  ✓ Loan data created');
+
+  // ===================================================
+  // 23. TRAVEL & EXPENSE
+  // ===================================================
+  console.log('  Creating travel & expense data...');
+  if (siti?.id && dewi?.id && bambang?.id) {
+    await prisma.businessTrip.upsert({
+      where: { id: 'trip-001' },
+      update: {},
+      create: {
+        id: 'trip-001',
+        companyId: company.id,
+        employeeId: siti.id,
+        destination: 'Bandung',
+        purpose: 'Koordinasi implementasi sistem attendance cabang Bandung',
+        startDate: new Date('2026-06-18'),
+        endDate: new Date('2026-06-20'),
+        estimatedCost: 4500000,
+        status: 'APPROVED',
+        approvedBy: bambang.id,
+        approvedAt: new Date('2026-06-15'),
+      },
+    });
+    await prisma.travelAdvance.upsert({
+      where: { id: 'advance-001' },
+      update: {},
+      create: {
+        id: 'advance-001',
+        tripId: 'trip-001',
+        companyId: company.id,
+        amount: 2500000,
+        disbursedAt: new Date('2026-06-17'),
+        reconciled: false,
+      },
+    });
+    await prisma.expenseClaim.upsert({
+      where: { id: 'claim-001' },
+      update: {},
+      create: {
+        id: 'claim-001',
+        companyId: company.id,
+        employeeId: siti.id,
+        tripId: 'trip-001',
+        category: 'HOTEL',
+        amount: 1850000,
+        description: 'Hotel 2 malam untuk perjalanan dinas Bandung',
+        expenseDate: new Date('2026-06-19'),
+        receiptFilePath: 'https://example.com/receipts/hotel-bandung.pdf',
+        ocrExtractedAmount: 1850000,
+        status: 'REIMBURSED',
+        notes: 'Sudah diverifikasi finance',
+      },
+    });
+    await prisma.expenseApproval.upsert({
+      where: { id: 'claimapp-001' },
+      update: {},
+      create: {
+        id: 'claimapp-001',
+        claimId: 'claim-001',
+        approverId: dewi.id,
+        level: 1,
+        status: 'APPROVED',
+        notes: 'Claim valid sesuai receipt',
+        approvedAt: new Date('2026-06-22'),
+      },
+    });
+    await prisma.reimbursement.upsert({
+      where: { id: 'reimburse-001' },
+      update: {},
+      create: {
+        id: 'reimburse-001',
+        claimId: 'claim-001',
+        companyId: company.id,
+        method: 'TRANSFER',
+        amount: 1850000,
+        processedBy: rudiUser?.id,
+        processedAt: new Date('2026-06-24'),
+        notes: 'Ditransfer ke rekening payroll',
+      },
+    });
+  }
+  console.log('  ✓ Travel & expense data created');
+
+  // ===================================================
+  // 24. WORKFLOW ENGINE
+  // ===================================================
+  console.log('  Creating workflow engine data...');
+  const workflowTemplate = await prisma.workflowTemplate.upsert({
+    where: { id: 'wf-template-001' },
+    update: {},
+    create: {
+      id: 'wf-template-001',
+      companyId: company.id,
+      name: 'Leave Request Approval',
+      approvalType: 'LEAVE_APPROVAL',
+      resource: 'leave',
+      description: 'Approval cuti dua level: manager lalu HR manager',
+      isActive: true,
+    },
+  });
+
+  await prisma.workflowStage.upsert({
+    where: { id: 'wf-stage-001' },
+    update: {},
+    create: {
+      id: 'wf-stage-001',
+      templateId: workflowTemplate.id,
+      name: 'Manager Approval',
+      level: 1,
+      approverType: 'ROLE',
+      approverRoleCode: 'MANAGER',
+      slaHours: 24,
+      allowEscalation: true,
+    },
+  });
+  await prisma.workflowStage.upsert({
+    where: { id: 'wf-stage-002' },
+    update: {},
+    create: {
+      id: 'wf-stage-002',
+      templateId: workflowTemplate.id,
+      name: 'HR Approval',
+      level: 2,
+      approverType: 'ROLE',
+      approverRoleCode: 'HR_MANAGER',
+      backupApproverRoleCode: 'COMPANY_ADMIN',
+      slaHours: 24,
+      allowEscalation: true,
+    },
+  });
+  await prisma.workflowConditionRule.upsert({
+    where: { id: 'wf-rule-001' },
+    update: {},
+    create: {
+      id: 'wf-rule-001',
+      stageId: 'wf-stage-002',
+      field: 'days',
+      operator: 'GTE',
+      value: '2',
+    },
+  });
+
+  if (annualLeave && sitiUser) {
+    await prisma.workflowInstance.upsert({
+      where: { id: 'wf-inst-001' },
+      update: {},
+      create: {
+        id: 'wf-inst-001',
+        templateId: workflowTemplate.id,
+        companyId: company.id,
+        approvalType: 'LEAVE_APPROVAL',
+        referenceType: 'leave_request',
+        referenceId: annualLeave.id,
+        requesterId: sitiUser.id,
+        payload: { days: 3, employeeNumber: 'EMP002', leaveType: 'ANNUAL' },
+        status: 'PENDING',
+        currentLevel: 1,
+      },
+    });
+    await prisma.workflowInstanceStep.upsert({
+      where: { id: 'wf-step-001' },
+      update: {},
+      create: {
+        id: 'wf-step-001',
+        instanceId: 'wf-inst-001',
+        stageId: 'wf-stage-001',
+        name: 'Manager Approval',
+        level: 1,
+        approverType: 'ROLE',
+        approverRoleCode: 'MANAGER',
+        status: 'PENDING',
+        isCurrent: true,
+      },
+    });
+    await prisma.workflowInstanceStep.upsert({
+      where: { id: 'wf-step-002' },
+      update: {},
+      create: {
+        id: 'wf-step-002',
+        instanceId: 'wf-inst-001',
+        stageId: 'wf-stage-002',
+        name: 'HR Approval',
+        level: 2,
+        approverType: 'ROLE',
+        approverRoleCode: 'HR_MANAGER',
+        backupApproverRoleCode: 'COMPANY_ADMIN',
+        status: 'PENDING',
+        isCurrent: false,
+      },
+    });
+    await prisma.workflowInstanceLog.upsert({
+      where: { id: 'wf-log-001' },
+      update: {},
+      create: {
+        id: 'wf-log-001',
+        instanceId: 'wf-inst-001',
+        action: 'STARTED',
+        actorId: sitiUser.id,
+        comment: 'Workflow dimulai dari pengajuan cuti tahunan',
+      },
+    });
+  }
+  console.log('  ✓ Workflow data created');
+
+  // ===================================================
+  // 25. AUDIT LOGS
+  // ===================================================
+  console.log('  Creating audit logs...');
+  const auditLogs = [
+    { id: 'audit-001', userId: rudiUser?.id, action: 'CREATE', entity: 'employee', entityId: agus?.id, newValue: '{"employeeNumber":"EMP007","status":"ACTIVE"}' },
+    { id: 'audit-002', userId: dewiUser?.id, action: 'APPROVE', entity: 'leave_request', entityId: 'perm-001', newValue: '{"status":"APPROVED"}' },
+    { id: 'audit-003', userId: bambangUser?.id, action: 'APPROVE', entity: 'business_trip', entityId: 'trip-001', newValue: '{"status":"APPROVED"}' },
+  ];
+  for (const log of auditLogs) {
+    await prisma.auditLog.upsert({
+      where: { id: log.id },
+      update: {},
+      create: {
+        id: log.id,
+        companyId: company.id,
+        userId: log.userId,
+        action: log.action,
+        entity: log.entity,
+        entityId: log.entityId,
+        newValue: log.newValue,
+        ipAddress: '127.0.0.1',
+        userAgent: 'seed-script',
+      },
+    });
+  }
+  console.log('  ✓ Audit logs created');
+
   console.log('\n  ✓ Test data seeding completed!');
   console.log('  ─────────────────────────────────────────');
   console.log('  Login credentials:');
   console.log('  Super Admin: admin@hrms.com / Admin123!');
   console.log('  Employee:     bambang@tech.com / Employee123!');
   console.log('  Employee:     siti@tech.com / Employee123!');
+  console.log('  HR Manager:   dewi@tech.com / Employee123!');
+  console.log('  HR Staff:     rina@tech.com / Employee123!');
+  console.log('  Company Admin:rudi@tech.com / Employee123!');
 }

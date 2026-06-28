@@ -4,12 +4,14 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useI18n } from '@/i18n/provider';
 import { Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { login, isLoading } = useAuthStore();
+  const { t } = useI18n();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,24 +23,24 @@ export function LoginPage() {
     setError(null);
 
     if (!email.trim()) {
-      setError('Email is required');
+      setError(t('auth.login.emailRequired'));
       return;
     }
 
     if (!password) {
-      setError('Password is required');
+      setError(t('auth.login.passwordRequired'));
       return;
     }
 
     try {
       await login(email.trim(), password);
-      toast.success('Login successful');
+      toast.success(t('auth.login.success'));
       navigate('/dashboard', { replace: true });
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
         err?.message ||
-        'Login failed. Please check your credentials.';
+        t('auth.login.failed');
       setError(message);
     }
   };
@@ -46,9 +48,9 @@ export function LoginPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-foreground">Sign in</h1>
+        <h1 className="text-2xl font-semibold text-foreground">{t('auth.login.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Enter your credentials to access your account
+          {t('auth.login.description')}
         </p>
       </div>
 
@@ -61,7 +63,7 @@ export function LoginPage() {
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="email">Email address</Label>
+          <Label htmlFor="email">{t('auth.login.email')}</Label>
           <Input
             id="email"
             type="email"
@@ -80,19 +82,19 @@ export function LoginPage() {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t('auth.login.password')}</Label>
             <Link
               to="/forgot-password"
               className="text-xs text-primary hover:text-primary/80 transition-colors"
             >
-              Forgot password?
+              {t('auth.login.forgotPassword')}
             </Link>
           </div>
           <div className="relative">
             <Input
               id="password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Enter your password"
+              placeholder={t('auth.login.passwordPlaceholder')}
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
@@ -117,17 +119,17 @@ export function LoginPage() {
           {isLoading ? (
             <>
               <Loader2 size={16} className="animate-spin mr-2" />
-              Signing in...
+              {t('auth.login.submitting')}
             </>
           ) : (
-            'Sign in'
+            t('auth.login.submit')
           )}
         </Button>
       </form>
 
       <div className="mt-6 pt-6 border-t border-border">
         <p className="text-xs text-center text-muted-foreground">
-          Default: admin@hrms.com / Admin123!
+          {t('common.defaultCredentials')}
         </p>
       </div>
     </div>

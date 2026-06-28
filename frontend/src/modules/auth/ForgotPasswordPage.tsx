@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useI18n } from '@/i18n/provider';
 import { ArrowLeft, Loader2, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export function ForgotPasswordPage() {
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -16,7 +18,7 @@ export function ForgotPasswordPage() {
     setError(null);
 
     if (!email.trim()) {
-      setError('Email is required');
+      setError(t('auth.forgot.emailRequired'));
       return;
     }
 
@@ -27,7 +29,7 @@ export function ForgotPasswordPage() {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       setIsSubmitted(true);
     } catch {
-      setError('Failed to send reset email. Please try again.');
+      setError(t('auth.forgot.failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -39,15 +41,15 @@ export function ForgotPasswordPage() {
         <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 size={24} className="text-primary" />
         </div>
-        <h1 className="text-xl font-semibold mb-2">Check your email</h1>
+        <h1 className="text-xl font-semibold mb-2">{t('auth.forgot.successTitle')}</h1>
         <p className="text-sm text-muted-foreground mb-6">
-          We have sent a password reset link to <strong>{email}</strong>
+          {t('auth.forgot.successDescription', { email })}
         </p>
         <Link
           to="/login"
           className="text-sm text-primary hover:text-primary/80 transition-colors"
         >
-          Back to sign in
+          {t('auth.forgot.back')}
         </Link>
       </div>
     );
@@ -60,12 +62,12 @@ export function ForgotPasswordPage() {
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
       >
         <ArrowLeft size={16} />
-        Back to sign in
+        {t('auth.forgot.back')}
       </Link>
 
-      <h1 className="text-2xl font-semibold mb-2">Reset password</h1>
+      <h1 className="text-2xl font-semibold mb-2">{t('auth.forgot.title')}</h1>
       <p className="text-sm text-muted-foreground mb-6">
-        Enter your email and we will send you a reset link
+        {t('auth.forgot.description')}
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -77,7 +79,7 @@ export function ForgotPasswordPage() {
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="reset-email">Email address</Label>
+          <Label htmlFor="reset-email">{t('auth.login.email')}</Label>
           <div className="relative">
             <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -96,10 +98,10 @@ export function ForgotPasswordPage() {
           {isSubmitting ? (
             <>
               <Loader2 size={16} className="animate-spin mr-2" />
-              Sending...
+              {t('auth.forgot.sending')}
             </>
           ) : (
-            'Send reset link'
+            t('auth.forgot.send')
           )}
         </Button>
       </form>

@@ -142,7 +142,7 @@ function RoleForm({ initial, onSave, onClose }: {
 
 // ─── Permission Manager Modal ───────────────────────────
 function PermissionManager({ role, open, onClose }: {
-  role: Role;
+  role: Role | null;
   open: boolean;
   onClose: () => void;
 }) {
@@ -153,6 +153,7 @@ function PermissionManager({ role, open, onClose }: {
   const [moduleFilter, setModuleFilter] = useState('');
 
   const fetchPermissions = useCallback(async () => {
+    if (!role) return;
     setLoading(true);
     try {
       const [allPerms, rolePerms] = await Promise.all([
@@ -166,7 +167,7 @@ function PermissionManager({ role, open, onClose }: {
     } finally {
       setLoading(false);
     }
-  }, [role.id, moduleFilter]);
+  }, [role, moduleFilter]);
 
   useEffect(() => { if (open) fetchPermissions(); }, [open, fetchPermissions]);
 
@@ -180,6 +181,7 @@ function PermissionManager({ role, open, onClose }: {
   };
 
   const handleSave = async () => {
+    if (!role) return;
     setSaving(true);
     try {
       await rbacService.assignPermissions(role.id, Array.from(rolePermissions));
@@ -204,7 +206,7 @@ function PermissionManager({ role, open, onClose }: {
 
   const modules = Object.keys(grouped).sort();
 
-  if (!open) return null;
+  if (!open || !role) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -521,7 +523,7 @@ export function RoleListPage() {
       />
 
       <PermissionManager
-        role={permissionRole!}
+        role={permissionRole}
         open={!!permissionRole}
         onClose={() => { setPermissionRole(null); fetchData(); }}
       />
