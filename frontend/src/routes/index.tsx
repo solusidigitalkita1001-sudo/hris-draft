@@ -70,6 +70,10 @@ import { RoleListPage } from '@/modules/rbac/pages/RoleListPage';
 // Self Service Pages
 import { SelfServicePage } from '@/modules/self-service/pages/SelfServicePage';
 
+// Employee Loan Pages
+import { EmployeeLoanPage } from '@/modules/employee-loan/pages/EmployeeLoanPage';
+import { EmployeeLoanDetailPage } from '@/modules/employee-loan/pages/EmployeeLoanDetailPage';
+
 // Work Calendar Pages
 import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
 import { WorkCalendarDetailPage } from '@/modules/work-calendar/pages/WorkCalendarDetailPage';
@@ -370,6 +374,23 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'self-service', action: 'read' }]}>
             <SelfServicePage />
+          </ProtectedRoute>
+        ),
+      },
+      // Employee Loan Routes
+      {
+        path: 'employee-loans',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'employee-loan', action: 'read' }]}>
+            <EmployeeLoanPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'employee-loans/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'employee-loan', action: 'read' }]}>
+            <EmployeeLoanDetailPage />
           </ProtectedRoute>
         ),
       },

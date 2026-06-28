@@ -99,6 +99,8 @@ model Company {
   nationalHolidays    NationalHoliday[]
   notifications       Notification[]
   permissionRequests  PermissionRequest[]
+  loanTypes           LoanType[]
+  loans               Loan[]
 
   @@index([groupId])
   @@index([code])
@@ -1132,6 +1134,7 @@ model Employee {
   assetAssignments     AssetAssignment[]
   exitClearancePICs    ExitClearance[]    @relation("ExitClearancePIC")
   permissionRequests   PermissionRequest[]
+  loans                Loan[]
 
   @@index([companyId])
   @@index([employeeNumber])
@@ -1933,6 +1936,94 @@ enum RequestStatus {
   APPROVED
   REJECTED
   CANCELLED
+}
+
+// ============================================================
+// EMPLOYEE LOAN
+// ============================================================
+
+/// Master data for loan types
+model LoanType {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  companyId       String   @map("company_id") @db.VarChar(36)
+  name            String   @db.VarChar(255)
+  maxAmount       Decimal  @map("max_amount") @db.Decimal(15, 2)
+  maxInstallments Int      @default(12) @map("max_installments")
+  interestRate    Decimal  @default(0) @map("interest_rate") @db.Decimal(5, 2)
+  description     String?  @db.Text
+  status          Status   @default(ACTIVE)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  loans   Loan[]
+
+  @@index([companyId])
+  @@map("loan_types")
+}
+
+/// Employee loan
+model Loan {
+  id                String       @id @default(uuid()) @db.VarChar(36)
+  companyId         String       @map("company_id") @db.VarChar(36)
+  employeeId        String       @map("employee_id") @db.VarChar(36)
+  loanTypeId        String       @map("loan_type_id") @db.VarChar(36)
+  amount            Decimal      @db.Decimal(15, 2)
+  totalInstallments Int          @default(1) @map("total_installments")
+  installmentAmount Decimal      @db.Decimal(15, 2)
+  remainingBalance  Decimal      @map("remaining_balance") @db.Decimal(15, 2)
+  reason            String       @db.Text
+  status            LoanStatus   @default(PENDING)
+  notes             String?      @db.Text
+  approverId        String?      @map("approver_id") @db.VarChar(36)
+  approvedAt        DateTime?    @map("approved_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  company    Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee   Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  loanType   LoanType          @relation(fields: [loanTypeId], references: [id], onDelete: Restrict)
+  installments LoanInstallment[]
+
+  @@index([employeeId, status])
+  @@index([companyId])
+  @@map("loans")
+}
+
+/// Loan installment schedule
+model LoanInstallment {
+  id        String           @id @default(uuid()) @db.VarChar(36)
+  loanId    String           @map("loan_id") @db.VarChar(36)
+  amount    Decimal          @db.Decimal(15, 2)
+  dueDate   DateTime         @map("due_date")
+  paidDate  DateTime?        @map("paid_date")
+  status    InstallmentStatus @default(PENDING)
+  notes     String?          @db.Text
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@index([status])
+  @@map("loan_installments")
+}
+
+enum LoanStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  PAID
+  CANCELLED
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  SKIPPED
 }
 
 // ============================================================

@@ -55,6 +55,7 @@ const navItems: NavItem[] = [
     ],
   },
   { label: 'Self Service', icon: <UserCheck size={18} />, path: '/self-service', module: 'self-service' },
+  { label: 'Loan', icon: <Banknote size={18} />, path: '/employee-loans', module: 'employee-loan' },
   { label: 'Employees', icon: <Users size={18} />, path: '/employees', module: 'employee' },
   { label: 'Attendance', icon: <Clock size={18} />, path: '/attendance', module: 'attendance' },
   {
