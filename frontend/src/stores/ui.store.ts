@@ -1,15 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
-type Theme = 'light' | 'dark';
+import { applyThemePreset, type ThemePreset } from '@/theme/theme-presets';
 
 interface UIState {
-  theme: Theme;
+  theme: ThemePreset;
   sidebarCollapsed: boolean;
   sidebarMobileOpen: boolean;
 
-  setTheme: (theme: Theme) => void;
-  toggleTheme: () => void;
+  setTheme: (theme: ThemePreset) => void;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarMobileOpen: (open: boolean) => void;
@@ -17,25 +15,14 @@ interface UIState {
 
 export const useUIStore = create<UIState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       theme: 'light',
       sidebarCollapsed: false,
       sidebarMobileOpen: false,
 
       setTheme: (theme) => {
-        const root = document.documentElement;
-        root.classList.remove('light', 'dark');
-        root.classList.add(theme);
+        applyThemePreset(theme);
         set({ theme });
-      },
-
-      toggleTheme: () => {
-        const { theme } = get();
-        const newTheme = theme === 'light' ? 'dark' : 'light';
-        const root = document.documentElement;
-        root.classList.remove('light', 'dark');
-        root.classList.add(newTheme);
-        set({ theme: newTheme });
       },
 
       toggleSidebar: () =>
@@ -54,9 +41,7 @@ export const useUIStore = create<UIState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.theme) {
-          const root = document.documentElement;
-          root.classList.remove('light', 'dark');
-          root.classList.add(state.theme);
+          applyThemePreset(state.theme);
         }
       },
     }

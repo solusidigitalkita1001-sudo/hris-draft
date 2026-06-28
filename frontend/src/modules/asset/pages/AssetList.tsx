@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, RefreshCw, Plus, Package, UserRound } from 'lucide-react';
 import { formatCurrency } from '@/utils/format';
+import toast from 'react-hot-toast';
 
 const STYLES: Record<string, string> = {
   AVAILABLE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
@@ -29,12 +30,15 @@ export function AssetList() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filtered = assets.filter((a) => a.name.toLowerCase().includes(search.toLowerCase()) || a.assetCode.toLowerCase().includes(search.toLowerCase()));
+  const handleAddAsset = () => {
+    toast('Form tambah asset belum tersedia. Saya bisa lanjut sambungkan create asset berikutnya.');
+  };
 
   return (
     <div>
       <PageHeader title="Asset Management" description="Manage company assets & assignments"
         actions={<><Button variant="outline" size="sm" onClick={fetchData}><RefreshCw size={16} className="mr-2" />Refresh</Button>
-          <Button size="sm"><Plus size={16} className="mr-2" />Add Asset</Button></>} />
+          <Button size="sm" onClick={handleAddAsset}><Plus size={16} className="mr-2" />Add Asset</Button></>} />
       <div className="relative mb-4 max-w-xs"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Search assets..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" /></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? <div className="col-span-full text-center py-12 text-sm text-muted-foreground">Loading...</div>

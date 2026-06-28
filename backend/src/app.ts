@@ -35,6 +35,7 @@ import permissionRequestRoutes from '@/modules/permission-request/permission-req
 import employeeLoanRoutes from '@/modules/employee-loan/employee-loan.routes';
 import travelExpenseRoutes from '@/modules/travel-expense/travel-expense.routes';
 import workflowEngineRoutes from '@/modules/workflow-engine/workflow-engine.routes';
+import documentManagementRoutes from '@/modules/document-management/document-management.routes';
 
 const app = express();
 
@@ -79,9 +80,10 @@ app.use(
 // Global rate limiter
 const globalLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.maxRequests,
+  max: config.app.env === 'development' ? Number.MAX_SAFE_INTEGER : config.rateLimit.maxRequests,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => config.app.env === 'development',
   message: {
     success: false,
     code: 'TOO_MANY_REQUESTS',
@@ -148,6 +150,7 @@ app.use(`${apiPrefix}/permission-requests`, permissionRequestRoutes);
 app.use(`${apiPrefix}/employee-loans`, employeeLoanRoutes);
 app.use(`${apiPrefix}/travel-expenses`, travelExpenseRoutes);
 app.use(`${apiPrefix}/workflow-engine`, workflowEngineRoutes);
+app.use(`${apiPrefix}/documents`, documentManagementRoutes);
 
 // ==================== 404 Handler ====================
 app.use((_req, res) => {

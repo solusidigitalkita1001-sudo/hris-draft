@@ -43,6 +43,7 @@ export async function seedRolePermissions(): Promise<void> {
         'report:create', 'report:read', 'report:export',
         'travel:create', 'travel:read', 'travel:update', 'travel:approve', 'travel:process',
         'workflow:create', 'workflow:read', 'workflow:update', 'workflow:delete', 'workflow:approve',
+        'document:create', 'document:read', 'document:update', 'document:delete',
         'settings:read', 'settings:update',
       ].includes(p.code)
     )
@@ -67,6 +68,7 @@ export async function seedRolePermissions(): Promise<void> {
         'report:create', 'report:read', 'report:export',
         'travel:create', 'travel:read', 'travel:update', 'travel:approve', 'travel:process',
         'workflow:create', 'workflow:read', 'workflow:update', 'workflow:approve',
+        'document:create', 'document:read', 'document:update',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -83,6 +85,7 @@ export async function seedRolePermissions(): Promise<void> {
         'leave:read',
         'travel:create', 'travel:read',
         'workflow:read',
+        'document:create', 'document:read',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -100,6 +103,7 @@ export async function seedRolePermissions(): Promise<void> {
         'dash:read',
         'travel:create', 'travel:read', 'travel:approve', 'travel:process',
         'workflow:read', 'workflow:approve',
+        'document:read',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -116,6 +120,7 @@ export async function seedRolePermissions(): Promise<void> {
         'leave:read',
         'travel:create', 'travel:read',
         'workflow:read',
+        'document:create', 'document:read',
       ].includes(p.code)
     )
     .map((p) => p.id);

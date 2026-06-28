@@ -2,6 +2,14 @@ import { attendanceRepository } from './attendance.repository';
 import { CreateAttendanceDTO, UpdateAttendanceDTO, CreateOvertimeDTO } from './attendance.dto';
 import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
+
+function buildScheduledTime(baseDate: Date, time: string) {
+  const [hours, minutes] = time.split(':').map(Number);
+  const scheduled = new Date(baseDate);
+  scheduled.setHours(hours, minutes, 0, 0);
+  return scheduled;
+}
 
 export class AttendanceService {
   async findAll(companyId: string, filters?: any) {
@@ -19,20 +27,22 @@ export class AttendanceService {
     const existing = await attendanceRepository.findByEmployeeAndDate(data.employeeId, new Date(data.date));
     if (existing) throw new BadRequestError('Attendance record already exists for this date');
 
-    // Auto-calculate late minutes if checkIn provided
-    if (data.checkIn) {
+    let status = data.status;
+
+    // Resolve expected check-in time from employee calendar instead of hardcoding 09:00
+    if (data.checkIn && data.status === 'PRESENT') {
       const checkIn = new Date(data.checkIn);
-      const nineAM = new Date(checkIn);
-      nineAM.setHours(9, 0, 0, 0);
-      if (checkIn > nineAM) {
-        const lateMin = Math.round((checkIn.getTime() - nineAM.getTime()) / 60000);
-        const record = await attendanceRepository.create(data);
-        await attendanceRepository.update(record.id, { ...data, status: 'LATE' as any });
-        return attendanceRepository.findById(record.id);
+      const schedule = await workCalendarRepository.findEmployeeDaySchedule(data.employeeId, new Date(data.date));
+
+      if (schedule?.isWorkingDay && schedule.workStart) {
+        const scheduledStart = buildScheduledTime(checkIn, schedule.workStart);
+        if (checkIn > scheduledStart) {
+          status = 'LATE';
+        }
       }
     }
 
-    const record = await attendanceRepository.create(data);
+    const record = await attendanceRepository.create({ ...data, status });
     logger.info('Attendance recorded', { employeeId: data.employeeId });
     return record;
   }

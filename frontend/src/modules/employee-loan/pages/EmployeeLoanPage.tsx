@@ -6,6 +6,7 @@ import { employeeLoanService, type Loan, type LoanType, LOAN_STATUS_LABELS } fro
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
 import {
   Plus, RefreshCw, Banknote, Eye,
 } from 'lucide-react';
@@ -80,14 +81,19 @@ function LoanForm({ onClose }: { onClose: () => void }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1.5">Jenis Pinjaman *</label>
-        <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground" required>
-          <option value="">Pilih jenis pinjaman</option>
-          {loanTypes.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} (Maks: {formatCurrency(Number(t.maxAmount))}, {t.maxInstallments}x cicilan)
-            </option>
-          ))}
-        </select>
+        <Select2
+          value={selectedType}
+          onValueChange={setSelectedType}
+          options={[
+            { value: '', label: 'Pilih jenis pinjaman' },
+            ...loanTypes.map((t) => ({
+              value: t.id,
+              label: `${t.name} (Maks: ${formatCurrency(Number(t.maxAmount))}, ${t.maxInstallments}x cicilan)`,
+            })),
+          ]}
+          placeholder="Pilih jenis pinjaman"
+          className="h-9"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-3">

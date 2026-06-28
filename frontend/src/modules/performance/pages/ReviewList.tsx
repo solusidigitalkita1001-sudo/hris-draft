@@ -3,6 +3,7 @@ import { performanceService, type PerformanceReview, type ReviewCycle } from '@/
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
 import { Search, RefreshCw, MessageSquare } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 
@@ -85,16 +86,15 @@ export function ReviewList() {
           />
         </div>
 
-        <select
+        <Select2
           value={cycleFilter}
-          onChange={(e) => setCycleFilter(e.target.value)}
-          className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground"
-        >
-          <option value="">All Cycles</option>
-          {cycles.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+          onValueChange={setCycleFilter}
+          options={[
+            { value: '', label: 'All Cycles' },
+            ...cycles.map((c) => ({ value: c.id, label: c.name })),
+          ]}
+          className="h-9 text-xs"
+        />
 
         <div className="flex gap-1">
           {['', 'DRAFT', 'SUBMITTED', 'APPROVED', 'COMPLETED'].map((s) => (

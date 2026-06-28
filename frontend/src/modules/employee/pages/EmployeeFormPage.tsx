@@ -5,6 +5,7 @@ import { organizationService, type Department, type Position, type Branch } from
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 
 const EMPLOYMENT_TYPES = ['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREELANCE', 'OUTSOURCING'] as const;
@@ -170,36 +171,51 @@ export function EmployeeFormPage() {
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Gender</label>
-                  <select value={form.gender} onChange={(e) => handleChange('gender', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground">
-                    <option value="">Select...</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                  </select>
+                  <Select2
+                    value={form.gender}
+                    onValueChange={(value) => handleChange('gender', value)}
+                    options={[
+                      { value: '', label: 'Select...' },
+                      { value: 'Male', label: 'Male' },
+                      { value: 'Female', label: 'Female' },
+                    ]}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Religion</label>
-                  <select value={form.religion} onChange={(e) => handleChange('religion', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground">
-                    <option value="">Select...</option>
-                    <option value="Islam">Islam</option>
-                    <option value="Christian">Christian</option>
-                    <option value="Catholic">Catholic</option>
-                    <option value="Hindu">Hindu</option>
-                    <option value="Buddha">Buddha</option>
-                    <option value="Other">Other</option>
-                  </select>
+                  <Select2
+                    value={form.religion}
+                    onValueChange={(value) => handleChange('religion', value)}
+                    options={[
+                      { value: '', label: 'Select...' },
+                      { value: 'Islam', label: 'Islam' },
+                      { value: 'Christian', label: 'Christian' },
+                      { value: 'Catholic', label: 'Catholic' },
+                      { value: 'Hindu', label: 'Hindu' },
+                      { value: 'Buddha', label: 'Buddha' },
+                      { value: 'Other', label: 'Other' },
+                    ]}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Marital Status</label>
-                  <select value={form.maritalStatus} onChange={(e) => handleChange('maritalStatus', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground">
-                    <option value="">Select...</option>
-                    <option value="Single">Single</option>
-                    <option value="Married">Married</option>
-                    <option value="Divorced">Divorced</option>
-                    <option value="Widowed">Widowed</option>
-                  </select>
+                  <Select2
+                    value={form.maritalStatus}
+                    onValueChange={(value) => handleChange('maritalStatus', value)}
+                    options={[
+                      { value: '', label: 'Select...' },
+                      { value: 'Single', label: 'Single' },
+                      { value: 'Married', label: 'Married' },
+                      { value: 'Divorced', label: 'Divorced' },
+                      { value: 'Widowed', label: 'Widowed' },
+                    ]}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Address</label>
@@ -217,34 +233,52 @@ export function EmployeeFormPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Department</label>
-                  <select value={form.departmentId} onChange={(e) => handleChange('departmentId', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground">
-                    <option value="">Select...</option>
-                    {departments.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                  </select>
+                  <Select2
+                    value={form.departmentId}
+                    onValueChange={(value) => handleChange('departmentId', value)}
+                    options={[
+                      { value: '', label: 'Select...' },
+                      ...departments.map((d) => ({ value: d.id, label: d.name })),
+                    ]}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Position</label>
-                  <select value={form.positionId} onChange={(e) => handleChange('positionId', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground">
-                    <option value="">Select...</option>
-                    {positions.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                  </select>
+                  <Select2
+                    value={form.positionId}
+                    onValueChange={(value) => handleChange('positionId', value)}
+                    options={[
+                      { value: '', label: 'Select...' },
+                      ...positions.map((p) => ({ value: p.id, label: p.name })),
+                    ]}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Branch</label>
-                  <select value={form.branchId} onChange={(e) => handleChange('branchId', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground">
-                    <option value="">Select...</option>
-                    {branches.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
-                  </select>
+                  <Select2
+                    value={form.branchId}
+                    onValueChange={(value) => handleChange('branchId', value)}
+                    options={[
+                      { value: '', label: 'Select...' },
+                      ...branches.map((b) => ({ value: b.id, label: b.name })),
+                    ]}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Employment Type</label>
-                  <select value={form.employmentType} onChange={(e) => handleChange('employmentType', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground">
-                    {EMPLOYMENT_TYPES.map((t) => (<option key={t} value={t}>{t}</option>))}
-                  </select>
+                  <Select2
+                    value={form.employmentType}
+                    onValueChange={(value) => handleChange('employmentType', value)}
+                    options={EMPLOYMENT_TYPES.map((t) => ({ value: t, label: t }))}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Join Date</label>
@@ -259,15 +293,20 @@ export function EmployeeFormPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Bank Name</label>
-                  <select value={form.bankName} onChange={(e) => handleChange('bankName', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground">
-                    <option value="">Select...</option>
-                    <option value="BCA">BCA</option>
-                    <option value="Mandiri">Mandiri</option>
-                    <option value="BNI">BNI</option>
-                    <option value="BRI">BRI</option>
-                    <option value="BSI">BSI</option>
-                  </select>
+                  <Select2
+                    value={form.bankName}
+                    onValueChange={(value) => handleChange('bankName', value)}
+                    options={[
+                      { value: '', label: 'Select...' },
+                      { value: 'BCA', label: 'BCA' },
+                      { value: 'Mandiri', label: 'Mandiri' },
+                      { value: 'BNI', label: 'BNI' },
+                      { value: 'BRI', label: 'BRI' },
+                      { value: 'BSI', label: 'BSI' },
+                    ]}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Bank Account</label>

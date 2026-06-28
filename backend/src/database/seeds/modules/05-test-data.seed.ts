@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import fs from 'fs/promises';
+import path from 'path';
 
 const prisma = new PrismaClient();
 
@@ -203,6 +205,121 @@ export async function seedTestData(): Promise<void> {
   const dewiUser = userByEmail.get('dewi@tech.com');
   const rudiUser = userByEmail.get('rudi@tech.com');
   const rinaUser = userByEmail.get('rina@tech.com');
+
+  // ===================================================
+  // 4C. DOCUMENT MANAGEMENT
+  // ===================================================
+  console.log('  Creating document management data...');
+  const uploadDir = path.resolve(process.cwd(), 'uploads/documents');
+  await fs.mkdir(uploadDir, { recursive: true });
+
+  const employeeIdCategory = await prisma.documentCategory.upsert({
+    where: { code: 'TECH-EMP-ID' },
+    update: {},
+    create: {
+      companyId: company.id,
+      groupId: group.id,
+      name: 'Employee Identity',
+      code: 'TECH-EMP-ID',
+      description: 'Dokumen identitas karyawan',
+    },
+  });
+
+  const contractCategory = await prisma.documentCategory.upsert({
+    where: { code: 'TECH-CONTRACT' },
+    update: {},
+    create: {
+      companyId: company.id,
+      groupId: group.id,
+      name: 'Employment Contract',
+      code: 'TECH-CONTRACT',
+      description: 'Kontrak kerja karyawan',
+    },
+  });
+
+  const policyCategory = await prisma.documentCategory.upsert({
+    where: { code: 'TECH-POLICY' },
+    update: {},
+    create: {
+      companyId: company.id,
+      groupId: group.id,
+      name: 'Company Policy',
+      code: 'TECH-POLICY',
+      description: 'Policy dan SOP perusahaan',
+    },
+  });
+
+  const demoFiles = [
+    {
+      id: 'doc-emp002-contract',
+      fileName: 'contract-emp002.txt',
+      title: 'Kontrak Kerja Siti Rahmawati',
+      content: 'Kontrak kerja demonstrasi untuk Siti Rahmawati.',
+      categoryId: contractCategory.id,
+      employeeId: siti?.id,
+      ownerType: 'EMPLOYEE' as const,
+      uploadedBy: dewiUser?.id,
+      visibility: 'RESTRICTED' as const,
+    },
+    {
+      id: 'doc-emp004-identity',
+      fileName: 'ktp-emp004.txt',
+      title: 'KTP Dewi Kusuma',
+      content: 'Dokumen identitas demonstrasi untuk Dewi Kusuma.',
+      categoryId: employeeIdCategory.id,
+      employeeId: dewi?.id,
+      ownerType: 'EMPLOYEE' as const,
+      uploadedBy: rinaUser?.id,
+      visibility: 'RESTRICTED' as const,
+    },
+    {
+      id: 'doc-company-policy',
+      fileName: 'policy-remote-work.txt',
+      title: 'Kebijakan Kerja Fleksibel',
+      content: 'Policy kerja fleksibel untuk simulasi DMS.',
+      categoryId: policyCategory.id,
+      employeeId: null,
+      ownerType: 'COMPANY' as const,
+      uploadedBy: rudiUser?.id,
+      visibility: 'INTERNAL' as const,
+    },
+  ];
+
+  for (const demoFile of demoFiles) {
+    if (!demoFile.uploadedBy) continue;
+    if (demoFile.ownerType === 'EMPLOYEE' && !demoFile.employeeId) continue;
+
+    const filePath = path.join(uploadDir, demoFile.fileName);
+    await fs.writeFile(filePath, demoFile.content, 'utf8');
+
+    await prisma.document.upsert({
+      where: { id: demoFile.id },
+      update: {
+        title: demoFile.title,
+        fileName: demoFile.fileName,
+        filePath,
+        mimeType: 'text/plain',
+        fileSize: Buffer.byteLength(demoFile.content),
+      },
+      create: {
+        id: demoFile.id,
+        companyId: company.id,
+        groupId: group.id,
+        categoryId: demoFile.categoryId,
+        employeeId: demoFile.employeeId,
+        ownerType: demoFile.ownerType,
+        title: demoFile.title,
+        fileName: demoFile.fileName,
+        filePath,
+        mimeType: 'text/plain',
+        fileSize: Buffer.byteLength(demoFile.content),
+        uploadedBy: demoFile.uploadedBy,
+        visibility: demoFile.visibility,
+        expiresAt: demoFile.ownerType === 'COMPANY' ? new Date('2027-12-31') : null,
+      },
+    });
+  }
+  console.log(`  ✓ ${demoFiles.length} documents prepared`);
 
   // ===================================================
   // 5. SALARY COMPONENTS

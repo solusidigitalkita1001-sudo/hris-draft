@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+const timeSchema = z.string().regex(/^\d{2}:\d{2}$/);
+
+const workDayRuleSchema = z.union([
+  z.boolean(),
+  z.object({
+    enabled: z.boolean(),
+    workStart: timeSchema.nullable().optional(),
+    workEnd: timeSchema.nullable().optional(),
+  }),
+]);
+
 export const createCalendarSchema = z.object({
   companyId: z.string().uuid(),
   branchId: z.string().uuid().optional(),
@@ -7,13 +18,13 @@ export const createCalendarSchema = z.object({
   name: z.string().min(1).max(100),
   year: z.number().int().min(2000).max(2100),
   workDays: z.object({
-    mon: z.boolean(),
-    tue: z.boolean(),
-    wed: z.boolean(),
-    thu: z.boolean(),
-    fri: z.boolean(),
-    sat: z.boolean().default(false),
-    sun: z.boolean().default(false),
+    mon: workDayRuleSchema,
+    tue: workDayRuleSchema,
+    wed: workDayRuleSchema,
+    thu: workDayRuleSchema,
+    fri: workDayRuleSchema,
+    sat: workDayRuleSchema.default(false),
+    sun: workDayRuleSchema.default(false),
   }),
   description: z.string().optional(),
 });
@@ -24,8 +35,8 @@ export const updateDaySchema = z.object({
   dayType: z.enum(['WD', 'WS', 'WE', 'NH', 'JL', 'CH', 'RH', 'OT']),
   name: z.string().max(150).optional(),
   notes: z.string().optional(),
-  workStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  workEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  workStart: timeSchema.nullable().optional(),
+  workEnd: timeSchema.nullable().optional(),
   isMandatory: z.boolean().optional(),
 });
 
@@ -35,6 +46,9 @@ export const bulkUpdateDaysSchema = z.object({
     dayType: z.enum(['WD', 'WS', 'WE', 'NH', 'JL', 'CH', 'RH', 'OT']),
     name: z.string().max(150).optional(),
     notes: z.string().optional(),
+    workStart: timeSchema.nullable().optional(),
+    workEnd: timeSchema.nullable().optional(),
+    isMandatory: z.boolean().optional(),
   })),
 });
 

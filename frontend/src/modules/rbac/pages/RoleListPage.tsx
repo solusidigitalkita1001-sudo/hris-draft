@@ -4,6 +4,7 @@ import { rbacService, type Role, type Permission } from '@/services/rbac.service
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
 import {
   Shield, Plus, RefreshCw, Pencil, Trash2, Search,
   Users, CheckCircle, XCircle, Globe,
@@ -105,15 +106,16 @@ function RoleForm({ initial, onSave, onClose }: {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">Scope</label>
-          <select
+          <Select2
             value={scope}
-            onChange={(e) => setScope(e.target.value as 'GLOBAL' | 'GROUP' | 'COMPANY')}
-            className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground"
-          >
-            <option value="COMPANY">Company</option>
-            <option value="GROUP">Group</option>
-            <option value="GLOBAL">Global</option>
-          </select>
+            onValueChange={(value) => setScope(value as 'GLOBAL' | 'GROUP' | 'COMPANY')}
+            options={[
+              { value: 'COMPANY', label: 'Company' },
+              { value: 'GROUP', label: 'Group' },
+              { value: 'GLOBAL', label: 'Global' },
+            ]}
+            className="h-9"
+          />
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">Priority</label>
@@ -222,16 +224,15 @@ function PermissionManager({ role, open, onClose }: {
         </div>
 
         <div className="px-5 py-3 border-b border-border">
-          <select
+          <Select2
             value={moduleFilter}
-            onChange={(e) => setModuleFilter(e.target.value)}
-            className="h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground w-full max-w-xs"
-          >
-            <option value="">All Modules</option>
-            {modules.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
+            onValueChange={setModuleFilter}
+            options={[
+              { value: '', label: 'All Modules' },
+              ...modules.map((m) => ({ value: m, label: m })),
+            ]}
+            className="w-full max-w-xs h-9"
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">

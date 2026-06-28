@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { employeeService } from './employee.service';
 import { Result } from '@/shared/core/Result';
+import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 
 export class EmployeeController {
   async findAll(req: Request, res: Response, next: NextFunction) {
@@ -66,6 +67,28 @@ export class EmployeeController {
     try {
       const employee = await employeeService.updateStatus(req.params.id as string, req.body.status);
       res.json(Result.updated(employee));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async findCareerTransactions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const items = await employeeService.findCareerTransactions(req.params.id as string);
+      res.json(Result.success(items));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createCareerTransaction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const transaction = await employeeService.createCareerTransaction(
+        req.params.id as string,
+        req.body,
+        req.user?.id
+      );
+      res.status(201).json(Result.created(transaction));
     } catch (error) {
       next(error);
     }

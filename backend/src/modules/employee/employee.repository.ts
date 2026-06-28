@@ -1,6 +1,6 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
-import { CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO } from './employee.dto';
+import { CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO } from './employee.dto';
 
 export class EmployeeRepository {
   async findAll(query: EmployeeQueryDTO) {
@@ -56,7 +56,36 @@ export class EmployeeRepository {
           where: { status: 'ACTIVE' },
           include: { benefitPlan: { select: { id: true, name: true, type: true } } },
         },
+        careerTransactions: {
+          where: { deletedAt: null },
+          include: {
+            fromBranch: { select: { id: true, name: true } },
+            toBranch: { select: { id: true, name: true } },
+            fromDepartment: { select: { id: true, name: true } },
+            toDepartment: { select: { id: true, name: true } },
+            fromPosition: { select: { id: true, name: true } },
+            toPosition: { select: { id: true, name: true } },
+            creator: { select: { id: true, email: true } },
+          },
+          orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
+        },
       },
+    });
+  }
+
+  async findCareerTransactions(employeeId: string) {
+    return prisma.employeeCareerTransaction.findMany({
+      where: { employeeId, deletedAt: null },
+      include: {
+        fromBranch: { select: { id: true, name: true } },
+        toBranch: { select: { id: true, name: true } },
+        fromDepartment: { select: { id: true, name: true } },
+        toDepartment: { select: { id: true, name: true } },
+        fromPosition: { select: { id: true, name: true } },
+        toPosition: { select: { id: true, name: true } },
+        creator: { select: { id: true, email: true } },
+      },
+      orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -117,6 +146,84 @@ export class EmployeeRepository {
     return prisma.employee.update({
       where: { id },
       data: { employmentStatus: status as any },
+    });
+  }
+
+  async createCareerTransaction(
+    employeeId: string,
+    createdBy: string | undefined,
+    data: CreateCareerTransactionDTO
+  ) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null },
+      select: {
+        id: true,
+        companyId: true,
+        branchId: true,
+        departmentId: true,
+        positionId: true,
+        employmentType: true,
+      },
+    });
+
+    if (!employee) {
+      return null;
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const transaction = await tx.employeeCareerTransaction.create({
+        data: {
+          employeeId,
+          companyId: employee.companyId,
+          transactionType: data.transactionType,
+          effectiveDate: new Date(data.effectiveDate),
+          fromBranchId: employee.branchId,
+          toBranchId: data.toBranchId || null,
+          fromDepartmentId: employee.departmentId,
+          toDepartmentId: data.toDepartmentId || null,
+          fromPositionId: employee.positionId,
+          toPositionId: data.toPositionId || null,
+          fromEmploymentType: employee.employmentType,
+          toEmploymentType: data.toEmploymentType || null,
+          referenceNumber: data.referenceNumber,
+          reason: data.reason,
+          notes: data.notes,
+          createdBy,
+        },
+        include: {
+          fromBranch: { select: { id: true, name: true } },
+          toBranch: { select: { id: true, name: true } },
+          fromDepartment: { select: { id: true, name: true } },
+          toDepartment: { select: { id: true, name: true } },
+          fromPosition: { select: { id: true, name: true } },
+          toPosition: { select: { id: true, name: true } },
+          creator: { select: { id: true, email: true } },
+        },
+      });
+
+      const updateData: Prisma.EmployeeUpdateInput = {};
+
+      if (data.toBranchId !== undefined) {
+        updateData.branch = data.toBranchId ? { connect: { id: data.toBranchId } } : { disconnect: true };
+      }
+      if (data.toDepartmentId !== undefined) {
+        updateData.department = data.toDepartmentId ? { connect: { id: data.toDepartmentId } } : { disconnect: true };
+      }
+      if (data.toPositionId !== undefined) {
+        updateData.position = data.toPositionId ? { connect: { id: data.toPositionId } } : { disconnect: true };
+      }
+      if (data.toEmploymentType !== undefined && data.toEmploymentType !== null) {
+        updateData.employmentType = data.toEmploymentType;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await tx.employee.update({
+          where: { id: employeeId },
+          data: updateData,
+        });
+      }
+
+      return transaction;
     });
   }
 }

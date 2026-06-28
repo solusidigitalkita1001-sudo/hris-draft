@@ -102,6 +102,12 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'workflow', action: 'delete', name: 'Delete Workflow', module: 'workflow', code: 'workflow:delete' },
     { resource: 'workflow', action: 'approve', name: 'Approve Workflow Step', module: 'workflow', code: 'workflow:approve' },
 
+    // Document Management
+    { resource: 'document', action: 'create', name: 'Upload Document', module: 'document', code: 'document:create' },
+    { resource: 'document', action: 'read', name: 'Read Document', module: 'document', code: 'document:read' },
+    { resource: 'document', action: 'update', name: 'Update Document', module: 'document', code: 'document:update' },
+    { resource: 'document', action: 'delete', name: 'Delete Document', module: 'document', code: 'document:delete' },
+
     // Settings
     { resource: 'settings', action: 'read', name: 'Read Settings', module: 'settings', code: 'settings:read' },
     { resource: 'settings', action: 'update', name: 'Update Settings', module: 'settings', code: 'settings:update' },

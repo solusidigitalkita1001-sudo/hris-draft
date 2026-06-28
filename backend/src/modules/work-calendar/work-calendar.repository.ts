@@ -2,6 +2,59 @@ import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import type { CreateCalendarDTO, UpdateCalendarDTO, BulkUpdateDaysDTO, CreateHolidayDTO, UpdateHolidayDTO } from './work-calendar.dto';
 
+type WorkDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+interface WorkDayRule {
+  enabled: boolean;
+  workStart: string | null;
+  workEnd: string | null;
+}
+
+interface ResolvedEmployeeDaySchedule {
+  calendarId: string;
+  dayType: string;
+  workStart: string | null;
+  workEnd: string | null;
+  isWorkingDay: boolean;
+}
+
+const DAY_KEYS_BY_INDEX: WorkDayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+function normalizeWorkDayRule(value: unknown): WorkDayRule {
+  if (typeof value === 'boolean') {
+    return { enabled: value, workStart: null, workEnd: null };
+  }
+
+  if (value && typeof value === 'object') {
+    const rule = value as Record<string, unknown>;
+    return {
+      enabled: Boolean(rule.enabled),
+      workStart: typeof rule.workStart === 'string' ? rule.workStart : null,
+      workEnd: typeof rule.workEnd === 'string' ? rule.workEnd : null,
+    };
+  }
+
+  return { enabled: false, workStart: null, workEnd: null };
+}
+
+function normalizeWorkDaysConfig(value: unknown): Record<WorkDayKey, WorkDayRule> {
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+  return {
+    mon: normalizeWorkDayRule(raw.mon),
+    tue: normalizeWorkDayRule(raw.tue),
+    wed: normalizeWorkDayRule(raw.wed),
+    thu: normalizeWorkDayRule(raw.thu),
+    fri: normalizeWorkDayRule(raw.fri),
+    sat: normalizeWorkDayRule(raw.sat),
+    sun: normalizeWorkDayRule(raw.sun),
+  };
+}
+
+function isWorkingDayType(dayType: string) {
+  return ['WD', 'WS', 'OT'].includes(dayType);
+}
+
 export class WorkCalendarRepository {
   // ─── Calendars ───────────────────────────────────────────
   async findAll(companyId: string) {
@@ -64,30 +117,39 @@ export class WorkCalendarRepository {
           dayType: d.dayType,
           name: d.name,
           notes: d.notes,
+          workStart: d.workStart,
+          workEnd: d.workEnd,
+          isMandatory: d.isMandatory,
         },
         update: {
           dayType: d.dayType,
           name: d.name,
           notes: d.notes,
+          workStart: d.workStart,
+          workEnd: d.workEnd,
+          isMandatory: d.isMandatory,
         },
       })
     );
     return prisma.$transaction(ops);
   }
 
-  async generateDefaultDays(calendarId: string, year: number, workDays: Record<string, boolean>) {
-    const days: { calendarId: string; date: Date; dayType: string }[] = [];
+  async generateDefaultDays(calendarId: string, year: number, workDaysConfig: Record<string, unknown>) {
+    const workDays = normalizeWorkDaysConfig(workDaysConfig);
+    const days: { calendarId: string; date: Date; dayType: string; workStart?: string | null; workEnd?: string | null }[] = [];
     const start = new Date(year, 0, 1);
     const end = new Date(year, 11, 31);
-    const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dow = dayMap[d.getDay()];
-      const isWorkDay = workDays[dow] ?? false;
+      const dow = DAY_KEYS_BY_INDEX[d.getDay()];
+      const rule = workDays[dow];
+      const isWorkDay = rule.enabled;
       days.push({
         calendarId,
         date: new Date(d),
         dayType: isWorkDay ? 'WD' : 'WE',
+        workStart: isWorkDay ? rule.workStart : null,
+        workEnd: isWorkDay ? rule.workEnd : null,
       });
     }
 
@@ -214,6 +276,44 @@ export class WorkCalendarRepository {
       where: { companyId, branchId: null, departmentId: null, deletedAt: null, isActive: true },
       orderBy: { year: 'desc' },
     });
+  }
+
+  async findEmployeeDaySchedule(employeeId: string, date: Date): Promise<ResolvedEmployeeDaySchedule | null> {
+    const calendar = await this.findEmployeeCalendar(employeeId);
+    if (!calendar) return null;
+
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+
+    const calendarDay = await prisma.workCalendarDay.findFirst({
+      where: {
+        calendarId: calendar.id,
+        date: { gte: start, lte: end },
+      },
+    });
+
+    if (calendarDay) {
+      return {
+        calendarId: calendar.id,
+        dayType: calendarDay.dayType,
+        workStart: calendarDay.workStart,
+        workEnd: calendarDay.workEnd,
+        isWorkingDay: isWorkingDayType(calendarDay.dayType),
+      };
+    }
+
+    const workDays = normalizeWorkDaysConfig(calendar.workDays);
+    const rule = workDays[DAY_KEYS_BY_INDEX[date.getDay()]];
+
+    return {
+      calendarId: calendar.id,
+      dayType: rule.enabled ? 'WD' : 'WE',
+      workStart: rule.enabled ? rule.workStart : null,
+      workEnd: rule.enabled ? rule.workEnd : null,
+      isWorkingDay: rule.enabled,
+    };
   }
 
   // ─── Team Calendar ───────────────────────────────────────

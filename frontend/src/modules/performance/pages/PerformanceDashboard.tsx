@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { performanceService, type ReviewCycle, type PerformanceReview } from '@/services/performance.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
+import toast from 'react-hot-toast';
 import { RefreshCw, BarChart3, Target, MessageSquare, ChevronRight, Star } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 
@@ -86,6 +87,10 @@ export function PerformanceDashboard() {
     },
   ];
 
+  const handleViewCycles = () => {
+    toast('Halaman review cycles belum tersedia. Saat ini akses tersedia lewat dashboard, reviews, dan goals.');
+  };
+
   return (
     <div>
       <PageHeader
@@ -125,7 +130,7 @@ export function PerformanceDashboard() {
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-border">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h3 className="text-sm font-medium">Review Cycles</h3>
-              <Button size="sm" variant="ghost" onClick={() => navigate('/performance/cycles')}>
+              <Button size="sm" variant="ghost" onClick={handleViewCycles}>
                 View All <ChevronRight size={14} className="ml-1" />
               </Button>
             </div>

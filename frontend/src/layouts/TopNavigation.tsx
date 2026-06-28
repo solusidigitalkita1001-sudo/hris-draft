@@ -8,18 +8,21 @@ import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { useI18n } from '@/i18n/provider';
 import { cn } from '@/utils/cn';
 import { getInitials } from '@/utils/format';
-import { Bell, Moon, Sun, Menu, ChevronDown, LogOut, User, Settings } from 'lucide-react';
+import { Bell, Menu, ChevronDown, LogOut, User, Settings, Palette, X } from 'lucide-react';
 import { organizationService, type Company } from '@/services/organization.service';
+import { getThemePreset, themePresets } from '@/theme/theme-presets';
 
 export function TopNavigation() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { theme, toggleTheme, setSidebarMobileOpen } = useUIStore();
+  const { theme, setTheme, setSidebarMobileOpen } = useUIStore();
   const { activeCompany, setActiveCompany, setCompanies: setStoredCompanies } = useCompanyStore();
   const { t } = useI18n();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
+  const [showThemePanel, setShowThemePanel] = useState(false);
   const [companies, setCompanyOptions] = useState<Company[]>([]);
+  const activeTheme = getThemePreset(theme);
   const canOpenSettings = canAccess(user, {
     requireAuth: true,
     requiredPermissions: [{ resource: 'settings', action: 'read' }],
@@ -129,15 +132,16 @@ export function TopNavigation() {
             </button>
           )}
 
-          {/* Theme toggle */}
+          {/* Theme settings */}
           <LanguageSwitcher compact />
 
           <button
-            onClick={toggleTheme}
-            className="p-2 hover:bg-muted rounded-md transition-colors"
-            title={theme === 'light' ? t('topnav.theme.switchToDark') : t('topnav.theme.switchToLight')}
+            onClick={() => setShowThemePanel(true)}
+            className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+            title="Theme settings"
           >
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            <Palette size={16} />
+            <span className="hidden sm:inline">{activeTheme.name}</span>
           </button>
 
           {/* Notifications */}
@@ -250,6 +254,72 @@ export function TopNavigation() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {showThemePanel && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowThemePanel(false)} />
+          <aside className="absolute right-0 top-0 h-full w-full max-w-sm border-l border-border bg-card shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border p-5">
+              <div>
+                <h3 className="text-base font-semibold">Theme Settings</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pilih tampilan yang paling nyaman untuk aktivitas harian kamu.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowThemePanel(false)}
+                className="rounded-md p-2 transition-colors hover:bg-muted"
+                aria-label="Close theme settings"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3 overflow-y-auto p-5">
+              {themePresets.map((preset) => {
+                const isActive = preset.id === theme;
+
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setTheme(preset.id)}
+                    className={cn(
+                      'w-full rounded-2xl border p-4 text-left transition-all',
+                      isActive
+                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                        : 'border-border hover:border-primary/40 hover:bg-muted/40'
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold">{preset.name}</p>
+                          {isActive && (
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{preset.description}</p>
+                      </div>
+                      <div className="flex gap-1 rounded-full border border-border bg-background p-1">
+                        {preset.preview.map((color) => (
+                          <span
+                            key={color}
+                            className="h-5 w-5 rounded-full border border-black/5"
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
         </div>
       )}
     </header>

@@ -4,6 +4,7 @@ import { organizationService, type Company } from '@/services/organization.servi
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Building, Pencil, Trash2 } from 'lucide-react';
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -64,10 +65,16 @@ function CompanyForm({ initial, groups, onSave, onClose }: {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1.5">Group *</label>
-        <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground" required>
-          <option value="">Select group</option>
-          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
+        <Select2
+          value={groupId}
+          onValueChange={setGroupId}
+          options={[
+            { value: '', label: 'Select group' },
+            ...groups.map((g) => ({ value: g.id, label: g.name })),
+          ]}
+          placeholder="Select group"
+          className="h-9"
+        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Company Name *</label>

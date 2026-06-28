@@ -13,6 +13,7 @@ import { GroupListPage } from '@/modules/organization/pages/GroupListPage';
 import { CompanyListPage } from '@/modules/organization/pages/CompanyListPage';
 import { DepartmentListPage } from '@/modules/organization/pages/DepartmentListPage';
 import { PositionListPage } from '@/modules/organization/pages/PositionListPage';
+import { OrganizationChartPage } from '@/modules/organization/pages/OrganizationChartPage';
 
 // Employee Pages
 import { EmployeeListPage } from '@/modules/employee/pages/EmployeeListPage';
@@ -75,6 +76,7 @@ import { EmployeeLoanPage } from '@/modules/employee-loan/pages/EmployeeLoanPage
 import { EmployeeLoanDetailPage } from '@/modules/employee-loan/pages/EmployeeLoanDetailPage';
 import { TravelExpensePage } from '@/modules/travel-expense/pages/TravelExpensePage';
 import { WorkflowEnginePage } from '@/modules/workflow-engine/pages/WorkflowEnginePage';
+import { DocumentManagementPage } from '@/modules/document-management/pages/DocumentManagementPage';
 
 // Work Calendar Pages
 import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
@@ -128,6 +130,17 @@ export const router = createBrowserRouter([
       {
         path: 'organization',
         children: [
+          {
+            path: 'chart',
+            element: (
+              <ProtectedRoute
+                requiredPermissions={[{ resource: 'organization', action: 'read' }]}
+                requiredRoles={OPERATIONAL_ROLES}
+              >
+                <OrganizationChartPage />
+              </ProtectedRoute>
+            ),
+          },
           {
             path: 'groups',
             element: (
@@ -463,6 +476,17 @@ export const router = createBrowserRouter([
             requiredRoles={OPERATIONAL_ROLES}
           >
             <WorkflowEnginePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'documents',
+        element: (
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'document', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
+            <DocumentManagementPage />
           </ProtectedRoute>
         ),
       },

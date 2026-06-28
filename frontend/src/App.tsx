@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { router } from '@/routes';
 import { I18nProvider } from '@/i18n/provider';
+import { PopupHost } from '@/components/ui/popup-host';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +21,7 @@ export function App() {
     <I18nProvider>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
+        <PopupHost />
         <Toaster
           position="top-right"
           toastOptions={{

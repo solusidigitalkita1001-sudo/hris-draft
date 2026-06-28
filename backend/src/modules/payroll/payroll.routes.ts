@@ -12,7 +12,7 @@ import {
   createPayrollPeriodSchema,
   createPayrollRunSchema,
 } from './payroll.dto';
-import { idParamSchema } from './payroll.validation';
+import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema } from './payroll.validation';
 
 const router = Router();
 
@@ -123,7 +123,7 @@ router.get(
 router.get(
   '/runs/:id',
   authorize({ resource: 'payroll', action: 'read' }),
-  validate(idParamSchema, 'params'),
+  validate(payrollRunIdParamSchema, 'params'),
   payrollController.findPayrollRunById.bind(payrollController)
 );
 
@@ -137,14 +137,14 @@ router.post(
 router.patch(
   '/runs/:id/approve',
   authorize({ resource: 'payroll', action: 'approve' }),
-  validate(idParamSchema, 'params'),
+  validate(payrollRunIdParamSchema, 'params'),
   payrollController.approvePayrollRun.bind(payrollController)
 );
 
 router.patch(
   '/runs/:id/disburse',
   authorize({ resource: 'payroll', action: 'approve' }),
-  validate(idParamSchema, 'params'),
+  validate(payrollRunIdParamSchema, 'params'),
   payrollController.disbursePayrollRun.bind(payrollController)
 );
 
@@ -152,7 +152,7 @@ router.patch(
 router.get(
   '/payslips/:id',
   authorize({ resource: 'payroll', action: 'read' }),
-  validate(idParamSchema, 'params'),
+  validate(payslipIdParamSchema, 'params'),
   payrollController.findPayslipById.bind(payrollController)
 );
 

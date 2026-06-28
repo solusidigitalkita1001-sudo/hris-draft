@@ -13,6 +13,8 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
+import { popup } from '@/stores/popup.store';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   BUSINESS_TRIP_STATUS_LABELS,
@@ -235,32 +237,27 @@ function ClaimForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Trip Terkait</label>
-          <select
+          <Select2
             value={tripId}
-            onChange={(event) => setTripId(event.target.value)}
-            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
-          >
-            <option value="">Tanpa trip spesifik</option>
-            {selectableTrips.map((trip) => (
-              <option key={trip.id} value={trip.id}>
-                {trip.destination} ({dayjs(trip.startDate).format('DD MMM YYYY')})
-              </option>
-            ))}
-          </select>
+            onValueChange={setTripId}
+            options={[
+              { value: '', label: 'Tanpa trip spesifik' },
+              ...selectableTrips.map((trip) => ({
+                value: trip.id,
+                label: `${trip.destination} (${dayjs(trip.startDate).format('DD MMM YYYY')})`,
+              })),
+            ]}
+            placeholder="Pilih trip"
+          />
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Kategori *</label>
-          <select
+          <Select2
             value={category}
-            onChange={(event) => setCategory(event.target.value as ExpenseCategory)}
-            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
-          >
-            {categories.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => setCategory(value as ExpenseCategory)}
+            options={categories}
+            placeholder="Pilih kategori"
+          />
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -370,7 +367,15 @@ export function TravelExpensePage() {
   }, [refresh]);
 
   const handleTripApproval = async (id: string, action: 'approve' | 'reject') => {
-    const notes = window.prompt(action === 'approve' ? 'Catatan approval (opsional)' : 'Alasan reject');
+    const notes = await popup.prompt({
+      title: action === 'approve' ? 'Approval Travel Request' : 'Reject Travel Request',
+      description: action === 'approve' ? 'Tambahkan catatan approval bila perlu.' : 'Masukkan alasan penolakan.',
+      placeholder: action === 'approve' ? 'Catatan approval (opsional)' : 'Alasan reject',
+      required: action === 'reject',
+      confirmText: action === 'approve' ? 'Approve' : 'Reject',
+      intent: action === 'reject' ? 'destructive' : 'default',
+    });
+    if (action === 'reject' && !notes) return;
     try {
       if (action === 'approve') {
         await travelExpenseService.approveTrip(id, notes || undefined);
@@ -386,7 +391,13 @@ export function TravelExpensePage() {
   };
 
   const handleCreateAdvance = async (tripId: string) => {
-    const amount = window.prompt('Masukkan nominal cash advance');
+    const amount = await popup.prompt({
+      title: 'Cash Advance',
+      description: 'Masukkan nominal cash advance untuk trip ini.',
+      placeholder: 'Contoh: 1500000',
+      required: true,
+      confirmText: 'Simpan',
+    });
     if (!amount) return;
 
     try {
@@ -401,15 +412,39 @@ export function TravelExpensePage() {
   const handleClaimAction = async (id: string, action: 'approve' | 'reject' | 'reimburse') => {
     try {
       if (action === 'approve') {
-        const notes = window.prompt('Catatan approval (opsional)');
+        const notes = await popup.prompt({
+          title: 'Approve Expense Claim',
+          description: 'Tambahkan catatan approval bila perlu.',
+          placeholder: 'Catatan approval (opsional)',
+          confirmText: 'Approve',
+        });
         await travelExpenseService.approveClaim(id, notes || undefined);
         toast.success('Expense claim disetujui');
       } else if (action === 'reject') {
-        const notes = window.prompt('Alasan reject');
+        const notes = await popup.prompt({
+          title: 'Reject Expense Claim',
+          description: 'Masukkan alasan penolakan claim.',
+          placeholder: 'Alasan reject',
+          required: true,
+          confirmText: 'Reject',
+          intent: 'destructive',
+        });
+        if (!notes) return;
         await travelExpenseService.rejectClaim(id, notes || undefined);
         toast.success('Expense claim ditolak');
       } else {
-        const method = (window.prompt('Metode reimbursement: TRANSFER atau PAYROLL', 'TRANSFER') || 'TRANSFER') as ReimbursementMethod;
+        const method = (await popup.select({
+          title: 'Metode Reimbursement',
+          description: 'Pilih metode reimbursement untuk claim ini.',
+          value: 'TRANSFER',
+          options: [
+            { value: 'TRANSFER', label: 'TRANSFER' },
+            { value: 'PAYROLL', label: 'PAYROLL' },
+          ],
+          required: true,
+          confirmText: 'Proses',
+        })) as ReimbursementMethod | null;
+        if (!method) return;
         await travelExpenseService.reimburseClaim(id, { companyId, method });
         toast.success('Reimbursement berhasil dicatat');
       }

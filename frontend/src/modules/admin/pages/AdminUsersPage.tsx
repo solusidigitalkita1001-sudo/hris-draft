@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, RefreshCw, Plus, Shield, UserRound } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import toast from 'react-hot-toast';
 
 export function AdminUsersPage() {
   const [users, setUsers] = useState<UserData[]>([]);
@@ -25,12 +26,15 @@ export function AdminUsersPage() {
     u.email.toLowerCase().includes(search.toLowerCase()) ||
     u.employee?.fullName?.toLowerCase().includes(search.toLowerCase())
   );
+  const handleAddUser = () => {
+    toast('Form tambah user belum tersedia. Saya bisa lanjut sambungkan create user bila diperlukan.');
+  };
 
   return (
     <div>
       <PageHeader title="User Management" description="Manage system users and their roles"
         actions={<><Button variant="outline" size="sm" onClick={fetchData}><RefreshCw size={16} className="mr-2" />Refresh</Button>
-          <Button size="sm"><Plus size={16} className="mr-2" />Add User</Button></>} />
+          <Button size="sm" onClick={handleAddUser}><Plus size={16} className="mr-2" />Add User</Button></>} />
       <div className="relative mb-4 max-w-xs">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />

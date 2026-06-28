@@ -43,6 +43,27 @@ export const employeeQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
 });
 
+export const createCareerTransactionSchema = z.object({
+  effectiveDate: z.string().datetime(),
+  transactionType: z.enum([
+    'PROMOTION',
+    'DEMOTION',
+    'MUTATION',
+    'TRANSFER',
+    'ROTATION',
+    'ACTING_ASSIGNMENT',
+    'STATUS_CHANGE',
+  ]),
+  toBranchId: z.string().uuid().optional().nullable(),
+  toDepartmentId: z.string().uuid().optional().nullable(),
+  toPositionId: z.string().uuid().optional().nullable(),
+  toEmploymentType: z.enum(['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREELANCE', 'OUTSOURCING']).optional().nullable(),
+  referenceNumber: z.string().max(100).optional(),
+  reason: z.string().optional(),
+  notes: z.string().optional(),
+});
+
 export type CreateEmployeeDTO = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeeDTO = z.infer<typeof updateEmployeeSchema>;
 export type EmployeeQueryDTO = z.infer<typeof employeeQuerySchema>;
+export type CreateCareerTransactionDTO = z.infer<typeof createCareerTransactionSchema>;

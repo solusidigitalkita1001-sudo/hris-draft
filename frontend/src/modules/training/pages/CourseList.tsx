@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, RefreshCw, Plus, GraduationCap, BookOpen, Users, Clock, Award } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export function CourseList() {
   const navigate = useNavigate();
@@ -44,6 +45,9 @@ export function CourseList() {
 
   const totalEnrollments = courses.reduce((sum, c) => sum + (c._count?.enrollments || 0), 0);
   const mandatoryCount = courses.filter((c) => c.isMandatory).length;
+  const handleCreateCourse = () => {
+    toast('Form create course belum tersedia. Route create course belum disambungkan.');
+  };
 
   return (
     <div>
@@ -56,7 +60,7 @@ export function CourseList() {
               <RefreshCw size={16} className="mr-2" />
               Refresh
             </Button>
-            <Button size="sm" onClick={() => navigate('/lms/courses/new')}>
+            <Button size="sm" onClick={handleCreateCourse}>
               <Plus size={16} className="mr-2" />
               New Course
             </Button>

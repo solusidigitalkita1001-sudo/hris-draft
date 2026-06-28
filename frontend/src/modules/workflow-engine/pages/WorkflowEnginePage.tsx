@@ -15,6 +15,8 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
+import { popup } from '@/stores/popup.store';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   workflowEngineService,
@@ -324,15 +326,16 @@ function TemplateForm({
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Approver Type *</label>
-                <select
+                <Select2
                   value={stage.approverType}
-                  onChange={(event) => updateStage(stageIndex, 'approverType', event.target.value as WorkflowApproverType)}
-                  className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
-                >
-                  <option value="ROLE">Role</option>
-                  <option value="USER">User</option>
-                  <option value="AUTO">Auto</option>
-                </select>
+                  onValueChange={(value) => updateStage(stageIndex, 'approverType', value as WorkflowApproverType)}
+                  options={[
+                    { value: 'ROLE', label: 'Role' },
+                    { value: 'USER', label: 'User' },
+                    { value: 'AUTO', label: 'Auto' },
+                  ]}
+                  placeholder="Pilih approver type"
+                />
               </div>
             </div>
 
@@ -407,17 +410,15 @@ function TemplateForm({
                       onChange={(event) => updateRule(stageIndex, ruleIndex, 'field', event.target.value)}
                       placeholder="field"
                     />
-                    <select
+                    <Select2
                       value={rule.operator}
-                      onChange={(event) => updateRule(stageIndex, ruleIndex, 'operator', event.target.value as WorkflowOperator)}
-                      className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
-                    >
-                      {['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'IN', 'CONTAINS'].map((operator) => (
-                        <option key={operator} value={operator}>
-                          {operator}
-                        </option>
-                      ))}
-                    </select>
+                      onValueChange={(value) => updateRule(stageIndex, ruleIndex, 'operator', value as WorkflowOperator)}
+                      options={['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'IN', 'CONTAINS'].map((operator) => ({
+                        value: operator,
+                        label: operator,
+                      }))}
+                      placeholder="Operator"
+                    />
                     <Input
                       value={rule.value}
                       onChange={(event) => updateRule(stageIndex, ruleIndex, 'value', event.target.value)}
@@ -492,18 +493,15 @@ function StartInstanceForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Template *</label>
-        <select
+        <Select2
           value={templateId}
-          onChange={(event) => setTemplateId(event.target.value)}
-          className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
-          required
-        >
-          {templates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name} ({template.approvalType})
-            </option>
-          ))}
-        </select>
+          onValueChange={setTemplateId}
+          options={templates.map((template) => ({
+            value: template.id,
+            label: `${template.name} (${template.approvalType})`,
+          }))}
+          placeholder="Pilih template"
+        />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div>
@@ -601,7 +599,13 @@ export function WorkflowEnginePage() {
   };
 
   const handleAction = async (instanceId: string, action: WorkflowActionType) => {
-    const comment = window.prompt(`Komentar untuk aksi ${action} (opsional)`) || undefined;
+    const comment = (await popup.prompt({
+      title: `Workflow Action: ${action}`,
+      description: `Tambahkan komentar untuk aksi ${action.toLowerCase()} bila perlu.`,
+      placeholder: `Komentar untuk aksi ${action} (opsional)`,
+      confirmText: 'Proses',
+      intent: action === 'REJECT' ? 'destructive' : 'default',
+    })) || undefined;
     try {
       await workflowEngineService.applyAction(instanceId, action, comment);
       toast.success(`Aksi ${action.toLowerCase()} berhasil diproses`);

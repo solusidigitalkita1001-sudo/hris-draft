@@ -63,7 +63,7 @@ export class WorkCalendarController {
       const id = req.params.id as string;
       const calendar = await workCalendarRepository.findById(id);
       if (!calendar) return res.status(404).json(Result.error('Calendar not found'));
-      const workDays = calendar.workDays as Record<string, boolean>;
+      const workDays = calendar.workDays as Record<string, unknown>;
       const data = await workCalendarRepository.generateDefaultDays(id, calendar.year, workDays);
       res.json(Result.success(data));
     } catch (error) { next(error); }

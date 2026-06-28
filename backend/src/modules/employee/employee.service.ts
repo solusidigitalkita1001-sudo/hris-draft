@@ -1,5 +1,5 @@
 import { employeeRepository } from './employee.repository';
-import { CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO } from './employee.dto';
+import { CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO } from './employee.dto';
 import { NotFoundError, ConflictError, BadRequestError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 
@@ -58,6 +58,36 @@ export class EmployeeService {
       throw new BadRequestError(`Invalid status: ${status}`);
     }
     return employeeRepository.updateStatus(id, status);
+  }
+
+  async findCareerTransactions(employeeId: string) {
+    await this.findById(employeeId);
+    return employeeRepository.findCareerTransactions(employeeId);
+  }
+
+  async createCareerTransaction(employeeId: string, data: CreateCareerTransactionDTO, createdBy?: string) {
+    const employee = await this.findById(employeeId);
+
+    if (data.toDepartmentId === employee.departmentId &&
+        data.toPositionId === employee.positionId &&
+        data.toBranchId === employee.branchId &&
+        (data.toEmploymentType === undefined || data.toEmploymentType === employee.employmentType)) {
+      throw new BadRequestError('No actual career change detected');
+    }
+
+    const transaction = await employeeRepository.createCareerTransaction(employeeId, createdBy, data);
+
+    if (!transaction) {
+      throw new NotFoundError('Employee not found');
+    }
+
+    logger.info('Employee career transaction created', {
+      employeeId,
+      transactionType: data.transactionType,
+      createdBy,
+    });
+
+    return transaction;
   }
 }
 

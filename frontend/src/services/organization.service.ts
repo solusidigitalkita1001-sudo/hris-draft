@@ -38,7 +38,8 @@ export interface Division {
   code: string;
   headId?: string;
   status: string;
-  _count: { departments: number };
+  head?: { id: string; fullName: string } | null;
+  _count?: { departments: number };
 }
 
 export interface Department {
@@ -51,7 +52,10 @@ export interface Department {
   headId?: string;
   costCenter?: string;
   status: string;
+  head?: { id: string; fullName: string } | null;
   _count?: { children: number; positions: number };
+  children?: Department[];
+  subDepartments?: Department[];
 }
 
 export interface Position {
@@ -62,6 +66,9 @@ export interface Position {
   code: string;
   gradeLevel?: number;
   status: string;
+  department?: { id: string; name: string } | null;
+  reportsTo?: { id: string; name: string } | null;
+  _count?: { employees: number };
 }
 
 class OrganizationService {
@@ -119,6 +126,12 @@ class OrganizationService {
   // Branches
   async getBranches(companyId: string): Promise<Branch[]> {
     const response = await api.get('/organization/branches', { params: { companyId } });
+    return response.data.data;
+  }
+
+  // Divisions
+  async getDivisions(companyId: string): Promise<Division[]> {
+    const response = await api.get('/organization/divisions', { params: { companyId } });
     return response.data.data;
   }
 

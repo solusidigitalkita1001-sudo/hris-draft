@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { recruitmentService, type Interview } from '@/services/recruitment.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import toast from 'react-hot-toast';
 import {
   Search,
   RefreshCw,
@@ -39,7 +39,6 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function InterviewSchedule() {
-  const navigate = useNavigate();
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -79,6 +78,10 @@ export function InterviewSchedule() {
     return acc;
   }, {});
 
+  const handleScheduleInterview = () => {
+    toast('Form schedule interview belum tersedia. Route create interview belum disambungkan.');
+  };
+
   return (
     <div>
       <PageHeader
@@ -90,7 +93,7 @@ export function InterviewSchedule() {
               <RefreshCw size={16} className="mr-2" />
               Refresh
             </Button>
-            <Button size="sm" onClick={() => navigate('/recruitment/interviews/new')}>
+            <Button size="sm" onClick={handleScheduleInterview}>
               <Plus size={16} className="mr-2" />
               Schedule Interview
             </Button>

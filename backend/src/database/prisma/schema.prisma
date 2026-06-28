@@ -35,6 +35,8 @@ model CompanyGroup {
   groupSettings GroupSetting[]
   roles         Role[]
   assetCategories AssetCategory[]
+  documentCategories DocumentCategory[]
+  documents          Document[]
 
   @@map("company_groups")
 }
@@ -107,6 +109,9 @@ model Company {
   travelAdvances      TravelAdvance[]
   expenseClaims       ExpenseClaim[]
   reimbursements      Reimbursement[]
+  documentCategories  DocumentCategory[]
+  documents           Document[]
+  careerTransactions  EmployeeCareerTransaction[]
 
   @@index([groupId])
   @@index([code])
@@ -133,6 +138,8 @@ model Branch {
 
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   employees Employee[]
+  careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromBranch")
+  careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToBranch")
 
   @@index([companyId])
   @@index([code])
@@ -186,6 +193,8 @@ model Department {
   positions      Position[]
   employees      Employee[]
   jobPostings    JobPosting[]
+  careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromDepartment")
+  careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToDepartment")
 
   @@index([divisionId])
   @@index([companyId])
@@ -240,6 +249,8 @@ model Position {
   subordinates Position[]  @relation("PositionHierarchy")
   employees    Employee[]
   jobPostings  JobPosting[]
+  careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromPosition")
+  careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToPosition")
 
   @@index([departmentId])
   @@index([companyId])
@@ -1067,6 +1078,10 @@ model User {
   loginAttempts   LoginAttempt[]
   auditLogs       AuditLog[]
   notifications   Notification[]
+  uploadedDocuments Document[]        @relation("DocumentUploader")
+  documentSignatures DocumentSignature[]
+  documentAccessLogs DocumentAccessLog[]
+  createdCareerTransactions EmployeeCareerTransaction[]
 
   @@index([email])
   @@index([status])
@@ -1143,6 +1158,8 @@ model Employee {
   loans                Loan[]
   businessTrips        BusinessTrip[]
   expenseClaims        ExpenseClaim[]
+  documents            Document[]
+  careerTransactions   EmployeeCareerTransaction[]
 
   @@index([companyId])
   @@index([employeeNumber])
@@ -1151,6 +1168,45 @@ model Employee {
   @@index([employmentStatus])
   @@index([branchId])
   @@map("employees")
+}
+
+model EmployeeCareerTransaction {
+  id                 String                 @id @default(uuid()) @db.VarChar(36)
+  employeeId         String                 @map("employee_id") @db.VarChar(36)
+  companyId          String                 @map("company_id") @db.VarChar(36)
+  transactionType    CareerTransactionType  @map("transaction_type")
+  effectiveDate      DateTime               @map("effective_date")
+  fromBranchId       String?                @map("from_branch_id") @db.VarChar(36)
+  toBranchId         String?                @map("to_branch_id") @db.VarChar(36)
+  fromDepartmentId   String?                @map("from_department_id") @db.VarChar(36)
+  toDepartmentId     String?                @map("to_department_id") @db.VarChar(36)
+  fromPositionId     String?                @map("from_position_id") @db.VarChar(36)
+  toPositionId       String?                @map("to_position_id") @db.VarChar(36)
+  fromEmploymentType EmploymentType?        @map("from_employment_type")
+  toEmploymentType   EmploymentType?        @map("to_employment_type")
+  referenceNumber    String?                @map("reference_number") @db.VarChar(100)
+  reason             String?                @db.Text
+  notes              String?                @db.Text
+  createdBy          String?                @map("created_by") @db.VarChar(36)
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  deletedAt          DateTime?              @map("deleted_at")
+
+  employee           Employee               @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company            Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fromBranch         Branch?                @relation("CareerFromBranch", fields: [fromBranchId], references: [id], onDelete: SetNull)
+  toBranch           Branch?                @relation("CareerToBranch", fields: [toBranchId], references: [id], onDelete: SetNull)
+  fromDepartment     Department?            @relation("CareerFromDepartment", fields: [fromDepartmentId], references: [id], onDelete: SetNull)
+  toDepartment       Department?            @relation("CareerToDepartment", fields: [toDepartmentId], references: [id], onDelete: SetNull)
+  fromPosition       Position?              @relation("CareerFromPosition", fields: [fromPositionId], references: [id], onDelete: SetNull)
+  toPosition         Position?              @relation("CareerToPosition", fields: [toPositionId], references: [id], onDelete: SetNull)
+  creator            User?                  @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([transactionType])
+  @@index([effectiveDate])
+  @@map("employee_career_transactions")
 }
 
 /// Roles
@@ -1359,6 +1415,100 @@ model GroupPolicy {
   @@index([groupId])
   @@index([code])
   @@map("group_policies")
+}
+
+/// Document category master
+model DocumentCategory {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  companyId   String?  @map("company_id") @db.VarChar(36)
+  groupId     String?  @map("group_id") @db.VarChar(36)
+  name        String   @db.VarChar(150)
+  code        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  status      Status   @default(ACTIVE)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company   Company?      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  group     CompanyGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  documents Document[]
+
+  @@index([companyId])
+  @@index([groupId])
+  @@index([status])
+  @@map("document_categories")
+}
+
+/// Document repository entry
+model Document {
+  id               String             @id @default(uuid()) @db.VarChar(36)
+  companyId        String             @map("company_id") @db.VarChar(36)
+  groupId          String?            @map("group_id") @db.VarChar(36)
+  categoryId       String             @map("category_id") @db.VarChar(36)
+  employeeId       String?            @map("employee_id") @db.VarChar(36)
+  ownerType        DocumentOwnerType  @map("owner_type")
+  title            String             @db.VarChar(255)
+  description      String?            @db.Text
+  fileName         String             @map("file_name") @db.VarChar(255)
+  filePath         String             @map("file_path") @db.VarChar(500)
+  mimeType         String             @map("mime_type") @db.VarChar(100)
+  fileSize         Int                @map("file_size")
+  status           DocumentStatus     @default(ACTIVE)
+  visibility       DocumentVisibility @default(INTERNAL)
+  version          Int                @default(1)
+  expiresAt        DateTime?          @map("expires_at")
+  uploadedBy       String             @map("uploaded_by") @db.VarChar(36)
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  deletedAt        DateTime?          @map("deleted_at")
+
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  group      CompanyGroup?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  category   DocumentCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  employee   Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  uploader   User             @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: Restrict)
+  signatures DocumentSignature[]
+  accessLogs DocumentAccessLog[]
+
+  @@index([companyId, status])
+  @@index([categoryId])
+  @@index([employeeId])
+  @@index([uploadedBy])
+  @@index([expiresAt])
+  @@map("documents")
+}
+
+/// Signature trail for documents
+model DocumentSignature {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  documentId String   @map("document_id") @db.VarChar(36)
+  signerId   String   @map("signer_id") @db.VarChar(36)
+  signedAt   DateTime @default(now()) @map("signed_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  signer   User     @relation(fields: [signerId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([signerId])
+  @@map("document_signatures")
+}
+
+/// Access log for document read/download activities
+model DocumentAccessLog {
+  id         String               @id @default(uuid()) @db.VarChar(36)
+  documentId String               @map("document_id") @db.VarChar(36)
+  accessedBy String               @map("accessed_by") @db.VarChar(36)
+  action     DocumentAccessAction
+  createdAt  DateTime             @default(now()) @map("created_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [accessedBy], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([accessedBy])
+  @@index([action])
+  @@map("document_access_logs")
 }
 
 // ============================================================
@@ -1682,6 +1832,16 @@ enum EmploymentType {
   PROBATION
   FREELANCE
   OUTSOURCING
+}
+
+enum CareerTransactionType {
+  PROMOTION
+  DEMOTION
+  MUTATION
+  TRANSFER
+  ROTATION
+  ACTING_ASSIGNMENT
+  STATUS_CHANGE
 }
 
 enum LoginStatus {
@@ -2377,4 +2537,29 @@ enum LeaveStatus {
   REJECTED
   CANCELLED
   WITHDRAWN
+}
+
+enum DocumentOwnerType {
+  EMPLOYEE
+  COMPANY
+  GROUP
+}
+
+enum DocumentStatus {
+  ACTIVE
+  EXPIRED
+  REJECTED
+  SUPERSEDED
+  ARCHIVED
+}
+
+enum DocumentVisibility {
+  INTERNAL
+  RESTRICTED
+  PUBLIC
+}
+
+enum DocumentAccessAction {
+  VIEW
+  DOWNLOAD
 }

@@ -36,6 +36,7 @@ import {
   Bell,
   Shield,
   GitBranch,
+  Network,
   Heart,
   Target,
   Package,
@@ -68,6 +69,7 @@ const navItems: NavItem[] = [
       requiredRoles: OPERATIONAL_ROLES,
     },
     children: [
+      { labelKey: 'sidebar.organization.chart', icon: <Network size={16} />, path: '/organization/chart' },
       { labelKey: 'sidebar.organization.groups', icon: <GitBranch size={16} />, path: '/organization/groups' },
       { labelKey: 'sidebar.organization.companies', icon: <Building size={16} />, path: '/organization/companies' },
       { labelKey: 'sidebar.organization.departments', icon: <Building2 size={16} />, path: '/organization/departments' },
@@ -99,6 +101,16 @@ const navItems: NavItem[] = [
     access: {
       requireAuth: true,
       requiredPermissions: [{ resource: 'workflow', action: 'read' }],
+      requiredRoles: OPERATIONAL_ROLES,
+    },
+  },
+  {
+    labelKey: 'sidebar.documents',
+    icon: <FileText size={18} />,
+    path: '/documents',
+    access: {
+      requireAuth: true,
+      requiredPermissions: [{ resource: 'document', action: 'read' }],
       requiredRoles: OPERATIONAL_ROLES,
     },
   },

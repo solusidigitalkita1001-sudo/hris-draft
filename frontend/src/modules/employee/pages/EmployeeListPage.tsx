@@ -5,6 +5,7 @@ import { organizationService, type Department } from '@/services/organization.se
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Users, ChevronLeft, ChevronRight, UserRound } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 
@@ -102,16 +103,15 @@ export function EmployeeListPage() {
           />
         </div>
 
-        <select
+        <Select2
           value={deptFilter}
-          onChange={(e) => setDeptFilter(e.target.value)}
-          className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground"
-        >
-          <option value="">All Departments</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
+          onValueChange={setDeptFilter}
+          options={[
+            { value: '', label: 'All Departments' },
+            ...departments.map((d) => ({ value: d.id, label: d.name })),
+          ]}
+          className="h-9 text-xs"
+        />
 
         <div className="flex gap-1">
           {['', 'ACTIVE', 'PROBATION', 'RESIGNED', 'TERMINATED', 'CONTRACT_END'].map((s) => (

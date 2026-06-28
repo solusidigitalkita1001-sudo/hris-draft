@@ -16,6 +16,7 @@ export const translations = {
 
     'sidebar.dashboard': 'Dashboard',
     'sidebar.organization': 'Organisasi',
+    'sidebar.organization.chart': 'Struktur Organisasi',
     'sidebar.organization.groups': 'Grup Perusahaan',
     'sidebar.organization.companies': 'Perusahaan',
     'sidebar.organization.departments': 'Departemen',
@@ -24,6 +25,7 @@ export const translations = {
     'sidebar.loan': 'Pinjaman',
     'sidebar.travelExpense': 'Perjalanan & Klaim',
     'sidebar.workflow': 'Workflow',
+    'sidebar.documents': 'Dokumen',
     'sidebar.employees': 'Karyawan',
     'sidebar.attendance': 'Kehadiran',
     'sidebar.workCalendar': 'Kalender Kerja',
@@ -122,6 +124,7 @@ export const translations = {
 
     'sidebar.dashboard': 'Dashboard',
     'sidebar.organization': 'Organization',
+    'sidebar.organization.chart': 'Organization Chart',
     'sidebar.organization.groups': 'Company Groups',
     'sidebar.organization.companies': 'Companies',
     'sidebar.organization.departments': 'Departments',
@@ -130,6 +133,7 @@ export const translations = {
     'sidebar.loan': 'Loan',
     'sidebar.travelExpense': 'Travel & Expense',
     'sidebar.workflow': 'Workflow',
+    'sidebar.documents': 'Documents',
     'sidebar.employees': 'Employees',
     'sidebar.attendance': 'Attendance',
     'sidebar.workCalendar': 'Work Calendar',

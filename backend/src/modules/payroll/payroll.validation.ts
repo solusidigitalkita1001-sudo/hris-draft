@@ -4,6 +4,14 @@ export const idParamSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const payrollRunIdParamSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const payslipIdParamSchema = z.object({
+  id: z.string().min(1),
+});
+
 export const periodIdParamSchema = z.object({
   periodId: z.string().uuid(),
 });

@@ -33,6 +33,35 @@ export interface Employee {
   bpjsKetenagakerjaan?: string;
   bpjsKesehatan?: string;
   createdAt: string;
+  careerTransactions?: CareerTransaction[];
+}
+
+export interface CareerTransaction {
+  id: string;
+  employeeId: string;
+  companyId: string;
+  transactionType: 'PROMOTION' | 'DEMOTION' | 'MUTATION' | 'TRANSFER' | 'ROTATION' | 'ACTING_ASSIGNMENT' | 'STATUS_CHANGE';
+  effectiveDate: string;
+  fromBranchId?: string | null;
+  toBranchId?: string | null;
+  fromDepartmentId?: string | null;
+  toDepartmentId?: string | null;
+  fromPositionId?: string | null;
+  toPositionId?: string | null;
+  fromEmploymentType?: string | null;
+  toEmploymentType?: string | null;
+  referenceNumber?: string | null;
+  reason?: string | null;
+  notes?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  fromBranch?: { id: string; name: string } | null;
+  toBranch?: { id: string; name: string } | null;
+  fromDepartment?: { id: string; name: string } | null;
+  toDepartment?: { id: string; name: string } | null;
+  fromPosition?: { id: string; name: string } | null;
+  toPosition?: { id: string; name: string } | null;
+  creator?: { id: string; email: string } | null;
 }
 
 export interface EmployeeQueryResult {
@@ -84,6 +113,29 @@ class EmployeeService {
 
   async updateEmployeeStatus(id: string, status: string): Promise<Employee> {
     const response = await api.patch(`/employees/${id}/status`, { status });
+    return response.data.data;
+  }
+
+  async getCareerTransactions(id: string): Promise<CareerTransaction[]> {
+    const response = await api.get(`/employees/${id}/career-transactions`);
+    return response.data.data;
+  }
+
+  async createCareerTransaction(
+    id: string,
+    data: {
+      effectiveDate: string;
+      transactionType: CareerTransaction['transactionType'];
+      toBranchId?: string | null;
+      toDepartmentId?: string | null;
+      toPositionId?: string | null;
+      toEmploymentType?: string | null;
+      referenceNumber?: string;
+      reason?: string;
+      notes?: string;
+    }
+  ): Promise<CareerTransaction> {
+    const response = await api.post(`/employees/${id}/career-transactions`, data);
     return response.data.data;
   }
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
-import { workCalendarService, type WorkCalendar, type WorkDaysConfig } from '@/services/work-calendar.service';
+import { workCalendarService, normalizeWorkDaysConfig, type WorkCalendar, type WorkDaysConfig, type WorkDayKey } from '@/services/work-calendar.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,11 +13,16 @@ import {
 
 // ─── Default work days: Mon–Fri ─────────────────────────
 const DEFAULT_WORK_DAYS: WorkDaysConfig = {
-  mon: true, tue: true, wed: true, thu: true, fri: true,
-  sat: false, sun: false,
+  mon: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+  tue: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+  wed: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+  thu: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+  fri: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+  sat: { enabled: false, workStart: null, workEnd: null },
+  sun: { enabled: false, workStart: null, workEnd: null },
 };
 
-const DAY_LABELS: Record<keyof WorkDaysConfig, string> = {
+const DAY_LABELS: Record<WorkDayKey, string> = {
   mon: 'Senin', tue: 'Selasa', wed: 'Rabu', thu: 'Kamis', fri: 'Jumat',
   sat: 'Sabtu', sun: 'Minggu',
 };
@@ -72,7 +77,7 @@ function CalendarForm({ initial, onSave, onClose }: {
   const [year, setYear] = useState(initial?.year || dayjs().year());
   const [description, setDescription] = useState(initial?.description || '');
   const [workDays, setWorkDays] = useState<WorkDaysConfig>(
-    (initial?.workDays as WorkDaysConfig) || DEFAULT_WORK_DAYS
+    initial?.workDays ? normalizeWorkDaysConfig(initial.workDays) : DEFAULT_WORK_DAYS
   );
   const [saving, setSaving] = useState(false);
 
@@ -90,8 +95,24 @@ function CalendarForm({ initial, onSave, onClose }: {
     }
   };
 
-  const toggleDay = (day: keyof WorkDaysConfig) => {
-    setWorkDays((prev) => ({ ...prev, [day]: !prev[day] }));
+  const toggleDay = (day: WorkDayKey) => {
+    setWorkDays((prev) => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        enabled: !prev[day].enabled,
+      },
+    }));
+  };
+
+  const changeDayTime = (day: WorkDayKey, field: 'workStart' | 'workEnd', value: string) => {
+    setWorkDays((prev) => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        [field]: value || null,
+      },
+    }));
   };
 
   return (
@@ -108,22 +129,38 @@ function CalendarForm({ initial, onSave, onClose }: {
 
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1.5">Work Days</label>
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(DAY_LABELS) as (keyof WorkDaysConfig)[]).map((day) => (
-            <button
-              key={day}
-              type="button"
-              onClick={() => toggleDay(day)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                workDays[day]
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-              }`}
-            >
-              {DAY_LABELS[day]}
-            </button>
+        <div className="space-y-2">
+          {(Object.keys(DAY_LABELS) as WorkDayKey[]).map((day) => (
+            <div key={day} className="grid grid-cols-[110px,1fr,1fr] gap-2 items-center rounded-lg border border-border p-2.5">
+              <button
+                type="button"
+                onClick={() => toggleDay(day)}
+                className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                  workDays[day].enabled
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                }`}
+              >
+                {DAY_LABELS[day]}
+              </button>
+              <Input
+                type="time"
+                value={workDays[day].workStart || ''}
+                onChange={(e) => changeDayTime(day, 'workStart', e.target.value)}
+                disabled={!workDays[day].enabled}
+              />
+              <Input
+                type="time"
+                value={workDays[day].workEnd || ''}
+                onChange={(e) => changeDayTime(day, 'workEnd', e.target.value)}
+                disabled={!workDays[day].enabled}
+              />
+            </div>
           ))}
         </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Cocok untuk HO, cabang, dan jadwal normal. Untuk shift bergilir, atur default di sini lalu override per tanggal di detail kalender.
+        </p>
       </div>
 
       <div>
@@ -148,13 +185,19 @@ function CalendarForm({ initial, onSave, onClose }: {
 // ─── Copy Calendar Dialog ───────────────────────────────
 function CopyDialog({ open, onClose, onCopy, calendar }: {
   open: boolean; onClose: () => void; onCopy: (targetYear: number, name?: string) => Promise<void>;
-  calendar: WorkCalendar;
+  calendar: WorkCalendar | null;
 }) {
-  const [targetYear, setTargetYear] = useState(calendar.year + 1);
+  const [targetYear, setTargetYear] = useState(dayjs().year() + 1);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (!calendar) return;
+    setTargetYear(calendar.year + 1);
+    setName('');
+  }, [calendar]);
+
+  if (!open || !calendar) return null;
 
   const handleCopy = async () => {
     setSaving(true);
@@ -351,16 +394,17 @@ export function WorkCalendarListPage() {
 
                 {/* Work days summary */}
                 <div className="flex flex-wrap gap-1 mb-3">
-                  {(Object.keys(DAY_LABELS) as (keyof WorkDaysConfig)[]).map((day) => {
-                    const wd = cal.workDays as WorkDaysConfig;
+                  {(Object.keys(DAY_LABELS) as WorkDayKey[]).map((day) => {
+                    const wd = normalizeWorkDaysConfig(cal.workDays);
                     return (
                       <span
                         key={day}
                         className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                          wd[day]
+                          wd[day].enabled
                             ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                             : 'bg-gray-50 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
                         }`}
+                        title={wd[day].enabled ? `${wd[day].workStart || '--:--'} - ${wd[day].workEnd || '--:--'}` : 'Libur'}
                       >
                         {DAY_LABELS[day].slice(0, 3)}
                       </span>
@@ -436,7 +480,7 @@ export function WorkCalendarListPage() {
         open={!!copyingCalendar}
         onClose={() => setCopyingCalendar(null)}
         onCopy={handleCopy}
-        calendar={copyingCalendar!}
+        calendar={copyingCalendar}
       />
     </div>
   );

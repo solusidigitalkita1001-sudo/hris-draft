@@ -5,6 +5,7 @@ import { workCalendarService, type Holiday } from '@/services/work-calendar.serv
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
 import {
   Plus, RefreshCw, Pencil, Trash2, Search, CalendarDays,
 } from 'lucide-react';
@@ -91,14 +92,15 @@ function HolidayForm({ initial, onSave, onClose }: {
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">Type *</label>
-          <select
+          <Select2
             value={type}
-            onChange={(e) => setType(e.target.value as 'NH' | 'JL')}
-            className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground"
-          >
-            <option value="NH">National Holiday</option>
-            <option value="JL">Joint Leave</option>
-          </select>
+            onValueChange={(value) => setType(value as 'NH' | 'JL')}
+            options={[
+              { value: 'NH', label: 'National Holiday' },
+              { value: 'JL', label: 'Joint Leave' },
+            ]}
+            className="h-9"
+          />
         </div>
       </div>
 
@@ -218,15 +220,12 @@ export function WorkCalendarHolidaysPage() {
           />
         </div>
 
-        <select
-          value={yearFilter}
-          onChange={(e) => setYearFilter(Number(e.target.value))}
-          className="h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground"
-        >
-          {years.map((y) => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
+        <Select2
+          value={String(yearFilter)}
+          onValueChange={(value) => setYearFilter(Number(value))}
+          options={years.map((y) => ({ value: String(y), label: String(y) }))}
+          className="h-9"
+        />
 
         <div className="flex gap-1">
           {(['all', 'NH', 'JL'] as const).map((t) => (

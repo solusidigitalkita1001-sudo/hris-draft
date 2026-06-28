@@ -7,6 +7,8 @@ import { attendanceService } from '@/services/attendance.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
+import { popup } from '@/stores/popup.store';
 import {
   Plus, RefreshCw, FileText, CalendarDays, Clock,
   CheckCircle, XCircle, AlertCircle, Ban,
@@ -78,15 +80,16 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tipe Izin *</label>
-        <select
+        <Select2
           value={type}
-          onChange={(e) => setType(e.target.value as PermissionType)}
-          className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-background text-foreground"
-        >
-          {Object.entries(PERMISSION_TYPE_LABELS).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
+          onValueChange={(value) => setType(value as PermissionType)}
+          options={Object.entries(PERMISSION_TYPE_LABELS).map(([key, label]) => ({
+            value: key,
+            label,
+          }))}
+          placeholder="Pilih tipe izin"
+          className="h-9"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -168,7 +171,14 @@ export function SelfServicePage() {
   useEffect(() => { if (activeTab === 'permissions') fetchPermissions(); }, [fetchPermissions, activeTab]);
 
   const handleCancel = async (id: string) => {
-    if (!confirm('Batalkan pengajuan ini?')) return;
+    const confirmed = await popup.confirm({
+      title: 'Batalkan Pengajuan',
+      description: 'Pengajuan ini akan dibatalkan. Lanjutkan?',
+      confirmText: 'Ya, Batalkan',
+      cancelText: 'Kembali',
+      intent: 'destructive',
+    });
+    if (!confirmed) return;
     try {
       await permissionRequestService.cancel(id, employeeId);
       toast.success('Pengajuan dibatalkan');

@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { recruitmentService, type Candidate } from '@/services/recruitment.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import toast from 'react-hot-toast';
 import { Plus, Search, RefreshCw, UserRound, Mail, Phone, Briefcase, Building2 } from 'lucide-react';
 //
 
@@ -28,7 +28,6 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function CandidateList() {
-  const navigate = useNavigate();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -58,6 +57,10 @@ export function CandidateList() {
       c.currentCompany?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const handleAddCandidate = () => {
+    toast('Form tambah candidate belum tersedia. Route create candidate belum disambungkan.');
+  };
+
   return (
     <div>
       <PageHeader
@@ -69,7 +72,7 @@ export function CandidateList() {
               <RefreshCw size={16} className="mr-2" />
               Refresh
             </Button>
-            <Button size="sm" onClick={() => navigate('/recruitment/candidates/new')}>
+            <Button size="sm" onClick={handleAddCandidate}>
               <Plus size={16} className="mr-2" />
               Add Candidate
             </Button>
