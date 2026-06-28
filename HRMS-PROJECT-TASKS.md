@@ -257,18 +257,18 @@
 | Cancel Request | ➖ | ✅ PATCH cancel | ✅ (button) | ✅ |
 | Unified Dashboard | ➖ | ➖ | ✅ Tabs: Izin, Cuti, Lembur | ✅ |
 
-### 8.2 Employee Loan — ❌
+### 8.2 Employee Loan — ✅ Selesai
 
 > Pinjaman karyawan: pengajuan, approval, cicilan, sisa pinjaman.
 
 | Sub-modul | Prisma Model | Backend | Frontend | Service |
 |-----------|:------------:|:-------:|:--------:|:-------:|
-| Loan Types | ❌ | ❌ | ❌ | ❌ |
-| Apply Loan | ❌ | ❌ | ❌ | ❌ |
-| Approve / Reject | ❌ | ❌ | ❌ | ❌ |
-| Installment Tracking | ❌ | ❌ | ❌ | ❌ |
-| Remaining Balance | ❌ | ❌ | ❌ | ❌ |
-| Payroll Deduction | ❌ | ❌ | ❌ | ❌ |
+| Loan Types | ✅ LoanType model | ✅ GET /types | ✅ (dropdown di form) | ✅ |
+| Apply Loan | ✅ Loan model | ✅ POST | ✅ EmployeeLoanPage + modal form | ✅ |
+| Approve / Reject | ➖ | ✅ PATCH approve/reject | ❌ (admin page future) | ✅ |
+| Installment Tracking | ✅ LoanInstallment model | ✅ GET /:id/installments | ✅ DetailPage tabel cicilan | ✅ |
+| Remaining Balance | ✅ field on Loan | ✅ auto-calculate | ✅ info card + progress bar | ✅ |
+| Payroll Deduction | ❌ (future) | ❌ | ❌ | ❌ |
 
 ### 8.3 Travel & Expense Claim — ❌
 
@@ -349,7 +349,7 @@ ANALYTICS
 PENDING
 ├── 7.1 Notifications     ✅ Full-stack (baru)
 ├── 8.1 Self Service      ✅ Full-stack (baru)
-├── 8.2 Employee Loan     ❌ Not started
+├── 8.2 Employee Loan     ✅ Full-stack (baru)
 ├── 8.3 Travel & Expense  ❌ Not started
 ├── 8.4 Workflow Engine   ❌ Not started
 ├── 8.5 Document Mgmt     ❌ Not started
@@ -359,11 +359,11 @@ PENDING
 
 | Kategori | Jumlah |
 |----------|:------:|
-| ✅ Full-stack (backend + frontend + service) | **17 modul** |
+| ✅ Full-stack (backend + frontend + service) | **18 modul** |
 | ⚠️ Backend ✅, Frontend Partial (via /admin) | **2 modul** (User, Audit Log) |
 | 🟡 Backend ✅, Frontend ❌ | **0 modul** |
 | 🟠 Frontend mock, Backend ❌ | **0 modul** |
-| ❌ Not started | **4 modul** |
+| ❌ Not started | **3 modul** |
 | **Total** | **23 modul** |
 
 ---
@@ -372,7 +372,6 @@ PENDING
 
 | Priority | Module | Estimasi | Alasan |
 |----------|--------|----------|--------|
-| 🥇 P1 | **Employee Loan** | 3-5 hari | Fitur penting untuk kesejahteraan |
-| 🥈 P2 | **Travel & Expense** | 4-6 hari | Butuh upload receipt dll |
-| 🥉 P3 | **Workflow Engine** | 5-7 hari | Foundation untuk approval terpusat |
+| 🥇 P1 | **Travel & Expense** | 4-6 hari | Butuh upload receipt dll |
+| 🥈 P2 | **Workflow Engine** | 5-7 hari | Foundation untuk approval terpusat |
 | 🥉 P3 | **Document Management** | 4-6 hari | Upload & tracking dokumen |
