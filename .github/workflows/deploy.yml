@@ -1,0 +1,36 @@
+name: 🚀 Deploy HRIS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          timeout: 600s
+          script: |
+            set -e
+            cd /root/projects/dev/hris-draft
+            git fetch origin && git reset --hard origin/main
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+            sleep 15
+            until docker exec hris_backend curl -sf http://localhost:3000/health 2>/dev/null; do
+                printf '.'; sleep 3
+            done
+            echo ""
+            docker exec hris_backend npx prisma migrate deploy \
+                --schema=src/database/prisma/schema.prisma 2>/dev/null || \
+            docker exec hris_backend npx prisma db push \
+                --schema=src/database/prisma/schema.prisma --accept-data-loss
+            docker image prune -f --filter "until=24h"
+            echo "✅ HRIS deployed!"
