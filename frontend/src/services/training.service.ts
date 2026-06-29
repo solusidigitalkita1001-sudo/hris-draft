@@ -75,6 +75,18 @@ class TrainingService {
   async completeEnrollment(id: string): Promise<TrainingEnrollment> {
     const r = await api.patch(`/training/enrollments/${id}/complete`); return r.data.data;
   }
+
+  // Convenience: enroll self in a course
+  async enroll(courseId: string): Promise<TrainingEnrollment> {
+    const r = await api.post(`/training/courses/${courseId}/enroll`);
+    return r.data.data;
+  }
+
+  // Convenience: complete self enrollment for a course
+  async complete(courseId: string): Promise<TrainingEnrollment> {
+    const r = await api.post(`/training/courses/${courseId}/complete`);
+    return r.data.data;
+  }
 }
 
 export const trainingService = new TrainingService();

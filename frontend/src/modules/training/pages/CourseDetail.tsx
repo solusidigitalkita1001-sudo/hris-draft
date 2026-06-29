@@ -3,9 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { trainingService, type TrainingCourse } from '@/services/training.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
+import toast from 'react-hot-toast';
 import {
   ArrowLeft, BookOpen, Users, Clock, CalendarDays,
   UserRound, MapPin, FileText, CheckCircle2, AlertCircle,
+  UserPlus, CheckSquare,
 } from 'lucide-react';
 import { formatDateTime } from '@/utils/format';
 
@@ -37,6 +39,8 @@ export function CourseDetail() {
   const navigate = useNavigate();
   const [course, setCourse] = useState<TrainingCourse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [enrolling, setEnrolling] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -50,6 +54,34 @@ export function CourseDetail() {
       setLoading(false);
     }
   }, [id]);
+
+  const handleEnroll = useCallback(async () => {
+    if (!id) return;
+    setEnrolling(true);
+    try {
+      await trainingService.enroll(id);
+      toast.success('Successfully enrolled in course');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to enroll');
+    } finally {
+      setEnrolling(false);
+    }
+  }, [id, fetchData]);
+
+  const handleComplete = useCallback(async () => {
+    if (!id) return;
+    setCompleting(true);
+    try {
+      await trainingService.complete(id);
+      toast.success('Course marked as completed');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to complete course');
+    } finally {
+      setCompleting(false);
+    }
+  }, [id, fetchData]);
 
   useEffect(() => {
     fetchData();
@@ -76,10 +108,20 @@ export function CourseDetail() {
         title={course.title}
         description={`${course.code}${course.category ? ` · ${course.category.name}` : ''}`}
         actions={
-          <Button variant="outline" size="sm" onClick={() => navigate('/lms')}>
-            <ArrowLeft size={16} className="mr-2" />
-            Back
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={handleEnroll} disabled={enrolling}>
+              <UserPlus size={16} className="mr-2" />
+              {enrolling ? 'Enrolling...' : 'Enroll'}
+            </Button>
+            <Button size="sm" onClick={handleComplete} disabled={completing}>
+              <CheckSquare size={16} className="mr-2" />
+              {completing ? 'Completing...' : 'Complete'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/lms')}>
+              <ArrowLeft size={16} className="mr-2" />
+              Back
+            </Button>
+          </div>
         }
       />
 

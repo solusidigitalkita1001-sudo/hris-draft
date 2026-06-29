@@ -30,6 +30,9 @@ class OnboardingService {
   async rejectResignation(id: string): Promise<Resignation> {
     const r = await api.patch(`/onboarding/resignations/${id}/reject`); return r.data.data;
   }
+  async completeResignation(id: string): Promise<Resignation> {
+    const r = await api.patch(`/onboarding/resignations/${id}/complete`); return r.data.data;
+  }
   async updateClearance(id: string, status: string, notes?: string): Promise<ExitClearance> {
     const r = await api.patch(`/onboarding/clearances/${id}`, { status, notes }); return r.data.data;
   }

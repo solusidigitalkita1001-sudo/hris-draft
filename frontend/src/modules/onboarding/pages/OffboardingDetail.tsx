@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { onboardingService, type Resignation } from '@/services/onboarding.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CheckCircle, XCircle, UserRound, Calendar, FileText } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, UserRound, Calendar, FileText, Flag } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -69,6 +69,20 @@ export function OffboardingDetail() {
     }
   };
 
+  const handleComplete = async () => {
+    if (!id) return;
+    if (!window.confirm('Are you sure you want to mark this resignation as complete?')) return;
+    setActionLoading(true);
+    try {
+      await onboardingService.completeResignation(id);
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleUpdateClearance = async (clearanceId: string, status: string) => {
     try {
       await onboardingService.updateClearance(clearanceId, status);
@@ -119,6 +133,11 @@ export function OffboardingDetail() {
                   <CheckCircle size={16} className="mr-2" /> Approve
                 </Button>
               </>
+            )}
+            {resignation.status === 'APPROVED' && (
+              <Button size="sm" onClick={handleComplete} disabled={actionLoading}>
+                <Flag size={16} className="mr-2" /> Complete
+              </Button>
             )}
           </div>
         }
