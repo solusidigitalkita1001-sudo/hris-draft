@@ -6,6 +6,11 @@ on:
   workflow_dispatch:
 
 jobs:
+  - name: Debug SSH
+  run: |
+    echo "HOST=${{ secrets.SSH_HOST }}"
+    echo "PORT=${{ secrets.SSH_PORT }}"
+    echo "USER=${{ secrets.SSH_USER }}"
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
