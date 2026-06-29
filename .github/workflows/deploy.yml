@@ -6,15 +6,17 @@ on:
   workflow_dispatch:
 
 jobs:
-  - name: Debug SSH
-  run: |
-    echo "HOST=${{ secrets.SSH_HOST }}"
-    echo "PORT=${{ secrets.SSH_PORT }}"
-    echo "USER=${{ secrets.SSH_USER }}"
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
     steps:
+      - name: Debug SSH
+        run: |
+          echo "HOST=${{ secrets.SSH_HOST }}"
+          echo "PORT=${{ secrets.SSH_PORT }}"
+          echo "USER=${{ secrets.SSH_USER }}"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -30,12 +32,13 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
             sleep 15
             until docker exec hris_backend curl -sf http://localhost:3000/health 2>/dev/null; do
-                printf '.'; sleep 3
+              printf '.'
+              sleep 3
             done
             echo ""
             docker exec hris_backend npx prisma migrate deploy \
-                --schema=src/database/prisma/schema.prisma 2>/dev/null || \
+              --schema=src/database/prisma/schema.prisma 2>/dev/null || \
             docker exec hris_backend npx prisma db push \
-                --schema=src/database/prisma/schema.prisma --accept-data-loss
+              --schema=src/database/prisma/schema.prisma --accept-data-loss
             docker image prune -f --filter "until=24h"
             echo "✅ HRIS deployed!"
