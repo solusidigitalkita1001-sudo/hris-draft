@@ -261,18 +261,18 @@ const navItems: NavItem[] = [
 
 function filterNavItems(items: NavItem[], user: ReturnType<typeof useAuthStore.getState>['user']) {
   return items.reduce<NavItem[]>((visibleItems, item) => {
-    const filteredChildren = item.children ? filterNavItems(item.children, user) : undefined;
     const isVisible = item.access ? canAccess(user, item.access) : !!user;
+    if (!isVisible) return visibleItems;
 
-    if (filteredChildren?.length) {
-      visibleItems.push({ ...item, children: filteredChildren });
+    if (item.children) {
+      const filteredChildren = filterNavItems(item.children, user);
+      if (filteredChildren.length > 0) {
+        visibleItems.push({ ...item, children: filteredChildren });
+      }
       return visibleItems;
     }
 
-    if (isVisible) {
-      visibleItems.push(item);
-    }
-
+    visibleItems.push(item);
     return visibleItems;
   }, []);
 }
