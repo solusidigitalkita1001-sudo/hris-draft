@@ -181,18 +181,18 @@ const navItems: NavItem[] = [
     labelKey: 'sidebar.payroll',
     icon: <Banknote size={18} />,
     path: '/payroll',
-    access: { requireAuth: true, requiredPermissions: [{ resource: 'payroll', action: 'read' }] },
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'payroll', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
   },
   {
     labelKey: 'sidebar.benefits',
     icon: <Heart size={18} />,
     path: '/benefits',
-    access: { requireAuth: true, requiredPermissions: [{ resource: 'benefit', action: 'read' }] },
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'benefit', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
   },
   {
     labelKey: 'sidebar.recruitment',
     icon: <UserSquare2 size={18} />,
-    access: { requireAuth: true, requiredPermissions: [{ resource: 'recruitment', action: 'read' }] },
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'recruitment', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
     children: [
       { labelKey: 'sidebar.recruitment.jobs', icon: <Briefcase size={16} />, path: '/recruitment' },
       { labelKey: 'sidebar.recruitment.candidates', icon: <Users size={16} />, path: '/recruitment/candidates' },
@@ -203,7 +203,7 @@ const navItems: NavItem[] = [
   {
     labelKey: 'sidebar.performance',
     icon: <BarChart3 size={18} />,
-    access: { requireAuth: true, requiredPermissions: [{ resource: 'performance', action: 'read' }] },
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'performance', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
     children: [
       { labelKey: 'sidebar.performance.dashboard', icon: <BarChart3 size={16} />, path: '/performance' },
       { labelKey: 'sidebar.performance.reviews', icon: <ClipboardList size={16} />, path: '/performance/reviews' },
@@ -214,7 +214,7 @@ const navItems: NavItem[] = [
     labelKey: 'sidebar.lms',
     icon: <GraduationCap size={18} />,
     path: '/lms',
-    access: { requireAuth: true, requiredPermissions: [{ resource: 'training', action: 'read' }] },
+    access: { requireAuth: true, requiredPermissions: [{ resource: 'training', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
   },
   {
     labelKey: 'sidebar.reports',
