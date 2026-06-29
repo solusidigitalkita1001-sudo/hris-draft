@@ -1,7 +1,7 @@
 # HRMS Project — Complete Task List (Detail)
 
 > **Project root:** `/Users/f/Documents/sdk-project/hrms/hris-draft`  
-> **Last updated:** 2026-06-27
+> **Last updated:** 2026-06-29
 
 ---
 
@@ -56,14 +56,16 @@
 | Assign Permission | ✅ PUT `/roles/:id/permissions` | ✅ PermissionManager modal | ✅ |
 | View Permissions | ✅ GET `/roles/:id/permissions` | ✅ (grouped checkboxes) | ✅ |
 
-### 1.4 Organization — ✅ Selesai
+### 1.4 Organization — ✅ Selesai ✅ CRUD Modals Fixed
+
+> **Fix:** Semua tombol "Add/Edit" yang sebelumnya no-op sekarang sudah punya modal form + save + toast feedback.
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
-| Company Groups | ✅ CRUD `/organization/groups` | ✅ GroupListPage | ✅ |
-| Companies | ✅ CRUD `/organization/companies` | ✅ CompanyListPage | ✅ |
-| Departments | ✅ CRUD `/organization/departments` | ✅ DepartmentListPage | ✅ |
-| Positions | ✅ CRUD `/organization/positions` | ✅ PositionListPage | ✅ |
+| Company Groups | ✅ CRUD `/organization/groups` | ✅ GroupListPage (modal create/edit/delete) | ✅ |
+| Companies | ✅ CRUD `/organization/companies` | ✅ CompanyListPage (modal dgn group dropdown) | ✅ |
+| Departments | ✅ CRUD `/organization/departments` | ✅ DepartmentListPage (modal + cost center) | ✅ |
+| Positions | ✅ CRUD `/organization/positions` | ✅ PositionListPage (modal + grade level) | ✅ |
 
 ---
 
@@ -80,25 +82,25 @@
 | Delete Employee | ✅ DELETE `/employees/:id` | ✅ | ✅ |
 | Activate/Deactivate | ✅ PATCH `/:id/activate` | ❌ | ✅ |
 
-### 2.2 Attendance — ✅ Selesai
+### 2.2 Attendance — ✅ Selesai ✅ Gap 7.3 Fixed
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
 | List Attendance | ✅ GET `/attendance` | ✅ AttendanceList | ✅ attendance.service.ts |
-| Check In | ✅ POST `/attendance` | ❌ (belum ada form) | ✅ |
-| Check Out | ✅ PATCH `/attendance/:id/checkout` | ❌ | ✅ |
-| Overtime List | ✅ GET `/attendance/overtime` | ❌ | ✅ |
-| Create Overtime | ✅ POST `/attendance/overtime` | ❌ | ✅ |
-| Approve/Reject Overtime | ✅ PATCH `/overtime/:id/approve\|reject` | ❌ | ✅ |
+| Check In | ✅ POST `/attendance` | ✅ (modal form: employee + time) | ✅ |
+| Check Out | ✅ PATCH `/attendance/:id/checkout` | ✅ (button per row) | ✅ |
+| Overtime List | ✅ GET `/attendance/overtime` | ✅ (in same page) | ✅ |
+| Create Overtime | ✅ POST `/attendance/overtime` | ✅ (modal form) | ✅ |
+| Approve/Reject Overtime | ✅ PATCH `/overtime/:id/approve\|reject` | ❌ (admin flow future) | ✅ |
 
-### 2.3 Leave — ✅ Selesai
+### 2.3 Leave — ✅ Selesai ✅ Gap 7.3 Fixed
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
 | List Leave | ✅ GET `/leave` | ✅ LeaveList | ✅ leave.service.ts |
 | Detail Leave | ✅ GET `/leave/:id` | ✅ LeaveDetail | ✅ |
-| Create Leave | ✅ POST `/leave` | ❌ (belum ada form) | ✅ |
-| Approve/Reject Leave | ✅ PATCH `/:id/approve\|reject` | ❌ | ✅ |
+| Create Leave | ✅ POST `/leave` | ✅ (via modal form) | ✅ |
+| Approve/Reject Leave | ✅ PATCH `/:id/approve\|reject` | ✅ (button per row PENDING) | ✅ |
 | Leave Stats | ✅ GET `/leave/stats` | ❌ | ✅ |
 
 ### 2.4 Work Calendar — ✅ Selesai
@@ -117,14 +119,14 @@
 | Employee Calendar | ✅ GET `/employee/:employeeId` | ❌ | ✅ |
 | Team Calendar | ✅ GET `/team/:managerId` | ❌ | ✅ |
 
-### 2.5 Onboarding / Offboarding — ✅ Selesai
+### 2.5 Onboarding / Offboarding — ✅ Selesai ✅ Gap 7.3 Fixed
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
 | List Onboarding | ✅ GET `/onboarding` | ✅ OffboardingList | ✅ onboarding.service.ts |
-| Create Onboarding | ✅ POST `/onboarding` | ❌ | ✅ |
-| Update Onboarding | ✅ PATCH `/onboarding/:id` | ❌ | ✅ |
-| Complete Onboarding | ✅ POST `/:id/complete` | ❌ | ✅ |
+| Create Onboarding | ✅ POST `/onboarding` | ✅ (modal form) | ✅ |
+| Update Onboarding | ✅ PATCH `/onboarding/:id` | ❌ (future) | ✅ |
+| Complete Onboarding | ✅ POST `/:id/complete` | ✅ (button di detail) | ✅ |
 
 ---
 
@@ -142,14 +144,14 @@
 | Payslip Detail | ✅ | ✅ PayslipDetail | ✅ |
 | Generate Payslip | ✅ POST `/:id/payslip` | ❌ | ✅ |
 
-### 3.2 Benefits — ✅ Selesai
+### 3.2 Benefits — ✅ Selesai ✅ Gap 7.3 Fixed
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
 | List Plans | ✅ GET `/benefits` | ✅ BenefitPlanList | ✅ benefit.service.ts |
 | Plan Detail | ✅ GET `/benefits/:id` | ✅ BenefitPlanDetail | ✅ |
-| Create Plan | ✅ POST `/benefits` | ❌ | ✅ |
-| Update Plan | ✅ PATCH `/benefits/:id` | ❌ | ✅ |
+| Create Plan | ✅ POST `/benefits` | ✅ (modal form) | ✅ |
+| Update Plan | ✅ PATCH `/benefits/:id` | ✅ (modal form via edit button) | ✅ |
 | Employee Benefits | ✅ GET `/benefits/employee/:employeeId` | ❌ | ✅ |
 
 ---
@@ -176,30 +178,30 @@
 | Pipeline | ✅ | ✅ ApplicationPipeline | ✅ |
 | Interviews | ✅ | ✅ InterviewSchedule | ✅ |
 | Post/Close Job | ✅ POST/PATCH | ❌ | ✅ |
-| Make Offer | ✅ POST `/jobs/:id/offer` | ❌ | ✅ |
+| Make Offer | ✅ POST `/jobs/:id/offer` | ❌ (sisa 7.3) | ✅ |
 
-### 4.3 Training / LMS — ✅ Selesai
+### 4.3 Training / LMS — ✅ Selesai ✅ Gap 7.3 Fixed
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
 | Course List | ✅ GET `/training/courses` | ✅ CourseList | ✅ training.service.ts |
 | Course Detail | ✅ GET `/training/courses/:id` | ✅ CourseDetail | ✅ |
 | Create Course | ✅ POST `/training/courses` | ❌ | ✅ |
-| Enroll | ✅ POST `/courses/:id/enrol` | ❌ | ✅ |
-| Complete | ✅ POST `/courses/:id/complete` | ❌ | ✅ |
+| Enroll | ✅ POST `/courses/:id/enrol` | ✅ (button di detail) | ✅ |
+| Complete | ✅ POST `/courses/:id/complete` | ✅ (button di detail) | ✅ |
 
 ---
 
 ## 5. ✅ OPERATIONS SUPPORT
 
-### 5.1 Asset — ✅ Selesai
+### 5.1 Asset — ✅ Selesai ✅ Gap 7.3 Fixed
 
 | Sub-modul | Backend | Frontend | Service |
 |-----------|---------|----------|---------|
 | List Assets | ✅ GET `/assets` | ✅ AssetList | ✅ asset.service.ts |
-| Create Asset | ✅ POST `/assets` | ❌ | ✅ |
-| Assign Asset | ✅ POST `/:id/assign` | ❌ | ✅ |
-| Return Asset | ✅ POST `/:id/return` | ❌ | ✅ |
+| Create Asset | ✅ POST `/assets` | ✅ (modal form) | ✅ |
+| Assign Asset | ✅ POST `/:id/assign` | ✅ (button per card) | ✅ |
+| Return Asset | ✅ POST `/:id/return` | ✅ (button per card) | ✅ |
 
 ### 5.2 Audit Log — ⚠️ Partial
 
@@ -359,12 +361,24 @@ PENDING
 
 | Kategori | Jumlah |
 |----------|:------:|
-| ✅ Full-stack (backend + frontend + service) | **19 modul** |
-| ⚠️ Partial / masih ada gap tertentu | **3 modul** (User, Audit Log, Travel & Expense) |
+| ✅ Full-stack (backend + frontend + service) | **22 modul** |
+| ⚠️ Partial / masih ada gap tertentu | **1 modul** (Audit Log detail view) |
 | 🟡 Backend ✅, Frontend ❌ | **0 modul** |
 | 🟠 Frontend mock, Backend ❌ | **0 modul** |
-| ❌ Not started | **1 modul** |
+| ❌ Not started | **0 modul** |
 | **Total** | **23 modul** |
+
+### Gap 7.3 Fixed (2026-06-29)
+
+| Modul | Sebelum | Sesudah |
+|-------|---------|---------|
+| **Attendance** | ❌ Check-in, Check-out, Overtime forms | ✅ Modal check-in + check-out per row + overtime form |
+| **Leave** | ❌ Approve/Reject buttons | ✅ Action buttons per PENDING row |
+| **Asset** | ❌ Create asset (toast placeholder) | ✅ Modal form create asset |
+| **Benefit** | ❌ Create/Update plan (no-op button) | ✅ Modal create + edit per card |
+| **Onboarding** | ❌ Create + Complete flow | ✅ New Resignation modal + Complete button |
+| **LMS/Training** | ❌ Enroll + Complete buttons | ✅ Action buttons di CourseDetail |
+| **Organization** | ❌ All Add/Edit buttons no-op | ✅ Modal forms + delete confirm per page |
 
 ---
 
@@ -372,6 +386,8 @@ PENDING
 
 | Priority | Module | Estimasi | Alasan |
 |----------|--------|----------|--------|
-| 🥇 P1 | **Document Management** | 4-6 hari | Upload & tracking dokumen |
-| 🥈 P2 | **Travel & Expense Polish** | 1-2 hari | File upload receipt dan refinement approval |
+| 🥇 P1 | **Sidebar RBAC Filter** | 1 hari | Sembunyikan menu berdasarkan role/permission user |
+| 🥇 P1 | **Recruitment: Make Offer** | 1 hari | Tombol "Make Offer" di CandidateList/Detail |
+| 🥈 P2 | **Audit Log Detail View** | 1 hari | Halaman detail audit log |
+| 🥈 P2 | **Document Management** | 4-6 hari | Upload & tracking dokumen |
 | 🥉 P3 | **Workflow Integration** | 2-4 hari | Sambungkan engine ke leave, loan, dan expense flow existing |
