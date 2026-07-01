@@ -129,6 +129,26 @@ class OrganizationService {
     return response.data.data;
   }
 
+  async findBranches(companyId?: string): Promise<Branch[]> {
+    const params = companyId ? { companyId } : {};
+    const response = await api.get('/organization/branches', { params });
+    return response.data.data;
+  }
+
+  async createBranch(data: Partial<Branch>): Promise<Branch> {
+    const response = await api.post('/organization/branches', data);
+    return response.data.data;
+  }
+
+  async updateBranch(id: string, data: Partial<Branch>): Promise<Branch> {
+    const response = await api.put(`/organization/branches/${id}`, data);
+    return response.data.data;
+  }
+
+  async deleteBranch(id: string): Promise<void> {
+    await api.delete(`/organization/branches/${id}`);
+  }
+
   // Divisions
   async getDivisions(companyId: string): Promise<Division[]> {
     const response = await api.get('/organization/divisions', { params: { companyId } });

@@ -72,6 +72,12 @@ export interface EmployeeQueryResult {
   totalPages: number;
 }
 
+export interface ImportCsvResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
 class EmployeeService {
   async getEmployees(params: {
     companyId: string;
@@ -137,6 +143,36 @@ class EmployeeService {
   ): Promise<CareerTransaction> {
     const response = await api.post(`/employees/${id}/career-transactions`, data);
     return response.data.data;
+  }
+
+  /**
+   * Import employees from a CSV file.
+   * @param formData - FormData containing the CSV file under the key "file"
+   * @param companyId - Company ID to associate the import with
+   */
+  async importCsv(formData: FormData, companyId: string): Promise<ImportCsvResult> {
+    formData.append('companyId', companyId);
+    const response = await api.post('/employees/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  }
+
+  /**
+   * Export employees to a CSV file (blob download).
+   * @param params - Filter parameters to narrow the export
+   */
+  async exportCsv(params: {
+    companyId: string;
+    departmentId?: string;
+    positionId?: string;
+    status?: string;
+  }): Promise<Blob> {
+    const response = await api.get('/employees/export', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
   }
 }
 

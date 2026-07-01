@@ -35,6 +35,31 @@ export class AttendanceController {
     catch (error) { next(error); }
   }
 
+  async correction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await attendanceService.correction(req.params.id as string, req.body);
+      res.json(Result.updated(data));
+    } catch (error) { next(error); }
+  }
+
+  async getSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { companyId, month, year } = req.query as { companyId: string; month: string; year: string };
+      const data = await attendanceService.getSummary(companyId, month, year);
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async getReport(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { companyId, month, year } = req.query as { companyId: string; month: string; year: string };
+      const csv = await attendanceService.getReport(companyId, month, year);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="attendance-report-${month}-${year}.csv"`);
+      res.send(csv);
+    } catch (error) { next(error); }
+  }
+
   // Overtime
   async findAllOvertime(req: Request, res: Response, next: NextFunction) {
     try {

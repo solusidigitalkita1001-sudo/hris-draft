@@ -93,6 +93,40 @@ export class EmployeeController {
       next(error);
     }
   }
+
+  async importCsv(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.body.companyId || req.user?.companyId;
+      if (!companyId) {
+        res.status(400).json({ success: false, message: 'companyId is required' });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ success: false, message: 'CSV file is required' });
+        return;
+      }
+      const result = await employeeService.importCsv(companyId, req.file);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async exportCsv(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = (req.query.companyId as string) || req.user?.companyId;
+      if (!companyId) {
+        res.status(400).json({ success: false, message: 'companyId is required' });
+        return;
+      }
+      const csv = await employeeService.exportCsv(companyId);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="employees.csv"');
+      res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const employeeController = new EmployeeController();

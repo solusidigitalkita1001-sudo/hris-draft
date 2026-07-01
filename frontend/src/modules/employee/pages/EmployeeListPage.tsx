@@ -1,13 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import * as Dialog from '@radix-ui/react-dialog';
 import { employeeService, type Employee } from '@/services/employee.service';
 import { organizationService, type Department } from '@/services/organization.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select2 } from '@/components/ui/select2';
-import { Plus, Search, RefreshCw, Users, ChevronLeft, ChevronRight, UserRound } from 'lucide-react';
+import { Plus, Search, RefreshCw, Users, ChevronLeft, ChevronRight, UserRound, Upload, Download, Loader2, X } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { cn } from '@/utils/cn';
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
@@ -25,6 +29,138 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function ImportModal({
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0] || null;
+    if (selected && !selected.name.endsWith('.csv')) {
+      toast.error('Please select a CSV file');
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setFile(selected);
+  };
+
+  const handleImport = async () => {
+    if (!file) {
+      toast.error('Please select a CSV file first');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const companyId = localStorage.getItem('companyId') || '';
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const result = await employeeService.importCsv(formData, companyId);
+
+      toast.success(
+        `Import complete: ${result.imported} imported, ${result.skipped} skipped`
+      );
+
+      if (result.errors?.length > 0) {
+        // Show first few errors in a second toast
+        const errorSummary = result.errors.slice(0, 3).join('; ');
+        toast.error(
+          `${result.errors.length} error(s): ${errorSummary}${result.errors.length > 3 ? '...' : ''}`,
+          { duration: 5000 }
+        );
+      }
+
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      onOpenChange(false);
+      onSuccess();
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || 'Import failed';
+      toast.error(message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (importing) return;
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(open) => !open && handleCancel()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/45 backdrop-blur-sm" />
+        <Dialog.Content
+          className={cn(
+            'fixed left-1/2 top-1/2 z-[81] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card shadow-2xl',
+            'focus:outline-none'
+          )}
+        >
+          <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+            <div>
+              <Dialog.Title className="text-base font-semibold">Import Employees</Dialog.Title>
+              <Dialog.Description className="mt-1 text-sm text-muted-foreground">
+                Upload a CSV file to bulk-import employee records.
+              </Dialog.Description>
+            </div>
+            <button
+              type="button"
+              disabled={importing}
+              className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+              onClick={handleCancel}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="space-y-4 px-5 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="csv-file">CSV File</Label>
+              <Input
+                ref={fileInputRef}
+                id="csv-file"
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                disabled={importing}
+                className="file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+              />
+            </div>
+            {file && (
+              <p className="text-xs text-muted-foreground">
+                Selected: <span className="font-medium text-foreground">{file.name}</span> ({(file.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={importing}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleImport} disabled={!file || importing}>
+              {importing && <Loader2 size={16} className="mr-2 animate-spin" />}
+              {importing ? 'Importing...' : 'Import'}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 export function EmployeeListPage() {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -35,6 +171,7 @@ export function EmployeeListPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -72,6 +209,31 @@ export function EmployeeListPage() {
     setPage(1);
   }, [deptFilter, statusFilter]);
 
+  const handleExport = async () => {
+    try {
+      const companyId = localStorage.getItem('companyId') || '';
+      const blob = await employeeService.exportCsv({
+        companyId,
+        departmentId: deptFilter || undefined,
+        status: statusFilter || undefined,
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `employees-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Employees exported successfully');
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || 'Export failed';
+      toast.error(message);
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -79,6 +241,14 @@ export function EmployeeListPage() {
         description="Manage employee master data"
         actions={
           <>
+            <Button variant="outline" size="sm" onClick={() => setShowImportModal(true)}>
+              <Upload size={16} className="mr-2" />
+              Import CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download size={16} className="mr-2" />
+              Export CSV
+            </Button>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
               Refresh
@@ -225,6 +395,13 @@ export function EmployeeListPage() {
           </div>
         </div>
       )}
+
+      {/* Import Modal */}
+      <ImportModal
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
+        onSuccess={fetchData}
+      />
     </div>
   );
 }

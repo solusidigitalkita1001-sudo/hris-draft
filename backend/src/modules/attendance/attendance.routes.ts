@@ -10,9 +10,12 @@ router.use(authenticate);
 
 // Attendance Records
 router.get('/', authorize({ resource: 'attendance', action: 'read' }), attendanceController.findAll.bind(attendanceController));
+router.get('/summary', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getSummary.bind(attendanceController));
+router.get('/report', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getReport.bind(attendanceController));
 router.get('/:id', authorize({ resource: 'attendance', action: 'read' }), attendanceController.findById.bind(attendanceController));
 router.post('/', authorize({ resource: 'attendance', action: 'create' }), validate(createAttendanceSchema), attendanceController.create.bind(attendanceController));
 router.patch('/:id/checkout', authorize({ resource: 'attendance', action: 'update' }), attendanceController.checkOut.bind(attendanceController));
+router.patch('/:id/correction', authorize({ resource: 'attendance', action: 'update' }), attendanceController.correction.bind(attendanceController));
 router.delete('/:id', authorize({ resource: 'attendance', action: 'delete' }), attendanceController.delete.bind(attendanceController));
 
 // Overtime

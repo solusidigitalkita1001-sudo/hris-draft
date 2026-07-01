@@ -52,6 +52,30 @@ export class AttendanceService {
     return attendanceRepository.update(id, { checkOut: checkOutTime });
   }
 
+  async correction(id: string, data: { status: string; notes?: string }) {
+    const record = await this.findById(id);
+    return attendanceRepository.update(record.id, {
+      status: data.status as any,
+      notes: data.notes ?? record.notes ?? undefined,
+    });
+  }
+
+  async getSummary(companyId: string, month: string, year: string, departmentId?: string) {
+    return attendanceRepository.getSummary(companyId, Number(month), Number(year), departmentId);
+  }
+
+  async getReport(companyId: string, month: string, year: string, departmentId?: string) {
+    // Convert month/year to date range
+    const startDate = `${year}-${month.padStart(2, '0')}-01`;
+    const endMonth = Number(month);
+    const endYear = Number(year);
+    const lastDay = new Date(endYear, endMonth, 0).getDate();
+    const endDate = `${year}-${month.padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    const result = await attendanceRepository.getReport(companyId, { startDate, endDate, departmentId });
+    return result.csv;
+  }
+
   async delete(id: string) {
     await this.findById(id);
     await attendanceRepository.delete(id);
