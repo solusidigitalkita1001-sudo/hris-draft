@@ -29,6 +29,15 @@ export function TopNavigation() {
     requiredRoles: ADMIN_ROLES,
   });
 
+  const getScopedCompanies = useCallback(
+    (items: Company[]) => {
+      if (!user?.companyScope?.length) return items;
+      const allowed = new Set(user.companyScope);
+      return items.filter((company) => allowed.has(company.id));
+    },
+    [user?.companyScope]
+  );
+
   const handleLogout = useCallback(async () => {
     await logout();
     window.location.href = '/login';
@@ -38,12 +47,13 @@ export function TopNavigation() {
     setShowCompanySwitcher(true);
     try {
       const data = await organizationService.getCompanies();
-      setStoredCompanies(data);
-      setCompanyOptions(data);
+      const scopedCompanies = getScopedCompanies(data);
+      setStoredCompanies(scopedCompanies);
+      setCompanyOptions(scopedCompanies);
     } catch {
       // silent
     }
-  }, [setStoredCompanies]);
+  }, [getScopedCompanies, setStoredCompanies]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,16 +63,17 @@ export function TopNavigation() {
 
       try {
         const data = await organizationService.getCompanies();
-        if (cancelled || !data.length) return;
+        const scopedCompanies = getScopedCompanies(data);
+        if (cancelled || !scopedCompanies.length) return;
         const previousCompanyId = localStorage.getItem('companyId');
 
-        setStoredCompanies(data);
-        setCompanyOptions(data);
+        setStoredCompanies(scopedCompanies);
+        setCompanyOptions(scopedCompanies);
 
         const scopedCompany =
-          data.find((company) => company.id === user.companyId) ||
-          data.find((company) => company.id === localStorage.getItem('companyId')) ||
-          data[0];
+          scopedCompanies.find((company) => company.id === localStorage.getItem('companyId')) ||
+          scopedCompanies.find((company) => company.id === user.companyId) ||
+          scopedCompanies[0];
 
         if (!scopedCompany) return;
 
@@ -81,7 +92,7 @@ export function TopNavigation() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany, setActiveCompany, setStoredCompanies, user]);
+  }, [activeCompany, getScopedCompanies, setActiveCompany, setStoredCompanies, user]);
 
   const switchCompany = useCallback(
     (company: Company) => {

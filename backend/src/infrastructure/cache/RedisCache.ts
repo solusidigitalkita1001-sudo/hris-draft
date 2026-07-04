@@ -1,23 +1,23 @@
 import Redis from 'ioredis';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { getRedisConnectionOptions } from './redis-options';
 
 export class RedisCache {
   private static instance: RedisCache;
   private client: Redis;
   private readonly defaultTTL: number = 3600; // 1 hour
+  private readonly healthTimeoutMs: number = 1000;
 
   private constructor() {
+    const redisOptions = getRedisConnectionOptions();
+
     this.client = new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password || undefined,
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
+      ...redisOptions,
+      keyPrefix: config.redis.keyPrefix,
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
+      retryStrategy: (times) => Math.min(times * 50, 2000),
     });
 
     this.client.on('connect', () => {
@@ -150,6 +150,20 @@ export class RedisCache {
   async disconnect(): Promise<void> {
     await this.client.quit();
     logger.info('Redis cache disconnected');
+  }
+
+  async ping(): Promise<boolean> {
+    try {
+      const response = await Promise.race([
+        this.client.ping(),
+        new Promise<'TIMEOUT'>((resolve) =>
+          setTimeout(() => resolve('TIMEOUT'), this.healthTimeoutMs)
+        ),
+      ]);
+      return response === 'PONG';
+    } catch {
+      return false;
+    }
   }
 }
 

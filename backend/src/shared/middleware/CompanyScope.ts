@@ -18,6 +18,8 @@ export function requireCompanyAccess() {
       return;
     }
 
+    const allowedCompanyIds = req.user.companyScope || (req.user.companyId ? [req.user.companyId] : []);
+
     // Get requested company from params, query, or body
     const requestedCompanyId =
       req.params.companyId ||
@@ -25,15 +27,19 @@ export function requireCompanyAccess() {
       req.body.companyId;
 
     // If accessing a specific company, validate access
-    if (requestedCompanyId && req.user.companyId !== requestedCompanyId) {
+    if (requestedCompanyId && !allowedCompanyIds.includes(requestedCompanyId)) {
       throw new ForbiddenError('You do not have access to this company data');
     }
 
     // Attach company context to request for downstream use
     req.company = {
-      id: req.user.companyId!,
+      id: requestedCompanyId || req.user.companyId || allowedCompanyIds[0],
       groupId: req.user.groupId,
     };
+
+    if (!req.company.id) {
+      throw new ForbiddenError('No accessible company scope found for this request');
+    }
 
     next();
   };

@@ -60,6 +60,17 @@ export class UserRepository {
             },
           },
         },
+        companyAccesses: {
+          include: {
+            company: {
+              select: { id: true, name: true, code: true, groupId: true },
+            },
+            group: {
+              select: { id: true, name: true, code: true },
+            },
+          },
+          orderBy: [{ accessScope: 'desc' }, { createdAt: 'desc' }],
+        },
       },
     });
   }
@@ -74,6 +85,74 @@ export class UserRepository {
 
   async softDelete(id: string) {
     return prisma.user.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+
+  async findCompanyAccesses(userId: string) {
+    return prisma.userCompanyAccess.findMany({
+      where: { userId },
+      include: {
+        company: {
+          select: { id: true, name: true, code: true, groupId: true },
+        },
+        group: {
+          select: { id: true, name: true, code: true },
+        },
+      },
+      orderBy: [{ accessScope: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async findCompanyAccessById(id: string) {
+    return prisma.userCompanyAccess.findUnique({
+      where: { id },
+      include: {
+        company: {
+          select: { id: true, name: true, code: true, groupId: true },
+        },
+        group: {
+          select: { id: true, name: true, code: true },
+        },
+      },
+    });
+  }
+
+  async findCompanyAccessByUserAndCompany(userId: string, companyId: string) {
+    return prisma.userCompanyAccess.findUnique({
+      where: { userId_companyId: { userId, companyId } },
+    });
+  }
+
+  async createCompanyAccess(data: Prisma.UserCompanyAccessUncheckedCreateInput) {
+    return prisma.userCompanyAccess.create({
+      data,
+      include: {
+        company: {
+          select: { id: true, name: true, code: true, groupId: true },
+        },
+        group: {
+          select: { id: true, name: true, code: true },
+        },
+      },
+    });
+  }
+
+  async updateCompanyAccess(id: string, data: Prisma.UserCompanyAccessUncheckedUpdateInput) {
+    return prisma.userCompanyAccess.update({
+      where: { id },
+      data,
+      include: {
+        company: {
+          select: { id: true, name: true, code: true, groupId: true },
+        },
+        group: {
+          select: { id: true, name: true, code: true },
+        },
+      },
+    });
+  }
+
+  async deleteCompanyAccess(id: string) {
+    return prisma.userCompanyAccess.delete({ where: { id } });
   }
 }
 

@@ -4,6 +4,8 @@ import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { testDatabaseConnection } from '@/shared/database/prisma';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
+import { rabbitMQBroker } from '@/infrastructure/messaging/RabbitMQBroker';
+import { queueManager } from '@/infrastructure/queue/QueueManager';
 
 async function bootstrap(): Promise<void> {
   logger.info('Starting HRMS Enterprise API...', {
@@ -36,6 +38,26 @@ async function bootstrap(): Promise<void> {
     });
   });
 
+  void (async () => {
+    try {
+      await rabbitMQBroker.connect();
+      logger.info('RabbitMQ connection established');
+    } catch (error) {
+      logger.warn('RabbitMQ connection failed. Cross-instance events will be degraded.', { error });
+    }
+
+    try {
+      const queueHealthy = await queueManager.isHealthy();
+      if (queueHealthy) {
+        logger.info('BullMQ Redis connection established');
+      } else {
+        logger.warn('BullMQ Redis connection failed. Background jobs will be degraded.');
+      }
+    } catch (error) {
+      logger.warn('BullMQ initialization failed. Background jobs will be degraded.', { error });
+    }
+  })();
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received. Shutting down gracefully...`);
@@ -52,6 +74,18 @@ async function bootstrap(): Promise<void> {
 
       try {
         await redisCache.disconnect();
+      } catch (e) {
+        // ignore
+      }
+
+      try {
+        await rabbitMQBroker.disconnect();
+      } catch (e) {
+        // ignore
+      }
+
+      try {
+        await queueManager.disconnect();
       } catch (e) {
         // ignore
       }

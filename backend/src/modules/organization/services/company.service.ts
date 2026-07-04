@@ -9,12 +9,12 @@ import { v4 as uuidv4 } from 'uuid';
 const logger = new WinstonLogger('CompanyService');
 
 export class CompanyService {
-  async findAll(groupId?: string) {
-    return companyRepository.findAll(groupId);
+  async findAll(groupId?: string, allowedCompanyIds?: string[]) {
+    return companyRepository.findAll(groupId, false, allowedCompanyIds);
   }
 
-  async findById(id: string) {
-    const company = await companyRepository.findById(id);
+  async findById(id: string, allowedCompanyIds?: string[]) {
+    const company = await companyRepository.findById(id, allowedCompanyIds);
     if (!company) {
       throw new NotFoundError('Company not found');
     }

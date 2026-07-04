@@ -8,6 +8,7 @@ export interface TokenPayload {
   sub: string;
   email: string;
   companyId?: string;
+  companyScope?: string[];
   groupId?: string;
   type: 'access' | 'refresh';
   jti: string;
@@ -17,6 +18,7 @@ export interface AccessTokenPayload {
   sub: string;
   email: string;
   companyId?: string;
+  companyScope?: string[];
   groupId?: string;
   permissions?: string[];
   roles?: string[];
@@ -93,6 +95,7 @@ export class JWTHandler {
         sub: decoded.sub,
         email: decoded.email,
         companyId: decoded.companyId,
+        companyScope: decoded.companyScope,
         groupId: decoded.groupId,
         permissions: decoded.permissions,
         roles: decoded.roles,

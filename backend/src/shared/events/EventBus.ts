@@ -1,5 +1,7 @@
 import { EventEmitter } from 'events';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { rabbitMQBroker } from '@/infrastructure/messaging/RabbitMQBroker';
+import { queueManager, QueueNames } from '@/infrastructure/queue/QueueManager';
 
 export interface DomainEvent {
   name: string;
@@ -72,6 +74,21 @@ export class EventBus {
     });
 
     this.emitter.emit(event.name, event);
+
+    try {
+      await rabbitMQBroker.publish(event.name, event);
+    } catch (error) {
+      logger.warn(`Failed to publish event to RabbitMQ: ${event.name}`, { error });
+    }
+
+    try {
+      await queueManager.enqueue(QueueNames.DOMAIN_EVENTS, event.name, event, {
+        removeOnComplete: 1000,
+        removeOnFail: 1000,
+      });
+    } catch (error) {
+      logger.warn(`Failed to enqueue event to BullMQ: ${event.name}`, { error });
+    }
   }
 
   /**

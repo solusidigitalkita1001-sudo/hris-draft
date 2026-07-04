@@ -69,6 +69,46 @@ export class UserController {
       next(error);
     }
   }
+
+  async findCompanyAccesses(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const accesses = await userService.findCompanyAccesses(req.params.id as string);
+      res.status(200).json(Result.success(accesses));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createCompanyAccess(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const access = await userService.createCompanyAccess(req.params.id as string, req.body);
+      res.status(201).json(Result.created(access, 'User company access created successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateCompanyAccess(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const access = await userService.updateCompanyAccess(
+        req.params.id as string,
+        req.params.accessId as string,
+        req.body
+      );
+      res.status(200).json(Result.updated(access, 'User company access updated successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteCompanyAccess(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await userService.deleteCompanyAccess(req.params.id as string, req.params.accessId as string);
+      res.status(200).json(Result.deleted('User company access deleted successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const userController = new UserController();

@@ -1,5 +1,4 @@
 import 'express';
-import { Prisma } from '@prisma/client';
 export {};
 
 import express from 'express';
@@ -11,6 +10,9 @@ import rateLimit from 'express-rate-limit';
 import config from '@/config';
 import { errorHandler } from '@/shared/middleware/ErrorHandler';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { redisCache } from '@/infrastructure/cache/RedisCache';
+import { rabbitMQBroker } from '@/infrastructure/messaging/RabbitMQBroker';
+import { queueManager } from '@/infrastructure/queue/QueueManager';
 
 // Route imports
 import authRoutes from '@/modules/auth/auth.routes';
@@ -116,12 +118,27 @@ app.use((req, res, next) => {
 });
 
 // ==================== Health Check ====================
-app.get('/health', (_req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'HRMS Enterprise API is running',
+app.get('/health', async (_req, res) => {
+  const [redisHealthy, rabbitHealthy, queueHealthy] = await Promise.all([
+    redisCache.ping(),
+    rabbitMQBroker.isHealthy(),
+    queueManager.isHealthy(),
+  ]);
+
+  const isHealthy = redisHealthy && rabbitHealthy && queueHealthy;
+
+  res.status(isHealthy ? 200 : 503).json({
+    success: isHealthy,
+    message: isHealthy
+      ? 'HRMS Enterprise API is running'
+      : 'HRMS Enterprise API is degraded',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    services: {
+      redis: redisHealthy ? 'up' : 'down',
+      rabbitmq: rabbitHealthy ? 'up' : 'down',
+      queue: queueHealthy ? 'up' : 'down',
+    },
   });
 });
 

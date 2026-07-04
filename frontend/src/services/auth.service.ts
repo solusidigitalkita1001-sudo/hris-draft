@@ -20,6 +20,7 @@ export interface AuthUser {
   roles: string[];
   permissions: string[];
   companyId?: string;
+  companyScope: string[];
   groupId?: string;
   mustChangePassword: boolean;
 }

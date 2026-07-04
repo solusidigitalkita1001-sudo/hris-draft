@@ -34,6 +34,7 @@ model CompanyGroup {
   groupPolicies GroupPolicy[]
   groupSettings GroupSetting[]
   roles         Role[]
+  userCompanyAccesses UserCompanyAccess[]
   assetCategories AssetCategory[]
   documentCategories DocumentCategory[]
   documents          Document[]
@@ -69,6 +70,7 @@ model Company {
   positions         Position[]
   employees         Employee[]
   roles             Role[]
+  userCompanyAccesses UserCompanyAccess[]
   companySettings   CompanySetting[]
   auditLogs         AuditLog[]
   salaryComponents    SalaryComponent[]
@@ -112,6 +114,7 @@ model Company {
   documentCategories  DocumentCategory[]
   documents           Document[]
   careerTransactions  EmployeeCareerTransaction[]
+  employeeCompanyAssignments EmployeeCompanyAssignment[]
 
   @@index([groupId])
   @@index([code])
@@ -1082,6 +1085,8 @@ model User {
   documentSignatures DocumentSignature[]
   documentAccessLogs DocumentAccessLog[]
   createdCareerTransactions EmployeeCareerTransaction[]
+  companyAccesses   UserCompanyAccess[]
+  approvedCompanyAssignments EmployeeCompanyAssignment[]
 
   @@index([email])
   @@index([status])
@@ -1160,6 +1165,14 @@ model Employee {
   expenseClaims        ExpenseClaim[]
   documents            Document[]
   careerTransactions   EmployeeCareerTransaction[]
+  companyAssignments   EmployeeCompanyAssignment[]
+  families             EmployeeFamily[]
+  educations           EmployeeEducation[]
+  emergencyContacts    EmployeeEmergencyContact[]
+  trainings            EmployeeTraining[]
+  skills               EmployeeSkill[]
+  experiences          EmployeeExperience[]
+  attachments          EmployeeAttachment[]
 
   @@index([companyId])
   @@index([employeeNumber])
@@ -1168,6 +1181,50 @@ model Employee {
   @@index([employmentStatus])
   @@index([branchId])
   @@map("employees")
+}
+
+model EmployeeCompanyAssignment {
+  id             String                        @id @default(uuid()) @db.VarChar(36)
+  employeeId     String                        @map("employee_id") @db.VarChar(36)
+  companyId      String                        @map("company_id") @db.VarChar(36)
+  assignmentType EmployeeCompanyAssignmentType @default(PRIMARY) @map("assignment_type")
+  startDate      DateTime                      @map("start_date")
+  endDate        DateTime?                     @map("end_date")
+  reason         String?                       @db.Text
+  approvedBy     String?                       @map("approved_by") @db.VarChar(36)
+  createdAt      DateTime                      @default(now()) @map("created_at")
+  updatedAt      DateTime                      @updatedAt @map("updated_at")
+
+  employee       Employee                      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company        Company                       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  approver       User?                         @relation(fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([assignmentType])
+  @@index([startDate])
+  @@map("employee_company_assignments")
+}
+
+model UserCompanyAccess {
+  id          String            @id @default(uuid()) @db.VarChar(36)
+  userId      String            @map("user_id") @db.VarChar(36)
+  companyId   String            @map("company_id") @db.VarChar(36)
+  groupId     String?           @map("group_id") @db.VarChar(36)
+  accessScope CompanyAccessScope @default(SINGLE_COMPANY) @map("access_scope")
+  roleOverride String?          @map("role_override") @db.VarChar(50)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  group       CompanyGroup?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@index([groupId])
+  @@index([accessScope])
+  @@map("user_company_access")
 }
 
 model EmployeeCareerTransaction {
@@ -1207,6 +1264,170 @@ model EmployeeCareerTransaction {
   @@index([transactionType])
   @@index([effectiveDate])
   @@map("employee_career_transactions")
+}
+
+// ============================================================
+// EMPLOYEE DETAIL SUB-ENTITIES
+// ============================================================
+
+/// Employee Family / Dependent
+model EmployeeFamily {
+  id                String    @id @default(uuid()) @db.VarChar(36)
+  employeeId        String    @map("employee_id") @db.VarChar(36)
+  fullName          String    @map("full_name") @db.VarChar(255)
+  relationship      String    @db.VarChar(50)
+  idNumber          String?   @map("id_number") @db.VarChar(50)
+  placeOfBirth      String?   @map("place_of_birth") @db.VarChar(255)
+  dateOfBirth       DateTime? @map("date_of_birth")
+  gender            String?   @db.VarChar(20)
+  religion          String?   @db.VarChar(50)
+  occupation        String?   @db.VarChar(255)
+  phone             String?   @db.VarChar(50)
+  address           String?   @db.Text
+  isEmergencyContact Boolean? @default(false) @map("is_emergency_contact")
+  isDependent       Boolean?  @default(true) @map("is_dependent")
+  maritalStatus     String?   @map("marital_status") @db.VarChar(20)
+  educationLevel    String?   @map("education_level") @db.VarChar(50)
+  orderSequence     Int?      @default(0) @map("order_sequence")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_families")
+}
+
+/// Employee Education
+model EmployeeEducation {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  employeeId      String    @map("employee_id") @db.VarChar(36)
+  level           String    @db.VarChar(20)
+  institutionName String    @map("institution_name") @db.VarChar(255)
+  major           String?   @db.VarChar(255)
+  degree          String?   @db.VarChar(100)
+  startDate       DateTime? @map("start_date")
+  endDate         DateTime? @map("end_date")
+  isGraduated     Boolean?  @default(true) @map("is_graduated")
+  gpa             Float?    @map("gpa")
+  city            String?   @db.VarChar(100)
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_educations")
+}
+
+/// Employee Emergency Contact
+model EmployeeEmergencyContact {
+  id               String   @id @default(uuid()) @db.VarChar(36)
+  employeeId       String   @map("employee_id") @db.VarChar(36)
+  fullName         String   @map("full_name") @db.VarChar(255)
+  relationship     String   @db.VarChar(50)
+  phone            String   @db.VarChar(50)
+  alternativePhone String?  @map("alternative_phone") @db.VarChar(50)
+  address          String?  @db.Text
+  isPrimary        Boolean? @default(false) @map("is_primary")
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_emergency_contacts")
+}
+
+/// Employee Training Record
+model EmployeeTraining {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  employeeId     String    @map("employee_id") @db.VarChar(36)
+  trainingName   String    @map("training_name") @db.VarChar(255)
+  organizer      String?   @db.VarChar(255)
+  startDate      DateTime? @map("start_date")
+  endDate        DateTime? @map("end_date")
+  duration       String?   @db.VarChar(50)
+  trainingType   String?   @map("training_type") @db.VarChar(50)
+  description    String?   @db.Text
+  certificateUrl String?   @map("certificate_url") @db.VarChar(500)
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_trainings")
+}
+
+/// Employee Skill
+model EmployeeSkill {
+  id                String    @id @default(uuid()) @db.VarChar(36)
+  employeeId        String    @map("employee_id") @db.VarChar(36)
+  skillName         String    @map("skill_name") @db.VarChar(255)
+  category          String?   @db.VarChar(50)
+  proficiencyLevel  String?   @map("proficiency_level") @db.VarChar(20)
+  yearsOfExperience Float?    @map("years_of_experience")
+  lastUsedDate      DateTime? @map("last_used_date")
+  isCertified       Boolean?  @default(false) @map("is_certified")
+  notes             String?   @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_skills")
+}
+
+/// Employee Work Experience
+model EmployeeExperience {
+  id                String    @id @default(uuid()) @db.VarChar(36)
+  employeeId        String    @map("employee_id") @db.VarChar(36)
+  companyName       String    @map("company_name") @db.VarChar(255)
+  position          String    @db.VarChar(255)
+  startDate         DateTime  @map("start_date")
+  endDate           DateTime? @map("end_date")
+  isCurrentPosition Boolean?  @default(false) @map("is_current_position")
+  jobDescription    String?   @map("job_description") @db.Text
+  achievements      String?   @db.Text
+  industry          String?   @db.VarChar(100)
+  city              String?   @db.VarChar(100)
+  reasonForLeaving  String?   @map("reason_for_leaving") @db.Text
+  referenceName     String?   @map("reference_name") @db.VarChar(255)
+  referencePhone    String?   @map("reference_phone") @db.VarChar(50)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_experiences")
+}
+
+/// Employee Attachment (files related to any sub-entity)
+model EmployeeAttachment {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  employeeId   String   @map("employee_id") @db.VarChar(36)
+  category     String   @db.VarChar(50)
+  fileName     String   @map("file_name") @db.VarChar(255)
+  fileUrl      String   @map("file_url") @db.VarChar(500)
+  originalName String?  @map("original_name") @db.VarChar(255)
+  fileSize     Int?     @map("file_size")
+  mimeType     String?  @map("mime_type") @db.VarChar(100)
+  description  String?  @db.Text
+  uploadedBy   String?  @map("uploaded_by") @db.VarChar(36)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([category])
+  @@map("employee_attachments")
 }
 
 /// Roles
@@ -1855,6 +2076,17 @@ enum RoleScope {
   GLOBAL
   GROUP
   COMPANY
+}
+
+enum CompanyAccessScope {
+  GROUP_WIDE
+  SINGLE_COMPANY
+}
+
+enum EmployeeCompanyAssignmentType {
+  PRIMARY
+  SECONDMENT
+  TRANSFER
 }
 
 /// Salary component types

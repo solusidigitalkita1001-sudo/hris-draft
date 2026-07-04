@@ -18,6 +18,16 @@ const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue = [];
 };
 
+const clearClientSession = () => {
+  localStorage.removeItem(appConfig.authTokenKey);
+  localStorage.removeItem(appConfig.refreshTokenKey);
+  localStorage.removeItem(appConfig.companyKey);
+  localStorage.removeItem('companyId');
+  localStorage.removeItem('employeeId');
+  localStorage.removeItem('groupId');
+  localStorage.removeItem('hrms-auth-store');
+};
+
 const api = axios.create({
   baseURL: appConfig.apiUrl,
   timeout: 30000,
@@ -64,8 +74,7 @@ api.interceptors.response.use(
 
       if (!refreshToken) {
         // No refresh token, force logout
-        localStorage.removeItem(appConfig.authTokenKey);
-        localStorage.removeItem(appConfig.refreshTokenKey);
+        clearClientSession();
         window.location.href = '/login';
         return Promise.reject(error);
       }
@@ -89,8 +98,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        localStorage.removeItem(appConfig.authTokenKey);
-        localStorage.removeItem(appConfig.refreshTokenKey);
+        clearClientSession();
         window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {

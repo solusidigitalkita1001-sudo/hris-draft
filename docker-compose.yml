@@ -1,4 +1,36 @@
-version: '3.8'
+x-api-service: &api-service
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment:
+    - NODE_ENV=development
+    - DATABASE_URL=mysql://hris_user:hris_password@mysql:3306/hris_enterprise
+    - REDIS_URL=redis://redis:6379/0
+    - REDIS_HOST=redis
+    - REDIS_PORT=6379
+    - REDIS_DB=0
+    - RABBITMQ_ENABLED=true
+    - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+    - RABBITMQ_EXCHANGE=hrms.domain-events
+    - RABBITMQ_QUEUE_PREFIX=hrms
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  volumes:
+    - ./backend:/app
+    - /app/node_modules
+    - upload_data:/app/uploads
+  healthcheck:
+    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+    interval: 30s
+    timeout: 10s
+    retries: 5
+    start_period: 40s
 
 services:
   mysql:
@@ -41,28 +73,33 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: hris-api
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: hris-rabbitmq
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "5672:5672"
+      - "15672:15672"
     environment:
-      - NODE_ENV=development
-      - DATABASE_URL=mysql://hris_user:hris_password@mysql:3306/hris_enterprise
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
     volumes:
-      - ./backend:/app
-      - /app/node_modules
-      - upload_data:/app/uploads
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  api:
+    <<: *api-service
+    container_name: hris-api
+    ports:
+      - "3000:3000"
+
+  api-replica:
+    <<: *api-service
+    container_name: hris-api-replica
 
   worker:
     build:
@@ -70,20 +107,29 @@ services:
       dockerfile: Dockerfile
     container_name: hris-worker
     restart: unless-stopped
-    command: npx tsx src/worker.ts
+    command: npm run worker
     environment:
       - NODE_ENV=development
       - DATABASE_URL=mysql://hris_user:hris_password@mysql:3306/hris_enterprise
+      - REDIS_URL=redis://redis:6379/0
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_DB=0
+      - RABBITMQ_ENABLED=true
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - RABBITMQ_EXCHANGE=hrms.domain-events
+      - RABBITMQ_QUEUE_PREFIX=hrms
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - upload_data:/app/uploads
 
   nginx:
     image: nginx:alpine
@@ -91,15 +137,18 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./docker/nginx/sites:/etc/nginx/sites-enabled
       - ./frontend/dist:/var/www/html
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+      api-replica:
+        condition: service_healthy
 
 volumes:
   mysql_data:
   redis_data:
+  rabbitmq_data:
   upload_data:

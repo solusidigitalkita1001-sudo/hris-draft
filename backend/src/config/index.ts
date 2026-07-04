@@ -15,9 +15,23 @@ interface Config {
     url: string;
   };
   redis: {
+    url: string;
     host: string;
     port: number;
     password: string;
+    db: number;
+    keyPrefix: string;
+  };
+  rabbitmq: {
+    url: string;
+    exchange: string;
+    queuePrefix: string;
+    prefetch: number;
+    enabled: boolean;
+  };
+  queue: {
+    defaultAttempts: number;
+    defaultBackoffMs: number;
   };
   jwt: {
     accessSecret: string;
@@ -95,9 +109,23 @@ export const config: Config = {
     url: getEnv('DATABASE_URL', 'mysql://root:password@localhost:3306/hris_enterprise'),
   },
   redis: {
+    url: getEnv('REDIS_URL', ''),
     host: getEnv('REDIS_HOST', 'localhost'),
     port: getEnvInt('REDIS_PORT', 6379),
     password: getEnv('REDIS_PASSWORD', ''),
+    db: getEnvInt('REDIS_DB', 0),
+    keyPrefix: getEnv('REDIS_KEY_PREFIX', 'hrms:'),
+  },
+  rabbitmq: {
+    url: getEnv('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672'),
+    exchange: getEnv('RABBITMQ_EXCHANGE', 'hrms.domain-events'),
+    queuePrefix: getEnv('RABBITMQ_QUEUE_PREFIX', 'hrms'),
+    prefetch: getEnvInt('RABBITMQ_PREFETCH', 20),
+    enabled: getEnv('RABBITMQ_ENABLED', 'true') !== 'false',
+  },
+  queue: {
+    defaultAttempts: getEnvInt('QUEUE_DEFAULT_ATTEMPTS', 3),
+    defaultBackoffMs: getEnvInt('QUEUE_DEFAULT_BACKOFF_MS', 5000),
   },
   jwt: {
     accessSecret: getEnv('JWT_ACCESS_SECRET', 'fallback-secret-not-secure'),

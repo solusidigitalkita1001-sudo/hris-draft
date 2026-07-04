@@ -3,13 +3,20 @@ import { Prisma } from '@prisma/client';
 import { CreateCompanyDTO, UpdateCompanyDTO } from '../organization.dto';
 
 export class CompanyRepository {
-  async findAll(groupId?: string, includeDeleted: boolean = false) {
+  async findAll(groupId?: string, includeDeleted: boolean = false, allowedCompanyIds?: string[]) {
+    if (allowedCompanyIds && allowedCompanyIds.length === 0) {
+      return [];
+    }
+
     const where: Prisma.CompanyWhereInput = {};
     if (!includeDeleted) {
       where.deletedAt = null;
     }
     if (groupId) {
       where.groupId = groupId;
+    }
+    if (allowedCompanyIds && allowedCompanyIds.length > 0) {
+      where.id = { in: allowedCompanyIds };
     }
 
     return prisma.company.findMany({
@@ -28,9 +35,22 @@ export class CompanyRepository {
     });
   }
 
-  async findById(id: string) {
+  async findById(id: string, allowedCompanyIds?: string[]) {
+    if (allowedCompanyIds && allowedCompanyIds.length === 0) {
+      return null;
+    }
+
+    const where: Prisma.CompanyWhereInput = {
+      id,
+      deletedAt: null,
+    };
+
+    if (allowedCompanyIds && allowedCompanyIds.length > 0) {
+      where.id = { in: allowedCompanyIds.filter((companyId) => companyId === id) };
+    }
+
     return prisma.company.findFirst({
-      where: { id, deletedAt: null },
+      where,
       include: {
         group: true,
         _count: {

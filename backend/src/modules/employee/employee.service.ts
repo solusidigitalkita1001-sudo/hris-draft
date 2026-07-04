@@ -1,6 +1,16 @@
 import { parse } from 'csv-parse/sync';
 import { employeeRepository } from './employee.repository';
-import { CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO, createEmployeeSchema } from './employee.dto';
+import {
+  CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO, createEmployeeSchema,
+  CreateEmployeeCompanyAssignmentDTO, UpdateEmployeeCompanyAssignmentDTO,
+  CreateEmployeeFamilyDTO, UpdateEmployeeFamilyDTO,
+  CreateEmployeeEducationDTO, UpdateEmployeeEducationDTO,
+  CreateEmployeeEmergencyContactDTO, UpdateEmployeeEmergencyContactDTO,
+  CreateEmployeeTrainingDTO, UpdateEmployeeTrainingDTO,
+  CreateEmployeeSkillDTO, UpdateEmployeeSkillDTO,
+  CreateEmployeeExperienceDTO, UpdateEmployeeExperienceDTO,
+  CreateEmployeeAttachmentDTO, UpdateEmployeeAttachmentDTO,
+} from './employee.dto';
 import { NotFoundError, ConflictError, BadRequestError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 
@@ -89,6 +99,211 @@ export class EmployeeService {
     });
 
     return transaction;
+  }
+
+  async findCompanyAssignments(employeeId: string) {
+    await this.findById(employeeId);
+    return employeeRepository.findCompanyAssignments(employeeId);
+  }
+
+  async createCompanyAssignment(
+    employeeId: string,
+    data: CreateEmployeeCompanyAssignmentDTO
+  ) {
+    const employee = await this.findById(employeeId);
+
+    if (data.assignmentType === 'PRIMARY' && data.companyId !== employee.companyId) {
+      throw new BadRequestError('Primary assignment must match the employee primary company');
+    }
+
+    if (data.endDate && new Date(data.endDate) < new Date(data.startDate)) {
+      throw new BadRequestError('Assignment end date must be after start date');
+    }
+
+    return employeeRepository.createCompanyAssignment(employeeId, {
+      companyId: data.companyId,
+      assignmentType: data.assignmentType,
+      startDate: new Date(data.startDate),
+      endDate: data.endDate ? new Date(data.endDate) : null,
+      reason: data.reason,
+      approvedBy: data.approvedBy || null,
+    });
+  }
+
+  async updateCompanyAssignment(
+    employeeId: string,
+    assignmentId: string,
+    data: UpdateEmployeeCompanyAssignmentDTO
+  ) {
+    await this.findById(employeeId);
+
+    const current = await employeeRepository.findCompanyAssignmentById(assignmentId);
+    if (!current || current.employeeId !== employeeId) {
+      throw new NotFoundError('Employee company assignment not found');
+    }
+
+    const nextStartDate = data.startDate ? new Date(data.startDate) : current.startDate;
+    const nextEndDate =
+      data.endDate !== undefined
+        ? (data.endDate ? new Date(data.endDate) : null)
+        : current.endDate;
+
+    if (nextEndDate && nextEndDate < nextStartDate) {
+      throw new BadRequestError('Assignment end date must be after start date');
+    }
+
+    return employeeRepository.updateCompanyAssignment(assignmentId, {
+      ...(data.companyId !== undefined ? { companyId: data.companyId } : {}),
+      ...(data.assignmentType !== undefined ? { assignmentType: data.assignmentType } : {}),
+      ...(data.startDate !== undefined ? { startDate: new Date(data.startDate) } : {}),
+      ...(data.endDate !== undefined ? { endDate: data.endDate ? new Date(data.endDate) : null } : {}),
+      ...(data.reason !== undefined ? { reason: data.reason } : {}),
+      ...(data.approvedBy !== undefined ? { approvedBy: data.approvedBy || null } : {}),
+    });
+  }
+
+  async deleteCompanyAssignment(employeeId: string, assignmentId: string) {
+    await this.findById(employeeId);
+
+    const current = await employeeRepository.findCompanyAssignmentById(assignmentId);
+    if (!current || current.employeeId !== employeeId) {
+      throw new NotFoundError('Employee company assignment not found');
+    }
+
+    await employeeRepository.deleteCompanyAssignment(assignmentId);
+  }
+
+  // ============================================================
+  // Employee Family
+  // ============================================================
+  async findFamilies(employeeId: string) {
+    return employeeRepository.findFamilies(employeeId);
+  }
+
+  async createFamily(employeeId: string, data: CreateEmployeeFamilyDTO) {
+    return employeeRepository.createFamily(employeeId, data);
+  }
+
+  async updateFamily(id: string, data: UpdateEmployeeFamilyDTO) {
+    return employeeRepository.updateFamily(id, data);
+  }
+
+  async deleteFamily(id: string) {
+    return employeeRepository.deleteFamily(id);
+  }
+
+  // ============================================================
+  // Employee Education
+  // ============================================================
+  async findEducations(employeeId: string) {
+    return employeeRepository.findEducations(employeeId);
+  }
+
+  async createEducation(employeeId: string, data: CreateEmployeeEducationDTO) {
+    return employeeRepository.createEducation(employeeId, data);
+  }
+
+  async updateEducation(id: string, data: UpdateEmployeeEducationDTO) {
+    return employeeRepository.updateEducation(id, data);
+  }
+
+  async deleteEducation(id: string) {
+    return employeeRepository.deleteEducation(id);
+  }
+
+  // ============================================================
+  // Employee Emergency Contact
+  // ============================================================
+  async findEmergencyContacts(employeeId: string) {
+    return employeeRepository.findEmergencyContacts(employeeId);
+  }
+
+  async createEmergencyContact(employeeId: string, data: CreateEmployeeEmergencyContactDTO) {
+    return employeeRepository.createEmergencyContact(employeeId, data);
+  }
+
+  async updateEmergencyContact(id: string, data: UpdateEmployeeEmergencyContactDTO) {
+    return employeeRepository.updateEmergencyContact(id, data);
+  }
+
+  async deleteEmergencyContact(id: string) {
+    return employeeRepository.deleteEmergencyContact(id);
+  }
+
+  // ============================================================
+  // Employee Training
+  // ============================================================
+  async findTrainings(employeeId: string) {
+    return employeeRepository.findTrainings(employeeId);
+  }
+
+  async createTraining(employeeId: string, data: CreateEmployeeTrainingDTO) {
+    return employeeRepository.createTraining(employeeId, data);
+  }
+
+  async updateTraining(id: string, data: UpdateEmployeeTrainingDTO) {
+    return employeeRepository.updateTraining(id, data);
+  }
+
+  async deleteTraining(id: string) {
+    return employeeRepository.deleteTraining(id);
+  }
+
+  // ============================================================
+  // Employee Skill
+  // ============================================================
+  async findSkills(employeeId: string) {
+    return employeeRepository.findSkills(employeeId);
+  }
+
+  async createSkill(employeeId: string, data: CreateEmployeeSkillDTO) {
+    return employeeRepository.createSkill(employeeId, data);
+  }
+
+  async updateSkill(id: string, data: UpdateEmployeeSkillDTO) {
+    return employeeRepository.updateSkill(id, data);
+  }
+
+  async deleteSkill(id: string) {
+    return employeeRepository.deleteSkill(id);
+  }
+
+  // ============================================================
+  // Employee Experience
+  // ============================================================
+  async findExperiences(employeeId: string) {
+    return employeeRepository.findExperiences(employeeId);
+  }
+
+  async createExperience(employeeId: string, data: CreateEmployeeExperienceDTO) {
+    return employeeRepository.createExperience(employeeId, data);
+  }
+
+  async updateExperience(id: string, data: UpdateEmployeeExperienceDTO) {
+    return employeeRepository.updateExperience(id, data);
+  }
+
+  async deleteExperience(id: string) {
+    return employeeRepository.deleteExperience(id);
+  }
+
+  // ============================================================
+  // Employee Attachment
+  // ============================================================
+  async findAttachments(employeeId: string, category?: string) {
+    return employeeRepository.findAttachments(employeeId, category);
+  }
+
+  async createAttachment(employeeId: string, data: CreateEmployeeAttachmentDTO) {
+    return employeeRepository.createAttachment(employeeId, data);
+  }
+
+  async updateAttachment(id: string, data: UpdateEmployeeAttachmentDTO) {
+    return employeeRepository.updateAttachment(id, data);
+  }
+
+  async deleteAttachment(id: string) {
+    return employeeRepository.deleteAttachment(id);
   }
 
   async importCsv(companyId: string, file: Express.Multer.File) {

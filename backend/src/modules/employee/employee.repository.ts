@@ -1,6 +1,15 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
-import { CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO } from './employee.dto';
+import {
+  CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO,
+  CreateEmployeeFamilyDTO, UpdateEmployeeFamilyDTO,
+  CreateEmployeeEducationDTO, UpdateEmployeeEducationDTO,
+  CreateEmployeeEmergencyContactDTO, UpdateEmployeeEmergencyContactDTO,
+  CreateEmployeeTrainingDTO, UpdateEmployeeTrainingDTO,
+  CreateEmployeeSkillDTO, UpdateEmployeeSkillDTO,
+  CreateEmployeeExperienceDTO, UpdateEmployeeExperienceDTO,
+  CreateEmployeeAttachmentDTO, UpdateEmployeeAttachmentDTO,
+} from './employee.dto';
 
 export class EmployeeRepository {
   async findAll(query: EmployeeQueryDTO) {
@@ -69,6 +78,13 @@ export class EmployeeRepository {
           },
           orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
         },
+        companyAssignments: {
+          include: {
+            company: { select: { id: true, name: true, code: true, groupId: true } },
+            approver: { select: { id: true, email: true } },
+          },
+          orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+        },
       },
     });
   }
@@ -87,6 +103,75 @@ export class EmployeeRepository {
       },
       orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
     });
+  }
+
+  async findCompanyAssignments(employeeId: string) {
+    return prisma.employeeCompanyAssignment.findMany({
+      where: { employeeId },
+      include: {
+        company: { select: { id: true, name: true, code: true, groupId: true } },
+        approver: { select: { id: true, email: true } },
+      },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async findCompanyAssignmentById(id: string) {
+    return prisma.employeeCompanyAssignment.findUnique({
+      where: { id },
+      include: {
+        company: { select: { id: true, name: true, code: true, groupId: true } },
+        approver: { select: { id: true, email: true } },
+      },
+    });
+  }
+
+  async createCompanyAssignment(
+    employeeId: string,
+    data: {
+      companyId: string;
+      assignmentType: 'PRIMARY' | 'SECONDMENT' | 'TRANSFER';
+      startDate: Date;
+      endDate?: Date | null;
+      reason?: string;
+      approvedBy?: string | null;
+    }
+  ) {
+    return prisma.employeeCompanyAssignment.create({
+      data: {
+        ...data,
+        employeeId,
+      },
+      include: {
+        company: { select: { id: true, name: true, code: true, groupId: true } },
+        approver: { select: { id: true, email: true } },
+      },
+    });
+  }
+
+  async updateCompanyAssignment(
+    id: string,
+    data: {
+      companyId?: string;
+      assignmentType?: 'PRIMARY' | 'SECONDMENT' | 'TRANSFER';
+      startDate?: Date;
+      endDate?: Date | null;
+      reason?: string;
+      approvedBy?: string | null;
+    }
+  ) {
+    return prisma.employeeCompanyAssignment.update({
+      where: { id },
+      data,
+      include: {
+        company: { select: { id: true, name: true, code: true, groupId: true } },
+        approver: { select: { id: true, email: true } },
+      },
+    });
+  }
+
+  async deleteCompanyAssignment(id: string) {
+    return prisma.employeeCompanyAssignment.delete({ where: { id } });
   }
 
   async findByEmail(email: string) {
@@ -147,6 +232,259 @@ export class EmployeeRepository {
       where: { id },
       data: { employmentStatus: status as any },
     });
+  }
+
+  // ============================================================
+  // Employee Family
+  // ============================================================
+  async findFamilies(employeeId: string) {
+    return prisma.employeeFamily.findMany({
+      where: { employeeId },
+      orderBy: [{ orderSequence: 'asc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createFamily(employeeId: string, data: CreateEmployeeFamilyDTO) {
+    return prisma.employeeFamily.create({
+      data: {
+        ...data,
+        employeeId,
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
+      },
+    });
+  }
+
+  async updateFamily(id: string, data: UpdateEmployeeFamilyDTO) {
+    const updateData: Prisma.EmployeeFamilyUpdateInput = {};
+    const fields: (keyof UpdateEmployeeFamilyDTO)[] = [
+      'fullName', 'relationship', 'idNumber', 'placeOfBirth', 'gender', 'religion',
+      'occupation', 'phone', 'address', 'isEmergencyContact', 'isDependent',
+      'maritalStatus', 'educationLevel', 'orderSequence',
+    ];
+    for (const field of fields) {
+      if (data[field] !== undefined) (updateData as any)[field] = data[field];
+    }
+    if (data.dateOfBirth !== undefined) updateData.dateOfBirth = new Date(data.dateOfBirth);
+    return prisma.employeeFamily.update({ where: { id }, data: updateData });
+  }
+
+  async deleteFamily(id: string) {
+    return prisma.employeeFamily.delete({ where: { id } });
+  }
+
+  // ============================================================
+  // Employee Education
+  // ============================================================
+  async findEducations(employeeId: string) {
+    return prisma.employeeEducation.findMany({
+      where: { employeeId },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createEducation(employeeId: string, data: CreateEmployeeEducationDTO) {
+    return prisma.employeeEducation.create({
+      data: {
+        ...data,
+        employeeId,
+        startDate: data.startDate ? new Date(data.startDate) : undefined,
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
+      },
+    });
+  }
+
+  async updateEducation(id: string, data: UpdateEmployeeEducationDTO) {
+    const updateData: Prisma.EmployeeEducationUpdateInput = {};
+    const fields: (keyof UpdateEmployeeEducationDTO)[] = [
+      'level', 'institutionName', 'major', 'degree', 'isGraduated', 'gpa', 'city', 'notes',
+    ];
+    for (const field of fields) {
+      if (data[field] !== undefined) (updateData as any)[field] = data[field];
+    }
+    if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate);
+    if (data.endDate !== undefined) updateData.endDate = new Date(data.endDate);
+    return prisma.employeeEducation.update({ where: { id }, data: updateData });
+  }
+
+  async deleteEducation(id: string) {
+    return prisma.employeeEducation.delete({ where: { id } });
+  }
+
+  // ============================================================
+  // Employee Emergency Contact
+  // ============================================================
+  async findEmergencyContacts(employeeId: string) {
+    return prisma.employeeEmergencyContact.findMany({
+      where: { employeeId },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createEmergencyContact(employeeId: string, data: CreateEmployeeEmergencyContactDTO) {
+    return prisma.employeeEmergencyContact.create({
+      data: { ...data, employeeId },
+    });
+  }
+
+  async updateEmergencyContact(id: string, data: UpdateEmployeeEmergencyContactDTO) {
+    const updateData: Prisma.EmployeeEmergencyContactUpdateInput = {};
+    const fields: (keyof UpdateEmployeeEmergencyContactDTO)[] = [
+      'fullName', 'relationship', 'phone', 'alternativePhone', 'address', 'isPrimary', 'notes',
+    ];
+    for (const field of fields) {
+      if (data[field] !== undefined) (updateData as any)[field] = data[field];
+    }
+    return prisma.employeeEmergencyContact.update({ where: { id }, data: updateData });
+  }
+
+  async deleteEmergencyContact(id: string) {
+    return prisma.employeeEmergencyContact.delete({ where: { id } });
+  }
+
+  // ============================================================
+  // Employee Training
+  // ============================================================
+  async findTrainings(employeeId: string) {
+    return prisma.employeeTraining.findMany({
+      where: { employeeId },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createTraining(employeeId: string, data: CreateEmployeeTrainingDTO) {
+    return prisma.employeeTraining.create({
+      data: {
+        ...data,
+        employeeId,
+        startDate: data.startDate ? new Date(data.startDate) : undefined,
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
+      },
+    });
+  }
+
+  async updateTraining(id: string, data: UpdateEmployeeTrainingDTO) {
+    const updateData: Prisma.EmployeeTrainingUpdateInput = {};
+    const fields: (keyof UpdateEmployeeTrainingDTO)[] = [
+      'trainingName', 'organizer', 'duration', 'trainingType', 'description', 'certificateUrl', 'notes',
+    ];
+    for (const field of fields) {
+      if (data[field] !== undefined) (updateData as any)[field] = data[field];
+    }
+    if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate);
+    if (data.endDate !== undefined) updateData.endDate = new Date(data.endDate);
+    return prisma.employeeTraining.update({ where: { id }, data: updateData });
+  }
+
+  async deleteTraining(id: string) {
+    return prisma.employeeTraining.delete({ where: { id } });
+  }
+
+  // ============================================================
+  // Employee Skill
+  // ============================================================
+  async findSkills(employeeId: string) {
+    return prisma.employeeSkill.findMany({
+      where: { employeeId },
+      orderBy: [{ yearsOfExperience: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createSkill(employeeId: string, data: CreateEmployeeSkillDTO) {
+    return prisma.employeeSkill.create({
+      data: {
+        ...data,
+        employeeId,
+        lastUsedDate: data.lastUsedDate ? new Date(data.lastUsedDate) : undefined,
+      },
+    });
+  }
+
+  async updateSkill(id: string, data: UpdateEmployeeSkillDTO) {
+    const updateData: Prisma.EmployeeSkillUpdateInput = {};
+    const fields: (keyof UpdateEmployeeSkillDTO)[] = [
+      'skillName', 'category', 'proficiencyLevel', 'yearsOfExperience', 'isCertified', 'notes',
+    ];
+    for (const field of fields) {
+      if (data[field] !== undefined) (updateData as any)[field] = data[field];
+    }
+    if (data.lastUsedDate !== undefined) updateData.lastUsedDate = new Date(data.lastUsedDate);
+    return prisma.employeeSkill.update({ where: { id }, data: updateData });
+  }
+
+  async deleteSkill(id: string) {
+    return prisma.employeeSkill.delete({ where: { id } });
+  }
+
+  // ============================================================
+  // Employee Experience
+  // ============================================================
+  async findExperiences(employeeId: string) {
+    return prisma.employeeExperience.findMany({
+      where: { employeeId },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createExperience(employeeId: string, data: CreateEmployeeExperienceDTO) {
+    return prisma.employeeExperience.create({
+      data: {
+        ...data,
+        employeeId,
+        startDate: new Date(data.startDate),
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
+      },
+    });
+  }
+
+  async updateExperience(id: string, data: UpdateEmployeeExperienceDTO) {
+    const updateData: Prisma.EmployeeExperienceUpdateInput = {};
+    const fields: (keyof UpdateEmployeeExperienceDTO)[] = [
+      'companyName', 'position', 'isCurrentPosition', 'jobDescription', 'achievements',
+      'industry', 'city', 'reasonForLeaving', 'referenceName', 'referencePhone',
+    ];
+    for (const field of fields) {
+      if (data[field] !== undefined) (updateData as any)[field] = data[field];
+    }
+    if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate);
+    if (data.endDate !== undefined) updateData.endDate = new Date(data.endDate);
+    return prisma.employeeExperience.update({ where: { id }, data: updateData });
+  }
+
+  async deleteExperience(id: string) {
+    return prisma.employeeExperience.delete({ where: { id } });
+  }
+
+  // ============================================================
+  // Employee Attachment
+  // ============================================================
+  async findAttachments(employeeId: string, category?: string) {
+    const where: Prisma.EmployeeAttachmentWhereInput = { employeeId };
+    if (category) where.category = category;
+    return prisma.employeeAttachment.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }],
+    });
+  }
+
+  async createAttachment(employeeId: string, data: CreateEmployeeAttachmentDTO) {
+    return prisma.employeeAttachment.create({
+      data: { ...data, employeeId },
+    });
+  }
+
+  async updateAttachment(id: string, data: UpdateEmployeeAttachmentDTO) {
+    const updateData: Prisma.EmployeeAttachmentUpdateInput = {};
+    const fields: (keyof UpdateEmployeeAttachmentDTO)[] = [
+      'category', 'fileName', 'fileUrl', 'originalName', 'fileSize', 'mimeType', 'description',
+    ];
+    for (const field of fields) {
+      if (data[field] !== undefined) (updateData as any)[field] = data[field];
+    }
+    return prisma.employeeAttachment.update({ where: { id }, data: updateData });
+  }
+
+  async deleteAttachment(id: string) {
+    return prisma.employeeAttachment.delete({ where: { id } });
   }
 
   async createCareerTransaction(

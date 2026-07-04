@@ -51,6 +51,17 @@ export class AuthRepository {
             },
           },
         },
+        companyAccesses: {
+          include: {
+            company: {
+              select: {
+                id: true,
+                groupId: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -96,6 +107,17 @@ export class AuthRepository {
                     permission: true,
                   },
                 },
+              },
+            },
+          },
+        },
+        companyAccesses: {
+          include: {
+            company: {
+              select: {
+                id: true,
+                groupId: true,
+                name: true,
               },
             },
           },

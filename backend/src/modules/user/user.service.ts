@@ -2,7 +2,12 @@ import { userRepository } from './user.repository';
 import { passwordHandler } from '@/shared/security/PasswordHandler';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError } from '@/shared/exceptions/AppError';
-import { CreateUserDTO, UpdateUserDTO } from './user.dto';
+import {
+  CreateUserDTO,
+  UpdateUserDTO,
+  CreateUserCompanyAccessDTO,
+  UpdateUserCompanyAccessDTO,
+} from './user.dto';
 import { authRepository } from '../auth/auth.repository';
 
 const logger = new WinstonLogger('UserService');
@@ -57,6 +62,63 @@ export class UserService {
     await this.findById(id);
     await userRepository.softDelete(id);
     logger.info(`User soft deleted: ${id}`);
+  }
+
+  async findCompanyAccesses(userId: string) {
+    await this.findById(userId);
+    return userRepository.findCompanyAccesses(userId);
+  }
+
+  async createCompanyAccess(userId: string, dto: CreateUserCompanyAccessDTO) {
+    await this.findById(userId);
+
+    const existing = await userRepository.findCompanyAccessByUserAndCompany(userId, dto.companyId);
+    if (existing) {
+      throw new ConflictError('Company access already exists for this user');
+    }
+
+    return userRepository.createCompanyAccess({
+      userId,
+      companyId: dto.companyId,
+      groupId: dto.groupId || null,
+      accessScope: dto.accessScope,
+      roleOverride: dto.roleOverride || null,
+    });
+  }
+
+  async updateCompanyAccess(userId: string, accessId: string, dto: UpdateUserCompanyAccessDTO) {
+    await this.findById(userId);
+
+    const current = await userRepository.findCompanyAccessById(accessId);
+    if (!current || current.userId !== userId) {
+      throw new NotFoundError('User company access not found');
+    }
+
+    const nextCompanyId = dto.companyId || current.companyId;
+    if (nextCompanyId !== current.companyId) {
+      const existing = await userRepository.findCompanyAccessByUserAndCompany(userId, nextCompanyId);
+      if (existing && existing.id !== accessId) {
+        throw new ConflictError('Company access already exists for this user');
+      }
+    }
+
+    return userRepository.updateCompanyAccess(accessId, {
+      ...(dto.companyId !== undefined ? { companyId: dto.companyId } : {}),
+      ...(dto.groupId !== undefined ? { groupId: dto.groupId || null } : {}),
+      ...(dto.accessScope !== undefined ? { accessScope: dto.accessScope } : {}),
+      ...(dto.roleOverride !== undefined ? { roleOverride: dto.roleOverride || null } : {}),
+    });
+  }
+
+  async deleteCompanyAccess(userId: string, accessId: string) {
+    await this.findById(userId);
+
+    const current = await userRepository.findCompanyAccessById(accessId);
+    if (!current || current.userId !== userId) {
+      throw new NotFoundError('User company access not found');
+    }
+
+    await userRepository.deleteCompanyAccess(accessId);
   }
 }
 

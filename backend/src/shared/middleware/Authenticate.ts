@@ -7,6 +7,7 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     email: string;
     companyId?: string;
+    companyScope?: string[];
     groupId?: string;
     permissions?: string[];
     roles?: string[];
@@ -37,6 +38,7 @@ export function authenticate(req: AuthenticatedRequest, _res: Response, next: Ne
       id: decoded.sub,
       email: decoded.email,
       companyId: decoded.companyId,
+      companyScope: decoded.companyScope,
       groupId: decoded.groupId,
       permissions: decoded.permissions,
       roles: decoded.roles,
@@ -73,6 +75,7 @@ export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, 
       id: decoded.sub,
       email: decoded.email,
       companyId: decoded.companyId,
+      companyScope: decoded.companyScope,
       groupId: decoded.groupId,
       permissions: decoded.permissions,
       roles: decoded.roles,

@@ -20,7 +20,7 @@ import { AuthResponse, LoginDTO, ChangePasswordDTO } from './auth.dto';
 const logger = new WinstonLogger('AuthService');
 
 export class AuthService {
-  private buildAuthContext(user: any) {
+  private async buildAuthContext(user: any) {
     const roles: string[] = user.userRoles.map((ur: any) => ur.role.code);
     const permissions = Array.from(
       new Set<string>(
@@ -32,6 +32,50 @@ export class AuthService {
       )
     );
 
+    const companyScope = new Set<string>();
+    const primaryCompanyId =
+      user.employee?.companyId || user.userRoles.find((ur: any) => ur.companyId)?.companyId;
+    const groupId =
+      user.employee?.company?.groupId ||
+      user.companyAccesses?.find((access: any) => access.groupId)?.groupId ||
+      user.companyAccesses?.find((access: any) => access.company?.groupId)?.company?.groupId ||
+      user.userRoles.find((ur: any) => ur.groupId)?.groupId;
+
+    if (primaryCompanyId) {
+      companyScope.add(primaryCompanyId);
+    }
+
+    user.userRoles.forEach((ur: any) => {
+      if (ur.companyId) {
+        companyScope.add(ur.companyId);
+      }
+    });
+
+    user.companyAccesses?.forEach((access: any) => {
+      if (access.companyId) {
+        companyScope.add(access.companyId);
+      }
+    });
+
+    const hasGroupWideScope = user.userRoles.some(
+      (ur: any) =>
+        ur.scopeType === 'GROUP' ||
+        ur.role?.scope === 'GROUP' ||
+        (!!ur.groupId && !ur.companyId)
+    ) || user.companyAccesses?.some((access: any) => access.accessScope === 'GROUP_WIDE');
+
+    if (groupId && hasGroupWideScope) {
+      const companies = await prisma.company.findMany({
+        where: {
+          groupId,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+
+      companies.forEach((company) => companyScope.add(company.id));
+    }
+
     return {
       id: user.id,
       email: user.email,
@@ -39,8 +83,9 @@ export class AuthService {
       name: user.employee?.fullName,
       roles,
       permissions,
-      companyId: user.employee?.companyId || undefined,
-      groupId: user.employee?.company?.groupId || undefined,
+      companyId: primaryCompanyId || undefined,
+      companyScope: Array.from(companyScope),
+      groupId: groupId || undefined,
       mustChangePassword: user.mustChangePassword,
     };
   }
@@ -99,7 +144,7 @@ export class AuthService {
     await authRepository.updateUserLoginSuccess(user.id);
 
     // Generate tokens
-    const authUser = this.buildAuthContext(user);
+    const authUser = await this.buildAuthContext(user);
     const tokens = await this.generateTokens(authUser, ipAddress, userAgent);
 
     // Create login log
@@ -191,7 +236,7 @@ export class AuthService {
     this.validateUserStatus(user);
 
     // Generate new tokens
-    const authUser = this.buildAuthContext(user);
+    const authUser = await this.buildAuthContext(user);
     const tokens = await this.generateTokens(authUser, ipAddress, userAgent, decoded.family);
 
     // Create login log
@@ -294,7 +339,7 @@ export class AuthService {
       throw new AuthError('User not found');
     }
 
-    const authUser = this.buildAuthContext(user);
+    const authUser = await this.buildAuthContext(user);
 
     return {
       ...authUser,
@@ -310,6 +355,7 @@ export class AuthService {
       id: string;
       email: string;
       companyId?: string;
+      companyScope: string[];
       groupId?: string;
       permissions: string[];
       roles: string[];
@@ -323,6 +369,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       companyId: user.companyId,
+      companyScope: user.companyScope,
       groupId: user.groupId,
       permissions: user.permissions,
       roles: user.roles,

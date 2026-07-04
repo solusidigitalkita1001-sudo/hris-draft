@@ -75,6 +75,7 @@ export interface AuthResponse {
     roles: string[];
     permissions: string[];
     companyId?: string;
+    companyScope: string[];
     groupId?: string;
     mustChangePassword: boolean;
   };

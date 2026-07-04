@@ -64,6 +64,127 @@ export interface CareerTransaction {
   creator?: { id: string; email: string } | null;
 }
 
+// ============================================================
+// Employee Detail Sub-Entities
+// ============================================================
+
+export interface EmployeeFamily {
+  id: string;
+  employeeId: string;
+  fullName: string;
+  relationship: string;
+  idNumber?: string;
+  placeOfBirth?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  religion?: string;
+  occupation?: string;
+  phone?: string;
+  address?: string;
+  isEmergencyContact?: boolean;
+  isDependent?: boolean;
+  maritalStatus?: string;
+  educationLevel?: string;
+  orderSequence?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeEducation {
+  id: string;
+  employeeId: string;
+  level: string;
+  institutionName: string;
+  major?: string;
+  degree?: string;
+  startDate?: string;
+  endDate?: string;
+  isGraduated?: boolean;
+  gpa?: number;
+  city?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeEmergencyContact {
+  id: string;
+  employeeId: string;
+  fullName: string;
+  relationship: string;
+  phone: string;
+  alternativePhone?: string;
+  address?: string;
+  isPrimary?: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeTraining {
+  id: string;
+  employeeId: string;
+  trainingName: string;
+  organizer?: string;
+  startDate?: string;
+  endDate?: string;
+  duration?: string;
+  trainingType?: string;
+  description?: string;
+  certificateUrl?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeSkill {
+  id: string;
+  employeeId: string;
+  skillName: string;
+  category?: string;
+  proficiencyLevel?: string;
+  yearsOfExperience?: number;
+  lastUsedDate?: string;
+  isCertified?: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeExperience {
+  id: string;
+  employeeId: string;
+  companyName: string;
+  position: string;
+  startDate: string;
+  endDate?: string;
+  isCurrentPosition?: boolean;
+  jobDescription?: string;
+  achievements?: string;
+  industry?: string;
+  city?: string;
+  reasonForLeaving?: string;
+  referenceName?: string;
+  referencePhone?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeAttachment {
+  id: string;
+  employeeId: string;
+  category: string;
+  fileName: string;
+  fileUrl: string;
+  originalName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  description?: string;
+  uploadedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface EmployeeQueryResult {
   data: Employee[];
   total: number;
@@ -173,6 +294,161 @@ class EmployeeService {
       responseType: 'blob',
     });
     return response.data;
+  }
+
+  // ============================================================
+  // Employee Family
+  // ============================================================
+  async getFamilies(employeeId: string): Promise<EmployeeFamily[]> {
+    const response = await api.get(`/employees/${employeeId}/families`);
+    return response.data.data;
+  }
+
+  async createFamily(employeeId: string, data: Partial<EmployeeFamily>): Promise<EmployeeFamily> {
+    const response = await api.post(`/employees/${employeeId}/families`, data);
+    return response.data.data;
+  }
+
+  async updateFamily(employeeId: string, familyId: string, data: Partial<EmployeeFamily>): Promise<EmployeeFamily> {
+    const response = await api.put(`/employees/${employeeId}/families/${familyId}`, data);
+    return response.data.data;
+  }
+
+  async deleteFamily(employeeId: string, familyId: string): Promise<void> {
+    await api.delete(`/employees/${employeeId}/families/${familyId}`);
+  }
+
+  // ============================================================
+  // Employee Education
+  // ============================================================
+  async getEducations(employeeId: string): Promise<EmployeeEducation[]> {
+    const response = await api.get(`/employees/${employeeId}/educations`);
+    return response.data.data;
+  }
+
+  async createEducation(employeeId: string, data: Partial<EmployeeEducation>): Promise<EmployeeEducation> {
+    const response = await api.post(`/employees/${employeeId}/educations`, data);
+    return response.data.data;
+  }
+
+  async updateEducation(employeeId: string, educationId: string, data: Partial<EmployeeEducation>): Promise<EmployeeEducation> {
+    const response = await api.put(`/employees/${employeeId}/educations/${educationId}`, data);
+    return response.data.data;
+  }
+
+  async deleteEducation(employeeId: string, educationId: string): Promise<void> {
+    await api.delete(`/employees/${employeeId}/educations/${educationId}`);
+  }
+
+  // ============================================================
+  // Employee Emergency Contact
+  // ============================================================
+  async getEmergencyContacts(employeeId: string): Promise<EmployeeEmergencyContact[]> {
+    const response = await api.get(`/employees/${employeeId}/emergency-contacts`);
+    return response.data.data;
+  }
+
+  async createEmergencyContact(employeeId: string, data: Partial<EmployeeEmergencyContact>): Promise<EmployeeEmergencyContact> {
+    const response = await api.post(`/employees/${employeeId}/emergency-contacts`, data);
+    return response.data.data;
+  }
+
+  async updateEmergencyContact(employeeId: string, emergencyId: string, data: Partial<EmployeeEmergencyContact>): Promise<EmployeeEmergencyContact> {
+    const response = await api.put(`/employees/${employeeId}/emergency-contacts/${emergencyId}`, data);
+    return response.data.data;
+  }
+
+  async deleteEmergencyContact(employeeId: string, emergencyId: string): Promise<void> {
+    await api.delete(`/employees/${employeeId}/emergency-contacts/${emergencyId}`);
+  }
+
+  // ============================================================
+  // Employee Training
+  // ============================================================
+  async getTrainings(employeeId: string): Promise<EmployeeTraining[]> {
+    const response = await api.get(`/employees/${employeeId}/trainings`);
+    return response.data.data;
+  }
+
+  async createTraining(employeeId: string, data: Partial<EmployeeTraining>): Promise<EmployeeTraining> {
+    const response = await api.post(`/employees/${employeeId}/trainings`, data);
+    return response.data.data;
+  }
+
+  async updateTraining(employeeId: string, trainingId: string, data: Partial<EmployeeTraining>): Promise<EmployeeTraining> {
+    const response = await api.put(`/employees/${employeeId}/trainings/${trainingId}`, data);
+    return response.data.data;
+  }
+
+  async deleteTraining(employeeId: string, trainingId: string): Promise<void> {
+    await api.delete(`/employees/${employeeId}/trainings/${trainingId}`);
+  }
+
+  // ============================================================
+  // Employee Skill
+  // ============================================================
+  async getSkills(employeeId: string): Promise<EmployeeSkill[]> {
+    const response = await api.get(`/employees/${employeeId}/skills`);
+    return response.data.data;
+  }
+
+  async createSkill(employeeId: string, data: Partial<EmployeeSkill>): Promise<EmployeeSkill> {
+    const response = await api.post(`/employees/${employeeId}/skills`, data);
+    return response.data.data;
+  }
+
+  async updateSkill(employeeId: string, skillId: string, data: Partial<EmployeeSkill>): Promise<EmployeeSkill> {
+    const response = await api.put(`/employees/${employeeId}/skills/${skillId}`, data);
+    return response.data.data;
+  }
+
+  async deleteSkill(employeeId: string, skillId: string): Promise<void> {
+    await api.delete(`/employees/${employeeId}/skills/${skillId}`);
+  }
+
+  // ============================================================
+  // Employee Experience
+  // ============================================================
+  async getExperiences(employeeId: string): Promise<EmployeeExperience[]> {
+    const response = await api.get(`/employees/${employeeId}/experiences`);
+    return response.data.data;
+  }
+
+  async createExperience(employeeId: string, data: Partial<EmployeeExperience>): Promise<EmployeeExperience> {
+    const response = await api.post(`/employees/${employeeId}/experiences`, data);
+    return response.data.data;
+  }
+
+  async updateExperience(employeeId: string, experienceId: string, data: Partial<EmployeeExperience>): Promise<EmployeeExperience> {
+    const response = await api.put(`/employees/${employeeId}/experiences/${experienceId}`, data);
+    return response.data.data;
+  }
+
+  async deleteExperience(employeeId: string, experienceId: string): Promise<void> {
+    await api.delete(`/employees/${employeeId}/experiences/${experienceId}`);
+  }
+
+  // ============================================================
+  // Employee Attachment
+  // ============================================================
+  async getAttachments(employeeId: string, category?: string): Promise<EmployeeAttachment[]> {
+    const params = category ? { category } : {};
+    const response = await api.get(`/employees/${employeeId}/attachments`, { params });
+    return response.data.data;
+  }
+
+  async createAttachment(employeeId: string, data: Partial<EmployeeAttachment>): Promise<EmployeeAttachment> {
+    const response = await api.post(`/employees/${employeeId}/attachments`, data);
+    return response.data.data;
+  }
+
+  async updateAttachment(employeeId: string, attachmentId: string, data: Partial<EmployeeAttachment>): Promise<EmployeeAttachment> {
+    const response = await api.put(`/employees/${employeeId}/attachments/${attachmentId}`, data);
+    return response.data.data;
+  }
+
+  async deleteAttachment(employeeId: string, attachmentId: string): Promise<void> {
+    await api.delete(`/employees/${employeeId}/attachments/${attachmentId}`);
   }
 }
 
