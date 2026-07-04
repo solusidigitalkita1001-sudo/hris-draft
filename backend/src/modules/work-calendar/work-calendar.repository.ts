@@ -9,6 +9,8 @@ import type {
   UpdateHolidayDTO,
   CreateShiftFormulaDTO,
   UpdateShiftFormulaDTO,
+  CreateShiftSwapRequestDTO,
+  ReviewShiftSwapRequestDTO,
 } from './work-calendar.dto';
 
 type WorkDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
@@ -30,6 +32,15 @@ export interface ResolvedEmployeeDaySchedule {
   shiftFormulaName?: string | null;
   shiftFormulaCode?: string | null;
   crossesMidnight?: boolean;
+  label?: string | null;
+  notes?: string | null;
+  overrideSource?: 'SHIFT_SWAP' | null;
+  overrideRequestId?: string | null;
+  swappedWithEmployee?: {
+    id: string;
+    fullName: string;
+    employeeNumber: string;
+  } | null;
 }
 
 export interface WorkCalendarResolutionContext {
@@ -89,11 +100,27 @@ export interface ResolvedMyWorkCalendarMonth {
     offDays: number;
     calendarDays: number;
     shiftDays: number;
+    shiftSwapDays: number;
     approvedLeaveDays: number;
     approvedPermissionDays: number;
     approvedSickDays: number;
   };
   days: ResolvedWorkCalendarMonthDay[];
+}
+
+interface ShiftOverrideSchedulePayload {
+  calendarId: string | null;
+  dayType: string;
+  workStart: string | null;
+  workEnd: string | null;
+  isWorkingDay: boolean;
+  scheduleSource: 'CALENDAR' | 'SHIFT_FORMULA';
+  shiftFormulaId?: string | null;
+  shiftFormulaName?: string | null;
+  shiftFormulaCode?: string | null;
+  crossesMidnight?: boolean;
+  label?: string | null;
+  notes?: string | null;
 }
 
 const DAY_KEYS_BY_INDEX: WorkDayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -204,6 +231,9 @@ function buildCalendarSchedule(
       label: calendarDay.name,
       notes: calendarDay.notes,
       absence: null,
+      overrideSource: null,
+      overrideRequestId: null,
+      swappedWithEmployee: null,
     };
   }
 
@@ -225,6 +255,9 @@ function buildCalendarSchedule(
     label: null,
     notes: null,
     absence: null,
+    overrideSource: null,
+    overrideRequestId: null,
+    swappedWithEmployee: null,
   };
 }
 
@@ -266,6 +299,9 @@ function buildShiftSchedule(
     label: activeDay.label,
     notes: null,
     absence: null,
+    overrideSource: null,
+    overrideRequestId: null,
+    swappedWithEmployee: null,
   };
 }
 
@@ -280,6 +316,83 @@ function applyApprovedAbsence(
   return {
     ...day,
     absence,
+  };
+}
+
+function toShiftOverridePayload(
+  schedule: ResolvedEmployeeDaySchedule | ResolvedWorkCalendarMonthDay
+): ShiftOverrideSchedulePayload {
+  return {
+    calendarId: schedule.calendarId,
+    dayType: schedule.dayType,
+    workStart: schedule.workStart ?? null,
+    workEnd: schedule.workEnd ?? null,
+    isWorkingDay: schedule.isWorkingDay,
+    scheduleSource: schedule.scheduleSource,
+    shiftFormulaId: schedule.shiftFormulaId ?? null,
+    shiftFormulaName: schedule.shiftFormulaName ?? null,
+    shiftFormulaCode: schedule.shiftFormulaCode ?? null,
+    crossesMidnight: schedule.crossesMidnight ?? false,
+    label: schedule.label ?? null,
+    notes: schedule.notes ?? null,
+  };
+}
+
+function parseShiftOverridePayload(value: Prisma.JsonValue): ShiftOverrideSchedulePayload {
+  const payload = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+  return {
+    calendarId: typeof payload.calendarId === 'string' ? payload.calendarId : null,
+    dayType: typeof payload.dayType === 'string' ? payload.dayType : 'WE',
+    workStart: typeof payload.workStart === 'string' ? payload.workStart : null,
+    workEnd: typeof payload.workEnd === 'string' ? payload.workEnd : null,
+    isWorkingDay: Boolean(payload.isWorkingDay),
+    scheduleSource: payload.scheduleSource === 'SHIFT_FORMULA' ? 'SHIFT_FORMULA' : 'CALENDAR',
+    shiftFormulaId: typeof payload.shiftFormulaId === 'string' ? payload.shiftFormulaId : null,
+    shiftFormulaName: typeof payload.shiftFormulaName === 'string' ? payload.shiftFormulaName : null,
+    shiftFormulaCode: typeof payload.shiftFormulaCode === 'string' ? payload.shiftFormulaCode : null,
+    crossesMidnight: Boolean(payload.crossesMidnight),
+    label: typeof payload.label === 'string' ? payload.label : null,
+    notes: typeof payload.notes === 'string' ? payload.notes : null,
+  };
+}
+
+function buildShiftOverrideSchedule(
+  date: Date,
+  override: {
+    overrideSchedule: Prisma.JsonValue;
+    notes: string | null;
+    shiftSwapRequestId: string | null;
+  },
+  counterpart?: {
+    id: string;
+    fullName: string;
+    employeeNumber: string;
+  } | null
+): ResolvedWorkCalendarMonthDay {
+  const schedule = parseShiftOverridePayload(override.overrideSchedule);
+  const swapNotes = counterpart
+    ? `Tukar shift dengan ${counterpart.fullName} (${counterpart.employeeNumber})`
+    : null;
+
+  return {
+    date: toDateKey(date),
+    calendarId: schedule.calendarId,
+    dayType: schedule.dayType,
+    workStart: schedule.workStart,
+    workEnd: schedule.workEnd,
+    isWorkingDay: schedule.isWorkingDay,
+    scheduleSource: schedule.scheduleSource,
+    shiftFormulaId: schedule.shiftFormulaId ?? null,
+    shiftFormulaName: schedule.shiftFormulaName ?? null,
+    shiftFormulaCode: schedule.shiftFormulaCode ?? null,
+    crossesMidnight: schedule.crossesMidnight ?? false,
+    label: schedule.label ?? 'Tukar Shift',
+    notes: [schedule.notes, override.notes, swapNotes].filter(Boolean).join(' • ') || null,
+    absence: null,
+    overrideSource: 'SHIFT_SWAP',
+    overrideRequestId: override.shiftSwapRequestId,
+    swappedWithEmployee: counterpart ?? null,
   };
 }
 
@@ -606,6 +719,597 @@ export class WorkCalendarRepository {
     });
   }
 
+  private async findEmployeeByUserId(userId: string) {
+    const user = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        employee: {
+          select: {
+            id: true,
+            companyId: true,
+            branchId: true,
+            departmentId: true,
+            positionId: true,
+            employeeNumber: true,
+            fullName: true,
+            employeeCategory: true,
+            shiftFormulaId: true,
+            shiftStartDate: true,
+            status: true,
+            position: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user?.employee) {
+      throw new NotFoundError('User tidak terhubung ke data employee');
+    }
+
+    return user.employee;
+  }
+
+  private async resolveShiftSwapApprover(employee: {
+    id: string;
+    companyId: string;
+    branchId: string | null;
+    departmentId: string | null;
+  }) {
+    if (!employee.branchId || !employee.departmentId) {
+      throw new BadRequestError('Pegawai belum memiliki branch atau department untuk alur tukar shift');
+    }
+
+    const approver = await prisma.employee.findFirst({
+      where: {
+        companyId: employee.companyId,
+        branchId: employee.branchId,
+        departmentId: employee.departmentId,
+        employeeCategory: 'FACTORY',
+        status: 'ACTIVE',
+        deletedAt: null,
+        id: { not: employee.id },
+        position: {
+          code: 'OPSL',
+        },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        employeeNumber: true,
+        position: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!approver) {
+      throw new BadRequestError('Kepala regu untuk tim ini belum tersedia');
+    }
+
+    return approver;
+  }
+
+  private async resolveBaseScheduleForShiftSwap(employee: {
+    id: string;
+    companyId: string;
+    branchId: string | null;
+    departmentId: string | null;
+    employeeCategory: string;
+  }, date: Date): Promise<ResolvedEmployeeDaySchedule | null> {
+    if (employee.employeeCategory === 'FACTORY') {
+      const shiftSchedule = await this.resolveShiftFormulaSchedule(employee.id, date);
+      if (shiftSchedule) {
+        return shiftSchedule;
+      }
+    }
+
+    return this.findDayScheduleForContext({
+      companyId: employee.companyId,
+      branchId: employee.branchId,
+      departmentId: employee.departmentId,
+    }, date);
+  }
+
+  async findEmployeeShiftOverrideSchedule(employeeId: string, date: Date): Promise<ResolvedEmployeeDaySchedule | null> {
+    const override = await prisma.employeeShiftOverride.findFirst({
+      where: {
+        employeeId,
+        deletedAt: null,
+        date: {
+          gte: startOfDateOnly(date),
+          lte: endOfDateOnly(date),
+        },
+      },
+      include: {
+        shiftSwapRequest: {
+          select: {
+            id: true,
+            requesterEmployeeId: true,
+            targetEmployeeId: true,
+            requesterEmployee: {
+              select: {
+                id: true,
+                fullName: true,
+                employeeNumber: true,
+              },
+            },
+            targetEmployee: {
+              select: {
+                id: true,
+                fullName: true,
+                employeeNumber: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!override) {
+      return null;
+    }
+
+    const counterpart = override.shiftSwapRequest
+      ? override.shiftSwapRequest.requesterEmployeeId === employeeId
+        ? override.shiftSwapRequest.targetEmployee
+        : override.shiftSwapRequest.requesterEmployee
+      : null;
+
+    return buildShiftOverrideSchedule(date, {
+      overrideSchedule: override.overrideSchedule,
+      notes: override.notes,
+      shiftSwapRequestId: override.shiftSwapRequestId,
+    }, counterpart);
+  }
+
+  async findShiftSwapCandidatesForUser(userId: string, shiftDate?: string) {
+    const employee = await this.findEmployeeByUserId(userId);
+    const approver = await this.resolveShiftSwapApprover(employee);
+
+    if (employee.employeeCategory !== 'FACTORY') {
+      return {
+        requester: employee,
+        approver,
+        candidates: [],
+      };
+    }
+
+    const targetDate = shiftDate ? startOfDateOnly(new Date(shiftDate)) : null;
+
+    const candidates = await prisma.employee.findMany({
+      where: {
+        companyId: employee.companyId,
+        branchId: employee.branchId,
+        departmentId: employee.departmentId,
+        employeeCategory: 'FACTORY',
+        status: 'ACTIVE',
+        deletedAt: null,
+        id: {
+          notIn: [employee.id, approver.id],
+        },
+      },
+      select: {
+        id: true,
+        employeeNumber: true,
+        fullName: true,
+        shiftFormulaId: true,
+        shiftStartDate: true,
+        position: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [
+        { fullName: 'asc' },
+      ],
+    });
+
+    const requesterSchedule = targetDate
+      ? await this.resolveBaseScheduleForShiftSwap(employee, targetDate)
+      : null;
+
+    const candidateSchedules = targetDate
+      ? await Promise.all(
+          candidates.map(async (candidate) => ({
+            employeeId: candidate.id,
+            schedule: await this.resolveBaseScheduleForShiftSwap({
+              id: candidate.id,
+              companyId: employee.companyId,
+              branchId: employee.branchId,
+              departmentId: employee.departmentId,
+              employeeCategory: 'FACTORY',
+            }, targetDate),
+          }))
+        )
+      : [];
+
+    const candidateScheduleMap = new Map(candidateSchedules.map((entry) => [entry.employeeId, entry.schedule]));
+
+    return {
+      requester: {
+        ...employee,
+        schedule: requesterSchedule,
+      },
+      approver,
+      candidates: candidates.map((candidate) => ({
+        ...candidate,
+        schedule: candidateScheduleMap.get(candidate.id) ?? null,
+      })),
+    };
+  }
+
+  async findMyShiftSwapRequests(userId: string, status?: string) {
+    const employee = await this.findEmployeeByUserId(userId);
+
+    return prisma.shiftSwapRequest.findMany({
+      where: {
+        requesterEmployeeId: employee.id,
+        deletedAt: null,
+        ...(status ? { status: status as any } : {}),
+      },
+      include: {
+        requesterEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        targetEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        approverEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+      },
+      orderBy: [
+        { shiftDate: 'desc' },
+        { createdAt: 'desc' },
+      ],
+    });
+  }
+
+  async findMyShiftSwapApprovals(userId: string, status?: string) {
+    const employee = await this.findEmployeeByUserId(userId);
+
+    return prisma.shiftSwapRequest.findMany({
+      where: {
+        approverEmployeeId: employee.id,
+        deletedAt: null,
+        ...(status ? { status: status as any } : {}),
+      },
+      include: {
+        requesterEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        targetEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        approverEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+      },
+      orderBy: [
+        { status: 'asc' },
+        { shiftDate: 'desc' },
+        { createdAt: 'desc' },
+      ],
+    });
+  }
+
+  async createShiftSwapRequest(userId: string, data: CreateShiftSwapRequestDTO) {
+    const requester = await this.findEmployeeByUserId(userId);
+
+    if (requester.employeeCategory !== 'FACTORY') {
+      throw new BadRequestError('Request tukar shift hanya tersedia untuk pegawai pabrik');
+    }
+
+    const shiftDate = startOfDateOnly(new Date(data.shiftDate));
+    const target = await prisma.employee.findFirst({
+      where: {
+        id: data.targetEmployeeId,
+        companyId: requester.companyId,
+        branchId: requester.branchId,
+        departmentId: requester.departmentId,
+        employeeCategory: 'FACTORY',
+        status: 'ACTIVE',
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        companyId: true,
+        branchId: true,
+        departmentId: true,
+        employeeCategory: true,
+        fullName: true,
+        employeeNumber: true,
+      },
+    });
+
+    if (!target) {
+      throw new BadRequestError('Pegawai tujuan tukar shift tidak ditemukan dalam regu yang sama');
+    }
+
+    if (target.id === requester.id) {
+      throw new BadRequestError('Pegawai tidak bisa mengajukan tukar shift dengan dirinya sendiri');
+    }
+
+    const approver = await this.resolveShiftSwapApprover(requester);
+
+    const [requesterSchedule, targetSchedule, existingPendingRequest, existingOverrides] = await Promise.all([
+      this.resolveBaseScheduleForShiftSwap(requester, shiftDate),
+      this.resolveBaseScheduleForShiftSwap(target, shiftDate),
+      prisma.shiftSwapRequest.findFirst({
+        where: {
+          deletedAt: null,
+          status: 'PENDING',
+          shiftDate,
+          OR: [
+            { requesterEmployeeId: { in: [requester.id, target.id] } },
+            { targetEmployeeId: { in: [requester.id, target.id] } },
+          ],
+        },
+        select: { id: true },
+      }),
+      prisma.employeeShiftOverride.findMany({
+        where: {
+          employeeId: { in: [requester.id, target.id] },
+          deletedAt: null,
+          date: shiftDate,
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingPendingRequest) {
+      throw new BadRequestError('Sudah ada request tukar shift yang masih pending pada tanggal tersebut');
+    }
+
+    if (existingOverrides.length > 0) {
+      throw new BadRequestError('Jadwal pada tanggal tersebut sudah memiliki override resmi');
+    }
+
+    if (!requesterSchedule || !targetSchedule || !requesterSchedule.isWorkingDay || !targetSchedule.isWorkingDay) {
+      throw new BadRequestError('Kedua pegawai harus sama-sama memiliki jadwal kerja aktif pada tanggal tukar shift');
+    }
+
+    const isSameSchedule = requesterSchedule.workStart === targetSchedule.workStart
+      && requesterSchedule.workEnd === targetSchedule.workEnd
+      && requesterSchedule.dayType === targetSchedule.dayType
+      && requesterSchedule.shiftFormulaCode === targetSchedule.shiftFormulaCode;
+
+    if (isSameSchedule) {
+      throw new BadRequestError('Shift kedua pegawai sama, jadi tidak perlu tukar shift');
+    }
+
+    return prisma.shiftSwapRequest.create({
+      data: {
+        companyId: requester.companyId,
+        requesterEmployeeId: requester.id,
+        targetEmployeeId: target.id,
+        approverEmployeeId: approver.id,
+        shiftDate,
+        reason: data.reason,
+      },
+      include: {
+        requesterEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        targetEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        approverEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+      },
+    });
+  }
+
+  async cancelShiftSwapRequest(userId: string, requestId: string) {
+    const employee = await this.findEmployeeByUserId(userId);
+
+    const result = await prisma.shiftSwapRequest.updateMany({
+      where: {
+        id: requestId,
+        requesterEmployeeId: employee.id,
+        status: 'PENDING',
+        deletedAt: null,
+      },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+      },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundError('Request tukar shift tidak ditemukan atau sudah diproses');
+    }
+
+    return { count: result.count };
+  }
+
+  async approveShiftSwapRequest(userId: string, requestId: string, data: ReviewShiftSwapRequestDTO) {
+    const approver = await this.findEmployeeByUserId(userId);
+    const request = await prisma.shiftSwapRequest.findFirst({
+      where: {
+        id: requestId,
+        deletedAt: null,
+      },
+      include: {
+        requesterEmployee: {
+          select: {
+            id: true,
+            companyId: true,
+            branchId: true,
+            departmentId: true,
+            employeeCategory: true,
+            fullName: true,
+            employeeNumber: true,
+          },
+        },
+        targetEmployee: {
+          select: {
+            id: true,
+            companyId: true,
+            branchId: true,
+            departmentId: true,
+            employeeCategory: true,
+            fullName: true,
+            employeeNumber: true,
+          },
+        },
+      },
+    });
+
+    if (!request || request.approverEmployeeId !== approver.id) {
+      throw new NotFoundError('Request tukar shift tidak ditemukan untuk kepala regu ini');
+    }
+
+    if (request.status !== 'PENDING') {
+      throw new BadRequestError('Request tukar shift sudah diproses sebelumnya');
+    }
+
+    const shiftDate = startOfDateOnly(request.shiftDate);
+    const [requesterSchedule, targetSchedule] = await Promise.all([
+      this.resolveBaseScheduleForShiftSwap(request.requesterEmployee, shiftDate),
+      this.resolveBaseScheduleForShiftSwap(request.targetEmployee, shiftDate),
+    ]);
+
+    if (!requesterSchedule || !targetSchedule) {
+      throw new BadRequestError('Jadwal shift salah satu pegawai tidak dapat di-resolve');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await tx.employeeShiftOverride.upsert({
+        where: {
+          employeeId_date: {
+            employeeId: request.requesterEmployeeId,
+            date: shiftDate,
+          },
+        },
+        update: {
+          companyId: request.companyId,
+          shiftSwapRequestId: request.id,
+          source: 'SHIFT_SWAP',
+          originalSchedule: toShiftOverridePayload(requesterSchedule) as unknown as Prisma.InputJsonValue,
+          overrideSchedule: toShiftOverridePayload(targetSchedule) as unknown as Prisma.InputJsonValue,
+          notes: data.approvalNotes ?? null,
+          deletedAt: null,
+        },
+        create: {
+          companyId: request.companyId,
+          employeeId: request.requesterEmployeeId,
+          shiftSwapRequestId: request.id,
+          date: shiftDate,
+          source: 'SHIFT_SWAP',
+          originalSchedule: toShiftOverridePayload(requesterSchedule) as unknown as Prisma.InputJsonValue,
+          overrideSchedule: toShiftOverridePayload(targetSchedule) as unknown as Prisma.InputJsonValue,
+          notes: data.approvalNotes ?? null,
+        },
+      });
+
+      await tx.employeeShiftOverride.upsert({
+        where: {
+          employeeId_date: {
+            employeeId: request.targetEmployeeId,
+            date: shiftDate,
+          },
+        },
+        update: {
+          companyId: request.companyId,
+          shiftSwapRequestId: request.id,
+          source: 'SHIFT_SWAP',
+          originalSchedule: toShiftOverridePayload(targetSchedule) as unknown as Prisma.InputJsonValue,
+          overrideSchedule: toShiftOverridePayload(requesterSchedule) as unknown as Prisma.InputJsonValue,
+          notes: data.approvalNotes ?? null,
+          deletedAt: null,
+        },
+        create: {
+          companyId: request.companyId,
+          employeeId: request.targetEmployeeId,
+          shiftSwapRequestId: request.id,
+          date: shiftDate,
+          source: 'SHIFT_SWAP',
+          originalSchedule: toShiftOverridePayload(targetSchedule) as unknown as Prisma.InputJsonValue,
+          overrideSchedule: toShiftOverridePayload(requesterSchedule) as unknown as Prisma.InputJsonValue,
+          notes: data.approvalNotes ?? null,
+        },
+      });
+
+      return tx.shiftSwapRequest.update({
+        where: { id: request.id },
+        data: {
+          status: 'APPROVED',
+          approvalNotes: data.approvalNotes,
+          reviewedAt: new Date(),
+        },
+        include: {
+          requesterEmployee: {
+            select: { id: true, fullName: true, employeeNumber: true },
+          },
+          targetEmployee: {
+            select: { id: true, fullName: true, employeeNumber: true },
+          },
+          approverEmployee: {
+            select: { id: true, fullName: true, employeeNumber: true },
+          },
+        },
+      });
+    });
+  }
+
+  async rejectShiftSwapRequest(userId: string, requestId: string, data: ReviewShiftSwapRequestDTO) {
+    const approver = await this.findEmployeeByUserId(userId);
+    const request = await prisma.shiftSwapRequest.findFirst({
+      where: {
+        id: requestId,
+        approverEmployeeId: approver.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundError('Request tukar shift tidak ditemukan untuk kepala regu ini');
+    }
+
+    if (request.status !== 'PENDING') {
+      throw new BadRequestError('Request tukar shift sudah diproses sebelumnya');
+    }
+
+    return prisma.shiftSwapRequest.update({
+      where: { id: request.id },
+      data: {
+        status: 'REJECTED',
+        approvalNotes: data.approvalNotes,
+        reviewedAt: new Date(),
+      },
+      include: {
+        requesterEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        targetEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        approverEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+      },
+    });
+  }
+
   async resolveShiftFormulaSchedule(employeeId: string, date: Date): Promise<ResolvedEmployeeDaySchedule | null> {
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
@@ -661,6 +1365,11 @@ export class WorkCalendarRepository {
       shiftFormulaName: formula.name,
       shiftFormulaCode: formula.code,
       crossesMidnight: activeDay.crossesMidnight,
+      label: activeDay.label,
+      notes: null,
+      overrideSource: null,
+      overrideRequestId: null,
+      swappedWithEmployee: null,
     };
   }
 
@@ -742,6 +1451,11 @@ export class WorkCalendarRepository {
         shiftFormulaName: null,
         shiftFormulaCode: null,
         crossesMidnight: false,
+        label: calendarDay.name,
+        notes: calendarDay.notes,
+        overrideSource: null,
+        overrideRequestId: null,
+        swappedWithEmployee: null,
       };
     }
 
@@ -759,10 +1473,25 @@ export class WorkCalendarRepository {
       shiftFormulaName: null,
       shiftFormulaCode: null,
       crossesMidnight: false,
+      label: null,
+      notes: null,
+      overrideSource: null,
+      overrideRequestId: null,
+      swappedWithEmployee: null,
     };
   }
 
   async findEmployeeDaySchedule(employeeId: string, date: Date): Promise<ResolvedEmployeeDaySchedule | null> {
+    const overrideSchedule = await this.findEmployeeShiftOverrideSchedule(employeeId, date);
+    if (overrideSchedule) {
+      return overrideSchedule;
+    }
+
+    const shiftSchedule = await this.resolveShiftFormulaSchedule(employeeId, date);
+    if (shiftSchedule) {
+      return shiftSchedule;
+    }
+
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
       select: { companyId: true, branchId: true, departmentId: true },
@@ -847,6 +1576,37 @@ export class WorkCalendarRepository {
         })
       : [];
 
+    const shiftOverrides = await prisma.employeeShiftOverride.findMany({
+      where: {
+        employeeId: employee.id,
+        deletedAt: null,
+        date: { gte: start, lte: end },
+      },
+      include: {
+        shiftSwapRequest: {
+          select: {
+            id: true,
+            requesterEmployeeId: true,
+            targetEmployeeId: true,
+            requesterEmployee: {
+              select: {
+                id: true,
+                fullName: true,
+                employeeNumber: true,
+              },
+            },
+            targetEmployee: {
+              select: {
+                id: true,
+                fullName: true,
+                employeeNumber: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
     const [approvedLeaveRequests, approvedPermissionRequests] = await Promise.all([
       prisma.leaveRequest.findMany({
         where: {
@@ -898,14 +1658,33 @@ export class WorkCalendarRepository {
         },
       ])
     );
+    const shiftOverrideMap = new Map(
+      shiftOverrides.map((override) => [
+        toDateKeyInTimezone(override.date, calendarTimezone),
+        override,
+      ])
+    );
 
     const days: ResolvedWorkCalendarMonthDay[] = [];
     for (let current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
       const currentDate = new Date(current);
       const dateKey = toDateKey(currentDate);
       let resolvedDay: ResolvedWorkCalendarMonthDay;
+      const matchedOverride = shiftOverrideMap.get(dateKey);
 
-      if (shiftFormula && employee.shiftStartDate) {
+      if (matchedOverride) {
+        const counterpart = matchedOverride.shiftSwapRequest
+          ? matchedOverride.shiftSwapRequest.requesterEmployeeId === employee.id
+            ? matchedOverride.shiftSwapRequest.targetEmployee
+            : matchedOverride.shiftSwapRequest.requesterEmployee
+          : null;
+
+        resolvedDay = buildShiftOverrideSchedule(currentDate, {
+          overrideSchedule: matchedOverride.overrideSchedule,
+          notes: matchedOverride.notes,
+          shiftSwapRequestId: matchedOverride.shiftSwapRequestId,
+        }, counterpart);
+      } else if (shiftFormula && employee.shiftStartDate) {
         resolvedDay = buildShiftSchedule(shiftFormula, employee.shiftStartDate, currentDate);
       } else {
         if (!linkedCalendar) {
@@ -965,6 +1744,7 @@ export class WorkCalendarRepository {
     const workingDays = days.filter((day) => day.isWorkingDay).length;
     const shiftDays = days.filter((day) => day.scheduleSource === 'SHIFT_FORMULA').length;
     const calendarResolvedDays = days.length - shiftDays;
+    const shiftSwapDays = days.filter((day) => day.overrideSource === 'SHIFT_SWAP').length;
     const approvedLeaveDays = days.filter((day) => day.absence?.category === 'CUTI').length;
     const approvedPermissionDays = days.filter((day) => day.absence?.category === 'IZIN').length;
     const approvedSickDays = days.filter((day) => day.absence?.category === 'SAKIT').length;
@@ -1008,6 +1788,7 @@ export class WorkCalendarRepository {
         offDays: days.length - workingDays,
         calendarDays: calendarResolvedDays,
         shiftDays,
+        shiftSwapDays,
         approvedLeaveDays,
         approvedPermissionDays,
         approvedSickDays,

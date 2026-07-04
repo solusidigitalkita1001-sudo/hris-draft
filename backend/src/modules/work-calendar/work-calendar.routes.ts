@@ -7,6 +7,7 @@ import {
   createCalendarSchema, updateCalendarSchema, bulkUpdateDaysSchema,
   createHolidaySchema, updateHolidaySchema, copyCalendarSchema,
   createShiftFormulaSchema, updateShiftFormulaSchema,
+  createShiftSwapRequestSchema, reviewShiftSwapRequestSchema,
 } from './work-calendar.dto';
 
 const router = Router();
@@ -43,6 +44,13 @@ router.delete('/holidays/:hid', authorize({ resource: 'work-calendar', action: '
 
 // My Calendar
 router.get('/me/resolved', workCalendarController.getMyResolvedCalendar.bind(workCalendarController));
+router.get('/shift-swaps/candidates/my', workCalendarController.findShiftSwapCandidates.bind(workCalendarController));
+router.get('/shift-swaps/my', workCalendarController.findMyShiftSwapRequests.bind(workCalendarController));
+router.get('/shift-swaps/approvals/my', workCalendarController.findMyShiftSwapApprovals.bind(workCalendarController));
+router.post('/shift-swaps', validate(createShiftSwapRequestSchema), workCalendarController.createShiftSwapRequest.bind(workCalendarController));
+router.patch('/shift-swaps/:requestId/cancel', workCalendarController.cancelShiftSwapRequest.bind(workCalendarController));
+router.patch('/shift-swaps/:requestId/approve', validate(reviewShiftSwapRequestSchema), workCalendarController.approveShiftSwapRequest.bind(workCalendarController));
+router.patch('/shift-swaps/:requestId/reject', validate(reviewShiftSwapRequestSchema), workCalendarController.rejectShiftSwapRequest.bind(workCalendarController));
 
 // Employee & Team Calendar
 router.get('/employee/:employeeId', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.getEmployeeCalendar.bind(workCalendarController));

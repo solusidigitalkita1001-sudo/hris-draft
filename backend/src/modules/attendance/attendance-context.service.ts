@@ -164,7 +164,8 @@ export class AttendanceContextService {
       departmentId: resolvedDepartment?.id ?? null,
     };
 
-    const shiftSchedule = await workCalendarRepository.resolveShiftFormulaSchedule(employeeId, attendanceDate);
+    const overrideSchedule = await workCalendarRepository.findEmployeeShiftOverrideSchedule(employeeId, attendanceDate);
+    const shiftSchedule = overrideSchedule ?? await workCalendarRepository.resolveShiftFormulaSchedule(employeeId, attendanceDate);
     const schedule = shiftSchedule ?? await workCalendarRepository.findDayScheduleForContext(calendarContext, attendanceDate);
     if (!schedule) {
       throw new BadRequestError('No active work calendar found for the employee attendance context');

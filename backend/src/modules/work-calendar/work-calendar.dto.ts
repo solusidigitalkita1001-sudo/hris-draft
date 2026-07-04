@@ -90,6 +90,16 @@ export const updateShiftFormulaSchema = createShiftFormulaSchema.partial().exten
   days: z.array(shiftFormulaDaySchema).min(1).optional(),
 });
 
+export const createShiftSwapRequestSchema = z.object({
+  targetEmployeeId: z.string().uuid(),
+  shiftDate: z.string(),
+  reason: z.string().min(1).max(1000),
+});
+
+export const reviewShiftSwapRequestSchema = z.object({
+  approvalNotes: z.string().max(1000).optional(),
+});
+
 export type CreateCalendarDTO = z.infer<typeof createCalendarSchema>;
 export type UpdateCalendarDTO = z.infer<typeof updateCalendarSchema>;
 export type UpdateDayDTO = z.infer<typeof updateDaySchema>;
@@ -99,3 +109,5 @@ export type UpdateHolidayDTO = z.infer<typeof updateHolidaySchema>;
 export type CopyCalendarDTO = z.infer<typeof copyCalendarSchema>;
 export type CreateShiftFormulaDTO = z.infer<typeof createShiftFormulaSchema>;
 export type UpdateShiftFormulaDTO = z.infer<typeof updateShiftFormulaSchema>;
+export type CreateShiftSwapRequestDTO = z.infer<typeof createShiftSwapRequestSchema>;
+export type ReviewShiftSwapRequestDTO = z.infer<typeof reviewShiftSwapRequestSchema>;

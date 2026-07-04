@@ -117,6 +117,8 @@ model Company {
   employeeCompanyAssignments EmployeeCompanyAssignment[]
   branchAttendancePolicies   BranchAttendancePolicy[]
   shiftFormulas              ShiftFormula[]
+  shiftSwapRequests          ShiftSwapRequest[]
+  shiftOverrides             EmployeeShiftOverride[]
 
   @@index([groupId])
   @@index([code])
@@ -1097,6 +1099,61 @@ model ShiftFormulaDay {
   @@map("shift_formula_days")
 }
 
+model ShiftSwapRequest {
+  id                 String        @id @default(uuid()) @db.VarChar(36)
+  companyId          String        @map("company_id") @db.VarChar(36)
+  requesterEmployeeId String       @map("requester_employee_id") @db.VarChar(36)
+  targetEmployeeId   String        @map("target_employee_id") @db.VarChar(36)
+  approverEmployeeId String        @map("approver_employee_id") @db.VarChar(36)
+  shiftDate          DateTime      @map("shift_date") @db.Date
+  reason             String        @db.Text
+  status             RequestStatus @default(PENDING)
+  approvalNotes      String?       @map("approval_notes") @db.Text
+  reviewedAt         DateTime?     @map("reviewed_at")
+  cancelledAt        DateTime?     @map("cancelled_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  deletedAt          DateTime?     @map("deleted_at")
+
+  company           Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requesterEmployee Employee               @relation("ShiftSwapRequester", fields: [requesterEmployeeId], references: [id], onDelete: Cascade)
+  targetEmployee    Employee               @relation("ShiftSwapTarget", fields: [targetEmployeeId], references: [id], onDelete: Cascade)
+  approverEmployee  Employee               @relation("ShiftSwapApprover", fields: [approverEmployeeId], references: [id], onDelete: Restrict)
+  overrides         EmployeeShiftOverride[]
+
+  @@index([companyId, status])
+  @@index([requesterEmployeeId, status])
+  @@index([targetEmployeeId, status])
+  @@index([approverEmployeeId, status])
+  @@index([shiftDate])
+  @@map("shift_swap_requests")
+}
+
+model EmployeeShiftOverride {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  companyId          String   @map("company_id") @db.VarChar(36)
+  employeeId         String   @map("employee_id") @db.VarChar(36)
+  shiftSwapRequestId String?  @map("shift_swap_request_id") @db.VarChar(36)
+  date               DateTime @db.Date
+  source             String   @default("SHIFT_SWAP") @db.VarChar(50)
+  originalSchedule   Json     @map("original_schedule")
+  overrideSchedule   Json     @map("override_schedule")
+  notes              String?  @db.Text
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee         Employee          @relation("EmployeeShiftOverrides", fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftSwapRequest ShiftSwapRequest? @relation(fields: [shiftSwapRequestId], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, date])
+  @@index([companyId, date])
+  @@index([employeeId, date])
+  @@index([shiftSwapRequestId])
+  @@map("employee_shift_overrides")
+}
+
 // ============================================================
 // AUTHENTICATION & AUTHORIZATION
 // ============================================================
@@ -1208,6 +1265,10 @@ model Employee {
   assetAssignments             AssetAssignment[]
   exitClearancePICs            ExitClearance[]             @relation("ExitClearancePIC")
   permissionRequests           PermissionRequest[]
+  shiftSwapRequestsAsRequester ShiftSwapRequest[]            @relation("ShiftSwapRequester")
+  shiftSwapRequestsAsTarget    ShiftSwapRequest[]            @relation("ShiftSwapTarget")
+  shiftSwapRequestsToApprove   ShiftSwapRequest[]            @relation("ShiftSwapApprover")
+  shiftOverrides               EmployeeShiftOverride[]       @relation("EmployeeShiftOverrides")
   loans                        Loan[]
   businessTrips                BusinessTrip[]
   expenseClaims                ExpenseClaim[]

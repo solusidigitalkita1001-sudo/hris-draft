@@ -92,6 +92,13 @@ export interface MyWorkCalendarDay {
   label?: string | null;
   notes?: string | null;
   calendarId?: string | null;
+  overrideSource?: 'SHIFT_SWAP' | null;
+  overrideRequestId?: string | null;
+  swappedWithEmployee?: {
+    id: string;
+    fullName: string;
+    employeeNumber: string;
+  } | null;
   absence?: {
     source: 'LEAVE_REQUEST' | 'PERMISSION_REQUEST';
     category: 'CUTI' | 'IZIN' | 'SAKIT';
@@ -139,11 +146,70 @@ export interface MyWorkCalendarMonth {
     offDays: number;
     calendarDays: number;
     shiftDays: number;
+    shiftSwapDays: number;
     approvedLeaveDays: number;
     approvedPermissionDays: number;
     approvedSickDays: number;
   };
   days: MyWorkCalendarDay[];
+}
+
+export interface ShiftSwapSchedulePreview {
+  dayType: string;
+  workStart?: string | null;
+  workEnd?: string | null;
+  scheduleSource: 'CALENDAR' | 'SHIFT_FORMULA';
+  label?: string | null;
+  crossesMidnight?: boolean;
+}
+
+export interface ShiftSwapEmployeeOption {
+  id: string;
+  employeeNumber: string;
+  fullName: string;
+  employeeCategory?: 'OFFICE' | 'FACTORY' | 'FIELD' | 'REMOTE';
+  shiftFormulaId?: string | null;
+  shiftStartDate?: string | null;
+  position?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
+  schedule?: ShiftSwapSchedulePreview | null;
+}
+
+export interface ShiftSwapRequest {
+  id: string;
+  companyId: string;
+  requesterEmployeeId: string;
+  targetEmployeeId: string;
+  approverEmployeeId: string;
+  shiftDate: string;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  approvalNotes?: string | null;
+  reviewedAt?: string | null;
+  cancelledAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  requesterEmployee?: { id: string; fullName: string; employeeNumber: string };
+  targetEmployee?: { id: string; fullName: string; employeeNumber: string };
+  approverEmployee?: { id: string; fullName: string; employeeNumber: string };
+}
+
+export interface ShiftSwapCandidateResponse {
+  requester: ShiftSwapEmployeeOption & { schedule?: ShiftSwapSchedulePreview | null };
+  approver: {
+    id: string;
+    fullName: string;
+    employeeNumber: string;
+    position?: {
+      id: string;
+      code: string;
+      name: string;
+    } | null;
+  };
+  candidates: ShiftSwapEmployeeOption[];
 }
 
 const WORK_DAY_KEYS: WorkDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -320,6 +386,47 @@ class WorkCalendarService {
       params: { year, month },
     });
     return r.data.data as MyWorkCalendarMonth;
+  }
+
+  async getMyShiftSwapCandidates(shiftDate?: string) {
+    const r = await api.get('/work-calendars/shift-swaps/candidates/my', {
+      params: shiftDate ? { shiftDate } : undefined,
+    });
+    return r.data.data as ShiftSwapCandidateResponse;
+  }
+
+  async getMyShiftSwapRequests(status?: string) {
+    const r = await api.get('/work-calendars/shift-swaps/my', {
+      params: status ? { status } : undefined,
+    });
+    return r.data.data as ShiftSwapRequest[];
+  }
+
+  async getMyShiftSwapApprovals(status?: string) {
+    const r = await api.get('/work-calendars/shift-swaps/approvals/my', {
+      params: status ? { status } : undefined,
+    });
+    return r.data.data as ShiftSwapRequest[];
+  }
+
+  async createShiftSwapRequest(data: { targetEmployeeId: string; shiftDate: string; reason: string }) {
+    const r = await api.post('/work-calendars/shift-swaps', data);
+    return r.data.data as ShiftSwapRequest;
+  }
+
+  async cancelShiftSwapRequest(id: string) {
+    const r = await api.patch(`/work-calendars/shift-swaps/${id}/cancel`);
+    return r.data;
+  }
+
+  async approveShiftSwapRequest(id: string, approvalNotes?: string) {
+    const r = await api.patch(`/work-calendars/shift-swaps/${id}/approve`, { approvalNotes });
+    return r.data.data as ShiftSwapRequest;
+  }
+
+  async rejectShiftSwapRequest(id: string, approvalNotes?: string) {
+    const r = await api.patch(`/work-calendars/shift-swaps/${id}/reject`, { approvalNotes });
+    return r.data.data as ShiftSwapRequest;
   }
 }
 

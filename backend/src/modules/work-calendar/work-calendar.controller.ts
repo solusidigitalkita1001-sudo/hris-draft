@@ -174,6 +174,64 @@ export class WorkCalendarController {
     } catch (error) { next(error); }
   }
 
+  async findShiftSwapCandidates(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.findShiftSwapCandidatesForUser(
+        req.user!.id,
+        req.query.shiftDate as string | undefined,
+      );
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async findMyShiftSwapRequests(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.findMyShiftSwapRequests(
+        req.user!.id,
+        req.query.status as string | undefined,
+      );
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async findMyShiftSwapApprovals(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.findMyShiftSwapApprovals(
+        req.user!.id,
+        req.query.status as string | undefined,
+      );
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async createShiftSwapRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.createShiftSwapRequest(req.user!.id, req.body);
+      res.status(201).json(Result.created(data));
+    } catch (error) { next(error); }
+  }
+
+  async cancelShiftSwapRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      await workCalendarRepository.cancelShiftSwapRequest(req.user!.id, req.params.requestId as string);
+      res.json(Result.success(null, 'Request tukar shift dibatalkan'));
+    } catch (error) { next(error); }
+  }
+
+  async approveShiftSwapRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.approveShiftSwapRequest(req.user!.id, req.params.requestId as string, req.body);
+      res.json(Result.updated(data, 'Request tukar shift disetujui'));
+    } catch (error) { next(error); }
+  }
+
+  async rejectShiftSwapRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.rejectShiftSwapRequest(req.user!.id, req.params.requestId as string, req.body);
+      res.json(Result.updated(data, 'Request tukar shift ditolak'));
+    } catch (error) { next(error); }
+  }
+
   async getTeamCalendar(req: Request, res: Response, next: NextFunction) {
     try {
       const year = Number(req.query.year as string) || new Date().getFullYear();

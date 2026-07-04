@@ -4,16 +4,17 @@ import dayjs from 'dayjs';
 import { permissionRequestService, type PermissionRequest, type PermissionType, type RequestStatus, PERMISSION_TYPE_LABELS, REQUEST_STATUS_LABELS } from '@/services/permission-request.service';
 import { leaveService } from '@/services/leave.service';
 import { attendanceService } from '@/services/attendance.service';
-import { workCalendarService, type MyWorkCalendarDay, type MyWorkCalendarMonth } from '@/services/work-calendar.service';
+import { workCalendarService, type MyWorkCalendarDay, type MyWorkCalendarMonth, type ShiftSwapCandidateResponse, type ShiftSwapRequest, type ShiftSwapSchedulePreview } from '@/services/work-calendar.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
+import { useAuthStore } from '@/stores/auth.store';
 import {
   Plus, RefreshCw, FileText, CalendarDays, Clock,
   CheckCircle, XCircle, AlertCircle, Ban,
-  Send,
+  Send, Repeat, Users,
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 
@@ -31,6 +32,10 @@ const DAY_TYPE_LABELS: Record<string, string> = {
 const WEEKDAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
 function getCalendarCellTone(day: MyWorkCalendarDay) {
+  if (day.overrideSource === 'SHIFT_SWAP') {
+    return 'border-violet-200 bg-violet-50 text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100';
+  }
+
   if (day.absence?.category === 'SAKIT') {
     return 'border-red-200 bg-red-50 text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-100';
   }
@@ -62,6 +67,16 @@ function getAbsenceBadgeTone(category: NonNullable<MyWorkCalendarDay['absence']>
   if (category === 'SAKIT') return 'border-red-200 bg-red-100 text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300';
   if (category === 'CUTI') return 'border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700 dark:border-fuchsia-900/40 dark:bg-fuchsia-950/40 dark:text-fuchsia-300';
   return 'border-orange-200 bg-orange-100 text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/40 dark:text-orange-300';
+}
+
+function formatShiftSchedule(schedule?: ShiftSwapSchedulePreview | null) {
+  if (!schedule) return 'Jadwal belum tersedia';
+
+  const timeText = schedule.workStart && schedule.workEnd
+    ? `${schedule.workStart} - ${schedule.workEnd}`
+    : 'Tidak ada jam kerja';
+
+  return schedule.label ? `${schedule.label} • ${timeText}` : timeText;
 }
 
 // ─── Stat Card ──────────────────────────────────────────
@@ -178,6 +193,154 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
   );
 }
 
+function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
+  const [shiftDate, setShiftDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [targetEmployeeId, setTargetEmployeeId] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loadingCandidates, setLoadingCandidates] = useState(true);
+  const [candidateData, setCandidateData] = useState<ShiftSwapCandidateResponse | null>(null);
+
+  const fetchCandidates = useCallback(async (date: string) => {
+    setLoadingCandidates(true);
+    try {
+      const data = await workCalendarService.getMyShiftSwapCandidates(date);
+      setCandidateData(data);
+      setTargetEmployeeId((current) => data.candidates.some((candidate) => candidate.id === current) ? current : '');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Gagal memuat kandidat tukar shift');
+      setCandidateData(null);
+    } finally {
+      setLoadingCandidates(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchCandidates(shiftDate);
+  }, [fetchCandidates, shiftDate]);
+
+  const selectedCandidate = candidateData?.candidates.find((candidate) => candidate.id === targetEmployeeId) ?? null;
+  const isFactoryRequester = candidateData?.requester.employeeCategory === 'FACTORY';
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!targetEmployeeId) {
+      toast.error('Pilih rekan tukar shift terlebih dahulu');
+      return;
+    }
+
+    if (!reason.trim()) {
+      toast.error('Alasan request tukar shift harus diisi');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await workCalendarService.createShiftSwapRequest({
+        targetEmployeeId,
+        shiftDate: dayjs(shiftDate).hour(12).minute(0).second(0).millisecond(0).toISOString(),
+        reason: reason.trim(),
+      });
+      toast.success('Request tukar shift berhasil dikirim ke kepala regu');
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Gagal mengirim request tukar shift');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tanggal Shift *</label>
+        <Input type="date" value={shiftDate} onChange={(e) => setShiftDate(e.target.value)} required />
+      </div>
+
+      <div className="rounded-xl border border-border bg-muted/20 p-4">
+        <p className="text-xs font-medium text-muted-foreground mb-1">Akan disetujui oleh</p>
+        <p className="text-sm font-semibold">{candidateData?.approver.fullName || '-'}</p>
+        <p className="text-xs text-muted-foreground">
+          {candidateData?.approver.employeeNumber || '-'}
+          {candidateData?.approver.position?.name ? ` • ${candidateData.approver.position.name}` : ''}
+        </p>
+      </div>
+
+      {loadingCandidates ? (
+        <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+          Memuat kandidat tukar shift...
+        </div>
+      ) : !candidateData ? (
+        <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+          Data kandidat belum tersedia.
+        </div>
+      ) : !isFactoryRequester ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+          Fitur tukar shift hanya tersedia untuk pegawai pabrik yang memakai formula shifting.
+        </div>
+      ) : (
+        <>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Rekan Tukar Shift *</label>
+            <Select2
+              value={targetEmployeeId}
+              onValueChange={setTargetEmployeeId}
+              options={[
+                { value: '', label: candidateData.candidates.length > 0 ? 'Pilih rekan regu...' : 'Belum ada kandidat tersedia' },
+                ...candidateData.candidates.map((candidate) => ({
+                  value: candidate.id,
+                  label: `${candidate.fullName} • ${candidate.employeeNumber}`,
+                })),
+              ]}
+              placeholder="Pilih rekan regu..."
+              className="h-9"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Shift Saya</p>
+              <p className="text-sm font-semibold">{candidateData.requester.fullName}</p>
+              <p className="text-xs text-muted-foreground">{formatShiftSchedule(candidateData.requester.schedule)}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Shift Rekan</p>
+              {selectedCandidate ? (
+                <>
+                  <p className="text-sm font-semibold">{selectedCandidate.fullName}</p>
+                  <p className="text-xs text-muted-foreground">{formatShiftSchedule(selectedCandidate.schedule)}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Pilih rekan terlebih dahulu.</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Alasan Request *</label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Contoh: ada kebutuhan keluarga dan sudah sepakat tukar dengan rekan satu regu."
+              rows={3}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
+              required
+            />
+          </div>
+        </>
+      )}
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>Batal</Button>
+        <Button type="submit" size="sm" disabled={saving || loadingCandidates || !candidateData || !isFactoryRequester}>
+          <Send size={14} className="mr-1.5" /> {saving ? 'Mengirim...' : 'Kirim Request'}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 // ─── Request Card ───────────────────────────────────────
 const STATUS_STYLES: Record<string, string> = {
   PENDING: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400 border-amber-200',
@@ -195,11 +358,14 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 // ─── Main Component ─────────────────────────────────────
 export function SelfServicePage() {
+  const { user } = useAuthStore();
   const [permissions, setPermissions] = useState<PermissionRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'permissions' | 'leave' | 'overtime' | 'calendar'>('permissions');
+  const [activeTab, setActiveTab] = useState<'permissions' | 'leave' | 'overtime' | 'calendar' | 'shift-swap'>('permissions');
   const [statusFilter, setStatusFilter] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [activeModal, setActiveModal] = useState<'permission' | 'shift-swap' | null>(null);
+  const [shiftCalendarMeta, setShiftCalendarMeta] = useState<MyWorkCalendarMonth | null>(null);
+  const [loadingShiftEligibility, setLoadingShiftEligibility] = useState(true);
   const companyId = localStorage.getItem('companyId') || '';
   const employeeId = localStorage.getItem('employeeId') || '';
 
@@ -217,6 +383,37 @@ export function SelfServicePage() {
   }, [employeeId, statusFilter]);
 
   useEffect(() => { if (activeTab === 'permissions') fetchPermissions(); }, [fetchPermissions, activeTab]);
+
+  const fetchShiftEligibility = useCallback(async () => {
+    setLoadingShiftEligibility(true);
+    try {
+      const now = dayjs();
+      const data = await workCalendarService.getMyResolvedCalendar(now.year(), now.month() + 1);
+      setShiftCalendarMeta(data);
+    } catch {
+      setShiftCalendarMeta(null);
+    } finally {
+      setLoadingShiftEligibility(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchShiftEligibility();
+  }, [fetchShiftEligibility]);
+
+  const hasShiftCalendar = Boolean(shiftCalendarMeta?.shiftFormula);
+
+  useEffect(() => {
+    if (!loadingShiftEligibility && !hasShiftCalendar && activeTab === 'shift-swap') {
+      setActiveTab('calendar');
+    }
+  }, [activeTab, hasShiftCalendar, loadingShiftEligibility]);
+
+  useEffect(() => {
+    if (!loadingShiftEligibility && !hasShiftCalendar && activeModal === 'shift-swap') {
+      setActiveModal(null);
+    }
+  }, [activeModal, hasShiftCalendar, loadingShiftEligibility]);
 
   const handleCancel = async (id: string) => {
     const confirmed = await popup.confirm({
@@ -239,12 +436,13 @@ export function SelfServicePage() {
   const pendingCount = permissions.filter((p) => p.status === 'PENDING').length;
   const approvedCount = permissions.filter((p) => p.status === 'APPROVED').length;
 
-  const TABS = [
+  const tabs = [
     { key: 'permissions' as const, label: 'Izin', icon: <FileText size={16} /> },
     { key: 'leave' as const, label: 'Cuti', icon: <CalendarDays size={16} /> },
     { key: 'overtime' as const, label: 'Lembur', icon: <Clock size={16} /> },
+    { key: 'shift-swap' as const, label: 'Tukar Shift', icon: <Repeat size={16} /> },
     { key: 'calendar' as const, label: 'Kalender Kerja', icon: <CalendarDays size={16} /> },
-  ];
+  ].filter((tab) => hasShiftCalendar || tab.key !== 'shift-swap');
 
   return (
     <div>
@@ -257,8 +455,13 @@ export function SelfServicePage() {
               <RefreshCw size={16} className="mr-2" /> Refresh
             </Button>
             {activeTab === 'permissions' && (
-              <Button size="sm" onClick={() => setShowForm(true)}>
+              <Button size="sm" onClick={() => setActiveModal('permission')}>
                 <Plus size={16} className="mr-2" /> Ajukan Izin
+              </Button>
+            )}
+            {activeTab === 'shift-swap' && hasShiftCalendar && (
+              <Button size="sm" onClick={() => setActiveModal('shift-swap')}>
+                <Plus size={16} className="mr-2" /> Request Tukar Shift
               </Button>
             )}
           </div>
@@ -267,7 +470,7 @@ export function SelfServicePage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-border">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -328,7 +531,7 @@ export function SelfServicePage() {
                 {statusFilter ? 'Tidak ada pengajuan dengan status ini' : 'Belum ada pengajuan izin'}
               </p>
               {!statusFilter && (
-                <Button size="sm" onClick={() => setShowForm(true)}>
+                <Button size="sm" onClick={() => setActiveModal('permission')}>
                   <Plus size={16} className="mr-2" /> Ajukan Izin
                 </Button>
               )}
@@ -381,13 +584,28 @@ export function SelfServicePage() {
         <OvertimeTabView companyId={companyId} />
       )}
 
+      {!loading && activeTab === 'shift-swap' && (
+        <ShiftSwapTabView
+          canApprove={Boolean(user?.employeeId)}
+          onCreateRequest={() => setActiveModal('shift-swap')}
+        />
+      )}
+
       {!loading && activeTab === 'calendar' && (
         <MyWorkCalendarTabView />
       )}
 
       {/* Modal */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Ajukan Izin">
-        <PermissionForm onClose={() => { setShowForm(false); fetchPermissions(); }} />
+      <Modal
+        open={activeModal !== null}
+        onClose={() => setActiveModal(null)}
+        title={activeModal === 'shift-swap' ? 'Request Tukar Shift' : 'Ajukan Izin'}
+      >
+        {activeModal === 'shift-swap' ? (
+          <ShiftSwapRequestForm onClose={() => setActiveModal(null)} />
+        ) : (
+          <PermissionForm onClose={() => { setActiveModal(null); fetchPermissions(); }} />
+        )}
       </Modal>
     </div>
   );
@@ -483,7 +701,11 @@ function MyWorkCalendarTabView() {
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className="inline-flex items-center rounded-full border border-current/15 px-2 py-0.5 text-[10px] font-semibold">
-                          {day.scheduleSource === 'SHIFT_FORMULA' ? 'SHIFT' : 'CALENDAR'}
+                          {day.overrideSource === 'SHIFT_SWAP'
+                            ? 'SWAP'
+                            : day.scheduleSource === 'SHIFT_FORMULA'
+                              ? 'SHIFT'
+                              : 'CALENDAR'}
                         </span>
                         {day.absence && (
                           <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getAbsenceBadgeTone(day.absence.category)}`}>
@@ -505,6 +727,11 @@ function MyWorkCalendarTabView() {
                         </>
                       )}
                       {day.label && <div className="opacity-80">{day.label}</div>}
+                      {day.swappedWithEmployee && (
+                        <div className="opacity-80">
+                          Tukar dengan {day.swappedWithEmployee.fullName}
+                        </div>
+                      )}
                       {day.crossesMidnight && <div className="opacity-80">Lintas tengah malam</div>}
                       {day.notes && <div className="opacity-70 line-clamp-2">{day.notes}</div>}
                     </div>
@@ -557,6 +784,7 @@ function MyWorkCalendarTabView() {
             <StatCard label="Hari Off" value={calendar?.summary.offDays || 0} color="text-slate-500" />
             <StatCard label="Hari Calendar" value={calendar?.summary.calendarDays || 0} color="text-amber-500" />
             <StatCard label="Hari Shift" value={calendar?.summary.shiftDays || 0} color="text-blue-500" />
+            <StatCard label="Hari Swap" value={calendar?.summary.shiftSwapDays || 0} color="text-violet-500" />
             <StatCard label="Cuti Approved" value={calendar?.summary.approvedLeaveDays || 0} color="text-fuchsia-500" />
             <StatCard label="Izin Approved" value={calendar?.summary.approvedPermissionDays || 0} color="text-orange-500" />
             <StatCard label="Sakit Approved" value={calendar?.summary.approvedSickDays || 0} color="text-red-500" />
@@ -572,6 +800,10 @@ function MyWorkCalendarTabView() {
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-blue-400" />
                 <span>Hari kerja dari formula shift</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-violet-400" />
+                <span>Hari hasil tukar shift yang sudah disetujui kepala regu</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-amber-400" />
@@ -597,6 +829,203 @@ function MyWorkCalendarTabView() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ShiftSwapTabView({
+  canApprove,
+  onCreateRequest,
+}: {
+  canApprove: boolean;
+  onCreateRequest: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState<ShiftSwapRequest[]>([]);
+  const [approvals, setApprovals] = useState<ShiftSwapRequest[]>([]);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [myRequests, myApprovals] = await Promise.all([
+        workCalendarService.getMyShiftSwapRequests(),
+        canApprove ? workCalendarService.getMyShiftSwapApprovals('PENDING') : Promise.resolve([]),
+      ]);
+      setRequests(myRequests);
+      setApprovals(myApprovals);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Gagal memuat request tukar shift');
+    } finally {
+      setLoading(false);
+    }
+  }, [canApprove]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  const handleCancel = async (id: string) => {
+    const confirmed = await popup.confirm({
+      title: 'Batalkan Request Tukar Shift',
+      description: 'Request yang masih pending akan dibatalkan. Lanjutkan?',
+      confirmText: 'Ya, Batalkan',
+      cancelText: 'Kembali',
+      intent: 'destructive',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await workCalendarService.cancelShiftSwapRequest(id);
+      toast.success('Request tukar shift dibatalkan');
+      fetchData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Gagal membatalkan request');
+    }
+  };
+
+  const handleReview = async (id: string, action: 'approve' | 'reject') => {
+    const approvalNotes = window.prompt(
+      action === 'approve'
+        ? 'Catatan persetujuan kepala regu (opsional)'
+        : 'Alasan penolakan kepala regu (opsional)',
+      '',
+    ) || undefined;
+
+    try {
+      if (action === 'approve') {
+        await workCalendarService.approveShiftSwapRequest(id, approvalNotes);
+        toast.success('Request tukar shift disetujui');
+      } else {
+        await workCalendarService.rejectShiftSwapRequest(id, approvalNotes);
+        toast.success('Request tukar shift ditolak');
+      }
+      fetchData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Gagal memproses request');
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total Request" value={requests.length} color="text-foreground" />
+        <StatCard label="Pending Saya" value={requests.filter((item) => item.status === 'PENDING').length} color="text-amber-500" />
+        <StatCard label="Approved" value={requests.filter((item) => item.status === 'APPROVED').length} color="text-emerald-500" />
+        <StatCard label="Menunggu Approval" value={approvals.length} color="text-violet-500" />
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-sm text-muted-foreground">Memuat request tukar shift...</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.1fr)_420px]">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-border p-4">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-semibold">Request Saya</h3>
+                <p className="text-xs text-muted-foreground">Ajukan tukar shift ke kepala regu dan pantau statusnya di sini.</p>
+              </div>
+              <Button size="sm" onClick={onCreateRequest}>
+                <Plus size={16} className="mr-2" /> Request Baru
+              </Button>
+            </div>
+
+            {requests.length === 0 ? (
+              <div className="flex flex-col items-center py-16 gap-3">
+                <Repeat size={40} className="text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">Belum ada request tukar shift.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {requests.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-border p-4 bg-background">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[request.status]}`}>
+                            {STATUS_ICONS[request.status]} {REQUEST_STATUS_LABELS[request.status as RequestStatus]}
+                          </span>
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {formatDate(request.shiftDate)}
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold">
+                          Tukar dengan {request.targetEmployee?.fullName || '-'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {request.targetEmployee?.employeeNumber || '-'} • Approver: {request.approverEmployee?.fullName || '-'}
+                        </p>
+                        <p className="text-sm mt-3">{request.reason}</p>
+                        {request.approvalNotes && (
+                          <div className="mt-3 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                            Catatan kepala regu: {request.approvalNotes}
+                          </div>
+                        )}
+                      </div>
+                      {request.status === 'PENDING' && (
+                        <button
+                          onClick={() => handleCancel(request.id)}
+                          className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          Batalkan
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-border p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Users size={16} className="text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Approval Kepala Regu</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Panel ini muncul untuk kepala regu yang menjadi approver resmi request tukar shift.
+              </p>
+
+              {approvals.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Tidak ada request yang menunggu approval Anda.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {approvals.map((request) => (
+                    <div key={request.id} className="rounded-xl border border-border p-4 bg-background">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[request.status]}`}>
+                          {STATUS_ICONS[request.status]} {REQUEST_STATUS_LABELS[request.status as RequestStatus]}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{formatDate(request.shiftDate)}</span>
+                      </div>
+                      <p className="text-sm font-semibold">
+                        {request.requesterEmployee?.fullName || '-'} ↔ {request.targetEmployee?.fullName || '-'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {request.requesterEmployee?.employeeNumber || '-'} • {request.targetEmployee?.employeeNumber || '-'}
+                      </p>
+                      <p className="text-sm mt-3">{request.reason}</p>
+                      <div className="flex gap-2 mt-4">
+                        <Button size="sm" onClick={() => handleReview(request.id, 'approve')}>
+                          Setujui
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleReview(request.id, 'reject')}>
+                          Tolak
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
