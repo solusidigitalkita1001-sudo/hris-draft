@@ -16,6 +16,7 @@ import {
   updateCompanySchema,
   createBranchSchema,
   updateBranchSchema,
+  upsertBranchAttendancePolicySchema,
   createDivisionSchema,
   updateDivisionSchema,
   createDepartmentSchema,
@@ -49,6 +50,9 @@ router.get('/branches/:id', authorize({ resource: 'organization', action: 'read'
 router.post('/branches', authorize({ resource: 'organization', action: 'create' }), validate(createBranchSchema), branchController.create.bind(branchController));
 router.put('/branches/:id', authorize({ resource: 'organization', action: 'update' }), validate(updateBranchSchema), branchController.update.bind(branchController));
 router.delete('/branches/:id', authorize({ resource: 'organization', action: 'delete' }), branchController.delete.bind(branchController));
+router.get('/branches/:id/attendance-policy', authorize({ resource: 'organization', action: 'read' }), branchController.getAttendancePolicy.bind(branchController));
+router.put('/branches/:id/attendance-policy', authorize({ resource: 'organization', action: 'update' }), validate(upsertBranchAttendancePolicySchema), branchController.upsertAttendancePolicy.bind(branchController));
+router.delete('/branches/:id/attendance-policy', authorize({ resource: 'organization', action: 'delete' }), branchController.deleteAttendancePolicy.bind(branchController));
 
 // ==================== Divisions ====================
 router.get('/divisions', authorize({ resource: 'organization', action: 'read' }), divisionController.findAll.bind(divisionController));

@@ -11,6 +11,7 @@ import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { GroupListPage } from '@/modules/organization/pages/GroupListPage';
 import { CompanyListPage } from '@/modules/organization/pages/CompanyListPage';
+import { BranchListPage } from '@/modules/organization/pages/BranchListPage';
 import { DepartmentListPage } from '@/modules/organization/pages/DepartmentListPage';
 import { PositionListPage } from '@/modules/organization/pages/PositionListPage';
 import { OrganizationChartPage } from '@/modules/organization/pages/OrganizationChartPage';
@@ -82,6 +83,7 @@ import { DocumentManagementPage } from '@/modules/document-management/pages/Docu
 import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
 import { WorkCalendarDetailPage } from '@/modules/work-calendar/pages/WorkCalendarDetailPage';
 import { WorkCalendarHolidaysPage } from '@/modules/work-calendar/pages/WorkCalendarHolidaysPage';
+import { ShiftFormulaPage } from '@/modules/work-calendar/pages/ShiftFormulaPage';
 
 // Notification Pages
 import { NotificationsPage } from '@/modules/notifications/pages/NotificationsPage';
@@ -160,6 +162,17 @@ export const router = createBrowserRouter([
                 requiredRoles={OPERATIONAL_ROLES}
               >
                 <CompanyListPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'branches',
+            element: (
+              <ProtectedRoute
+                requiredPermissions={[{ resource: 'organization', action: 'read' }]}
+                requiredRoles={OPERATIONAL_ROLES}
+              >
+                <BranchListPage />
               </ProtectedRoute>
             ),
           },
@@ -510,6 +523,17 @@ export const router = createBrowserRouter([
             requiredRoles={OPERATIONAL_ROLES}
           >
             <WorkCalendarHolidaysPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'work-calendar/shifts',
+        element: (
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'work-calendar', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
+            <ShiftFormulaPage />
           </ProtectedRoute>
         ),
       },

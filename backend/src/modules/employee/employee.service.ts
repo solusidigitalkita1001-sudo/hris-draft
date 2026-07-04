@@ -13,6 +13,7 @@ import {
 } from './employee.dto';
 import { NotFoundError, ConflictError, BadRequestError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { prisma } from '@/shared/database/prisma';
 
 export class EmployeeService {
   async findAll(query: EmployeeQueryDTO) {
@@ -36,19 +37,73 @@ export class EmployeeService {
       if (emailExists) throw new ConflictError('Email already in use');
     }
 
+    if (data.employeeCategory === 'FACTORY') {
+      if (!data.shiftFormulaId || !data.shiftStartDate) {
+        throw new BadRequestError('Pegawai pabrik wajib memiliki shift formula dan tanggal mulai shift');
+      }
+
+      const shiftFormula = await prisma.shiftFormula.findFirst({
+        where: {
+          id: data.shiftFormulaId,
+          companyId: data.companyId,
+          deletedAt: null,
+          isActive: true,
+        },
+      });
+
+      if (!shiftFormula) {
+        throw new BadRequestError('Shift formula tidak ditemukan atau tidak aktif untuk company ini');
+      }
+    } else {
+      data.shiftFormulaId = null;
+      data.shiftStartDate = null;
+    }
+
     const employee = await employeeRepository.create(data);
     logger.info('Employee created', { employeeId: employee.id, number: employee.employeeNumber });
     return employee;
   }
 
   async update(id: string, data: UpdateEmployeeDTO) {
-    await this.findById(id);
+    const existingEmployee = await this.findById(id);
 
     if (data.email) {
       const emailExists = await employeeRepository.findByEmail(data.email);
       if (emailExists && emailExists.id !== id) {
         throw new ConflictError('Email already in use');
       }
+    }
+
+    const nextEmployeeCategory = data.employeeCategory ?? existingEmployee.employeeCategory;
+    const nextShiftFormulaId = data.shiftFormulaId !== undefined
+      ? data.shiftFormulaId
+      : existingEmployee.shiftFormulaId ?? null;
+    const nextShiftStartDate = data.shiftStartDate !== undefined
+      ? data.shiftStartDate
+      : existingEmployee.shiftStartDate
+        ? new Date(existingEmployee.shiftStartDate).toISOString()
+        : null;
+
+    if (nextEmployeeCategory === 'FACTORY') {
+      if (!nextShiftFormulaId || !nextShiftStartDate) {
+        throw new BadRequestError('Pegawai pabrik wajib memiliki shift formula dan tanggal mulai shift');
+      }
+
+      const shiftFormula = await prisma.shiftFormula.findFirst({
+        where: {
+          id: nextShiftFormulaId,
+          companyId: existingEmployee.companyId,
+          deletedAt: null,
+          isActive: true,
+        },
+      });
+
+      if (!shiftFormula) {
+        throw new BadRequestError('Shift formula tidak ditemukan atau tidak aktif untuk company ini');
+      }
+    } else {
+      data.shiftFormulaId = null;
+      data.shiftStartDate = null;
     }
 
     const employee = await employeeRepository.update(id, data);
@@ -341,6 +396,9 @@ export class EmployeeService {
           address: row.address || undefined,
           joinDate: row.joinDate || row.join_date || undefined,
           employmentType: (row.employmentType || row.employment_type || 'PERMANENT') as any,
+          employeeCategory: (row.employeeCategory || row.employee_category || 'OFFICE') as any,
+          shiftFormulaId: row.shiftFormulaId || row.shift_formula_id || null,
+          shiftStartDate: row.shiftStartDate || row.shift_start_date || null,
           branchId: row.branchId || row.branch_id || undefined,
           departmentId: row.departmentId || row.department_id || undefined,
           subDepartmentId: row.subDepartmentId || row.sub_department_id || undefined,

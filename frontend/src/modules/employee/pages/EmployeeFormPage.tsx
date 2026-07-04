@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { employeeService } from '@/services/employee.service';
 import { organizationService, type Department, type Position, type Branch } from '@/services/organization.service';
+import { workCalendarService, type ShiftFormula } from '@/services/work-calendar.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,8 @@ import { Select2 } from '@/components/ui/select2';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 
 const EMPLOYMENT_TYPES = ['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREELANCE', 'OUTSOURCING'] as const;
+const EMPLOYEE_CATEGORIES = ['OFFICE', 'FACTORY', 'FIELD', 'REMOTE'] as const;
+type EmployeeCategory = typeof EMPLOYEE_CATEGORIES[number];
 
 export function EmployeeFormPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +21,7 @@ export function EmployeeFormPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [shiftFormulas, setShiftFormulas] = useState<ShiftFormula[]>([]);
 
   const [form, setForm] = useState({
     employeeNumber: '',
@@ -34,6 +38,9 @@ export function EmployeeFormPage() {
     positionId: '',
     branchId: '',
     employmentType: 'PERMANENT' as string,
+    employeeCategory: 'OFFICE' as EmployeeCategory,
+    shiftFormulaId: '',
+    shiftStartDate: '',
     joinDate: '',
     bankName: '',
     bankAccount: '',
@@ -48,14 +55,16 @@ export function EmployeeFormPage() {
   useEffect(() => {
     const fetchRefs = async () => {
       try {
-        const [deptData, posData, branchData] = await Promise.all([
+        const [deptData, posData, branchData, shiftFormulaData] = await Promise.all([
           organizationService.getDepartments(companyId),
           organizationService.getPositions(companyId),
           organizationService.getBranches(companyId),
+          workCalendarService.findAllShiftFormulas(companyId),
         ]);
         setDepartments(deptData);
         setPositions(posData);
         setBranches(branchData);
+        setShiftFormulas(shiftFormulaData);
       } catch (error) {
         console.error('Failed to fetch reference data:', error);
       }
@@ -83,6 +92,9 @@ export function EmployeeFormPage() {
             positionId: emp.positionId || '',
             branchId: emp.branchId || '',
             employmentType: emp.employmentType,
+            employeeCategory: emp.employeeCategory || 'OFFICE',
+            shiftFormulaId: emp.shiftFormulaId || '',
+            shiftStartDate: emp.shiftStartDate ? emp.shiftStartDate.split('T')[0] : '',
             joinDate: emp.joinDate ? emp.joinDate.split('T')[0] : '',
             bankName: emp.bankName || '',
             bankAccount: emp.bankAccount || '',
@@ -100,7 +112,17 @@ export function EmployeeFormPage() {
   }, [id]);
 
   const handleChange = (field: string, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      if (field === 'employeeCategory' && value !== 'FACTORY') {
+        return { ...prev, employeeCategory: value as EmployeeCategory, shiftFormulaId: '', shiftStartDate: '' };
+      }
+
+      if (field === 'employeeCategory') {
+        return { ...prev, employeeCategory: value as EmployeeCategory };
+      }
+
+      return { ...prev, [field]: value } as typeof prev;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -111,6 +133,8 @@ export function EmployeeFormPage() {
         ...form,
         companyId,
         joinDate: form.joinDate ? new Date(form.joinDate).toISOString() : undefined,
+        shiftStartDate: form.shiftStartDate ? new Date(form.shiftStartDate).toISOString() : null,
+        shiftFormulaId: form.shiftFormulaId || null,
       };
 
       if (isEdit) {
@@ -281,9 +305,40 @@ export function EmployeeFormPage() {
                   />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Employee Category</label>
+                  <Select2
+                    value={form.employeeCategory}
+                    onValueChange={(value) => handleChange('employeeCategory', value)}
+                    options={EMPLOYEE_CATEGORIES.map((category) => ({ value: category, label: category }))}
+                    placeholder="Select..."
+                    className="h-9"
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Join Date</label>
                   <Input type="date" value={form.joinDate} onChange={(e) => handleChange('joinDate', e.target.value)} className="h-9" />
                 </div>
+                {form.employeeCategory === 'FACTORY' && (
+                  <>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Shift Formula</label>
+                      <Select2
+                        value={form.shiftFormulaId}
+                        onValueChange={(value) => handleChange('shiftFormulaId', value)}
+                        options={[
+                          { value: '', label: 'Select...' },
+                          ...shiftFormulas.map((formula) => ({ value: formula.id, label: `${formula.code} - ${formula.name}` })),
+                        ]}
+                        placeholder="Select..."
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Shift Start Date</label>
+                      <Input type="date" value={form.shiftStartDate} onChange={(e) => handleChange('shiftStartDate', e.target.value)} className="h-9" />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

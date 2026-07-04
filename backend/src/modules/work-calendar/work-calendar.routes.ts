@@ -6,6 +6,7 @@ import { workCalendarController } from './work-calendar.controller';
 import {
   createCalendarSchema, updateCalendarSchema, bulkUpdateDaysSchema,
   createHolidaySchema, updateHolidaySchema, copyCalendarSchema,
+  createShiftFormulaSchema, updateShiftFormulaSchema,
 } from './work-calendar.dto';
 
 const router = Router();
@@ -14,6 +15,11 @@ router.use(authenticate);
 // Calendar CRUD
 router.get('/', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.findAll.bind(workCalendarController));
 router.post('/', authorize({ resource: 'work-calendar', action: 'create' }), validate(createCalendarSchema), workCalendarController.create.bind(workCalendarController));
+router.get('/shift-formulas', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.findAllShiftFormulas.bind(workCalendarController));
+router.post('/shift-formulas', authorize({ resource: 'work-calendar', action: 'create' }), validate(createShiftFormulaSchema), workCalendarController.createShiftFormula.bind(workCalendarController));
+router.get('/shift-formulas/:sid', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.findShiftFormulaById.bind(workCalendarController));
+router.put('/shift-formulas/:sid', authorize({ resource: 'work-calendar', action: 'update' }), validate(updateShiftFormulaSchema), workCalendarController.updateShiftFormula.bind(workCalendarController));
+router.delete('/shift-formulas/:sid', authorize({ resource: 'work-calendar', action: 'delete' }), workCalendarController.deleteShiftFormula.bind(workCalendarController));
 router.get('/:id', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.findById.bind(workCalendarController));
 router.put('/:id', authorize({ resource: 'work-calendar', action: 'update' }), validate(updateCalendarSchema), workCalendarController.update.bind(workCalendarController));
 router.delete('/:id', authorize({ resource: 'work-calendar', action: 'delete' }), workCalendarController.delete.bind(workCalendarController));
@@ -34,6 +40,9 @@ router.get('/holidays/list', authorize({ resource: 'work-calendar', action: 'rea
 router.post('/holidays', authorize({ resource: 'work-calendar', action: 'create' }), validate(createHolidaySchema), workCalendarController.createHoliday.bind(workCalendarController));
 router.put('/holidays/:hid', authorize({ resource: 'work-calendar', action: 'update' }), validate(updateHolidaySchema), workCalendarController.updateHoliday.bind(workCalendarController));
 router.delete('/holidays/:hid', authorize({ resource: 'work-calendar', action: 'delete' }), workCalendarController.deleteHoliday.bind(workCalendarController));
+
+// My Calendar
+router.get('/me/resolved', workCalendarController.getMyResolvedCalendar.bind(workCalendarController));
 
 // Employee & Team Calendar
 router.get('/employee/:employeeId', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.getEmployeeCalendar.bind(workCalendarController));

@@ -46,6 +46,28 @@ export const createBranchSchema = z.object({
 
 export const updateBranchSchema = createBranchSchema.partial().omit({ companyId: true });
 
+export const branchAttendancePolicyMethodSchema = z.enum(['FINGERPRINT', 'MOBILE_GPS', 'BOTH', 'MANUAL']);
+export const branchOutsideRadiusActionSchema = z.enum(['REJECT', 'FLAG', 'REVIEW']);
+
+export const upsertBranchAttendancePolicySchema = z.object({
+  attendanceMethod: branchAttendancePolicyMethodSchema,
+  gpsLatitude: z.number().min(-90).max(90).optional(),
+  gpsLongitude: z.number().min(-180).max(180).optional(),
+  gpsRadiusMeters: z.number().int().min(1).max(100000).optional(),
+  allowOutsideRadius: z.boolean().optional(),
+  outsideRadiusAction: branchOutsideRadiusActionSchema.optional(),
+  lateToleranceMinutes: z.number().int().min(0).max(1440).optional(),
+  earlyCheckoutToleranceMinutes: z.number().int().min(0).max(1440).optional(),
+  allowHolidayAttendance: z.boolean().optional(),
+  allowWeekendAttendance: z.boolean().optional(),
+  autoAbsentEnabled: z.boolean().optional(),
+  autoCheckoutEnabled: z.boolean().optional(),
+  requiresSelfie: z.boolean().optional(),
+  requiresLocation: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  notes: z.string().optional(),
+});
+
 // ==================== Division ====================
 export const createDivisionSchema = z.object({
   companyId: z.string().uuid(),
@@ -105,6 +127,7 @@ export type CreateCompanyDTO = z.infer<typeof createCompanySchema>;
 export type UpdateCompanyDTO = z.infer<typeof updateCompanySchema>;
 export type CreateBranchDTO = z.infer<typeof createBranchSchema>;
 export type UpdateBranchDTO = z.infer<typeof updateBranchSchema>;
+export type UpsertBranchAttendancePolicyDTO = z.infer<typeof upsertBranchAttendancePolicySchema>;
 export type CreateDivisionDTO = z.infer<typeof createDivisionSchema>;
 export type UpdateDivisionDTO = z.infer<typeof updateDivisionSchema>;
 export type CreateDepartmentDTO = z.infer<typeof createDepartmentSchema>;

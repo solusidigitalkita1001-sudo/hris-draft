@@ -52,6 +52,100 @@ export interface Holiday {
   source?: string | null;
 }
 
+export interface ShiftFormulaDay {
+  id?: string;
+  sequence: number;
+  label?: string | null;
+  dayType: DayType;
+  workStart?: string | null;
+  workEnd?: string | null;
+  crossesMidnight?: boolean;
+}
+
+export interface ShiftFormula {
+  id: string;
+  companyId: string;
+  code: string;
+  name: string;
+  cycleLength: number;
+  description?: string | null;
+  createdBy?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+  days: ShiftFormulaDay[];
+  _count?: { employees: number };
+}
+
+export interface MyWorkCalendarDay {
+  date: string;
+  dayType: DayType;
+  workStart?: string | null;
+  workEnd?: string | null;
+  isWorkingDay: boolean;
+  scheduleSource: 'CALENDAR' | 'SHIFT_FORMULA';
+  shiftFormulaId?: string | null;
+  shiftFormulaName?: string | null;
+  shiftFormulaCode?: string | null;
+  crossesMidnight?: boolean;
+  label?: string | null;
+  notes?: string | null;
+  calendarId?: string | null;
+  absence?: {
+    source: 'LEAVE_REQUEST' | 'PERMISSION_REQUEST';
+    category: 'CUTI' | 'IZIN' | 'SAKIT';
+    requestId: string;
+    label: string;
+    reason: string;
+    startDate: string;
+    endDate: string;
+    partialDay: boolean;
+  } | null;
+}
+
+export interface MyWorkCalendarMonth {
+  employee: {
+    id: string;
+    employeeNumber: string;
+    fullName: string;
+    employeeCategory: 'OFFICE' | 'FACTORY' | 'FIELD' | 'REMOTE';
+    branch?: { id: string; name: string } | null;
+    department?: { id: string; name: string } | null;
+    position?: { id: string; name: string } | null;
+  };
+  linkedCalendar: {
+    id: string;
+    name: string;
+    year: number;
+    scope: 'COMPANY' | 'BRANCH' | 'DEPARTMENT';
+  } | null;
+  shiftFormula: {
+    id: string;
+    code: string;
+    name: string;
+    cycleLength: number;
+    startDate: string | null;
+  } | null;
+  period: {
+    year: number;
+    month: number;
+    startDate: string;
+    endDate: string;
+  };
+  summary: {
+    totalDays: number;
+    workingDays: number;
+    offDays: number;
+    calendarDays: number;
+    shiftDays: number;
+    approvedLeaveDays: number;
+    approvedPermissionDays: number;
+    approvedSickDays: number;
+  };
+  days: MyWorkCalendarDay[];
+}
+
 const WORK_DAY_KEYS: WorkDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 function normalizeWorkDayRule(rule?: boolean | WorkDayRule): WorkDayRule {
@@ -169,6 +263,45 @@ class WorkCalendarService {
     return r.data;
   }
 
+  // ─── Shift Formulas ───────────────────────────────────
+  async findAllShiftFormulas(companyId: string) {
+    const r = await api.get('/work-calendars/shift-formulas', { params: { companyId } });
+    return r.data.data as ShiftFormula[];
+  }
+
+  async findShiftFormulaById(id: string) {
+    const r = await api.get(`/work-calendars/shift-formulas/${id}`);
+    return r.data.data as ShiftFormula;
+  }
+
+  async createShiftFormula(data: {
+    companyId: string;
+    code: string;
+    name: string;
+    description?: string;
+    isActive?: boolean;
+    days: ShiftFormulaDay[];
+  }) {
+    const r = await api.post('/work-calendars/shift-formulas', data);
+    return r.data.data as ShiftFormula;
+  }
+
+  async updateShiftFormula(id: string, data: {
+    code?: string;
+    name?: string;
+    description?: string;
+    isActive?: boolean;
+    days?: ShiftFormulaDay[];
+  }) {
+    const r = await api.put(`/work-calendars/shift-formulas/${id}`, data);
+    return r.data.data as ShiftFormula;
+  }
+
+  async deleteShiftFormula(id: string) {
+    const r = await api.delete(`/work-calendars/shift-formulas/${id}`);
+    return r.data;
+  }
+
   // ─── Employee & Team ─────────────────────────────────
   async getEmployeeCalendar(employeeId: string) {
     const r = await api.get(`/work-calendars/employee/${employeeId}`);
@@ -180,6 +313,13 @@ class WorkCalendarService {
       params: { companyId, year, month },
     });
     return r.data.data;
+  }
+
+  async getMyResolvedCalendar(year: number, month: number) {
+    const r = await api.get('/work-calendars/me/resolved', {
+      params: { year, month },
+    });
+    return r.data.data as MyWorkCalendarMonth;
   }
 }
 

@@ -22,6 +22,9 @@ export interface Employee {
   joinDate?: string;
   employmentStatus: string;
   employmentType: string;
+  employeeCategory: 'OFFICE' | 'FACTORY' | 'FIELD' | 'REMOTE';
+  shiftFormulaId?: string | null;
+  shiftStartDate?: string | null;
   bankName?: string;
   bankAccount?: string;
   bankAccountHolder?: string;
@@ -30,6 +33,7 @@ export interface Employee {
   department?: { id: string; name: string };
   position?: { id: string; name: string };
   branch?: { id: string; name: string };
+  shiftFormula?: { id: string; code: string; name: string } | null;
   bpjsKetenagakerjaan?: string;
   bpjsKesehatan?: string;
   createdAt: string;

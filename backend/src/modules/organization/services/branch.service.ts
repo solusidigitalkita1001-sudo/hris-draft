@@ -2,8 +2,9 @@ import { branchRepository } from '../repositories/branch.repository';
 import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
-import { NotFoundError, ConflictError } from '@/shared/exceptions/AppError';
-import { CreateBranchDTO, UpdateBranchDTO } from '../organization.dto';
+import { NotFoundError, ConflictError, BadRequestError } from '@/shared/exceptions/AppError';
+import { CreateBranchDTO, UpdateBranchDTO, UpsertBranchAttendancePolicyDTO } from '../organization.dto';
+import { AttendancePolicyMethod } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 
 const logger = new WinstonLogger('BranchService');
@@ -63,6 +64,80 @@ export class BranchService {
   async delete(id: string) {
     await this.findById(id);
     await branchRepository.softDelete(id);
+  }
+
+  async getAttendancePolicy(branchId: string) {
+    await this.findById(branchId);
+    return branchRepository.findAttendancePolicy(branchId);
+  }
+
+  async upsertAttendancePolicy(branchId: string, dto: UpsertBranchAttendancePolicyDTO) {
+    const branch = await this.findById(branchId);
+    const existing = await branchRepository.findAttendancePolicy(branchId);
+
+    const merged = {
+      attendanceMethod: dto.attendanceMethod ?? existing?.attendanceMethod,
+      gpsLatitude: dto.gpsLatitude ?? existing?.gpsLatitude ?? undefined,
+      gpsLongitude: dto.gpsLongitude ?? existing?.gpsLongitude ?? undefined,
+      gpsRadiusMeters: dto.gpsRadiusMeters ?? existing?.gpsRadiusMeters ?? undefined,
+      allowOutsideRadius: dto.allowOutsideRadius ?? existing?.allowOutsideRadius ?? false,
+      outsideRadiusAction: dto.outsideRadiusAction ?? existing?.outsideRadiusAction ?? 'REVIEW',
+      lateToleranceMinutes: dto.lateToleranceMinutes ?? existing?.lateToleranceMinutes ?? 0,
+      earlyCheckoutToleranceMinutes:
+        dto.earlyCheckoutToleranceMinutes ?? existing?.earlyCheckoutToleranceMinutes ?? 0,
+      allowHolidayAttendance: dto.allowHolidayAttendance ?? existing?.allowHolidayAttendance ?? false,
+      allowWeekendAttendance: dto.allowWeekendAttendance ?? existing?.allowWeekendAttendance ?? false,
+      autoAbsentEnabled: dto.autoAbsentEnabled ?? existing?.autoAbsentEnabled ?? false,
+      autoCheckoutEnabled: dto.autoCheckoutEnabled ?? existing?.autoCheckoutEnabled ?? false,
+      requiresSelfie: dto.requiresSelfie ?? existing?.requiresSelfie ?? false,
+      requiresLocation: dto.requiresLocation ?? existing?.requiresLocation ?? false,
+      isActive: dto.isActive ?? existing?.isActive ?? true,
+      notes: dto.notes ?? existing?.notes ?? undefined,
+    } satisfies UpsertBranchAttendancePolicyDTO;
+
+    if (!merged.attendanceMethod) {
+      throw new BadRequestError('Attendance method is required');
+    }
+
+    const needsGpsConfiguration =
+      merged.attendanceMethod === AttendancePolicyMethod.MOBILE_GPS ||
+      merged.attendanceMethod === AttendancePolicyMethod.BOTH ||
+      merged.requiresLocation;
+
+    const effectiveLatitude = merged.gpsLatitude ?? branch.latitude ?? undefined;
+    const effectiveLongitude = merged.gpsLongitude ?? branch.longitude ?? undefined;
+
+    if (needsGpsConfiguration) {
+      if (effectiveLatitude === undefined || effectiveLongitude === undefined) {
+        throw new BadRequestError('GPS latitude and longitude are required for this attendance policy');
+      }
+
+      if (!merged.gpsRadiusMeters) {
+        throw new BadRequestError('GPS radius is required for this attendance policy');
+      }
+    }
+
+    const policy = await branchRepository.upsertAttendancePolicy(branchId, branch.companyId, merged);
+
+    await eventBus.publish({
+      name: DomainEvents.BRANCH_UPDATED,
+      aggregateId: branchId,
+      aggregateType: 'BranchAttendancePolicy',
+      data: merged,
+      metadata: { eventId: uuidv4(), occurredAt: new Date() },
+    });
+
+    return policy;
+  }
+
+  async deleteAttendancePolicy(branchId: string) {
+    await this.findById(branchId);
+    const existing = await branchRepository.findAttendancePolicy(branchId);
+    if (!existing) {
+      throw new NotFoundError('Branch attendance policy not found');
+    }
+
+    await branchRepository.softDeleteAttendancePolicy(branchId);
   }
 }
 

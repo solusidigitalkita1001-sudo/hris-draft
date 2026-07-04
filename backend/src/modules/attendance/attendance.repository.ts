@@ -14,13 +14,30 @@ export class AttendanceRepository {
 
     return prisma.attendance.findMany({
       where,
-      include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true } },
+        branch: { select: { id: true, name: true, code: true } },
+      },
       orderBy: { date: 'desc' },
     });
   }
 
   async findById(id: string) {
-    return prisma.attendance.findFirst({ where: { id, deletedAt: null }, include: { employee: { select: { id: true, fullName: true, employeeNumber: true, department: { select: { name: true } } } } } });
+    return prisma.attendance.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            department: { select: { name: true } },
+          },
+        },
+        branch: { select: { id: true, name: true, code: true } },
+        attendancePolicy: { select: { id: true, attendanceMethod: true } },
+      },
+    });
   }
 
   async findByEmployeeAndDate(employeeId: string, date: Date) {
@@ -29,18 +46,14 @@ export class AttendanceRepository {
     return prisma.attendance.findFirst({ where: { employeeId, date: { gte: start, lte: end }, deletedAt: null } });
   }
 
-  async create(data: CreateAttendanceDTO) {
+  async create(data: Prisma.AttendanceUncheckedCreateInput) {
     return prisma.attendance.create({
-      data: {
-        employeeId: data.employeeId,
-        companyId: data.companyId,
-        date: new Date(data.date),
-        checkIn: data.checkIn ? new Date(data.checkIn) : undefined,
-        checkOut: data.checkOut ? new Date(data.checkOut) : undefined,
-        status: data.status as any,
-        notes: data.notes,
+      data,
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true } },
+        branch: { select: { id: true, name: true, code: true } },
+        attendancePolicy: { select: { id: true, attendanceMethod: true } },
       },
-      include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
     });
   }
 

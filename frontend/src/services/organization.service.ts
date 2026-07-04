@@ -29,6 +29,32 @@ export interface Branch {
   code: string;
   timezone: string;
   status: string;
+  attendancePolicy?: BranchAttendancePolicy | null;
+}
+
+export type AttendancePolicyMethod = 'FINGERPRINT' | 'MOBILE_GPS' | 'BOTH' | 'MANUAL';
+export type OutsideRadiusAction = 'REJECT' | 'FLAG' | 'REVIEW';
+
+export interface BranchAttendancePolicy {
+  id: string;
+  companyId: string;
+  branchId: string;
+  attendanceMethod: AttendancePolicyMethod;
+  gpsLatitude?: number | null;
+  gpsLongitude?: number | null;
+  gpsRadiusMeters?: number | null;
+  allowOutsideRadius: boolean;
+  outsideRadiusAction: OutsideRadiusAction;
+  lateToleranceMinutes: number;
+  earlyCheckoutToleranceMinutes: number;
+  allowHolidayAttendance: boolean;
+  allowWeekendAttendance: boolean;
+  autoAbsentEnabled: boolean;
+  autoCheckoutEnabled: boolean;
+  requiresSelfie: boolean;
+  requiresLocation: boolean;
+  isActive: boolean;
+  notes?: string | null;
 }
 
 export interface Division {
@@ -147,6 +173,23 @@ class OrganizationService {
 
   async deleteBranch(id: string): Promise<void> {
     await api.delete(`/organization/branches/${id}`);
+  }
+
+  async getBranchAttendancePolicy(branchId: string): Promise<BranchAttendancePolicy | null> {
+    const response = await api.get(`/organization/branches/${branchId}/attendance-policy`);
+    return response.data.data;
+  }
+
+  async upsertBranchAttendancePolicy(
+    branchId: string,
+    data: Partial<BranchAttendancePolicy> & { attendanceMethod: AttendancePolicyMethod },
+  ): Promise<BranchAttendancePolicy> {
+    const response = await api.put(`/organization/branches/${branchId}/attendance-policy`, data);
+    return response.data.data;
+  }
+
+  async deleteBranchAttendancePolicy(branchId: string): Promise<void> {
+    await api.delete(`/organization/branches/${branchId}/attendance-policy`);
   }
 
   // Divisions

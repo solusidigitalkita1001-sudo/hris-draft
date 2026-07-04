@@ -42,6 +42,8 @@ import {
   Package,
   Plane,
   Workflow,
+  MapPin,
+  Repeat,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -72,6 +74,7 @@ const navItems: NavItem[] = [
       { labelKey: 'sidebar.organization.chart', icon: <Network size={16} />, path: '/organization/chart' },
       { labelKey: 'sidebar.organization.groups', icon: <GitBranch size={16} />, path: '/organization/groups' },
       { labelKey: 'sidebar.organization.companies', icon: <Building size={16} />, path: '/organization/companies' },
+      { labelKey: 'sidebar.organization.branches', icon: <MapPin size={16} />, path: '/organization/branches' },
       { labelKey: 'sidebar.organization.departments', icon: <Building2 size={16} />, path: '/organization/departments' },
       { labelKey: 'sidebar.organization.positions', icon: <Briefcase size={16} />, path: '/organization/positions' },
     ],
@@ -144,6 +147,7 @@ const navItems: NavItem[] = [
     },
     children: [
       { labelKey: 'sidebar.workCalendar.calendars', icon: <CalendarDays size={16} />, path: '/work-calendar' },
+      { labelKey: 'sidebar.workCalendar.shifts', icon: <Repeat size={16} />, path: '/work-calendar/shifts' },
       { labelKey: 'sidebar.workCalendar.holidays', icon: <CalendarDays size={16} />, path: '/work-calendar/holidays' },
     ],
   },

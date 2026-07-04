@@ -20,9 +20,31 @@ export class WorkCalendarController {
     } catch (error) { next(error); }
   }
 
+  async findAllShiftFormulas(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.findAllShiftFormulas(req.query.companyId as string);
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async findShiftFormulaById(req: Request, res: Response, next: NextFunction) {
+    try {
+      const formula = await workCalendarRepository.findShiftFormulaById(req.params.sid as string);
+      if (!formula) return res.status(404).json(Result.error('Shift formula not found'));
+      res.json(Result.success(formula));
+    } catch (error) { next(error); }
+  }
+
   async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await workCalendarRepository.create({ ...req.body, createdBy: req.user!.id });
+      res.status(201).json(Result.created(data));
+    } catch (error) { next(error); }
+  }
+
+  async createShiftFormula(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.createShiftFormula({ ...req.body, createdBy: req.user!.id });
       res.status(201).json(Result.created(data));
     } catch (error) { next(error); }
   }
@@ -34,9 +56,23 @@ export class WorkCalendarController {
     } catch (error) { next(error); }
   }
 
+  async updateShiftFormula(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await workCalendarRepository.updateShiftFormula(req.params.sid as string, req.body);
+      res.json(Result.updated(data));
+    } catch (error) { next(error); }
+  }
+
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       await workCalendarRepository.delete(req.params.id as string);
+      res.json(Result.deleted());
+    } catch (error) { next(error); }
+  }
+
+  async deleteShiftFormula(req: Request, res: Response, next: NextFunction) {
+    try {
+      await workCalendarRepository.deleteShiftFormula(req.params.sid as string);
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }
@@ -126,6 +162,15 @@ export class WorkCalendarController {
       const calendar = await workCalendarRepository.findEmployeeCalendar(req.params.employeeId as string);
       if (!calendar) return res.status(404).json(Result.error('No calendar found for employee'));
       res.json(Result.success(calendar));
+    } catch (error) { next(error); }
+  }
+
+  async getMyResolvedCalendar(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const year = Number(req.query.year as string) || new Date().getFullYear();
+      const month = Number(req.query.month as string) || (new Date().getMonth() + 1);
+      const data = await workCalendarRepository.findResolvedMyWorkCalendarMonth(req.user!.id, year, month);
+      res.json(Result.success(data));
     } catch (error) { next(error); }
   }
 

@@ -6,6 +6,12 @@ export const createAttendanceSchema = z.object({
   date: z.string().datetime(),
   checkIn: z.string().datetime().optional(),
   checkOut: z.string().datetime().optional(),
+  method: z.enum(['FINGERPRINT', 'MOBILE_GPS', 'MANUAL']).default('MANUAL'),
+  source: z.string().max(50).optional(),
+  checkInLatitude: z.number().optional(),
+  checkInLongitude: z.number().optional(),
+  checkOutLatitude: z.number().optional(),
+  checkOutLongitude: z.number().optional(),
   status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']).default('PRESENT'),
   notes: z.string().optional(),
 });

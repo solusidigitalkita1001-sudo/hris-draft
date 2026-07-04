@@ -48,6 +48,33 @@ export class BranchController {
       next(error);
     }
   }
+
+  async getAttendancePolicy(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const policy = await branchService.getAttendancePolicy(req.params.id as string);
+      res.status(200).json(Result.success(policy));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async upsertAttendancePolicy(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const policy = await branchService.upsertAttendancePolicy(req.params.id as string, req.body);
+      res.status(200).json(Result.updated(policy, 'Branch attendance policy saved successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteAttendancePolicy(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await branchService.deleteAttendancePolicy(req.params.id as string);
+      res.status(200).json(Result.deleted('Branch attendance policy deleted successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const branchController = new BranchController();

@@ -35,7 +35,7 @@ const EMPLOYMENT_TYPES = ['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREEL
 const WORKSPACE_SECTIONS = [
   {
     key: 'overview',
-    icon: Sparkles,
+    icon: UserRound,
   },
   {
     key: 'profile',
@@ -93,13 +93,13 @@ function OverviewStatCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm backdrop-blur">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-2xl border border-border bg-background p-4">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-          <p className="mt-3 text-lg font-semibold leading-tight text-foreground">{value}</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+          <p className="mt-2 text-base font-semibold leading-tight text-foreground">{value}</p>
         </div>
-        <div className="rounded-xl bg-primary/10 p-2 text-primary">
+        <div className="rounded-xl border border-border bg-muted/40 p-2 text-muted-foreground">
           <Icon size={16} />
         </div>
       </div>
@@ -119,12 +119,12 @@ function DetailCard({
   className?: string;
 }) {
   return (
-    <div className={cn('rounded-3xl border border-border bg-card p-5 shadow-sm', className)}>
-      <div className="mb-4">
+    <div className={cn('rounded-2xl border border-border bg-background', className)}>
+      <div className="border-b border-border px-5 py-4">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {subtitle ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{subtitle}</p> : null}
       </div>
-      {children}
+      <div className="p-5">{children}</div>
     </div>
   );
 }
@@ -139,8 +139,8 @@ function DetailItem({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl bg-muted/30 px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+    <div className="rounded-xl border border-border bg-muted/15 px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
       <p className={cn('mt-1 text-sm font-medium text-foreground', mono && 'font-mono text-[13px]')}>
         {value || '-'}
       </p>
@@ -501,46 +501,51 @@ export function EmployeeDetailPage() {
       />
 
       <div className="space-y-8">
-        <div className="overflow-hidden rounded-[32px] border border-border/70 bg-gradient-to-br from-primary/15 via-background to-background shadow-[0_24px_80px_-48px_rgba(0,0,0,0.45)]">
-          <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.35fr)_360px] lg:px-8 lg:py-8">
-            <div className="space-y-6">
-              <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
-                {t('employees.detail.workspace.badge')}
-              </div>
-
+        <div className="overflow-hidden rounded-[28px] border border-border bg-card">
+          <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.45fr)_340px] lg:px-7 lg:py-6">
+            <div className="space-y-5">
               <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-[28px] border border-primary/15 bg-primary/10 shadow-inner shadow-primary/10">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-[24px] border border-border bg-muted/20">
                   {employee.avatar ? (
-                    <img src={employee.avatar} alt="" className="h-24 w-24 rounded-[28px] object-cover" />
+                    <img src={employee.avatar} alt="" className="h-24 w-24 rounded-[24px] object-cover" />
                   ) : (
-                    <UserRound size={42} className="text-primary" />
+                    <UserRound size={38} className="text-muted-foreground" />
                   )}
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-3xl font-semibold tracking-tight text-foreground">{employee.fullName}</h2>
-                  <p className="mt-2 text-base text-muted-foreground">{employee.position?.name || t('employees.detail.positionFallback')}</p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center rounded-full border border-border bg-muted/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      {t('employees.detail.workspace.badge')}
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                       #{employee.employeeNumber}
                     </span>
-                    <span className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-medium text-foreground">
+                  </div>
+
+                  <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">{employee.fullName}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{employee.position?.name || t('employees.detail.positionFallback')}</p>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
                       {employee.department?.name || t('employees.detail.departmentFallback')}
                     </span>
-                    <span className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-medium text-foreground">
+                    <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
                       {employee.branch?.name || t('employees.detail.companyLevel')}
+                    </span>
+                    <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
+                      {employee.employmentStatus}
                     </span>
                   </div>
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-border/70 bg-background/75 px-4 py-3">
+                    <div className="rounded-2xl border border-border bg-background px-4 py-3">
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Mail size={14} />
                         <span className="truncate text-sm">{employee.email || '-'}</span>
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-border/70 bg-background/75 px-4 py-3">
+                    <div className="rounded-2xl border border-border bg-background px-4 py-3">
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Phone size={14} />
                         <span className="text-sm">{employee.phone || '-'}</span>
@@ -551,7 +556,7 @@ export function EmployeeDetailPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               <OverviewStatCard icon={BadgeCheck} label={t('employees.detail.stats.employmentStatus')} value={employee.employmentStatus} />
               <OverviewStatCard icon={Briefcase} label={t('employees.detail.stats.employmentType')} value={employee.employmentType} />
               <OverviewStatCard icon={CalendarDays} label={t('employees.detail.stats.joinDate')} value={employee.joinDate ? formatDate(employee.joinDate) : '-'} />
@@ -571,24 +576,24 @@ export function EmployeeDetailPage() {
                 type="button"
                 onClick={() => setActiveWorkspace(section.key)}
                 className={cn(
-                  'rounded-[26px] border px-5 py-4 text-left transition-all duration-200',
+                  'rounded-2xl border px-5 py-4 text-left transition-all duration-200',
                   isActive
-                    ? 'border-primary/30 bg-primary text-primary-foreground shadow-[0_18px_40px_-24px_rgba(124,58,237,0.9)]'
-                    : 'border-border bg-card hover:border-primary/20 hover:bg-primary/[0.04]'
+                    ? 'border-foreground/15 bg-foreground text-background'
+                    : 'border-border bg-card hover:border-foreground/15 hover:bg-muted/20'
                 )}
               >
                 <div className="flex items-start gap-3">
                   <div
                     className={cn(
-                      'rounded-2xl p-2.5',
-                      isActive ? 'bg-white/15 text-primary-foreground' : 'bg-primary/10 text-primary'
+                      'rounded-xl border p-2.5',
+                      isActive ? 'border-white/10 bg-white/10 text-background' : 'border-border bg-muted/30 text-muted-foreground'
                     )}
                   >
                     <Icon size={18} />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold">{section.label}</p>
-                    <p className={cn('mt-1 text-xs leading-5', isActive ? 'text-primary-foreground/85' : 'text-muted-foreground')}>
+                    <p className={cn('mt-1 text-xs leading-5', isActive ? 'text-background/75' : 'text-muted-foreground')}>
                       {section.description}
                     </p>
                   </div>
@@ -598,7 +603,7 @@ export function EmployeeDetailPage() {
           })}
         </div>
 
-        <div className="rounded-[32px] border border-border bg-card shadow-sm">
+        <div className="rounded-[28px] border border-border bg-card shadow-sm">
           <div className="px-5 py-5 lg:px-6 lg:py-6">
             {activeWorkspace === 'overview' && (
               <div className="space-y-6">
@@ -659,14 +664,14 @@ export function EmployeeDetailPage() {
                     >
                       {transactions[0] ? (
                         <div className="space-y-3">
-                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                          <span className="inline-flex items-center rounded-full border border-border bg-muted/20 px-2.5 py-1 text-[11px] font-medium text-foreground">
                             {getCareerTransactionLabel(transactions[0].transactionType, t)}
                           </span>
                           <DetailItem label={t('employees.detail.fields.reference')} value={transactions[0].referenceNumber || t('employees.detail.noReference')} />
                           <DetailItem label={t('employees.detail.fields.effectiveDate')} value={formatDate(transactions[0].effectiveDate)} />
                         </div>
                       ) : (
-                        <div className="rounded-2xl border border-dashed border-border bg-muted/25 px-4 py-6 text-sm text-muted-foreground">
+                        <div className="rounded-2xl border border-dashed border-border bg-muted/15 px-4 py-6 text-sm text-muted-foreground">
                           {t('employees.detail.career.empty')}
                         </div>
                       )}
@@ -697,7 +702,7 @@ export function EmployeeDetailPage() {
                         {t('employees.detail.profile.subtitle')}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    <div className="rounded-2xl border border-border bg-muted/15 px-3 py-2 text-xs text-muted-foreground">
                       {t('employees.detail.profile.activeSection')}: <span className="font-medium text-foreground">{activeTabConfig.label}</span>
                     </div>
                   </div>
@@ -717,15 +722,15 @@ export function EmployeeDetailPage() {
                           className={cn(
                             'min-w-[190px] rounded-2xl border px-4 py-3 text-left transition-all',
                             isActive
-                              ? 'border-primary/30 bg-primary text-primary-foreground shadow-[0_18px_40px_-24px_rgba(124,58,237,0.9)]'
-                              : 'border-border bg-background hover:border-primary/20 hover:bg-primary/[0.04]'
+                              ? 'border-foreground/15 bg-foreground text-background'
+                              : 'border-border bg-background hover:border-foreground/15 hover:bg-muted/20'
                           )}
                         >
                           <div className="flex items-center gap-2">
                             <Icon size={16} />
                             <span className="text-sm font-medium">{tab.label}</span>
                           </div>
-                          <p className={cn('mt-2 text-xs leading-5', isActive ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+                          <p className={cn('mt-2 text-xs leading-5', isActive ? 'text-background/75' : 'text-muted-foreground')}>
                             {tab.description}
                           </p>
                         </button>
@@ -735,9 +740,9 @@ export function EmployeeDetailPage() {
                 </div>
 
                 <div className="px-5 py-5">
-                  <div className="mb-4 rounded-2xl border border-dashed border-border bg-muted/20 px-4 py-3">
+                  <div className="mb-4 rounded-2xl border border-dashed border-border bg-muted/10 px-4 py-3">
                     <div className="flex items-start gap-3">
-                      <div className="mt-0.5 rounded-xl bg-primary/10 p-2 text-primary">
+                      <div className="mt-0.5 rounded-xl border border-border bg-muted/20 p-2 text-muted-foreground">
                         <ActiveSectionIcon size={16} />
                       </div>
                       <div>
@@ -765,18 +770,17 @@ export function EmployeeDetailPage() {
                 </div>
 
                 {transactions.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                  <div className="rounded-2xl border border-dashed border-border bg-muted/15 px-4 py-8 text-center text-sm text-muted-foreground">
                     {t('employees.detail.career.empty')}
                   </div>
                 ) : (
-                  <div className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
+                  <div className="max-h-[72vh] space-y-3 overflow-y-auto pr-1">
                     {transactions.map((transaction) => (
-                      <div key={transaction.id} className="rounded-2xl border border-border bg-background/80 p-4 shadow-sm">
+                      <div key={transaction.id} className="rounded-2xl border border-border bg-background p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
-                                <Sparkles size={12} className="mr-1" />
+                              <span className="inline-flex items-center rounded-full border border-border bg-muted/20 px-2.5 py-1 text-[11px] font-medium text-foreground">
                                 {getCareerTransactionLabel(transaction.transactionType, t)}
                               </span>
                               <span className="text-xs text-muted-foreground">{formatDate(transaction.effectiveDate)}</span>
@@ -799,7 +803,7 @@ export function EmployeeDetailPage() {
                         </div>
 
                         {transaction.notes && (
-                          <div className="mt-3 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                          <div className="mt-3 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                             {transaction.notes}
                           </div>
                         )}

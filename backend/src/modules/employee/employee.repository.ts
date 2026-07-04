@@ -189,11 +189,13 @@ export class EmployeeRepository {
         fullName: `${data.firstName} ${data.lastName}`,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
         joinDate: data.joinDate ? new Date(data.joinDate) : undefined,
+        shiftStartDate: data.shiftStartDate ? new Date(data.shiftStartDate) : undefined,
       },
       include: {
         department: { select: { id: true, name: true } },
         position: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
+        shiftFormula: { select: { id: true, code: true, name: true } },
       },
     });
   }
@@ -204,7 +206,8 @@ export class EmployeeRepository {
       'branchId', 'departmentId', 'subDepartmentId', 'positionId',
       'firstName', 'lastName', 'email', 'phone', 'idNumber',
       'placeOfBirth', 'gender', 'religion', 'maritalStatus', 'bloodType',
-      'nationality', 'address', 'avatar', 'employmentType',
+      'nationality', 'address', 'avatar', 'employmentType', 'employeeCategory',
+      'shiftFormulaId',
       'bankName', 'bankAccount', 'bankAccountHolder', 'taxId',
       'bpjsKetenagakerjaan', 'bpjsKesehatan',
     ];
@@ -219,8 +222,18 @@ export class EmployeeRepository {
     }
     if (data.dateOfBirth !== undefined) updateData.dateOfBirth = new Date(data.dateOfBirth);
     if (data.joinDate !== undefined) updateData.joinDate = new Date(data.joinDate);
+    if (data.shiftStartDate !== undefined) updateData.shiftStartDate = data.shiftStartDate ? new Date(data.shiftStartDate) : null;
 
-    return prisma.employee.update({ where: { id }, data: updateData });
+    return prisma.employee.update({
+      where: { id },
+      data: updateData,
+      include: {
+        department: { select: { id: true, name: true } },
+        position: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
+        shiftFormula: { select: { id: true, code: true, name: true } },
+      },
+    });
   }
 
   async softDelete(id: string) {

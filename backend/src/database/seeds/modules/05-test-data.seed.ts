@@ -5,8 +5,85 @@ import path from 'path';
 
 const prisma = new PrismaClient();
 
+function addDays(baseDate: Date, days: number) {
+  const result = new Date(baseDate);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function padNumber(value: number, size: number) {
+  return value.toString().padStart(size, '0');
+}
+
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+const DAY_KEYS_BY_INDEX = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+
+function buildCalendarDaysForYear(
+  calendarId: string,
+  year: number,
+  workDaysConfig: Record<string, { enabled: boolean; workStart: string | null; workEnd: string | null }>,
+  overrides: Array<{
+    date: Date;
+    dayType: string;
+    name?: string;
+    notes?: string;
+    workStart?: string | null;
+    workEnd?: string | null;
+    isMandatory?: boolean;
+  }> = []
+) {
+  const overrideMap = new Map(overrides.map((item) => [toDateKey(item.date), item]));
+  const entries: Array<{
+    calendarId: string;
+    date: Date;
+    dayType: string;
+    name?: string | null;
+    notes?: string | null;
+    workStart?: string | null;
+    workEnd?: string | null;
+    isMandatory?: boolean;
+  }> = [];
+
+  for (let current = new Date(year, 0, 1); current <= new Date(year, 11, 31); current.setDate(current.getDate() + 1)) {
+    const date = new Date(current);
+    const override = overrideMap.get(toDateKey(date));
+    if (override) {
+      entries.push({
+        calendarId,
+        date,
+        dayType: override.dayType,
+        name: override.name ?? null,
+        notes: override.notes ?? null,
+        workStart: override.workStart ?? null,
+        workEnd: override.workEnd ?? null,
+        isMandatory: override.isMandatory ?? false,
+      });
+      continue;
+    }
+
+    const rule = workDaysConfig[DAY_KEYS_BY_INDEX[date.getDay()]];
+    entries.push({
+      calendarId,
+      date,
+      dayType: rule?.enabled ? 'WD' : 'WE',
+      workStart: rule?.enabled ? rule.workStart : null,
+      workEnd: rule?.enabled ? rule.workEnd : null,
+      isMandatory: false,
+    });
+  }
+
+  return entries;
+}
+
 export async function seedTestData(): Promise<void> {
   console.log('\n--- Seeding test data ---\n');
+  const companyStartedAt = new Date('2024-07-01T09:00:00+07:00');
 
   const ensureUserRole = async (params: {
     email: string;
@@ -47,16 +124,51 @@ export async function seedTestData(): Promise<void> {
 
   const group = await prisma.companyGroup.upsert({
     where: { code: 'HOLDING' },
-    update: {},
-    create: { name: 'PT Holding Utama', code: 'HOLDING', taxId: '01.234.567.8-901.000', status: 'ACTIVE' },
+    update: {
+      name: 'PT Holding Utama',
+      taxId: '01.234.567.8-901.000',
+      status: 'ACTIVE',
+      createdAt: companyStartedAt,
+      deletedAt: null,
+    },
+    create: {
+      name: 'PT Holding Utama',
+      code: 'HOLDING',
+      taxId: '01.234.567.8-901.000',
+      status: 'ACTIVE',
+      createdAt: companyStartedAt,
+    },
   });
 
   const company = await prisma.company.upsert({
     where: { code: 'TECH' },
-    update: {},
+    update: {
+      groupId: group.id,
+      name: 'PT Teknologi Maju',
+      taxId: '02.345.678.9-012.000',
+      timezone: 'Asia/Jakarta',
+      currency: 'IDR',
+      status: 'ACTIVE',
+      address: 'Gedung Inovasi Nusantara, Jl. Jenderal Sudirman Kav. 52-53, Jakarta Selatan',
+      phone: '+62 21 5550 1200',
+      email: 'hello@tech.com',
+      website: 'https://tech.example.com',
+      createdAt: companyStartedAt,
+      deletedAt: null,
+    },
     create: {
-      groupId: group.id, name: 'PT Teknologi Maju', code: 'TECH',
-      taxId: '02.345.678.9-012.000', timezone: 'Asia/Jakarta', currency: 'IDR', status: 'ACTIVE',
+      groupId: group.id,
+      name: 'PT Teknologi Maju',
+      code: 'TECH',
+      taxId: '02.345.678.9-012.000',
+      timezone: 'Asia/Jakarta',
+      currency: 'IDR',
+      status: 'ACTIVE',
+      address: 'Gedung Inovasi Nusantara, Jl. Jenderal Sudirman Kav. 52-53, Jakarta Selatan',
+      phone: '+62 21 5550 1200',
+      email: 'hello@tech.com',
+      website: 'https://tech.example.com',
+      createdAt: companyStartedAt,
     },
   });
 
@@ -65,17 +177,104 @@ export async function seedTestData(): Promise<void> {
   // ===================================================
   const branch = await prisma.branch.upsert({
     where: { code: 'HQ' },
-    update: {}, create: { companyId: company.id, name: 'Head Office Jakarta', code: 'HQ', status: 'ACTIVE' },
+    update: {
+      companyId: company.id,
+      name: 'Head Office Jakarta',
+      address: 'Jl. Jenderal Sudirman Kav. 52-53, Jakarta Selatan',
+      phone: '+62 21 5550 1201',
+      email: 'hq@tech.com',
+      timezone: 'Asia/Jakarta',
+      latitude: -6.21462,
+      longitude: 106.84513,
+      status: 'ACTIVE',
+      createdAt: companyStartedAt,
+      deletedAt: null,
+    },
+    create: {
+      companyId: company.id,
+      name: 'Head Office Jakarta',
+      code: 'HQ',
+      address: 'Jl. Jenderal Sudirman Kav. 52-53, Jakarta Selatan',
+      phone: '+62 21 5550 1201',
+      email: 'hq@tech.com',
+      timezone: 'Asia/Jakarta',
+      latitude: -6.21462,
+      longitude: 106.84513,
+      status: 'ACTIVE',
+      createdAt: companyStartedAt,
+    },
   });
 
   const branch2 = await prisma.branch.upsert({
     where: { code: 'BDG' },
-    update: {}, create: { companyId: company.id, name: 'Bandung Branch', code: 'BDG', status: 'ACTIVE' },
+    update: {
+      companyId: company.id,
+      name: 'Bandung Branch',
+      address: 'Jl. Asia Afrika No. 88, Bandung',
+      phone: '+62 22 5550 881',
+      email: 'bandung@tech.com',
+      timezone: 'Asia/Jakarta',
+      latitude: -6.91746,
+      longitude: 107.61912,
+      status: 'ACTIVE',
+      createdAt: addDays(companyStartedAt, 45),
+      deletedAt: null,
+    },
+    create: {
+      companyId: company.id,
+      name: 'Bandung Branch',
+      code: 'BDG',
+      address: 'Jl. Asia Afrika No. 88, Bandung',
+      phone: '+62 22 5550 881',
+      email: 'bandung@tech.com',
+      timezone: 'Asia/Jakarta',
+      latitude: -6.91746,
+      longitude: 107.61912,
+      status: 'ACTIVE',
+      createdAt: addDays(companyStartedAt, 45),
+    },
+  });
+
+  const branch3 = await prisma.branch.upsert({
+    where: { code: 'SBY' },
+    update: {
+      companyId: company.id,
+      name: 'Surabaya Branch',
+      address: 'Jl. Basuki Rahmat No. 16-18, Surabaya',
+      phone: '+62 31 5550 118',
+      email: 'surabaya@tech.com',
+      timezone: 'Asia/Jakarta',
+      latitude: -7.25747,
+      longitude: 112.75209,
+      status: 'ACTIVE',
+      createdAt: addDays(companyStartedAt, 120),
+      deletedAt: null,
+    },
+    create: {
+      companyId: company.id,
+      name: 'Surabaya Branch',
+      code: 'SBY',
+      address: 'Jl. Basuki Rahmat No. 16-18, Surabaya',
+      phone: '+62 31 5550 118',
+      email: 'surabaya@tech.com',
+      timezone: 'Asia/Jakarta',
+      latitude: -7.25747,
+      longitude: 112.75209,
+      status: 'ACTIVE',
+      createdAt: addDays(companyStartedAt, 120),
+    },
   });
 
   const division = await prisma.division.upsert({
     where: { code: 'OPS' },
-    update: {}, create: { companyId: company.id, name: 'Operations', code: 'OPS', status: 'ACTIVE' },
+    update: {},
+    create: {
+      companyId: company.id,
+      name: 'Operations',
+      code: 'OPS',
+      status: 'ACTIVE',
+      createdAt: companyStartedAt,
+    },
   });
 
   // ===================================================
@@ -99,6 +298,18 @@ export async function seedTestData(): Promise<void> {
   const deptMarketing = await prisma.department.upsert({
     where: { code: 'MKT' },
     update: {}, create: { companyId: company.id, name: 'Marketing', code: 'MKT', status: 'ACTIVE' },
+  });
+
+  const deptOps = await prisma.department.upsert({
+    where: { code: 'OPSD' },
+    update: {},
+    create: {
+      companyId: company.id,
+      divisionId: division.id,
+      name: 'Branch Operations',
+      code: 'OPSD',
+      status: 'ACTIVE',
+    },
   });
 
   const posManager = await prisma.position.upsert({
@@ -126,52 +337,555 @@ export async function seedTestData(): Promise<void> {
     update: {}, create: { companyId: company.id, departmentId: deptMarketing.id, name: 'Marketing Staff', code: 'MKTS', gradeLevel: 2, status: 'ACTIVE' },
   });
 
+  const posOps = await prisma.position.upsert({
+    where: { code: 'OPSF' },
+    update: {},
+    create: {
+      companyId: company.id,
+      departmentId: deptOps.id,
+      name: 'Branch Operations Staff',
+      code: 'OPSF',
+      gradeLevel: 2,
+      status: 'ACTIVE',
+    },
+  });
+
+  const posOpsLead = await prisma.position.upsert({
+    where: { code: 'OPSL' },
+    update: {},
+    create: {
+      companyId: company.id,
+      departmentId: deptOps.id,
+      name: 'Branch Operations Lead',
+      code: 'OPSL',
+      gradeLevel: 4,
+      status: 'ACTIVE',
+    },
+  });
+
+  await (prisma as any).branchAttendancePolicy.upsert({
+    where: { branchId: branch.id },
+    update: {
+      attendanceMethod: 'FINGERPRINT',
+      lateToleranceMinutes: 10,
+      earlyCheckoutToleranceMinutes: 10,
+      allowHolidayAttendance: false,
+      allowWeekendAttendance: false,
+      autoAbsentEnabled: true,
+      autoCheckoutEnabled: false,
+      requiresSelfie: false,
+      requiresLocation: false,
+      isActive: true,
+      notes: 'Head office menggunakan fingerprint only untuk seluruh karyawan onsite.',
+      deletedAt: null,
+    },
+    create: {
+      companyId: company.id,
+      branchId: branch.id,
+      attendanceMethod: 'FINGERPRINT',
+      lateToleranceMinutes: 10,
+      earlyCheckoutToleranceMinutes: 10,
+      allowHolidayAttendance: false,
+      allowWeekendAttendance: false,
+      autoAbsentEnabled: true,
+      autoCheckoutEnabled: false,
+      requiresSelfie: false,
+      requiresLocation: false,
+      isActive: true,
+      notes: 'Head office menggunakan fingerprint only untuk seluruh karyawan onsite.',
+    },
+  });
+
+  const shiftFormulaThreeGroup = await (prisma as any).shiftFormula.upsert({
+    where: {
+      companyId_code: {
+        companyId: company.id,
+        code: 'SHIFT-3REGU',
+      },
+    },
+    update: {
+      name: '3 Regu Rotasi 8 Hari',
+      description: '2 shift pagi, 2 shift sore, 2 shift malam, 2 hari libur untuk operator pabrik.',
+      cycleLength: 8,
+      isActive: true,
+      deletedAt: null,
+      days: {
+        deleteMany: {},
+        create: [
+          { sequence: 1, label: 'Pagi A', dayType: 'WS', workStart: '07:00', workEnd: '15:00', crossesMidnight: false },
+          { sequence: 2, label: 'Pagi B', dayType: 'WS', workStart: '07:00', workEnd: '15:00', crossesMidnight: false },
+          { sequence: 3, label: 'Sore A', dayType: 'WS', workStart: '15:00', workEnd: '23:00', crossesMidnight: false },
+          { sequence: 4, label: 'Sore B', dayType: 'WS', workStart: '15:00', workEnd: '23:00', crossesMidnight: false },
+          { sequence: 5, label: 'Malam A', dayType: 'WS', workStart: '23:00', workEnd: '07:00', crossesMidnight: true },
+          { sequence: 6, label: 'Malam B', dayType: 'WS', workStart: '23:00', workEnd: '07:00', crossesMidnight: true },
+          { sequence: 7, label: 'Off 1', dayType: 'WE', workStart: null, workEnd: null, crossesMidnight: false },
+          { sequence: 8, label: 'Off 2', dayType: 'WE', workStart: null, workEnd: null, crossesMidnight: false },
+        ],
+      },
+    },
+    create: {
+      companyId: company.id,
+      code: 'SHIFT-3REGU',
+      name: '3 Regu Rotasi 8 Hari',
+      description: '2 shift pagi, 2 shift sore, 2 shift malam, 2 hari libur untuk operator pabrik.',
+      cycleLength: 8,
+      createdBy: 'system-seed',
+      isActive: true,
+      days: {
+        create: [
+          { sequence: 1, label: 'Pagi A', dayType: 'WS', workStart: '07:00', workEnd: '15:00', crossesMidnight: false },
+          { sequence: 2, label: 'Pagi B', dayType: 'WS', workStart: '07:00', workEnd: '15:00', crossesMidnight: false },
+          { sequence: 3, label: 'Sore A', dayType: 'WS', workStart: '15:00', workEnd: '23:00', crossesMidnight: false },
+          { sequence: 4, label: 'Sore B', dayType: 'WS', workStart: '15:00', workEnd: '23:00', crossesMidnight: false },
+          { sequence: 5, label: 'Malam A', dayType: 'WS', workStart: '23:00', workEnd: '07:00', crossesMidnight: true },
+          { sequence: 6, label: 'Malam B', dayType: 'WS', workStart: '23:00', workEnd: '07:00', crossesMidnight: true },
+          { sequence: 7, label: 'Off 1', dayType: 'WE', workStart: null, workEnd: null, crossesMidnight: false },
+          { sequence: 8, label: 'Off 2', dayType: 'WE', workStart: null, workEnd: null, crossesMidnight: false },
+        ],
+      },
+    },
+    include: {
+      days: true,
+    },
+  });
+
+  const shiftFormulaWeekend = await (prisma as any).shiftFormula.upsert({
+    where: {
+      companyId_code: {
+        companyId: company.id,
+        code: 'SHIFT-2-2-2',
+      },
+    },
+    update: {
+      name: '2-2-2 Weekend Coverage',
+      description: 'Pola 2 pagi, 2 sore, 2 libur untuk supervisor pabrik.',
+      cycleLength: 6,
+      isActive: true,
+      deletedAt: null,
+      days: {
+        deleteMany: {},
+        create: [
+          { sequence: 1, label: 'Pagi 1', dayType: 'WS', workStart: '06:00', workEnd: '14:00', crossesMidnight: false },
+          { sequence: 2, label: 'Pagi 2', dayType: 'WS', workStart: '06:00', workEnd: '14:00', crossesMidnight: false },
+          { sequence: 3, label: 'Sore 1', dayType: 'WS', workStart: '14:00', workEnd: '22:00', crossesMidnight: false },
+          { sequence: 4, label: 'Sore 2', dayType: 'WS', workStart: '14:00', workEnd: '22:00', crossesMidnight: false },
+          { sequence: 5, label: 'Off 1', dayType: 'WE', workStart: null, workEnd: null, crossesMidnight: false },
+          { sequence: 6, label: 'Off 2', dayType: 'WE', workStart: null, workEnd: null, crossesMidnight: false },
+        ],
+      },
+    },
+    create: {
+      companyId: company.id,
+      code: 'SHIFT-2-2-2',
+      name: '2-2-2 Weekend Coverage',
+      description: 'Pola 2 pagi, 2 sore, 2 libur untuk supervisor pabrik.',
+      cycleLength: 6,
+      createdBy: 'system-seed',
+      isActive: true,
+      days: {
+        create: [
+          { sequence: 1, label: 'Pagi 1', dayType: 'WS', workStart: '06:00', workEnd: '14:00', crossesMidnight: false },
+          { sequence: 2, label: 'Pagi 2', dayType: 'WS', workStart: '06:00', workEnd: '14:00', crossesMidnight: false },
+          { sequence: 3, label: 'Sore 1', dayType: 'WS', workStart: '14:00', workEnd: '22:00', crossesMidnight: false },
+          { sequence: 4, label: 'Sore 2', dayType: 'WS', workStart: '14:00', workEnd: '22:00', crossesMidnight: false },
+          { sequence: 5, label: 'Off 1', dayType: 'WE', workStart: null, workEnd: null, crossesMidnight: false },
+          { sequence: 6, label: 'Off 2', dayType: 'WE', workStart: null, workEnd: null, crossesMidnight: false },
+        ],
+      },
+    },
+    include: {
+      days: true,
+    },
+  });
+
+  await (prisma as any).branchAttendancePolicy.upsert({
+    where: { branchId: branch2.id },
+    update: {
+      attendanceMethod: 'MOBILE_GPS',
+      gpsLatitude: branch2.latitude,
+      gpsLongitude: branch2.longitude,
+      gpsRadiusMeters: 150,
+      allowOutsideRadius: false,
+      outsideRadiusAction: 'REJECT',
+      lateToleranceMinutes: 5,
+      earlyCheckoutToleranceMinutes: 10,
+      allowHolidayAttendance: false,
+      allowWeekendAttendance: true,
+      autoAbsentEnabled: true,
+      autoCheckoutEnabled: false,
+      requiresSelfie: true,
+      requiresLocation: true,
+      isActive: true,
+      notes: 'Bandung branch menggunakan mobile GPS dengan radius ketat.',
+      deletedAt: null,
+    },
+    create: {
+      companyId: company.id,
+      branchId: branch2.id,
+      attendanceMethod: 'MOBILE_GPS',
+      gpsLatitude: branch2.latitude,
+      gpsLongitude: branch2.longitude,
+      gpsRadiusMeters: 150,
+      allowOutsideRadius: false,
+      outsideRadiusAction: 'REJECT',
+      lateToleranceMinutes: 5,
+      earlyCheckoutToleranceMinutes: 10,
+      allowHolidayAttendance: false,
+      allowWeekendAttendance: true,
+      autoAbsentEnabled: true,
+      autoCheckoutEnabled: false,
+      requiresSelfie: true,
+      requiresLocation: true,
+      isActive: true,
+      notes: 'Bandung branch menggunakan mobile GPS dengan radius ketat.',
+    },
+  });
+
+  await (prisma as any).branchAttendancePolicy.upsert({
+    where: { branchId: branch3.id },
+    update: {
+      attendanceMethod: 'BOTH',
+      gpsLatitude: branch3.latitude,
+      gpsLongitude: branch3.longitude,
+      gpsRadiusMeters: 250,
+      allowOutsideRadius: true,
+      outsideRadiusAction: 'REVIEW',
+      lateToleranceMinutes: 15,
+      earlyCheckoutToleranceMinutes: 15,
+      allowHolidayAttendance: false,
+      allowWeekendAttendance: false,
+      autoAbsentEnabled: true,
+      autoCheckoutEnabled: true,
+      requiresSelfie: false,
+      requiresLocation: false,
+      isActive: true,
+      notes: 'Surabaya branch mengizinkan fingerprint atau mobile GPS untuk tim hybrid.',
+      deletedAt: null,
+    },
+    create: {
+      companyId: company.id,
+      branchId: branch3.id,
+      attendanceMethod: 'BOTH',
+      gpsLatitude: branch3.latitude,
+      gpsLongitude: branch3.longitude,
+      gpsRadiusMeters: 250,
+      allowOutsideRadius: true,
+      outsideRadiusAction: 'REVIEW',
+      lateToleranceMinutes: 15,
+      earlyCheckoutToleranceMinutes: 15,
+      allowHolidayAttendance: false,
+      allowWeekendAttendance: false,
+      autoAbsentEnabled: true,
+      autoCheckoutEnabled: true,
+      requiresSelfie: false,
+      requiresLocation: false,
+      isActive: true,
+      notes: 'Surabaya branch mengizinkan fingerprint atau mobile GPS untuk tim hybrid.',
+    },
+  });
+
   // ===================================================
   // 4. EMPLOYEES
   // ===================================================
   console.log('  Creating employees...');
   const passwordHash = await bcrypt.hash('Employee123!', 12);
+  const baseEmployees = [
+    {
+      employeeNumber: 'EMP001',
+      firstName: 'Bambang',
+      lastName: 'Supriyadi',
+      email: 'bambang@tech.com',
+      phone: '08123456789',
+      gender: 'Male',
+      position: posManager,
+      dept: deptIT,
+      branch,
+      employmentType: 'PERMANENT',
+      employmentStatus: 'ACTIVE',
+      joinDate: addDays(companyStartedAt, 14),
+      religion: 'Islam',
+      maritalStatus: 'MARRIED',
+      placeOfBirth: 'Jakarta',
+    },
+    {
+      employeeNumber: 'EMP002',
+      firstName: 'Siti',
+      lastName: 'Rahmawati',
+      email: 'siti@tech.com',
+      phone: '08123456790',
+      gender: 'Female',
+      position: posDev,
+      dept: deptIT,
+      branch,
+      employmentType: 'PERMANENT',
+      employmentStatus: 'ACTIVE',
+      joinDate: addDays(companyStartedAt, 30),
+      religion: 'Islam',
+      maritalStatus: 'SINGLE',
+      placeOfBirth: 'Bandung',
+    },
+    {
+      employeeNumber: 'EMP003',
+      firstName: 'Ahmad',
+      lastName: 'Fauzi',
+      email: 'ahmad@tech.com',
+      phone: '08123456791',
+      gender: 'Male',
+      position: posDev,
+      dept: deptIT,
+      branch: branch2,
+      employmentType: 'CONTRACT',
+      employmentStatus: 'ACTIVE',
+      joinDate: addDays(companyStartedAt, 75),
+      religion: 'Islam',
+      maritalStatus: 'MARRIED',
+      placeOfBirth: 'Cirebon',
+    },
+    {
+      employeeNumber: 'EMP004',
+      firstName: 'Dewi',
+      lastName: 'Kusuma',
+      email: 'dewi@tech.com',
+      phone: '08123456792',
+      gender: 'Female',
+      position: posHR,
+      dept: deptHR,
+      branch,
+      employmentType: 'PERMANENT',
+      employmentStatus: 'ACTIVE',
+      joinDate: addDays(companyStartedAt, 20),
+      religion: 'Islam',
+      maritalStatus: 'MARRIED',
+      placeOfBirth: 'Yogyakarta',
+    },
+    {
+      employeeNumber: 'EMP005',
+      firstName: 'Rudi',
+      lastName: 'Hartono',
+      email: 'rudi@tech.com',
+      phone: '08123456793',
+      gender: 'Male',
+      position: posAcc,
+      dept: deptFinance,
+      branch,
+      employmentType: 'PERMANENT',
+      employmentStatus: 'ACTIVE',
+      joinDate: addDays(companyStartedAt, 18),
+      religion: 'Kristen',
+      maritalStatus: 'MARRIED',
+      placeOfBirth: 'Semarang',
+    },
+    {
+      employeeNumber: 'EMP006',
+      firstName: 'Maya',
+      lastName: 'Anggraini',
+      email: 'maya@tech.com',
+      phone: '08123456794',
+      gender: 'Female',
+      position: posMkt,
+      dept: deptMarketing,
+      branch: branch3,
+      employmentType: 'PERMANENT',
+      employmentStatus: 'ACTIVE',
+      joinDate: addDays(companyStartedAt, 150),
+      religion: 'Islam',
+      maritalStatus: 'MARRIED',
+      placeOfBirth: 'Malang',
+    },
+    {
+      employeeNumber: 'EMP007',
+      firstName: 'Agus',
+      lastName: 'Prasetyo',
+      email: 'agus@tech.com',
+      phone: '08123456795',
+      gender: 'Male',
+      position: posDev,
+      dept: deptIT,
+      branch: branch2,
+      employmentType: 'PROBATION',
+      employmentStatus: 'PROBATION',
+      joinDate: addDays(companyStartedAt, 660),
+      religion: 'Islam',
+      maritalStatus: 'SINGLE',
+      placeOfBirth: 'Solo',
+    },
+    {
+      employeeNumber: 'EMP008',
+      firstName: 'Rina',
+      lastName: 'Safitri',
+      email: 'rina@tech.com',
+      phone: '08123456796',
+      gender: 'Female',
+      position: posHR,
+      dept: deptHR,
+      branch,
+      employmentType: 'INTERN',
+      employmentStatus: 'ACTIVE',
+      joinDate: addDays(companyStartedAt, 690),
+      religion: 'Islam',
+      maritalStatus: 'SINGLE',
+      placeOfBirth: 'Bogor',
+    },
+  ].map((employee) => ({
+    employeeCategory: 'OFFICE',
+    shiftFormulaId: null,
+    shiftStartDate: null,
+    ...employee,
+  }));
 
-  const employees = [
-    { employeeNumber: 'EMP001', firstName: 'Bambang', lastName: 'Supriyadi', email: 'bambang@tech.com', phone: '08123456789', gender: 'Male', position: posManager, dept: deptIT, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
-    { employeeNumber: 'EMP002', firstName: 'Siti', lastName: 'Rahmawati', email: 'siti@tech.com', phone: '08123456790', gender: 'Female', position: posDev, dept: deptIT, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
-    { employeeNumber: 'EMP003', firstName: 'Ahmad', lastName: 'Fauzi', email: 'ahmad@tech.com', phone: '08123456791', gender: 'Male', position: posDev, dept: deptIT, employmentType: 'CONTRACT', employmentStatus: 'ACTIVE' },
-    { employeeNumber: 'EMP004', firstName: 'Dewi', lastName: 'Kusuma', email: 'dewi@tech.com', phone: '08123456792', gender: 'Female', position: posHR, dept: deptHR, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
-    { employeeNumber: 'EMP005', firstName: 'Rudi', lastName: 'Hartono', email: 'rudi@tech.com', phone: '08123456793', gender: 'Male', position: posAcc, dept: deptFinance, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
-    { employeeNumber: 'EMP006', firstName: 'Maya', lastName: 'Anggraini', email: 'maya@tech.com', phone: '08123456794', gender: 'Female', position: posMkt, dept: deptMarketing, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
-    { employeeNumber: 'EMP007', firstName: 'Agus', lastName: 'Prasetyo', email: 'agus@tech.com', phone: '08123456795', gender: 'Male', position: posDev, dept: deptIT, employmentType: 'PROBATION', employmentStatus: 'PROBATION' },
-    { employeeNumber: 'EMP008', firstName: 'Rina', lastName: 'Safitri', email: 'rina@tech.com', phone: '08123456796', gender: 'Female', position: posHR, dept: deptHR, employmentType: 'INTERN', employmentStatus: 'ACTIVE' },
+  const maleFirstNames = ['Arif', 'Dimas', 'Farhan', 'Galih', 'Hendra', 'Iqbal', 'Joko', 'Kevin', 'Lukman', 'Rizky', 'Teguh', 'Yusuf'];
+  const femaleFirstNames = ['Alya', 'Citra', 'Fitri', 'Gita', 'Intan', 'Laras', 'Nadia', 'Putri', 'Salsa', 'Tania', 'Vina', 'Wulan'];
+  const lastNames = ['Wijaya', 'Saputra', 'Permata', 'Nugroho', 'Mahendra', 'Lestari', 'Purnama', 'Hidayat', 'Sembiring', 'Utami', 'Wardani', 'Kirana'];
+  const cities = ['Jakarta', 'Bandung', 'Surabaya', 'Semarang', 'Yogyakarta', 'Malang', 'Bogor', 'Bekasi'];
+  const religions = ['Islam', 'Kristen', 'Katolik', 'Hindu', 'Buddha'];
+  const workforceTemplates = [
+    { branch, dept: deptIT, position: posDev, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
+    { branch, dept: deptFinance, position: posAcc, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
+    { branch, dept: deptHR, position: posHR, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
+    { branch: branch2, dept: deptOps, position: posOps, employmentType: 'CONTRACT', employmentStatus: 'ACTIVE' },
+    { branch: branch2, dept: deptMarketing, position: posMkt, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
+    { branch: branch3, dept: deptOps, position: posOpsLead, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
+    { branch: branch3, dept: deptIT, position: posDev, employmentType: 'PERMANENT', employmentStatus: 'ACTIVE' },
   ];
 
+  const generatedEmployees = Array.from({ length: 42 }, (_, index) => {
+    const employeeSequence = index + 9;
+    const template = workforceTemplates[index % workforceTemplates.length];
+    const isFemale = employeeSequence % 2 === 0;
+    const firstName = isFemale
+      ? femaleFirstNames[index % femaleFirstNames.length]
+      : maleFirstNames[index % maleFirstNames.length];
+    const lastName = lastNames[(index * 3) % lastNames.length];
+    const joinDate = addDays(companyStartedAt, 20 + (index * 17) % 700);
+
+    return {
+      employeeNumber: `EMP${padNumber(employeeSequence, 3)}`,
+      firstName,
+      lastName,
+      email: `employee${padNumber(employeeSequence, 3)}@tech.com`,
+      phone: `08123${padNumber(60000 + employeeSequence, 5)}`,
+      gender: isFemale ? 'Female' : 'Male',
+      position: template.position,
+      dept: template.dept,
+      branch: template.branch,
+      employmentType: employeeSequence % 11 === 0 ? 'CONTRACT' : template.employmentType,
+      employmentStatus: employeeSequence % 13 === 0 ? 'PROBATION' : template.employmentStatus,
+      employeeCategory: template.dept.id === deptOps.id ? 'FACTORY' : 'OFFICE',
+      shiftFormulaId: template.dept.id === deptOps.id
+        ? template.position.id === posOpsLead.id
+          ? shiftFormulaWeekend.id
+          : shiftFormulaThreeGroup.id
+        : null,
+      joinDate,
+      shiftStartDate: template.dept.id === deptOps.id ? joinDate : null,
+      religion: religions[index % religions.length],
+      maritalStatus: employeeSequence % 4 === 0 ? 'MARRIED' : 'SINGLE',
+      placeOfBirth: cities[index % cities.length],
+    };
+  });
+
+  const employees = [...baseEmployees, ...generatedEmployees];
   const createdEmployees: any[] = [];
-  for (const emp of employees) {
-    const created = await prisma.employee.upsert({
+
+  for (const [employeeIndex, emp] of employees.entries()) {
+    const fullName = `${emp.firstName} ${emp.lastName}`;
+    const joinDate = emp.joinDate;
+    const dateOfBirth = addDays(joinDate, -1 * (365 * (23 + (employeeIndex % 12))));
+    const branchRecord = emp.branch ?? branch;
+
+    const created = await (prisma as any).employee.upsert({
       where: { employeeNumber: emp.employeeNumber },
-      update: {},
+      update: {
+        companyId: company.id,
+        branchId: branchRecord.id,
+        departmentId: emp.dept.id,
+        positionId: emp.position.id,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        fullName,
+        email: emp.email,
+        phone: emp.phone,
+        gender: emp.gender,
+        placeOfBirth: emp.placeOfBirth,
+        dateOfBirth,
+        religion: emp.religion,
+        maritalStatus: emp.maritalStatus,
+        address: `${branchRecord.name}, ${emp.placeOfBirth}`,
+        joinDate,
+        employmentType: emp.employmentType as any,
+        employmentStatus: emp.employmentStatus as any,
+        employeeCategory: (emp.employeeCategory ?? 'OFFICE') as any,
+        shiftFormulaId: emp.shiftFormulaId ?? null,
+        shiftStartDate: emp.shiftStartDate ?? null,
+        bankName: employeeIndex % 3 === 0 ? 'BCA' : employeeIndex % 3 === 1 ? 'Mandiri' : 'BNI',
+        bankAccount: `88${padNumber(employeeIndex + 1, 8)}`,
+        bankAccountHolder: fullName,
+        taxId: `09.${padNumber(employeeIndex + 1, 3)}.${padNumber(employeeIndex + 11, 3)}.${padNumber(employeeIndex + 21, 1)}-${padNumber(employeeIndex + 31, 3)}.000`,
+        bpjsKetenagakerjaan: `BPJSTK${padNumber(employeeIndex + 1, 6)}`,
+        bpjsKesehatan: `BPJSKS${padNumber(employeeIndex + 1, 6)}`,
+        status: 'ACTIVE',
+        deletedAt: null,
+      } as any,
       create: {
-        companyId: company.id, branchId: branch.id, departmentId: emp.dept.id, positionId: emp.position.id,
-        employeeNumber: emp.employeeNumber, firstName: emp.firstName, lastName: emp.lastName,
-        fullName: `${emp.firstName} ${emp.lastName}`, email: emp.email, phone: emp.phone,
-        gender: emp.gender, joinDate: new Date('2024-01-15'),
-        employmentType: emp.employmentType as any, employmentStatus: emp.employmentStatus as any,
-        bankName: 'BCA', bankAccount: `123456${Math.floor(1000 + Math.random() * 9000)}`,
-        bankAccountHolder: `${emp.firstName} ${emp.lastName}`,
-      },
+        companyId: company.id,
+        branchId: branchRecord.id,
+        departmentId: emp.dept.id,
+        positionId: emp.position.id,
+        employeeNumber: emp.employeeNumber,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        fullName,
+        email: emp.email,
+        phone: emp.phone,
+        idNumber: `3174${padNumber(employeeIndex + 100001, 12)}`,
+        placeOfBirth: emp.placeOfBirth,
+        dateOfBirth,
+        gender: emp.gender,
+        religion: emp.religion,
+        maritalStatus: emp.maritalStatus,
+        address: `${branchRecord.name}, ${emp.placeOfBirth}`,
+        joinDate,
+        employmentType: emp.employmentType as any,
+        employmentStatus: emp.employmentStatus as any,
+        employeeCategory: (emp.employeeCategory ?? 'OFFICE') as any,
+        shiftFormulaId: emp.shiftFormulaId ?? null,
+        shiftStartDate: emp.shiftStartDate ?? null,
+        bankName: employeeIndex % 3 === 0 ? 'BCA' : employeeIndex % 3 === 1 ? 'Mandiri' : 'BNI',
+        bankAccount: `88${padNumber(employeeIndex + 1, 8)}`,
+        bankAccountHolder: fullName,
+        taxId: `09.${padNumber(employeeIndex + 1, 3)}.${padNumber(employeeIndex + 11, 3)}.${padNumber(employeeIndex + 21, 1)}-${padNumber(employeeIndex + 31, 3)}.000`,
+        bpjsKetenagakerjaan: `BPJSTK${padNumber(employeeIndex + 1, 6)}`,
+        bpjsKesehatan: `BPJSKS${padNumber(employeeIndex + 1, 6)}`,
+        createdAt: joinDate,
+      } as any,
     });
     createdEmployees.push(created);
 
-    // Create user accounts for employees
     if (emp.email) {
-      const existingUser = await prisma.user.findUnique({ where: { email: emp.email } });
-      if (!existingUser) {
-        const user = await prisma.user.create({
-          data: { email: emp.email, passwordHash, status: 'ACTIVE', mustChangePassword: false, employeeId: created.id },
-        });
-        const employeeRole = await prisma.role.findUnique({ where: { code: 'EMPLOYEE' } });
-        if (employeeRole) {
-          await prisma.userRole.create({ data: { userId: user.id, roleId: employeeRole.id, scopeType: 'COMPANY' } });
-        }
-      }
+      await prisma.user.upsert({
+        where: { email: emp.email },
+        update: {
+          passwordHash,
+          status: 'ACTIVE',
+          mustChangePassword: false,
+          employeeId: created.id,
+          deletedAt: null,
+        },
+        create: {
+          email: emp.email,
+          passwordHash,
+          status: 'ACTIVE',
+          mustChangePassword: false,
+          employeeId: created.id,
+          createdAt: joinDate,
+        },
+      });
+
+      await ensureUserRole({
+        email: emp.email,
+        roleCode: 'EMPLOYEE',
+        companyId: company.id,
+      });
     }
   }
   console.log(`  ✓ ${createdEmployees.length} employees created`);
@@ -357,6 +1071,7 @@ export async function seedTestData(): Promise<void> {
   console.log('  Creating employee salaries...');
   for (const emp of createdEmployees) {
     const baseSalary = emp.employeeNumber === 'EMP001' ? 25000000 :
+      emp.positionId === posOpsLead.id ? 18500000 :
       emp.employmentType === 'INTERN' ? 5000000 :
       emp.employmentType === 'PROBATION' ? 8000000 : 12000000;
     const salaryId = `sal-${emp.employeeNumber}`;
@@ -366,7 +1081,7 @@ export async function seedTestData(): Promise<void> {
       update: {},
       create: {
         id: salaryId, employeeId: emp.id, companyId: company.id,
-        effectiveDate: new Date('2024-01-01'), baseSalary, isActive: true,
+        effectiveDate: emp.joinDate || companyStartedAt, baseSalary, isActive: true,
       },
     });
 
@@ -431,24 +1146,76 @@ export async function seedTestData(): Promise<void> {
   if (annualLeave && sickLeave && createdEmployees.length >= 2) {
     await prisma.leaveRequest.upsert({
       where: { id: 'leave-001' },
-      update: {},
+      update: {
+        employeeId: createdEmployees[1].id,
+        companyId: company.id,
+        leaveTypeId: annualLeave.id,
+        startDate: new Date('2026-07-10T23:00:00+07:00'),
+        endDate: new Date('2026-07-12T23:00:00+07:00'),
+        totalDays: 3,
+        reason: 'Acara keluarga',
+        status: 'PENDING',
+        approvedAt: null,
+        approvedBy: null,
+      },
       create: {
         id: 'leave-001',
         employeeId: createdEmployees[1].id, companyId: company.id, leaveTypeId: annualLeave.id,
-        startDate: new Date('2026-07-10'), endDate: new Date('2026-07-12'), totalDays: 3,
+        startDate: new Date('2026-07-10T23:00:00+07:00'), endDate: new Date('2026-07-12T23:00:00+07:00'), totalDays: 3,
         reason: 'Acara keluarga', status: 'PENDING',
       },
     });
     await prisma.leaveRequest.upsert({
       where: { id: 'leave-002' },
-      update: {},
+      update: {
+        employeeId: createdEmployees[2].id,
+        companyId: company.id,
+        leaveTypeId: sickLeave.id,
+        startDate: new Date('2026-06-20T23:00:00+07:00'),
+        endDate: new Date('2026-06-21T23:00:00+07:00'),
+        totalDays: 2,
+        reason: 'Kurang enak badan',
+        status: 'APPROVED',
+        approvedAt: new Date(),
+      },
       create: {
         id: 'leave-002',
         employeeId: createdEmployees[2].id, companyId: company.id, leaveTypeId: sickLeave.id,
-        startDate: new Date('2026-06-20'), endDate: new Date('2026-06-21'), totalDays: 2,
+        startDate: new Date('2026-06-20T23:00:00+07:00'), endDate: new Date('2026-06-21T23:00:00+07:00'), totalDays: 2,
         reason: 'Kurang enak badan', status: 'APPROVED', approvedAt: new Date(),
       },
     });
+
+    if (bambang?.id) {
+      await prisma.leaveRequest.upsert({
+        where: { id: 'leave-003' },
+        update: {
+          employeeId: bambang.id,
+          companyId: company.id,
+          leaveTypeId: annualLeave.id,
+          startDate: new Date('2026-07-15T23:00:00+07:00'),
+          endDate: new Date('2026-07-16T23:00:00+07:00'),
+          totalDays: 2,
+          reason: 'Libur keluarga yang sudah disetujui',
+          status: 'APPROVED',
+          approvedBy: dewiUser?.id || rudiUser?.id || null,
+          approvedAt: new Date('2026-07-01T10:00:00+07:00'),
+        },
+        create: {
+          id: 'leave-003',
+          employeeId: bambang.id,
+          companyId: company.id,
+          leaveTypeId: annualLeave.id,
+          startDate: new Date('2026-07-15T23:00:00+07:00'),
+          endDate: new Date('2026-07-16T23:00:00+07:00'),
+          totalDays: 2,
+          reason: 'Libur keluarga yang sudah disetujui',
+          status: 'APPROVED',
+          approvedBy: dewiUser?.id || rudiUser?.id || null,
+          approvedAt: new Date('2026-07-01T10:00:00+07:00'),
+        },
+      });
+    }
   }
 
   // ===================================================
@@ -786,6 +1553,12 @@ export async function seedTestData(): Promise<void> {
   });
   let attendanceCount = 0;
 
+  const branchPolicies = new Map([
+    [branch.id, { method: 'FINGERPRINT', latitude: branch.latitude, longitude: branch.longitude, radius: null }],
+    [branch2.id, { method: 'MOBILE_GPS', latitude: branch2.latitude, longitude: branch2.longitude, radius: 150 }],
+    [branch3.id, { method: 'BOTH', latitude: branch3.latitude, longitude: branch3.longitude, radius: 250 }],
+  ]);
+
   for (const emp of createdEmployees) {
     for (let i = 1; i <= 7; i++) {
       const d = new Date(today);
@@ -798,18 +1571,36 @@ export async function seedTestData(): Promise<void> {
       checkIn.setMinutes(checkIn.getMinutes() + (emp.employeeNumber === 'EMP002' ? 15 : 0)); // EMP002 always late
       const checkOut = new Date(d); checkOut.setHours(17, 0, 0, 0);
       const status = emp.employeeNumber === 'EMP002' ? 'LATE' : 'PRESENT';
+      const branchPolicy = branchPolicies.get(emp.branchId || branch.id) || branchPolicies.get(branch.id)!;
+      const usesMobileGps = branchPolicy.method === 'MOBILE_GPS' || (branchPolicy.method === 'BOTH' && i % 2 === 0);
 
       await prisma.attendance.create({
         data: {
           employeeId: emp.id,
           companyId: company.id,
+          branchId: emp.branchId,
           date: d,
           checkIn,
           checkOut,
+          method: usesMobileGps ? 'MOBILE_GPS' : branchPolicy.method === 'FINGERPRINT' ? 'FINGERPRINT' : 'MANUAL',
+          source: usesMobileGps ? 'seed-mobile-web' : 'seed-fingerprint-device',
+          checkInLatitude: usesMobileGps && branchPolicy.latitude ? branchPolicy.latitude + 0.0001 : null,
+          checkInLongitude: usesMobileGps && branchPolicy.longitude ? branchPolicy.longitude + 0.0001 : null,
+          checkOutLatitude: usesMobileGps && branchPolicy.latitude ? branchPolicy.latitude + 0.00008 : null,
+          checkOutLongitude: usesMobileGps && branchPolicy.longitude ? branchPolicy.longitude + 0.00008 : null,
+          distanceMeters: usesMobileGps && branchPolicy.radius ? Math.round(branchPolicy.radius * 0.6) : null,
+          isWithinRadius: usesMobileGps ? true : null,
           status: status as any,
           workDuration: 480,
           lateMinutes: status === 'LATE' ? 15 : 0,
-        },
+          scheduledWorkStart: emp.branchId === branch2.id ? '08:30' : '09:00',
+          scheduledWorkEnd: emp.branchId === branch2.id ? '17:30' : '17:00',
+          policySnapshot: {
+            branchId: emp.branchId,
+            policyMethod: branchPolicy.method,
+            seeded: true,
+          },
+        } as any,
       });
       attendanceCount++;
     }
@@ -820,25 +1611,127 @@ export async function seedTestData(): Promise<void> {
   // 16. WORK CALENDAR & HOLIDAYS
   // ===================================================
   console.log('  Creating work calendar...');
+  const defaultOfficeWorkDays = {
+    mon: { enabled: true, workStart: '09:00', workEnd: '18:00' },
+    tue: { enabled: true, workStart: '09:00', workEnd: '18:00' },
+    wed: { enabled: true, workStart: '09:00', workEnd: '18:00' },
+    thu: { enabled: true, workStart: '09:00', workEnd: '18:00' },
+    fri: { enabled: true, workStart: '09:00', workEnd: '18:00' },
+    sat: { enabled: false, workStart: null, workEnd: null },
+    sun: { enabled: false, workStart: null, workEnd: null },
+  };
+  const bandungWorkDays = {
+    mon: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+    tue: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+    wed: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+    thu: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+    fri: { enabled: true, workStart: '08:30', workEnd: '17:30' },
+    sat: { enabled: true, workStart: '08:00', workEnd: '13:00' },
+    sun: { enabled: false, workStart: null, workEnd: null },
+  };
+  const surabayaWorkDays = {
+    mon: { enabled: true, workStart: '09:00', workEnd: '17:00' },
+    tue: { enabled: true, workStart: '09:00', workEnd: '17:00' },
+    wed: { enabled: true, workStart: '09:00', workEnd: '17:00' },
+    thu: { enabled: true, workStart: '09:00', workEnd: '17:00' },
+    fri: { enabled: true, workStart: '09:00', workEnd: '17:00' },
+    sat: { enabled: false, workStart: null, workEnd: null },
+    sun: { enabled: false, workStart: null, workEnd: null },
+  };
   const existingCalendar = await prisma.workCalendar.findFirst({
     where: { companyId: company.id, year: 2026, branchId: null, departmentId: null },
   });
-  const calendar = existingCalendar || await prisma.workCalendar.create({
-    data: {
+  const calendar = existingCalendar
+    ? await prisma.workCalendar.update({
+        where: { id: existingCalendar.id },
+        data: {
+          name: 'Kalender Kerja 2026',
+          workDays: defaultOfficeWorkDays,
+          isActive: true,
+          description: 'Kalender kerja utama perusahaan untuk tahun 2026',
+          deletedAt: null,
+        },
+      })
+    : await prisma.workCalendar.create({
+        data: {
+          companyId: company.id,
+          name: 'Kalender Kerja 2026',
+          year: 2026,
+          workDays: defaultOfficeWorkDays,
+          isActive: true,
+          description: 'Kalender kerja utama perusahaan untuk tahun 2026',
+          createdBy: rudiUser?.id || bambangUser?.id || 'system-seed',
+        },
+      });
+
+  const existingBandungCalendar = await prisma.workCalendar.findFirst({
+    where: {
       companyId: company.id,
-      name: 'Kalender Kerja 2026',
+      branchId: branch2.id,
+      departmentId: null,
       year: 2026,
-      workDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
-      isActive: true,
-      description: 'Kalender kerja utama perusahaan untuk tahun 2026',
-      createdBy: rudiUser?.id || bambangUser?.id || 'system-seed',
     },
   });
+  const branchCalendarBandung = existingBandungCalendar
+    ? await prisma.workCalendar.update({
+        where: { id: existingBandungCalendar.id },
+        data: {
+          name: 'Kalender Branch Bandung 2026',
+          workDays: bandungWorkDays,
+          isActive: true,
+          description: 'Bandung branch beroperasi 6 hari kerja dengan jam masuk lebih pagi.',
+          deletedAt: null,
+        },
+      })
+    : await prisma.workCalendar.create({
+        data: {
+          companyId: company.id,
+          branchId: branch2.id,
+          name: 'Kalender Branch Bandung 2026',
+          year: 2026,
+          workDays: bandungWorkDays,
+          isActive: true,
+          description: 'Bandung branch beroperasi 6 hari kerja dengan jam masuk lebih pagi.',
+          createdBy: rudiUser?.id || bambangUser?.id || 'system-seed',
+        },
+      });
+
+  const existingSurabayaCalendar = await prisma.workCalendar.findFirst({
+    where: {
+      companyId: company.id,
+      branchId: branch3.id,
+      departmentId: null,
+      year: 2026,
+    },
+  });
+  const branchCalendarSurabaya = existingSurabayaCalendar
+    ? await prisma.workCalendar.update({
+        where: { id: existingSurabayaCalendar.id },
+        data: {
+          name: 'Kalender Branch Surabaya 2026',
+          workDays: surabayaWorkDays,
+          isActive: true,
+          description: 'Surabaya branch hybrid dengan opsi checkout otomatis.',
+          deletedAt: null,
+        },
+      })
+    : await prisma.workCalendar.create({
+        data: {
+          companyId: company.id,
+          branchId: branch3.id,
+          name: 'Kalender Branch Surabaya 2026',
+          year: 2026,
+          workDays: surabayaWorkDays,
+          isActive: true,
+          description: 'Surabaya branch hybrid dengan opsi checkout otomatis.',
+          createdBy: rudiUser?.id || bambangUser?.id || 'system-seed',
+        },
+      });
 
   const holidays = [
-    { id: 'nat-holiday-2601', date: new Date('2026-01-01'), name: 'Tahun Baru 2026', type: 'H' },
-    { id: 'nat-holiday-2602', date: new Date('2026-08-17'), name: 'Hari Kemerdekaan RI', type: 'H' },
-    { id: 'nat-holiday-2603', date: new Date('2026-12-25'), name: 'Hari Natal', type: 'H' },
+    { id: 'nat-holiday-2601', date: new Date(2026, 0, 1), name: 'Tahun Baru 2026', type: 'H' },
+    { id: 'nat-holiday-2602', date: new Date(2026, 7, 17), name: 'Hari Kemerdekaan RI', type: 'H' },
+    { id: 'nat-holiday-2603', date: new Date(2026, 11, 25), name: 'Hari Natal', type: 'H' },
   ];
   for (const holiday of holidays) {
     await prisma.nationalHoliday.upsert({
@@ -858,24 +1751,49 @@ export async function seedTestData(): Promise<void> {
   }
 
   const specialDays = [
-    { id: 'wcday-2601', date: new Date('2026-01-01'), dayType: 'H', name: 'Tahun Baru 2026' },
-    { id: 'wcday-2602', date: new Date('2026-08-17'), dayType: 'H', name: 'Hari Kemerdekaan RI' },
-    { id: 'wcday-2603', date: new Date('2026-12-25'), dayType: 'H', name: 'Hari Natal' },
+    { id: 'wcday-2601', date: new Date(2026, 0, 1), dayType: 'NH', name: 'Tahun Baru 2026' },
+    { id: 'wcday-2602', date: new Date(2026, 7, 17), dayType: 'NH', name: 'Hari Kemerdekaan RI' },
+    { id: 'wcday-2603', date: new Date(2026, 11, 25), dayType: 'NH', name: 'Hari Natal' },
   ];
-  for (const day of specialDays) {
-    await prisma.workCalendarDay.upsert({
-      where: { id: day.id },
-      update: {},
-      create: {
-        id: day.id,
-        calendarId: calendar.id,
-        date: day.date,
-        dayType: day.dayType,
-        name: day.name,
+  await prisma.workCalendarDay.deleteMany({
+    where: {
+      calendarId: {
+        in: [calendar.id, branchCalendarBandung.id, branchCalendarSurabaya.id],
+      },
+    },
+  });
+
+  await prisma.workCalendarDay.createMany({
+    data: buildCalendarDaysForYear(calendar.id, 2026, defaultOfficeWorkDays, specialDays),
+  });
+
+  await prisma.workCalendarDay.createMany({
+    data: buildCalendarDaysForYear(branchCalendarBandung.id, 2026, bandungWorkDays, [
+      ...specialDays,
+      {
+        date: new Date(2026, 6, 6),
+        dayType: 'WD',
+        name: 'Bandung Early Shift',
+        workStart: '08:30',
+        workEnd: '17:30',
+        isMandatory: true,
+      },
+    ]),
+  });
+
+  await prisma.workCalendarDay.createMany({
+    data: buildCalendarDaysForYear(branchCalendarSurabaya.id, 2026, surabayaWorkDays, [
+      ...specialDays,
+      {
+        date: new Date(2026, 6, 11),
+        dayType: 'WS',
+        name: 'Surabaya Team Offsite',
+        workStart: '09:00',
+        workEnd: '13:00',
         isMandatory: false,
       },
-    });
-  }
+    ]),
+  });
   console.log('  ✓ Work calendar and holidays created');
 
   // ===================================================
@@ -1092,7 +2010,18 @@ export async function seedTestData(): Promise<void> {
   if (siti?.id && bambang?.id && agus?.id) {
     await prisma.permissionRequest.upsert({
       where: { id: 'perm-001' },
-      update: {},
+      update: {
+        companyId: company.id,
+        employeeId: siti.id,
+        type: 'WORK_FROM_HOME',
+        startDate: new Date('2026-06-26T09:00:00+07:00'),
+        endDate: new Date('2026-06-26T17:00:00+07:00'),
+        duration: 1,
+        reason: 'Menunggu teknisi internet di rumah',
+        status: 'APPROVED',
+        approverId: bambang.id,
+        approvedAt: new Date('2026-06-25T16:00:00+07:00'),
+      },
       create: {
         id: 'perm-001',
         companyId: company.id,
@@ -1109,7 +2038,18 @@ export async function seedTestData(): Promise<void> {
     });
     await prisma.permissionRequest.upsert({
       where: { id: 'perm-002' },
-      update: {},
+      update: {
+        companyId: company.id,
+        employeeId: agus.id,
+        type: 'PERSONAL',
+        startDate: new Date('2026-06-28T13:00:00+07:00'),
+        endDate: new Date('2026-06-28T17:00:00+07:00'),
+        duration: 0.5,
+        reason: 'Keperluan administrasi keluarga',
+        status: 'PENDING',
+        approverId: null,
+        approvedAt: null,
+      },
       create: {
         id: 'perm-002',
         companyId: company.id,
@@ -1120,6 +2060,64 @@ export async function seedTestData(): Promise<void> {
         duration: 0.5,
         reason: 'Keperluan administrasi keluarga',
         status: 'PENDING',
+      },
+    });
+
+    await prisma.permissionRequest.upsert({
+      where: { id: 'perm-003' },
+      update: {
+        companyId: company.id,
+        employeeId: bambang.id,
+        type: 'SICK',
+        startDate: new Date('2026-07-07T08:00:00+07:00'),
+        endDate: new Date('2026-07-07T17:00:00+07:00'),
+        duration: 1,
+        reason: 'Demam dan istirahat di rumah',
+        status: 'APPROVED',
+        approverId: dewiUser?.id || rudiUser?.id || null,
+        approvedAt: new Date('2026-07-06T16:00:00+07:00'),
+      },
+      create: {
+        id: 'perm-003',
+        companyId: company.id,
+        employeeId: bambang.id,
+        type: 'SICK',
+        startDate: new Date('2026-07-07T08:00:00+07:00'),
+        endDate: new Date('2026-07-07T17:00:00+07:00'),
+        duration: 1,
+        reason: 'Demam dan istirahat di rumah',
+        status: 'APPROVED',
+        approverId: dewiUser?.id || rudiUser?.id || null,
+        approvedAt: new Date('2026-07-06T16:00:00+07:00'),
+      },
+    });
+
+    await prisma.permissionRequest.upsert({
+      where: { id: 'perm-004' },
+      update: {
+        companyId: company.id,
+        employeeId: bambang.id,
+        type: 'PERSONAL',
+        startDate: new Date('2026-07-22T13:00:00+07:00'),
+        endDate: new Date('2026-07-22T17:00:00+07:00'),
+        duration: 0.5,
+        reason: 'Keperluan keluarga di siang hari',
+        status: 'APPROVED',
+        approverId: dewiUser?.id || rudiUser?.id || null,
+        approvedAt: new Date('2026-07-20T11:00:00+07:00'),
+      },
+      create: {
+        id: 'perm-004',
+        companyId: company.id,
+        employeeId: bambang.id,
+        type: 'PERSONAL',
+        startDate: new Date('2026-07-22T13:00:00+07:00'),
+        endDate: new Date('2026-07-22T17:00:00+07:00'),
+        duration: 0.5,
+        reason: 'Keperluan keluarga di siang hari',
+        status: 'APPROVED',
+        approverId: dewiUser?.id || rudiUser?.id || null,
+        approvedAt: new Date('2026-07-20T11:00:00+07:00'),
       },
     });
   }

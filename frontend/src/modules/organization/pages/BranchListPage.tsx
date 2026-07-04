@@ -1,11 +1,36 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
-import { organizationService, type Branch, type Company } from '@/services/organization.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+import {
+  organizationService,
+  type AttendancePolicyMethod,
+  type Branch,
+  type BranchAttendancePolicy,
+  type Company,
+  type OutsideRadiusAction,
+} from '@/services/organization.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
-import { Plus, Search, RefreshCw, MapPin, Pencil, Trash2, Building2, Globe, Phone, Mail, Map } from 'lucide-react';
+import {
+  Building2,
+  Clock3,
+  Fingerprint,
+  Globe,
+  LocateFixed,
+  Mail,
+  Map,
+  MapPin,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Trash2,
+  Phone,
+} from 'lucide-react';
 
 // ─── Extended Branch type (backend supports these fields) ─────
 interface BranchExtended extends Branch {
@@ -17,8 +42,26 @@ interface BranchExtended extends Branch {
   company?: { id: string; name: string; code: string };
 }
 
+const ATTENDANCE_METHOD_OPTIONS: Array<{ value: AttendancePolicyMethod; labelKey: TranslationKey }> = [
+  { value: 'FINGERPRINT', labelKey: 'organization.branches.policy.method.fingerprint' },
+  { value: 'MOBILE_GPS', labelKey: 'organization.branches.policy.method.mobileGps' },
+  { value: 'BOTH', labelKey: 'organization.branches.policy.method.both' },
+  { value: 'MANUAL', labelKey: 'organization.branches.policy.method.manual' },
+];
+
+const OUTSIDE_RADIUS_OPTIONS: Array<{ value: OutsideRadiusAction; labelKey: TranslationKey }> = [
+  { value: 'REJECT', labelKey: 'organization.branches.policy.outsideRadius.reject' },
+  { value: 'FLAG', labelKey: 'organization.branches.policy.outsideRadius.flag' },
+  { value: 'REVIEW', labelKey: 'organization.branches.policy.outsideRadius.review' },
+];
+
+function formatMethodLabel(method: AttendancePolicyMethod, t: ReturnType<typeof useI18n>['t']) {
+  const option = ATTENDANCE_METHOD_OPTIONS.find((item) => item.value === method);
+  return option ? t(option.labelKey) : method;
+}
+
 // ─── Modal ──────────────────────────────────────────────
-function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -39,6 +82,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
   open: boolean; onClose: () => void; onConfirm: () => void;
   title: string; message: string;
 }) {
+  const { t } = useI18n();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -48,8 +92,8 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">Delete</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">{t('common.delete')}</Button>
         </div>
       </div>
     </div>
@@ -62,6 +106,7 @@ function BranchForm({ initial, companies, onSave, onClose }: {
   onSave: (data: any) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [companyId, setCompanyId] = useState(initial?.companyId || '');
   const [name, setName] = useState(initial?.name || '');
   const [code, setCode] = useState(initial?.code || '');
@@ -73,10 +118,10 @@ function BranchForm({ initial, companies, onSave, onClose }: {
   const [longitude, setLongitude] = useState(initial?.longitude?.toString() || '');
   const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!companyId) return toast.error('Company is required');
-    if (!name.trim() || !code.trim()) return toast.error('Name and code are required');
+    if (!companyId) return toast.error(t('organization.branches.form.companyRequired'));
+    if (!name.trim() || !code.trim()) return toast.error(t('organization.branches.form.requiredFields'));
     setSaving(true);
     try {
       await onSave({
@@ -98,73 +143,302 @@ function BranchForm({ initial, companies, onSave, onClose }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Company *</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.company')} *</label>
         <Select2
           value={companyId}
           onValueChange={setCompanyId}
           options={companies.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-          placeholder="Select company..."
+          placeholder={t('organization.branches.form.selectCompany')}
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Branch Name *</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Jakarta HQ" required />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.branchName')} *</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('organization.branches.form.branchNamePlaceholder')} required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code *</label>
-          <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. JKT-HQ" required />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.code')} *</label>
+          <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder={t('organization.branches.form.codePlaceholder')} required />
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Address</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.address')}</label>
         <textarea
           value={address}
           onChange={(e) => setAddress(e.target.value)}
-          placeholder="e.g. Jl. Sudirman No. 1"
+          placeholder={t('organization.branches.form.addressPlaceholder')}
           rows={2}
           className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground resize-none"
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Phone</label>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +62 21 12345678" />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.phone')}</label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('organization.branches.form.phonePlaceholder')} />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Email</label>
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. branch@company.com" type="email" />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.email')}</label>
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('organization.branches.form.emailPlaceholder')} type="email" />
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Timezone</label>
-        <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="e.g. Asia/Jakarta" />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.timezone')}</label>
+        <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder={t('organization.branches.form.timezonePlaceholder')} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Latitude</label>
-          <Input value={latitude} onChange={(e) => setLatitude(e.target.value)} placeholder="e.g. -6.2088" type="number" step="any" />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.latitude')}</label>
+          <Input value={latitude} onChange={(e) => setLatitude(e.target.value)} placeholder={t('organization.branches.form.latitudePlaceholder')} type="number" step="any" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Longitude</label>
-          <Input value={longitude} onChange={(e) => setLongitude(e.target.value)} placeholder="e.g. 106.8456" type="number" step="any" />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.longitude')}</label>
+          <Input value={longitude} onChange={(e) => setLongitude(e.target.value)} placeholder={t('organization.branches.form.longitudePlaceholder')} type="number" step="any" />
         </div>
       </div>
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('organization.branches.form.saving') : t('common.save')}</Button>
       </div>
     </form>
   );
 }
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All Status' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'INACTIVE', label: 'Inactive' },
-];
+function PolicyForm({
+  branch,
+  initial,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  branch: BranchExtended;
+  initial?: BranchAttendancePolicy | null;
+  onSave: (data: {
+    attendanceMethod: AttendancePolicyMethod;
+    gpsLatitude?: number;
+    gpsLongitude?: number;
+    gpsRadiusMeters?: number;
+    allowOutsideRadius: boolean;
+    outsideRadiusAction: OutsideRadiusAction;
+    lateToleranceMinutes: number;
+    earlyCheckoutToleranceMinutes: number;
+    allowHolidayAttendance: boolean;
+    allowWeekendAttendance: boolean;
+    autoAbsentEnabled: boolean;
+    autoCheckoutEnabled: boolean;
+    requiresSelfie: boolean;
+    requiresLocation: boolean;
+    isActive: boolean;
+    notes?: string;
+  }) => Promise<void>;
+  onDelete: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const [attendanceMethod, setAttendanceMethod] = useState<AttendancePolicyMethod>(initial?.attendanceMethod || 'MANUAL');
+  const [gpsLatitude, setGpsLatitude] = useState(initial?.gpsLatitude?.toString() || '');
+  const [gpsLongitude, setGpsLongitude] = useState(initial?.gpsLongitude?.toString() || '');
+  const [gpsRadiusMeters, setGpsRadiusMeters] = useState(initial?.gpsRadiusMeters?.toString() || '');
+  const [allowOutsideRadius, setAllowOutsideRadius] = useState(initial?.allowOutsideRadius || false);
+  const [outsideRadiusAction, setOutsideRadiusAction] = useState<OutsideRadiusAction>(initial?.outsideRadiusAction || 'REVIEW');
+  const [lateToleranceMinutes, setLateToleranceMinutes] = useState(initial?.lateToleranceMinutes?.toString() || '0');
+  const [earlyCheckoutToleranceMinutes, setEarlyCheckoutToleranceMinutes] = useState(initial?.earlyCheckoutToleranceMinutes?.toString() || '0');
+  const [allowHolidayAttendance, setAllowHolidayAttendance] = useState(initial?.allowHolidayAttendance || false);
+  const [allowWeekendAttendance, setAllowWeekendAttendance] = useState(initial?.allowWeekendAttendance || false);
+  const [autoAbsentEnabled, setAutoAbsentEnabled] = useState(initial?.autoAbsentEnabled || false);
+  const [autoCheckoutEnabled, setAutoCheckoutEnabled] = useState(initial?.autoCheckoutEnabled || false);
+  const [requiresSelfie, setRequiresSelfie] = useState(initial?.requiresSelfie || false);
+  const [requiresLocation, setRequiresLocation] = useState(initial?.requiresLocation || false);
+  const [isActive, setIsActive] = useState(initial?.isActive ?? true);
+  const [notes, setNotes] = useState(initial?.notes || '');
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const needsGps = attendanceMethod === 'MOBILE_GPS' || attendanceMethod === 'BOTH' || requiresLocation;
+  const toggleFields: Array<{
+    key: TranslationKey;
+    checked: boolean;
+    setChecked: (value: boolean) => void;
+  }> = [
+    { key: 'organization.branches.policy.fields.isActive', checked: isActive, setChecked: setIsActive },
+    { key: 'organization.branches.policy.fields.requiresLocation', checked: requiresLocation, setChecked: setRequiresLocation },
+    { key: 'organization.branches.policy.fields.requiresSelfie', checked: requiresSelfie, setChecked: setRequiresSelfie },
+    { key: 'organization.branches.policy.fields.allowOutsideRadius', checked: allowOutsideRadius, setChecked: setAllowOutsideRadius },
+    { key: 'organization.branches.policy.fields.allowHolidayAttendance', checked: allowHolidayAttendance, setChecked: setAllowHolidayAttendance },
+    { key: 'organization.branches.policy.fields.allowWeekendAttendance', checked: allowWeekendAttendance, setChecked: setAllowWeekendAttendance },
+    { key: 'organization.branches.policy.fields.autoAbsentEnabled', checked: autoAbsentEnabled, setChecked: setAutoAbsentEnabled },
+    { key: 'organization.branches.policy.fields.autoCheckoutEnabled', checked: autoCheckoutEnabled, setChecked: setAutoCheckoutEnabled },
+  ];
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({
+        attendanceMethod,
+        gpsLatitude: gpsLatitude ? parseFloat(gpsLatitude) : undefined,
+        gpsLongitude: gpsLongitude ? parseFloat(gpsLongitude) : undefined,
+        gpsRadiusMeters: gpsRadiusMeters ? parseInt(gpsRadiusMeters, 10) : undefined,
+        allowOutsideRadius,
+        outsideRadiusAction,
+        lateToleranceMinutes: parseInt(lateToleranceMinutes || '0', 10),
+        earlyCheckoutToleranceMinutes: parseInt(earlyCheckoutToleranceMinutes || '0', 10),
+        allowHolidayAttendance,
+        allowWeekendAttendance,
+        autoAbsentEnabled,
+        autoCheckoutEnabled,
+        requiresSelfie,
+        requiresLocation,
+        isActive,
+        notes: notes.trim() || undefined,
+      });
+      onClose();
+    } catch {
+      // handled in parent
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await onDelete();
+      onClose();
+    } catch {
+      // handled in parent
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="rounded-xl border border-border bg-muted/30 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <ShieldCheck size={18} />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">{branch.name}</p>
+            <p className="text-xs text-muted-foreground">{branch.company?.name || t('organization.branches.policy.companyFallback')}</p>
+            <p className="text-xs text-muted-foreground">
+              {t('organization.branches.policy.branchCoordinatesHint', {
+                latitude: branch.latitude ?? '-',
+                longitude: branch.longitude ?? '-',
+              })}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('organization.branches.policy.fields.attendanceMethod')}</label>
+          <Select2
+            value={attendanceMethod}
+            onValueChange={(value) => setAttendanceMethod(value as AttendancePolicyMethod)}
+            options={ATTENDANCE_METHOD_OPTIONS.map((option) => ({
+              value: option.value,
+              label: t(option.labelKey),
+            }))}
+            placeholder={t('organization.branches.policy.selectMethod')}
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('organization.branches.policy.fields.outsideRadiusAction')}</label>
+          <Select2
+            value={outsideRadiusAction}
+            onValueChange={(value) => setOutsideRadiusAction(value as OutsideRadiusAction)}
+            options={OUTSIDE_RADIUS_OPTIONS.map((option) => ({
+              value: option.value,
+              label: t(option.labelKey),
+            }))}
+            placeholder={t('organization.branches.policy.selectOutsideRadiusAction')}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('organization.branches.policy.fields.gpsRadiusMeters')}</label>
+          <Input value={gpsRadiusMeters} onChange={(event) => setGpsRadiusMeters(event.target.value)} type="number" min="1" placeholder="100" />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('organization.branches.policy.fields.gpsLatitude')}</label>
+          <Input value={gpsLatitude} onChange={(event) => setGpsLatitude(event.target.value)} type="number" step="any" placeholder={branch.latitude?.toString() || '-6.2088'} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('organization.branches.policy.fields.gpsLongitude')}</label>
+          <Input value={gpsLongitude} onChange={(event) => setGpsLongitude(event.target.value)} type="number" step="any" placeholder={branch.longitude?.toString() || '106.8456'} />
+        </div>
+      </div>
+
+      {needsGps && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          {t('organization.branches.policy.gpsHint')}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('organization.branches.policy.fields.lateToleranceMinutes')}</label>
+          <Input value={lateToleranceMinutes} onChange={(event) => setLateToleranceMinutes(event.target.value)} type="number" min="0" placeholder="0" />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('organization.branches.policy.fields.earlyCheckoutToleranceMinutes')}</label>
+          <Input value={earlyCheckoutToleranceMinutes} onChange={(event) => setEarlyCheckoutToleranceMinutes(event.target.value)} type="number" min="0" placeholder="0" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 rounded-xl border border-border p-4 md:grid-cols-2">
+        {toggleFields.map((field) => (
+          <label key={field.key} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={field.checked}
+              onChange={(event) => field.setChecked(event.target.checked)}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+            />
+            <span>{t(field.key)}</span>
+          </label>
+        ))}
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('organization.branches.policy.fields.notes')}</label>
+        <textarea
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          placeholder={t('organization.branches.policy.notesPlaceholder')}
+          rows={3}
+          className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground resize-none"
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-2 pt-2">
+        <div>
+          {initial ? (
+            <Button type="button" variant="outline" size="sm" onClick={handleDelete} disabled={deleting}>
+              <Trash2 size={14} className="mr-2" />
+              {deleting ? t('organization.branches.policy.deleting') : t('organization.branches.policy.delete')}
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="submit" size="sm" disabled={saving}>
+            {saving ? t('organization.branches.policy.saving') : t('common.save')}
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+}
 
 export function BranchListPage() {
+  const { t } = useI18n();
   const [branches, setBranches] = useState<BranchExtended[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,6 +447,13 @@ export function BranchListPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<BranchExtended | null>(null);
   const [deleting, setDeleting] = useState<BranchExtended | null>(null);
+  const [policyTarget, setPolicyTarget] = useState<BranchExtended | null>(null);
+
+  const STATUS_OPTIONS = [
+    { value: '', label: t('organization.branches.filters.allStatus') },
+    { value: 'ACTIVE', label: t('common.active') },
+    { value: 'INACTIVE', label: t('common.inactive') },
+  ];
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -185,22 +466,22 @@ export function BranchListPage() {
       setCompanies(companyData);
     } catch (error) {
       console.error('Failed to fetch branches:', error);
-      toast.error('Failed to load branches');
+      toast.error(t('organization.branches.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleCreate = async (data: any) => {
     try {
       await organizationService.createBranch(data);
-      toast.success('Branch created');
+      toast.success(t('organization.branches.toast.createSuccess'));
       setShowCreate(false);
       fetchData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create branch');
+      toast.error(err?.response?.data?.message || t('organization.branches.toast.createFailed'));
       throw err;
     }
   };
@@ -209,11 +490,11 @@ export function BranchListPage() {
     if (!editing) return;
     try {
       await organizationService.updateBranch(editing.id, data);
-      toast.success('Branch updated');
+      toast.success(t('organization.branches.toast.updateSuccess'));
       setEditing(null);
       fetchData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update branch');
+      toast.error(err?.response?.data?.message || t('organization.branches.toast.updateFailed'));
       throw err;
     }
   };
@@ -222,11 +503,37 @@ export function BranchListPage() {
     if (!deleting) return;
     try {
       await organizationService.deleteBranch(deleting.id);
-      toast.success('Branch deleted');
+      toast.success(t('organization.branches.toast.deleteSuccess'));
       setDeleting(null);
       fetchData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete branch');
+      toast.error(err?.response?.data?.message || t('organization.branches.toast.deleteFailed'));
+    }
+  };
+
+  const handlePolicySave = async (data: any) => {
+    if (!policyTarget) return;
+    try {
+      await organizationService.upsertBranchAttendancePolicy(policyTarget.id, data);
+      toast.success(t('organization.branches.toast.policySaved'));
+      setPolicyTarget(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || t('organization.branches.toast.policySaveFailed'));
+      throw err;
+    }
+  };
+
+  const handlePolicyDelete = async () => {
+    if (!policyTarget) return;
+    try {
+      await organizationService.deleteBranchAttendancePolicy(policyTarget.id);
+      toast.success(t('organization.branches.toast.policyDeleted'));
+      setPolicyTarget(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || t('organization.branches.toast.policyDeleteFailed'));
+      throw err;
     }
   };
 
@@ -243,15 +550,15 @@ export function BranchListPage() {
   return (
     <div>
       <PageHeader
-        title="Branches"
-        description="Manage branch offices and locations"
+        title={t('organization.branches.title')}
+        description={t('organization.branches.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+              <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={16} className="mr-2" /> Add Branch
+              <Plus size={16} className="mr-2" /> {t('organization.branches.actions.add')}
             </Button>
           </>
         }
@@ -261,7 +568,7 @@ export function BranchListPage() {
         <div className="relative flex-1 max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search branches..."
+            placeholder={t('organization.branches.filters.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -272,20 +579,20 @@ export function BranchListPage() {
             value={statusFilter}
             onValueChange={setStatusFilter}
             options={STATUS_OPTIONS}
-            placeholder="All Status"
+            placeholder={t('organization.branches.filters.allStatus')}
           />
         </div>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
         </div>
       ) : filteredBranches.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <MapPin size={40} className="text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
-            {search || statusFilter ? 'No branches match your filters' : 'No branches found'}
+            {search || statusFilter ? t('organization.branches.empty.filtered') : t('organization.branches.empty.default')}
           </p>
         </div>
       ) : (
@@ -311,7 +618,7 @@ export function BranchListPage() {
                       ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                       : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                   }`}>
-                    {branch.status}
+                    {branch.status === 'ACTIVE' ? t('common.active') : t('common.inactive')}
                   </span>
                 </div>
 
@@ -346,20 +653,67 @@ export function BranchListPage() {
                     <span>{branch.timezone}</span>
                   </div>
                 </div>
+
+                <div className="mt-4 rounded-xl border border-dashed border-border bg-muted/30 p-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      {branch.attendancePolicy?.attendanceMethod === 'FINGERPRINT' ? <Fingerprint size={15} /> : <LocateFixed size={15} />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground">{t('organization.branches.policy.cardTitle')}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {branch.attendancePolicy
+                          ? formatMethodLabel(branch.attendancePolicy.attendanceMethod, t)
+                          : t('organization.branches.policy.notConfigured')}
+                      </p>
+                    </div>
+                  </div>
+
+                  {branch.attendancePolicy ? (
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      <span className="rounded-full bg-background px-2 py-1">
+                        {t('organization.branches.policy.summary.radius', {
+                          radius: branch.attendancePolicy.gpsRadiusMeters ?? '-',
+                        })}
+                      </span>
+                      <span className="rounded-full bg-background px-2 py-1">
+                        {t('organization.branches.policy.summary.lateTolerance', {
+                          minutes: branch.attendancePolicy.lateToleranceMinutes,
+                        })}
+                      </span>
+                      <span className="rounded-full bg-background px-2 py-1">
+                        {branch.attendancePolicy.requiresLocation
+                          ? t('organization.branches.policy.summary.locationRequired')
+                          : t('organization.branches.policy.summary.locationOptional')}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-[11px] text-muted-foreground">
+                      {t('organization.branches.policy.defaultFallback')}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-1 px-4 py-2.5 border-t border-border bg-muted/30 rounded-b-xl">
                 <button
+                  onClick={() => setPolicyTarget(branch)}
+                  className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary"
+                  title={t('organization.branches.actions.attendancePolicy')}
+                >
+                  <Clock3 size={15} />
+                </button>
+                <button
                   onClick={() => setEditing(branch)}
                   className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
-                  title="Edit"
+                  title={t('common.edit')}
                 >
                   <Pencil size={15} />
                 </button>
                 <button
                   onClick={() => setDeleting(branch)}
                   className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600"
-                  title="Delete"
+                  title={t('common.delete')}
                 >
                   <Trash2 size={15} />
                 </button>
@@ -369,18 +723,35 @@ export function BranchListPage() {
         </div>
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Branch">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('organization.branches.form.createTitle')}>
         <BranchForm companies={companies} onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Branch">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={t('organization.branches.form.editTitle')}>
         {editing && <BranchForm initial={editing} companies={companies} onSave={handleUpdate} onClose={() => setEditing(null)} />}
+      </Modal>
+      <Modal
+        open={!!policyTarget}
+        onClose={() => setPolicyTarget(null)}
+        title={t('organization.branches.policy.modalTitle')}
+      >
+        {policyTarget && (
+          <PolicyForm
+            branch={policyTarget}
+            initial={policyTarget.attendancePolicy}
+            onSave={handlePolicySave}
+            onDelete={handlePolicyDelete}
+            onClose={() => setPolicyTarget(null)}
+          />
+        )}
       </Modal>
       <ConfirmDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}
         onConfirm={handleDelete}
-        title="Delete Branch"
-        message={`Delete "${deleting?.name}"? This action cannot be undone.`}
+        title={t('organization.branches.confirm.deleteTitle')}
+        message={t('organization.branches.confirm.deleteMessage', {
+          name: deleting?.name || '',
+        })}
       />
     </div>
   );
