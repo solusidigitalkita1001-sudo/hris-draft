@@ -5,6 +5,8 @@ x-api-service: &api-service
   restart: unless-stopped
   environment:
     - NODE_ENV=development
+    - APP_URL=http://srv540825.hstgr.cloud:8084
+    - CORS_ORIGINS=http://srv540825.hstgr.cloud:8083,http://localhost:5173,http://localhost:5174,http://localhost:3000
     - DATABASE_URL=mysql://hris_user:hris_password@mysql:3306/hris_enterprise
     - REDIS_URL=redis://redis:6379/0
     - REDIS_HOST=redis
