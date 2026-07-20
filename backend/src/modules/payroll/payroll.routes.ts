@@ -10,6 +10,7 @@ import {
   createEmployeeSalarySchema,
   updateEmployeeSalarySchema,
   createPayrollPeriodSchema,
+  updatePayrollPeriodSchema,
   createPayrollRunSchema,
 } from './payroll.dto';
 import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema } from './payroll.validation';
@@ -103,6 +104,14 @@ router.post(
   authorize({ resource: 'payroll', action: 'create' }),
   validate(createPayrollPeriodSchema, 'body'),
   payrollController.createPayrollPeriod.bind(payrollController)
+);
+
+router.patch(
+  '/periods/:id',
+  authorize({ resource: 'payroll', action: 'update' }),
+  validate(idParamSchema, 'params'),
+  validate(updatePayrollPeriodSchema, 'body'),
+  payrollController.updatePayrollPeriod.bind(payrollController)
 );
 
 router.patch(

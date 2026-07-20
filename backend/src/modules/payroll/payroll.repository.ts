@@ -227,6 +227,16 @@ export class PayrollRepository {
     });
   }
 
+  async updatePayrollPeriod(id: string, data: UpdatePayrollPeriodDTO) {
+    return prisma.payrollPeriod.update({
+      where: { id },
+      data: {
+        name: data.name,
+        notes: data.notes,
+      },
+    });
+  }
+
   // ==================== Payroll Runs ====================
 
   async findAllPayrollRuns(companyId: string) {

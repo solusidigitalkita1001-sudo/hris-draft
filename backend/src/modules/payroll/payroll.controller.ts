@@ -128,6 +128,16 @@ export class PayrollController {
     }
   }
 
+  async updatePayrollPeriod(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const data = await payrollService.updatePayrollPeriod(id, req.body);
+      res.json(Result.updated(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async closePayrollPeriod(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;

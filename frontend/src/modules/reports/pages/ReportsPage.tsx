@@ -5,9 +5,11 @@ import {
   PieChart, Pie, Cell, LineChart, Line, Legend,
 } from 'recharts';
 import { reportsService } from '@/services/reports.service';
+import { payrollService, type PayrollPeriod } from '@/services/payroll.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select2 } from '@/components/ui/select2';
 import {
   Users, Clock, CalendarDays, Banknote, TrendingUp, UserSquare2,
   Download, RefreshCw, BarChart3, PieChart as PieChartIcon,
@@ -85,11 +87,36 @@ export function ReportsPage() {
   const [recruitmentData, setRecruitmentData] = useState<any>(null);
 
   // Period filter for payroll
-  const [periodId] = useState('');
+  const [payrollPeriods, setPayrollPeriods] = useState<PayrollPeriod[]>([]);
+  const [periodId, setPeriodId] = useState('');
+
+  const loadPayrollPeriods = useCallback(async () => {
+    if (!companyId) {
+      setPayrollPeriods([]);
+      return;
+    }
+
+    try {
+      const data = await payrollService.getPayrollPeriods(companyId);
+      setPayrollPeriods(data);
+    } catch {
+      setPayrollPeriods([]);
+    }
+  }, [companyId]);
 
   // ─── Fetch Data ──────────────────────────────────────
   const fetchAll = useCallback(async () => {
-    if (!companyId) return;
+    if (!companyId) {
+      setError('companyId tidak tersedia');
+      setLoading(false);
+      return;
+    }
+
+    if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) {
+      setError('Tanggal tidak valid: endDate lebih kecil dari startDate');
+      setLoading(false);
+      return;
+    }
     setLoading(true); setError(null);
     try {
       const [hc, att, lev, pr, to, rec] = await Promise.all([
@@ -108,6 +135,7 @@ export function ReportsPage() {
   }, [companyId, startDate, endDate, periodId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { void loadPayrollPeriods(); }, [loadPayrollPeriods]);
 
   // ─── Export Handlers ──────────────────────────────────
   const exportCSV = useCallback(() => {
@@ -182,6 +210,20 @@ export function ReportsPage() {
               onChange={(e) => setEndDate(e.target.value)}
               className="w-36 h-9 text-xs"
             />
+            {activeTab === 'payroll' && (
+              <div className="w-56">
+                <Select2
+                  value={periodId}
+                  onValueChange={setPeriodId}
+                  options={[
+                    { value: '', label: 'All Periods' },
+                    ...payrollPeriods.map((p) => ({ value: p.id, label: `${p.name} • ${p.status}` })),
+                  ]}
+                  placeholder="Filter period"
+                  className="h-9 text-xs"
+                />
+              </div>
+            )}
             <Button variant="outline" size="sm" onClick={fetchAll}>
               <RefreshCw size={16} className="mr-2" /> Refresh
             </Button>

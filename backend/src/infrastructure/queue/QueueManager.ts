@@ -14,10 +14,18 @@ export class QueueManager {
   private queueEvents = new Map<string, QueueEvents>();
   private workers: Worker[] = [];
   private connection: ConnectionOptions;
-  private healthClient: IORedis;
+  private healthClient?: IORedis;
   private readonly healthTimeoutMs: number = 1000;
+  private readonly enabled: boolean;
 
   private constructor() {
+    this.enabled = config.queue.enabled && config.redis.enabled;
+    this.connection = {};
+    if (!this.enabled) {
+      logger.info('BullMQ queue disabled via configuration');
+      return;
+    }
+
     const baseOptions = getRedisConnectionOptions();
 
     this.connection = {
@@ -48,6 +56,10 @@ export class QueueManager {
   }
 
   getQueue(name: string): Queue {
+    if (!this.enabled) {
+      throw new Error('Queue is disabled');
+    }
+
     if (!this.queues.has(name)) {
       this.queues.set(
         name,
@@ -70,6 +82,10 @@ export class QueueManager {
   }
 
   getQueueEvents(name: string): QueueEvents {
+    if (!this.enabled) {
+      throw new Error('Queue is disabled');
+    }
+
     if (!this.queueEvents.has(name)) {
       this.queueEvents.set(
         name,
@@ -82,7 +98,12 @@ export class QueueManager {
     return this.queueEvents.get(name)!;
   }
 
-  async enqueue<T>(queueName: string, jobName: string, data: T, options?: JobsOptions) {
+  async enqueue<T>(queueName: string, jobName: string, data: T, options?: JobsOptions): Promise<ReturnType<Queue['add']> | null> {
+    if (!this.enabled) {
+      logger.debug('Skipping BullMQ enqueue because queue is disabled', { queueName, jobName });
+      return null;
+    }
+
     const queue = this.getQueue(queueName);
     return queue.add(jobName, data, options);
   }
@@ -92,6 +113,10 @@ export class QueueManager {
     processor: Processor<T>,
     options?: Omit<WorkerOptions, 'connection'>
   ): Worker<T> {
+    if (!this.enabled) {
+      throw new Error('Queue is disabled');
+    }
+
     const worker = new Worker<T>(queueName, processor, {
       connection: this.connection,
       concurrency: 5,
@@ -120,6 +145,10 @@ export class QueueManager {
   }
 
   async isHealthy(): Promise<boolean> {
+    if (!this.enabled || !this.healthClient) {
+      return false;
+    }
+
     try {
       const response = await Promise.race([
         this.healthClient.ping(),
@@ -134,6 +163,8 @@ export class QueueManager {
   }
 
   async disconnect(): Promise<void> {
+    if (!this.enabled || !this.healthClient) return;
+
     await Promise.all(this.workers.map((worker) => worker.close()));
     await Promise.all(Array.from(this.queueEvents.values()).map((queueEvents) => queueEvents.close()));
     await Promise.all(Array.from(this.queues.values()).map((queue) => queue.close()));

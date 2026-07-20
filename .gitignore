@@ -1,3 +1,6 @@
 docker/
 dbg/
+dbg
+**/dbg/
 docker-compose.prod.yml
+*.md

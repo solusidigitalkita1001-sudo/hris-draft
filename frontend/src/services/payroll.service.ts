@@ -158,6 +158,11 @@ class PayrollService {
     return response.data.data;
   }
 
+  async updatePayrollPeriod(id: string, data: Partial<PayrollPeriod>): Promise<PayrollPeriod> {
+    const response = await api.patch(`/payroll/periods/${id}`, data);
+    return response.data.data;
+  }
+
   async closePayrollPeriod(id: string): Promise<PayrollPeriod> {
     const response = await api.patch(`/payroll/periods/${id}/close`);
     return response.data.data;

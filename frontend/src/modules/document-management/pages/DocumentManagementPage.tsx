@@ -98,8 +98,32 @@ function UploadDialog({
       toast.error('File dokumen wajib dipilih');
       return;
     }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 10MB');
+      return;
+    }
     if (ownerType === 'EMPLOYEE' && !employeeId.trim()) {
       toast.error('employeeId wajib diisi untuk dokumen employee');
+      return;
+    }
+
+    const expiresAtIso = expiresAt
+      ? (() => {
+          const parsed = new Date(expiresAt);
+          if (Number.isNaN(parsed.getTime())) return null;
+          if (parsed.getTime() <= Date.now()) return 'PAST';
+          return parsed.toISOString();
+        })()
+      : undefined;
+
+    if (expiresAt && expiresAtIso === null) {
+      toast.error('Format expiresAt tidak valid');
+      return;
+    }
+
+    if (expiresAtIso === 'PAST') {
+      toast.error('expiresAt tidak boleh tanggal masa lalu');
       return;
     }
 
@@ -113,7 +137,7 @@ function UploadDialog({
         title: title.trim(),
         description: description.trim() || undefined,
         visibility,
-        expiresAt: expiresAt || undefined,
+        expiresAt: expiresAtIso,
         file,
       });
       toast.success('Dokumen berhasil diupload');

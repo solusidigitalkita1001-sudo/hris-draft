@@ -120,12 +120,17 @@ app.use((req, res, next) => {
 // ==================== Health Check ====================
 app.get('/health', async (_req, res) => {
   const [redisHealthy, rabbitHealthy, queueHealthy] = await Promise.all([
-    redisCache.ping(),
-    rabbitMQBroker.isHealthy(),
-    queueManager.isHealthy(),
+    config.redis.enabled ? redisCache.ping() : Promise.resolve(false),
+    config.rabbitmq.enabled ? rabbitMQBroker.isHealthy() : Promise.resolve(false),
+    config.queue.enabled ? queueManager.isHealthy() : Promise.resolve(false),
   ]);
 
-  const isHealthy = redisHealthy && rabbitHealthy && queueHealthy;
+  const enabledChecks = [
+    !config.redis.enabled || redisHealthy,
+    !config.rabbitmq.enabled || rabbitHealthy,
+    !config.queue.enabled || queueHealthy,
+  ];
+  const isHealthy = enabledChecks.every(Boolean);
 
   res.status(isHealthy ? 200 : 503).json({
     success: isHealthy,
@@ -135,9 +140,9 @@ app.get('/health', async (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     services: {
-      redis: redisHealthy ? 'up' : 'down',
-      rabbitmq: rabbitHealthy ? 'up' : 'down',
-      queue: queueHealthy ? 'up' : 'down',
+      redis: config.redis.enabled ? (redisHealthy ? 'up' : 'down') : 'disabled',
+      rabbitmq: config.rabbitmq.enabled ? (rabbitHealthy ? 'up' : 'down') : 'disabled',
+      queue: config.queue.enabled ? (queueHealthy ? 'up' : 'down') : 'disabled',
     },
   });
 });

@@ -15,6 +15,7 @@ interface Config {
     url: string;
   };
   redis: {
+    enabled: boolean;
     url: string;
     host: string;
     port: number;
@@ -30,6 +31,7 @@ interface Config {
     enabled: boolean;
   };
   queue: {
+    enabled: boolean;
     defaultAttempts: number;
     defaultBackoffMs: number;
   };
@@ -92,6 +94,13 @@ function getEnvInt(key: string, defaultValue: number): number {
   return val ? parseInt(val, 10) : defaultValue;
 }
 
+function getEnvBool(key: string, defaultValue: boolean): boolean {
+  const val = process.env[key];
+  if (val === undefined) return defaultValue;
+
+  return !['false', '0', 'no', 'off'].includes(val.toLowerCase());
+}
+
 function getEnvArray(key: string, defaultValue: string[]): string[] {
   const val = process.env[key];
   return val ? val.split(',').map((s) => s.trim()) : defaultValue;
@@ -109,6 +118,7 @@ export const config: Config = {
     url: getEnv('DATABASE_URL', 'mysql://root:password@localhost:3306/hris_enterprise'),
   },
   redis: {
+    enabled: getEnvBool('REDIS_ENABLED', true),
     url: getEnv('REDIS_URL', ''),
     host: getEnv('REDIS_HOST', 'localhost'),
     port: getEnvInt('REDIS_PORT', 6379),
@@ -124,6 +134,7 @@ export const config: Config = {
     enabled: getEnv('RABBITMQ_ENABLED', 'true') !== 'false',
   },
   queue: {
+    enabled: getEnvBool('QUEUE_ENABLED', getEnvBool('REDIS_ENABLED', true)),
     defaultAttempts: getEnvInt('QUEUE_DEFAULT_ATTEMPTS', 3),
     defaultBackoffMs: getEnvInt('QUEUE_DEFAULT_BACKOFF_MS', 5000),
   },

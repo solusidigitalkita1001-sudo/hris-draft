@@ -5,11 +5,18 @@ import { getRedisConnectionOptions } from './redis-options';
 
 export class RedisCache {
   private static instance: RedisCache;
-  private client: Redis;
+  private client?: Redis;
   private readonly defaultTTL: number = 3600; // 1 hour
   private readonly healthTimeoutMs: number = 1000;
+  private readonly enabled: boolean;
 
   private constructor() {
+    this.enabled = config.redis.enabled;
+    if (!this.enabled) {
+      logger.info('Redis cache disabled via configuration');
+      return;
+    }
+
     const redisOptions = getRedisConnectionOptions();
 
     this.client = new Redis({
@@ -37,10 +44,16 @@ export class RedisCache {
   }
 
   getClient(): Redis {
+    if (!this.client) {
+      throw new Error('Redis is disabled');
+    }
+
     return this.client;
   }
 
   async get<T>(key: string): Promise<T | null> {
+    if (!this.client) return null;
+
     try {
       const value = await this.client.get(key);
       if (!value) return null;
@@ -52,6 +65,8 @@ export class RedisCache {
   }
 
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+    if (!this.client) return;
+
     try {
       const serialized = JSON.stringify(value);
       const ttl = ttlSeconds ?? this.defaultTTL;
@@ -62,6 +77,8 @@ export class RedisCache {
   }
 
   async delete(key: string): Promise<void> {
+    if (!this.client) return;
+
     try {
       await this.client.del(key);
     } catch (error) {
@@ -70,6 +87,8 @@ export class RedisCache {
   }
 
   async deletePattern(pattern: string): Promise<void> {
+    if (!this.client) return;
+
     try {
       const keys = await this.client.keys(pattern);
       if (keys.length > 0) {
@@ -81,6 +100,8 @@ export class RedisCache {
   }
 
   async exists(key: string): Promise<boolean> {
+    if (!this.client) return false;
+
     try {
       const result = await this.client.exists(key);
       return result === 1;
@@ -117,6 +138,8 @@ export class RedisCache {
    * Add token to blacklist
    */
   async blacklistToken(jti: string, expiresAt: Date): Promise<void> {
+    if (!this.client) return;
+
     const ttl = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
     if (ttl > 0) {
       await this.client.setex(`blacklist:${jti}`, ttl, '1');
@@ -127,11 +150,15 @@ export class RedisCache {
    * Check if token is blacklisted
    */
   async isTokenBlacklisted(jti: string): Promise<boolean> {
+    if (!this.client) return false;
+
     const result = await this.client.get(`blacklist:${jti}`);
     return result === '1';
   }
 
   async increment(key: string, ttlSeconds?: number): Promise<number> {
+    if (!this.client) return 0;
+
     const value = await this.client.incr(key);
     if (ttlSeconds) {
       await this.client.expire(key, ttlSeconds);
@@ -140,19 +167,29 @@ export class RedisCache {
   }
 
   async getTTL(key: string): Promise<number> {
+    if (!this.client) return -1;
+
     return this.client.ttl(key);
   }
 
   async flushAll(): Promise<void> {
+    if (!this.client) return;
+
     await this.client.flushall();
   }
 
   async disconnect(): Promise<void> {
+    if (!this.client) return;
+
     await this.client.quit();
     logger.info('Redis cache disconnected');
   }
 
   async ping(): Promise<boolean> {
+    if (!this.enabled || !this.client) {
+      return false;
+    }
+
     try {
       const response = await Promise.race([
         this.client.ping(),

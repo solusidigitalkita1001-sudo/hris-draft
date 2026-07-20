@@ -119,6 +119,12 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!employeeId) return toast.error('employeeId tidak tersedia. Silakan login ulang');
+    if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) return toast.error('Tanggal selesai tidak boleh lebih kecil dari tanggal mulai');
+    if (!Number.isFinite(duration) || duration <= 0) return toast.error('Durasi harus lebih dari 0');
+
+    const maxDuration = dayjs(endDate).startOf('day').diff(dayjs(startDate).startOf('day'), 'day') + 1;
+    if (duration > maxDuration) return toast.error(`Durasi melebihi rentang tanggal (maks ${maxDuration} hari)`);
     if (!reason.trim()) return toast.error('Alasan harus diisi');
     setSaving(true);
     try {
@@ -366,8 +372,8 @@ export function SelfServicePage() {
   const [activeModal, setActiveModal] = useState<'permission' | 'shift-swap' | null>(null);
   const [shiftCalendarMeta, setShiftCalendarMeta] = useState<MyWorkCalendarMonth | null>(null);
   const [loadingShiftEligibility, setLoadingShiftEligibility] = useState(true);
-  const companyId = localStorage.getItem('companyId') || '';
-  const employeeId = localStorage.getItem('employeeId') || '';
+  const companyId = user?.companyId || localStorage.getItem('companyId') || '';
+  const employeeId = user?.employeeId || localStorage.getItem('employeeId') || '';
 
   const fetchPermissions = useCallback(async () => {
     if (!employeeId) return;
@@ -385,6 +391,12 @@ export function SelfServicePage() {
   useEffect(() => { if (activeTab === 'permissions') fetchPermissions(); }, [fetchPermissions, activeTab]);
 
   const fetchShiftEligibility = useCallback(async () => {
+    if (!employeeId) {
+      setShiftCalendarMeta(null);
+      setLoadingShiftEligibility(false);
+      return;
+    }
+
     setLoadingShiftEligibility(true);
     try {
       const now = dayjs();
@@ -395,7 +407,7 @@ export function SelfServicePage() {
     } finally {
       setLoadingShiftEligibility(false);
     }
-  }, []);
+  }, [employeeId]);
 
   useEffect(() => {
     void fetchShiftEligibility();

@@ -22,12 +22,16 @@ async function bootstrap(): Promise<void> {
   }
 
   // Connect to Redis (non-blocking - log warning if fails)
-  try {
-    const redis = redisCache.getClient();
-    await redis.ping();
-    logger.info('Redis connection established');
-  } catch (error) {
-    logger.warn('Redis connection failed. Cache features will be degraded.', { error });
+  if (config.redis.enabled) {
+    try {
+      const redis = redisCache.getClient();
+      await redis.ping();
+      logger.info('Redis connection established');
+    } catch (error) {
+      logger.warn('Redis connection failed. Cache features will be degraded.', { error });
+    }
+  } else {
+    logger.info('Redis connection skipped because Redis is disabled');
   }
 
   // Start server
@@ -39,22 +43,30 @@ async function bootstrap(): Promise<void> {
   });
 
   void (async () => {
-    try {
-      await rabbitMQBroker.connect();
-      logger.info('RabbitMQ connection established');
-    } catch (error) {
-      logger.warn('RabbitMQ connection failed. Cross-instance events will be degraded.', { error });
+    if (config.rabbitmq.enabled) {
+      try {
+        await rabbitMQBroker.connect();
+        logger.info('RabbitMQ connection established');
+      } catch (error) {
+        logger.warn('RabbitMQ connection failed. Cross-instance events will be degraded.', { error });
+      }
+    } else {
+      logger.info('RabbitMQ connection skipped because RabbitMQ is disabled');
     }
 
-    try {
-      const queueHealthy = await queueManager.isHealthy();
-      if (queueHealthy) {
-        logger.info('BullMQ Redis connection established');
-      } else {
-        logger.warn('BullMQ Redis connection failed. Background jobs will be degraded.');
+    if (config.queue.enabled) {
+      try {
+        const queueHealthy = await queueManager.isHealthy();
+        if (queueHealthy) {
+          logger.info('BullMQ Redis connection established');
+        } else {
+          logger.warn('BullMQ Redis connection failed. Background jobs will be degraded.');
+        }
+      } catch (error) {
+        logger.warn('BullMQ initialization failed. Background jobs will be degraded.', { error });
       }
-    } catch (error) {
-      logger.warn('BullMQ initialization failed. Background jobs will be degraded.', { error });
+    } else {
+      logger.info('BullMQ initialization skipped because queue is disabled');
     }
   })();
 

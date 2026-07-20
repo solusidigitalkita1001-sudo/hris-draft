@@ -1,14 +1,245 @@
 import { useState, useEffect, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import { payrollService, type SalaryComponent } from '@/services/payroll.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, RefreshCw, Wallet, Percent } from 'lucide-react';
+import { Select2 } from '@/components/ui/select2';
+import { Plus, Search, RefreshCw, Wallet, Percent, Pencil, Trash2 } from 'lucide-react';
+
+function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl rounded-xl border border-border bg-background shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  message,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-xl border border-border bg-background shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="p-5">
+          <h3 className="text-base font-semibold mb-2">{title}</h3>
+          <p className="text-sm text-muted-foreground">{message}</p>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">Delete</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SalaryComponentForm({
+  initial,
+  onSave,
+  onClose,
+}: {
+  initial?: SalaryComponent | null;
+  onSave: (data: Partial<SalaryComponent>) => Promise<void>;
+  onClose: () => void;
+}) {
+  const isEdit = Boolean(initial?.id);
+  const [name, setName] = useState(initial?.name || '');
+  const [code, setCode] = useState(initial?.code || '');
+  const [type, setType] = useState<SalaryComponent['type']>(initial?.type || 'ALLOWANCE');
+  const [calculationMethod, setCalculationMethod] = useState<string>(initial?.calculationMethod || 'FIXED');
+  const [amount, setAmount] = useState(initial?.amount !== undefined && initial?.amount !== null ? String(initial.amount) : '');
+  const [ratePercent, setRatePercent] = useState(initial?.ratePercent !== undefined && initial?.ratePercent !== null ? String(initial.ratePercent) : '');
+  const [isTaxable, setIsTaxable] = useState(Boolean(initial?.isTaxable ?? true));
+  const [isProrated, setIsProrated] = useState(Boolean(initial?.isProrated ?? false));
+  const [isActive, setIsActive] = useState(Boolean(initial?.isActive ?? true));
+  const [description, setDescription] = useState(initial?.description || '');
+  const [sortOrder, setSortOrder] = useState<number>(initial?.sortOrder ?? 0);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const trimmedName = name.trim();
+    const trimmedCode = code.trim().toUpperCase();
+
+    if (!trimmedName) {
+      toast.error('Name wajib diisi');
+      return;
+    }
+
+    if (!isEdit && !trimmedCode) {
+      toast.error('Code wajib diisi');
+      return;
+    }
+
+    const parsedAmount = amount.trim() ? Number(amount) : undefined;
+    const parsedRate = ratePercent.trim() ? Number(ratePercent) : undefined;
+
+    if (calculationMethod === 'FIXED') {
+      if (parsedAmount === undefined || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+        toast.error('Amount harus > 0 untuk FIXED');
+        return;
+      }
+    }
+
+    if (calculationMethod === 'PERCENTAGE') {
+      if (parsedRate === undefined || Number.isNaN(parsedRate) || parsedRate < 0 || parsedRate > 100) {
+        toast.error('Rate percent harus 0 - 100 untuk PERCENTAGE');
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      await onSave({
+        name: trimmedName,
+        ...(isEdit ? {} : { code: trimmedCode }),
+        type,
+        calculationMethod,
+        amount: calculationMethod === 'FIXED' ? parsedAmount : undefined,
+        ratePercent: calculationMethod === 'PERCENTAGE' ? parsedRate : undefined,
+        isTaxable,
+        isProrated,
+        isActive,
+        description: description.trim() || undefined,
+        sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
+      });
+      onClose();
+    } catch {
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Name *</label>
+          <Input value={name} onChange={(event) => setName(event.target.value)} required />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Code {isEdit ? '' : '*'}</label>
+          <Input
+            value={code}
+            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            disabled={isEdit}
+            required={!isEdit}
+            placeholder="e.g. BASIC_SALARY"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Type *</label>
+          <Select2
+            value={type}
+            onValueChange={(value) => setType(value as SalaryComponent['type'])}
+            options={[
+              { value: 'ALLOWANCE', label: 'ALLOWANCE' },
+              { value: 'DEDUCTION', label: 'DEDUCTION' },
+            ]}
+            className="h-9"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Calculation Method *</label>
+          <Select2
+            value={calculationMethod}
+            onValueChange={setCalculationMethod}
+            options={[
+              { value: 'FIXED', label: 'FIXED' },
+              { value: 'PERCENTAGE', label: 'PERCENTAGE' },
+              { value: 'FORMULA', label: 'FORMULA' },
+            ]}
+            className="h-9"
+          />
+        </div>
+      </div>
+
+      {calculationMethod === 'FIXED' && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Amount *</label>
+          <Input type="number" min={0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required />
+        </div>
+      )}
+
+      {calculationMethod === 'PERCENTAGE' && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Rate Percent *</label>
+          <Input type="number" min={0} max={100} step="0.01" value={ratePercent} onChange={(event) => setRatePercent(event.target.value)} required />
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={isTaxable} onChange={(event) => setIsTaxable(event.target.checked)} />
+          Taxable
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={isProrated} onChange={(event) => setIsProrated(event.target.checked)} />
+          Prorated
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
+          Active
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Sort Order</label>
+          <Input type="number" value={String(sortOrder)} onChange={(event) => setSortOrder(Number(event.target.value))} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Description</label>
+          <Input value={description} onChange={(event) => setDescription(event.target.value)} />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+      </div>
+    </form>
+  );
+}
 
 export function SalaryComponentList() {
   const [components, setComponents] = useState<SalaryComponent[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<SalaryComponent | null>(null);
+  const [deleting, setDeleting] = useState<SalaryComponent | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -18,6 +249,7 @@ export function SalaryComponentList() {
       setComponents(data);
     } catch (error) {
       console.error('Failed to fetch salary components:', error);
+      toast.error('Gagal memuat salary components');
     } finally {
       setLoading(false);
     }
@@ -33,6 +265,49 @@ export function SalaryComponentList() {
       c.code.toLowerCase().includes(search.toLowerCase())
   );
 
+  const handleCreate = async (data: Partial<SalaryComponent>) => {
+    const companyId = localStorage.getItem('companyId') || '';
+    if (!companyId) {
+      toast.error('companyId tidak tersedia. Silakan login ulang.');
+      throw new Error('companyId missing');
+    }
+
+    try {
+      await payrollService.createSalaryComponent({ ...data, companyId });
+      toast.success('Salary component created');
+      setShowCreate(false);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Gagal membuat salary component');
+      throw err;
+    }
+  };
+
+  const handleUpdate = async (data: Partial<SalaryComponent>) => {
+    if (!editing) return;
+    try {
+      await payrollService.updateSalaryComponent(editing.id, data);
+      toast.success('Salary component updated');
+      setEditing(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Gagal update salary component');
+      throw err;
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    try {
+      await payrollService.deleteSalaryComponent(deleting.id);
+      toast.success('Salary component deleted');
+      setDeleting(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Gagal delete salary component');
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -44,7 +319,7 @@ export function SalaryComponentList() {
               <RefreshCw size={16} className="mr-2" />
               Refresh
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus size={16} className="mr-2" />
               Add Component
             </Button>
@@ -147,7 +422,24 @@ export function SalaryComponentList() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button variant="ghost" size="sm">Edit</Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditing(comp)}
+                        className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
+                        title="Edit"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleting(comp)}
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600"
+                        title="Delete"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -155,6 +447,22 @@ export function SalaryComponentList() {
           </tbody>
         </table>
       </div>
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add Salary Component">
+        <SalaryComponentForm onSave={handleCreate} onClose={() => setShowCreate(false)} />
+      </Modal>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Salary Component">
+        {editing && <SalaryComponentForm initial={editing} onSave={handleUpdate} onClose={() => setEditing(null)} />}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={handleDelete}
+        title="Delete Salary Component"
+        message={`Delete "${deleting?.name}"? This action cannot be undone.`}
+      />
     </div>
   );
 }

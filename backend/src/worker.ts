@@ -45,6 +45,10 @@ async function maybeCreateNotification(event: DomainEvent): Promise<void> {
 }
 
 async function recordProcessedEvent(event: DomainEvent, source: 'bullmq' | 'rabbitmq'): Promise<void> {
+  if (!config.redis.enabled) {
+    return;
+  }
+
   const client = redisCache.getClient();
   const key = `${config.redis.keyPrefix}ops:events:processed`;
   const entry = JSON.stringify({
@@ -68,6 +72,15 @@ async function bootstrapWorker(): Promise<void> {
   if (!isDbConnected) {
     logger.error('Worker failed to connect to database. Exiting...');
     process.exit(1);
+  }
+
+  if (!config.redis.enabled || !config.queue.enabled || !config.rabbitmq.enabled) {
+    logger.warn('Worker dependencies are disabled. Worker will not start.', {
+      redisEnabled: config.redis.enabled,
+      queueEnabled: config.queue.enabled,
+      rabbitmqEnabled: config.rabbitmq.enabled,
+    });
+    process.exit(0);
   }
 
   const redisHealthy = await redisCache.ping();

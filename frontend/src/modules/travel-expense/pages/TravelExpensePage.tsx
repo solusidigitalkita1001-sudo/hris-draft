@@ -96,16 +96,37 @@ function TripForm({
       return;
     }
 
+    if (!destination.trim()) {
+      toast.error('Tujuan wajib diisi');
+      return;
+    }
+
+    if (!purpose.trim()) {
+      toast.error('Tujuan perjalanan wajib diisi');
+      return;
+    }
+
+    if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) {
+      toast.error('Tanggal selesai tidak boleh lebih kecil dari tanggal mulai');
+      return;
+    }
+
+    const parsedEstimated = Number(estimatedCost);
+    if (!Number.isFinite(parsedEstimated) || parsedEstimated < 0) {
+      toast.error('Estimasi biaya tidak valid');
+      return;
+    }
+
     setSaving(true);
     try {
       await travelExpenseService.createTrip({
         companyId,
         employeeId,
-        destination,
-        purpose,
+        destination: destination.trim(),
+        purpose: purpose.trim(),
         startDate: dayjs(startDate).toISOString(),
         endDate: dayjs(endDate).toISOString(),
-        estimatedCost: Number(estimatedCost),
+        estimatedCost: parsedEstimated,
         notes: notes || undefined,
       });
       toast.success('Travel request berhasil dibuat');
@@ -210,6 +231,17 @@ function ClaimForm({
       return;
     }
 
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      toast.error('Nominal harus > 0');
+      return;
+    }
+
+    if (tripId && !selectableTrips.some((trip) => trip.id === tripId)) {
+      toast.error('Trip yang dipilih tidak valid');
+      return;
+    }
+
     setSaving(true);
     try {
       await travelExpenseService.createClaim({
@@ -217,9 +249,9 @@ function ClaimForm({
         employeeId,
         tripId: tripId || undefined,
         category,
-        amount: Number(amount),
+        amount: parsedAmount,
         expenseDate: dayjs(expenseDate).toISOString(),
-        description: description || undefined,
+        description: description.trim() || undefined,
         receiptFilePath: receiptFilePath || undefined,
       });
       toast.success('Expense claim berhasil dikirim');

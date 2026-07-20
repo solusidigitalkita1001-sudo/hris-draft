@@ -26,6 +26,7 @@ import { PayrollDashboard } from '@/modules/payroll/pages/PayrollDashboard';
 import { SalaryComponentList } from '@/modules/payroll/pages/SalaryComponentList';
 import { PayrollPeriodList } from '@/modules/payroll/pages/PayrollPeriodList';
 import { PayrollRunList } from '@/modules/payroll/pages/PayrollRunList';
+import { PayrollRunCreate } from '@/modules/payroll/pages/PayrollRunCreate';
 import { PayrollRunDetail } from '@/modules/payroll/pages/PayrollRunDetail';
 import { PayslipDetail } from '@/modules/payroll/pages/PayslipDetail';
 
@@ -275,6 +276,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
             <PayrollRunList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'payroll/runs/new',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'process' }]}>
+            <PayrollRunCreate />
           </ProtectedRoute>
         ),
       },

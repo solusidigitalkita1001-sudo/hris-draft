@@ -5,6 +5,7 @@ import {
   CreateEmployeeSalaryDTO,
   UpdateEmployeeSalaryDTO,
   CreatePayrollPeriodDTO,
+  UpdatePayrollPeriodDTO,
   CreatePayrollRunDTO,
 } from './payroll.dto';
 import { eventBus } from '@/shared/events/EventBus';
@@ -111,6 +112,14 @@ export class PayrollService {
 
     logger.info('Payroll period closed', { periodId: id });
     return period;
+  }
+
+  async updatePayrollPeriod(id: string, data: UpdatePayrollPeriodDTO) {
+    const period = await this.findPayrollPeriodById(id);
+    if (period.status === 'CLOSED') {
+      throw new BadRequestError('Cannot update a closed payroll period');
+    }
+    return payrollRepository.updatePayrollPeriod(id, data);
   }
 
   // ==================== Payroll Runs ====================

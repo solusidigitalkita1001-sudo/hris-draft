@@ -53,15 +53,26 @@ function LoanForm({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedType || !amount || !reason.trim()) return toast.error('Lengkapi semua field');
-    if (selectedLoanType && Number(amount) > Number(selectedLoanType.maxAmount)) {
+    if (!companyId || !employeeId) return toast.error('Profil employee atau company belum tersedia. Silakan login ulang');
+    if (!selectedType || !reason.trim()) return toast.error('Lengkapi semua field');
+
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return toast.error('Jumlah pinjaman harus > 0');
+
+    if (!Number.isFinite(installments) || installments <= 0) return toast.error('Jumlah cicilan tidak valid');
+
+    if (selectedLoanType && installments > Number(selectedLoanType.maxInstallments)) {
+      return toast.error(`Maksimal cicilan ${selectedLoanType.maxInstallments}x`);
+    }
+
+    if (selectedLoanType && parsedAmount > Number(selectedLoanType.maxAmount)) {
       return toast.error(`Maksimal pinjaman ${formatCurrency(Number(selectedLoanType.maxAmount))}`);
     }
     setSaving(true);
     try {
       await employeeLoanService.create({
         loanTypeId: selectedType,
-        amount: Number(amount),
+        amount: parsedAmount,
         totalInstallments: installments,
         installmentAmount: Math.round(installmentAmount * 100) / 100,
         reason: reason.trim(),
