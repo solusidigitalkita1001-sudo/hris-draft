@@ -13,12 +13,29 @@ import {
   UpdatePerformanceComponentDTO,
   CreatePerformancePeriodDTO,
   UpdatePerformancePeriodDTO,
+  CreatePerformancePlanningAssignmentDTO,
+  UpdatePerformancePlanningAssignmentDTO,
+  CreatePerformancePlanningTargetDTO,
+  UpdatePerformancePlanningTargetDTO,
+  CreatePerformanceTargetProgressDTO,
+  CreatePerformanceCalibrationSessionDTO,
+  PublishPerformanceResultsDTO,
+  AcknowledgePerformanceResultDTO,
+  CreatePerformanceResultDisputeDTO,
+  RespondPerformanceResultDisputeDTO,
+  ApprovePerformanceResultsDTO,
+  ReopenPerformanceResultDTO,
+  SendPerformanceResultRemindersDTO,
+  SyncPerformanceDevelopmentRecommendationsDTO,
+  AssignPerformanceDevelopmentRecommendationDTO,
+  CreatePerformanceAutomationScheduleDTO,
   CreatePerformanceFormulaDTO,
   UpdatePerformanceFormulaDTO,
   CreatePerformanceIndicatorDTO,
   UpdatePerformanceIndicatorDTO,
   CreatePerformanceGradeRuleDTO,
   UpdatePerformanceGradeRuleDTO,
+  PerformanceCalibrationDecisionDTO,
   CreatePerformanceWorkflowTemplateDTO,
   UpdatePerformanceWorkflowTemplateDTO,
   PerformanceWorkflowStageDTO,
@@ -237,6 +254,7 @@ export class PerformanceRepository {
         companyId,
         versionNumber,
         summary: data.summary,
+        weightMode: data.weightMode as any,
         scoreAggregation: data.scoreAggregation as any,
         minimumScore: data.minimumScore,
         maximumScore: data.maximumScore,
@@ -259,6 +277,7 @@ export class PerformanceRepository {
       where: { id },
       data: {
         ...data,
+        weightMode: data.weightMode as any,
         gradeRuleId: data.gradeRuleId,
         reviewWorkflowTemplateId: data.reviewWorkflowTemplateId,
         approvalWorkflowTemplateId: data.approvalWorkflowTemplateId,
@@ -561,6 +580,7 @@ export class PerformanceRepository {
         name: data.name,
         code: data.code,
         description: data.description,
+        recommendationRules: data.recommendationRules as any,
         isActive: data.isActive,
         ranges: {
           create: data.ranges.map((range) => ({
@@ -599,6 +619,7 @@ export class PerformanceRepository {
           name: data.name,
           code: data.code,
           description: data.description,
+          recommendationRules: data.recommendationRules as any,
           isActive: data.isActive,
           ranges: data.ranges
             ? {
@@ -768,7 +789,9 @@ export class PerformanceRepository {
       status?: Prisma.EnumPerformancePeriodStatusFieldUpdateOperationsInput | any;
       readinessSummary?: Prisma.InputJsonValue;
       configSnapshot?: Prisma.InputJsonValue;
+      planningSummary?: Prisma.InputJsonValue;
       publishedAt?: Date | null;
+      planningPublishedAt?: Date | null;
     }
   ) {
     const updateData: Prisma.PerformancePeriodUncheckedUpdateInput = {
@@ -788,7 +811,9 @@ export class PerformanceRepository {
       status: data.status,
       readinessSummary: data.readinessSummary,
       configSnapshot: data.configSnapshot,
+      planningSummary: data.planningSummary,
       publishedAt: data.publishedAt,
+      planningPublishedAt: data.planningPublishedAt,
     };
 
     return prisma.performancePeriod.update({
@@ -827,6 +852,2017 @@ export class PerformanceRepository {
           },
         },
       },
+    });
+  }
+
+  // ==================== Planning & Assignment ====================
+  async findPlanningWorkspace(periodId: string) {
+    return prisma.performancePeriod.findFirst({
+      where: { id: periodId, deletedAt: null },
+      include: {
+        method: true,
+        methodVersion: {
+          include: {
+            components: {
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+        },
+        planningAssignments: {
+          where: { deletedAt: null },
+          include: {
+            employee: {
+              select: {
+                id: true,
+                fullName: true,
+                employeeNumber: true,
+                email: true,
+                branch: { select: { id: true, name: true } },
+                department: { select: { id: true, name: true } },
+                subDepartment: { select: { id: true, name: true } },
+                position: { select: { id: true, name: true, reportsToId: true } },
+              },
+            },
+            reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            targets: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: 'asc' },
+              include: {
+                component: true,
+                indicator: {
+                  include: {
+                    formula: true,
+                  },
+                },
+                formula: true,
+                reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+                approver: { select: { id: true, fullName: true, employeeNumber: true } },
+                progressLogs: {
+                  orderBy: { createdAt: 'desc' },
+                  include: {
+                    actor: { select: { id: true, fullName: true, employeeNumber: true } },
+                  },
+                },
+                evidences: {
+                  orderBy: { createdAt: 'desc' },
+                  include: {
+                    uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+  }
+
+  async findEmployeePlanningProfile(id: string) {
+    return prisma.employee.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        branch: { select: { id: true, name: true } },
+        department: { select: { id: true, name: true } },
+        subDepartment: { select: { id: true, name: true } },
+        position: { select: { id: true, name: true, reportsToId: true } },
+      },
+    });
+  }
+
+  async findPlanningAssignmentById(id: string) {
+    return prisma.performancePlanningAssignment.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        period: {
+          include: {
+            methodVersion: {
+              include: {
+                components: {
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            email: true,
+            branch: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+            subDepartment: { select: { id: true, name: true } },
+            position: { select: { id: true, name: true, reportsToId: true } },
+          },
+        },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        targets: {
+          where: { deletedAt: null },
+          include: {
+            component: true,
+            indicator: { include: { formula: true } },
+            formula: true,
+            reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+            approver: { select: { id: true, fullName: true, employeeNumber: true } },
+            progressLogs: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                actor: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+            evidences: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+  }
+
+  async findPlanningAssignmentByPeriodAndEmployee(periodId: string, employeeId: string) {
+    return prisma.performancePlanningAssignment.findFirst({
+      where: { periodId, employeeId, deletedAt: null },
+    });
+  }
+
+  async createPlanningAssignment(
+    periodId: string,
+    companyId: string,
+    methodId: string,
+    methodVersionId: string,
+    data: CreatePerformancePlanningAssignmentDTO
+  ) {
+    return prisma.performancePlanningAssignment.create({
+      data: {
+        periodId,
+        companyId,
+        methodId,
+        methodVersionId,
+        employeeId: data.employeeId,
+        reviewerId: data.reviewerId,
+        approverId: data.approverId,
+        assignmentSource: data.assignmentSource as any,
+      },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        targets: {
+          where: { deletedAt: null },
+          include: {
+            component: true,
+            indicator: { include: { formula: true } },
+            formula: true,
+            progressLogs: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                actor: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+            evidences: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async updatePlanningAssignment(
+    id: string,
+    data: UpdatePerformancePlanningAssignmentDTO & {
+      status?: Prisma.EnumPerformancePlanningAssignmentStatusFieldUpdateOperationsInput | any;
+      employeeSnapshot?: Prisma.InputJsonValue | null;
+      orgSnapshot?: Prisma.InputJsonValue | null;
+      planningSnapshot?: Prisma.InputJsonValue | null;
+      executionSnapshot?: Prisma.InputJsonValue | null;
+      publishedAt?: Date | null;
+      submittedAt?: Date | null;
+      reviewedAt?: Date | null;
+      completedAt?: Date | null;
+      submissionNotes?: string | null;
+      decisionNotes?: string | null;
+      reassignmentReason?: string | null;
+    }
+  ) {
+    return prisma.performancePlanningAssignment.update({
+      where: { id },
+      data: {
+        reviewerId: data.reviewerId,
+        approverId: data.approverId,
+        assignmentSource: data.assignmentSource as any,
+        status: data.status,
+        employeeSnapshot: data.employeeSnapshot === null ? Prisma.JsonNull : data.employeeSnapshot,
+        orgSnapshot: data.orgSnapshot === null ? Prisma.JsonNull : data.orgSnapshot,
+        planningSnapshot: data.planningSnapshot === null ? Prisma.JsonNull : data.planningSnapshot,
+        executionSnapshot: data.executionSnapshot === null ? Prisma.JsonNull : data.executionSnapshot,
+        publishedAt: data.publishedAt,
+        submittedAt: data.submittedAt,
+        reviewedAt: data.reviewedAt,
+        completedAt: data.completedAt,
+        submissionNotes: data.submissionNotes,
+        decisionNotes: data.decisionNotes,
+        reassignmentReason: data.reassignmentReason,
+      },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        targets: {
+          where: { deletedAt: null },
+          include: {
+            component: true,
+            indicator: { include: { formula: true } },
+            formula: true,
+            reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+            approver: { select: { id: true, fullName: true, employeeNumber: true } },
+            progressLogs: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                actor: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+            evidences: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+  }
+
+  async deletePlanningAssignment(id: string) {
+    return prisma.$transaction(async (tx) => {
+      await tx.performancePlanningTarget.updateMany({
+        where: { assignmentId: id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+
+      return tx.performancePlanningAssignment.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+    });
+  }
+
+  async findPlanningTargetById(id: string) {
+    return prisma.performancePlanningTarget.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        assignment: {
+          include: {
+            period: {
+              include: {
+                methodVersion: {
+                  include: {
+                    components: {
+                      orderBy: { sortOrder: 'asc' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        component: true,
+        indicator: { include: { formula: true } },
+        formula: true,
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true } },
+        progressLogs: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            actor: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+        },
+        evidences: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async createPlanningTarget(assignmentId: string, companyId: string, data: CreatePerformancePlanningTargetDTO) {
+    return prisma.performancePlanningTarget.create({
+      data: {
+        assignmentId,
+        companyId,
+        componentId: data.componentId,
+        indicatorId: data.indicatorId,
+        formulaId: data.formulaId,
+        reviewerId: data.reviewerId,
+        approverId: data.approverId,
+        name: data.name ?? '',
+        description: data.description,
+        targetValue: data.targetValue,
+        targetText: data.targetText,
+        weight: data.weight,
+        frequency: data.frequency as any,
+        evidenceRequired: data.evidenceRequired,
+        config: data.config,
+      },
+      include: {
+        component: true,
+        indicator: { include: { formula: true } },
+        formula: true,
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async updatePlanningTarget(
+    id: string,
+    data: UpdatePerformancePlanningTargetDTO & {
+      status?: Prisma.EnumPerformancePlanningTargetStatusFieldUpdateOperationsInput | any;
+      currentValue?: number | string | null;
+      currentText?: string | null;
+      progressPercent?: number;
+      selfComment?: string | null;
+      reviewerComment?: string | null;
+      submittedAt?: Date | null;
+      reviewedAt?: Date | null;
+      completedAt?: Date | null;
+    }
+  ) {
+    return prisma.performancePlanningTarget.update({
+      where: { id },
+      data: {
+        componentId: data.componentId,
+        indicatorId: data.indicatorId,
+        formulaId: data.formulaId,
+        reviewerId: data.reviewerId,
+        approverId: data.approverId,
+        name: data.name,
+        description: data.description,
+        targetValue: data.targetValue,
+        targetText: data.targetText,
+        currentValue: data.currentValue as any,
+        currentText: data.currentText,
+        progressPercent: data.progressPercent,
+        weight: data.weight,
+        frequency: data.frequency as any,
+        evidenceRequired: data.evidenceRequired,
+        status: data.status,
+        config: data.config,
+        selfComment: data.selfComment,
+        reviewerComment: data.reviewerComment,
+        submittedAt: data.submittedAt,
+        reviewedAt: data.reviewedAt,
+        completedAt: data.completedAt,
+      },
+      include: {
+        component: true,
+        indicator: { include: { formula: true } },
+        formula: true,
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true } },
+        progressLogs: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            actor: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+        },
+        evidences: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async deletePlanningTarget(id: string) {
+    return prisma.performancePlanningTarget.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async createPlanningTargetProgress(
+    targetId: string,
+    assignmentId: string,
+    companyId: string,
+    actorId: string | undefined,
+    data: CreatePerformanceTargetProgressDTO
+  ) {
+    return prisma.performancePlanningTargetProgress.create({
+      data: {
+        targetId,
+        assignmentId,
+        companyId,
+        actorId,
+        progressPercent: data.progressPercent,
+        currentValue: data.currentValue,
+        currentText: data.currentText,
+        note: data.note,
+      },
+      include: {
+        actor: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async createPlanningEvidence(data: {
+    companyId: string;
+    assignmentId: string;
+    targetId: string;
+    uploadedById?: string;
+    fileName: string;
+    originalName: string;
+    fileUrl: string;
+    mimeType: string;
+    fileSize: number;
+    notes?: string;
+  }) {
+    return prisma.performancePlanningEvidence.create({
+      data,
+      include: {
+        uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async findExecutionApprovalQueue(companyId: string, approverId?: string) {
+    const where: Prisma.PerformancePlanningAssignmentWhereInput = {
+      companyId,
+      deletedAt: null,
+      status: { in: ['SUBMITTED'] },
+    };
+
+    if (approverId) {
+      where.OR = [
+        { approverId },
+        { targets: { some: { approverId, deletedAt: null, status: 'SUBMITTED' } } },
+      ];
+    }
+
+    return prisma.performancePlanningAssignment.findMany({
+      where,
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        targets: {
+          where: { deletedAt: null },
+          include: {
+            component: true,
+            indicator: { include: { formula: true } },
+            formula: true,
+            reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+            approver: { select: { id: true, fullName: true, employeeNumber: true } },
+            progressLogs: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                actor: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+            evidences: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { submittedAt: 'asc' },
+        { updatedAt: 'desc' },
+      ],
+    });
+  }
+
+  async touchPlanningWorkspace(periodId: string, planningSummary?: Prisma.InputJsonValue | null) {
+    return prisma.performancePeriod.update({
+      where: { id: periodId },
+      data: {
+        planningPublishedAt: null,
+        planningSummary: planningSummary ?? undefined,
+      },
+    });
+  }
+
+  async publishPlanning(
+    periodId: string,
+    planningSummary: Prisma.InputJsonValue,
+    assignmentSnapshots: Array<{
+      id: string;
+      employeeSnapshot: Prisma.InputJsonValue;
+      orgSnapshot: Prisma.InputJsonValue;
+      planningSnapshot: Prisma.InputJsonValue;
+    }>
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const publishedAt = new Date();
+
+      for (const assignment of assignmentSnapshots) {
+        await tx.performancePlanningAssignment.update({
+          where: { id: assignment.id },
+          data: {
+            status: 'PUBLISHED',
+            employeeSnapshot: assignment.employeeSnapshot,
+            orgSnapshot: assignment.orgSnapshot,
+            planningSnapshot: assignment.planningSnapshot,
+            publishedAt,
+          },
+        });
+
+        await tx.performancePlanningTarget.updateMany({
+          where: { assignmentId: assignment.id, deletedAt: null },
+          data: { status: 'PUBLISHED' },
+        });
+      }
+
+      await tx.performancePeriod.update({
+        where: { id: periodId },
+        data: {
+          planningSummary,
+          planningPublishedAt: publishedAt,
+        },
+      });
+
+      return tx.performancePeriod.findUnique({
+        where: { id: periodId },
+        include: {
+          method: true,
+          methodVersion: {
+            include: {
+              components: {
+                orderBy: { sortOrder: 'asc' },
+              },
+            },
+          },
+          planningAssignments: {
+            where: { deletedAt: null },
+            include: {
+              employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+              reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+              approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+              targets: {
+                where: { deletedAt: null },
+                include: {
+                  component: true,
+                  indicator: { include: { formula: true } },
+                  formula: true,
+                  reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+                  approver: { select: { id: true, fullName: true, employeeNumber: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+  }
+
+  // ==================== Score & Calibration ====================
+  async findResultsByPeriod(periodId: string) {
+    return prisma.performanceResult.findMany({
+      where: { periodId },
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            email: true,
+            branch: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+            subDepartment: { select: { id: true, name: true } },
+            position: { select: { id: true, name: true } },
+          },
+        },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        publishedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        finalApprovedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reopenedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        assignment: {
+          include: {
+            targets: {
+              where: { deletedAt: null },
+              include: {
+                component: true,
+                indicator: { include: { formula: true } },
+              },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        },
+        disputes: {
+          include: {
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            attachments: {
+              include: {
+                document: {
+                  include: {
+                    category: true,
+                  },
+                },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        developmentRecommendations: {
+          include: {
+            course: { select: { id: true, title: true, code: true } },
+            enrollment: true,
+            assignedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        attachments: {
+          include: {
+            document: {
+              include: {
+                category: true,
+              },
+            },
+            createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        calibrationParticipants: {
+          include: {
+            session: {
+              select: { id: true, name: true, code: true, status: true },
+            },
+            decisions: {
+              include: {
+                changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+      orderBy: [
+        { finalScore: 'desc' },
+        { updatedAt: 'desc' },
+      ],
+    });
+  }
+
+  async findResultById(id: string) {
+    return prisma.performanceResult.findUnique({
+      where: { id },
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            email: true,
+            branch: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+            subDepartment: { select: { id: true, name: true } },
+            position: { select: { id: true, name: true } },
+          },
+        },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        publishedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        finalApprovedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reopenedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        assignment: {
+          include: {
+            targets: {
+              where: { deletedAt: null },
+              include: {
+                component: true,
+                indicator: { include: { formula: true } },
+              },
+            },
+          },
+        },
+        disputes: {
+          include: {
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            attachments: {
+              include: {
+                document: {
+                  include: {
+                    category: true,
+                  },
+                },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        developmentRecommendations: {
+          include: {
+            course: { select: { id: true, title: true, code: true } },
+            enrollment: true,
+            assignedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        attachments: {
+          include: {
+            document: {
+              include: {
+                category: true,
+              },
+            },
+            createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        calibrationParticipants: {
+          include: {
+            session: {
+              select: { id: true, name: true, code: true, status: true },
+            },
+            decisions: {
+              include: {
+                changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+  }
+
+  async upsertPerformanceResult(data: {
+    companyId: string;
+    periodId: string;
+    assignmentId: string;
+    methodId: string;
+    methodVersionId: string;
+    employeeId: string;
+    reviewerId?: string;
+    approverId?: string;
+    status: string;
+    rawScore?: number;
+    normalizedScore?: number;
+    weightedScore?: number;
+    finalScore?: number;
+    gradeCode?: string;
+    gradeLabel?: string;
+    recommendationSummary?: string;
+    recommendationRules?: Prisma.InputJsonValue | null;
+    visibilityPolicy?: Prisma.InputJsonValue | null;
+    publishNotes?: string | null;
+    calculationVersion: number;
+    calculationSnapshot?: Prisma.InputJsonValue | null;
+    calibratedAt?: Date | null;
+    finalizedAt?: Date | null;
+    publishedAt?: Date | null;
+    publishedById?: string | null;
+    finalApprovedAt?: Date | null;
+    finalApprovedById?: string | null;
+    finalApprovalNote?: string | null;
+    disputeDeadline?: Date | null;
+    acknowledgedAt?: Date | null;
+    acknowledgementNote?: string | null;
+    reopenedAt?: Date | null;
+    reopenedById?: string | null;
+    reopenReason?: string | null;
+    reopenCount?: number;
+    lastReminderAt?: Date | null;
+    reminderCount?: number;
+    calculatedAt?: Date | null;
+    calibrationSnapshot?: Prisma.InputJsonValue | null;
+    finalSnapshot?: Prisma.InputJsonValue | null;
+    overrideReason?: string | null;
+    overriddenById?: string | null;
+  }) {
+    return prisma.performanceResult.upsert({
+      where: { assignmentId: data.assignmentId },
+      create: {
+        companyId: data.companyId,
+        periodId: data.periodId,
+        assignmentId: data.assignmentId,
+        methodId: data.methodId,
+        methodVersionId: data.methodVersionId,
+        employeeId: data.employeeId,
+        reviewerId: data.reviewerId,
+        approverId: data.approverId,
+        status: data.status as any,
+        rawScore: data.rawScore,
+        normalizedScore: data.normalizedScore,
+        weightedScore: data.weightedScore,
+        finalScore: data.finalScore,
+        gradeCode: data.gradeCode,
+        gradeLabel: data.gradeLabel,
+        recommendationSummary: data.recommendationSummary,
+        recommendationRules: data.recommendationRules === null ? Prisma.JsonNull : data.recommendationRules,
+        visibilityPolicy: data.visibilityPolicy === null ? Prisma.JsonNull : data.visibilityPolicy,
+        publishNotes: data.publishNotes,
+        calculationVersion: data.calculationVersion,
+        calculationSnapshot: data.calculationSnapshot === null ? Prisma.JsonNull : data.calculationSnapshot,
+        calibrationSnapshot: data.calibrationSnapshot === null ? Prisma.JsonNull : data.calibrationSnapshot,
+        finalSnapshot: data.finalSnapshot === null ? Prisma.JsonNull : data.finalSnapshot,
+        overrideReason: data.overrideReason,
+        overriddenById: data.overriddenById,
+        publishedById: data.publishedById,
+        finalApprovedAt: data.finalApprovedAt,
+        finalApprovedById: data.finalApprovedById,
+        finalApprovalNote: data.finalApprovalNote,
+        disputeDeadline: data.disputeDeadline,
+        acknowledgedAt: data.acknowledgedAt,
+        acknowledgementNote: data.acknowledgementNote,
+        reopenedAt: data.reopenedAt,
+        reopenedById: data.reopenedById,
+        reopenReason: data.reopenReason,
+        reopenCount: data.reopenCount,
+        lastReminderAt: data.lastReminderAt,
+        reminderCount: data.reminderCount,
+        calculatedAt: data.calculatedAt,
+        calibratedAt: data.calibratedAt,
+        finalizedAt: data.finalizedAt,
+        publishedAt: data.publishedAt,
+      },
+      update: {
+        reviewerId: data.reviewerId,
+        approverId: data.approverId,
+        status: data.status as any,
+        rawScore: data.rawScore,
+        normalizedScore: data.normalizedScore,
+        weightedScore: data.weightedScore,
+        finalScore: data.finalScore,
+        gradeCode: data.gradeCode,
+        gradeLabel: data.gradeLabel,
+        recommendationSummary: data.recommendationSummary,
+        recommendationRules: data.recommendationRules === null ? Prisma.JsonNull : data.recommendationRules,
+        visibilityPolicy: data.visibilityPolicy === null ? Prisma.JsonNull : data.visibilityPolicy,
+        publishNotes: data.publishNotes,
+        calculationVersion: data.calculationVersion,
+        calculationSnapshot: data.calculationSnapshot === null ? Prisma.JsonNull : data.calculationSnapshot,
+        calibrationSnapshot: data.calibrationSnapshot === null ? Prisma.JsonNull : data.calibrationSnapshot,
+        finalSnapshot: data.finalSnapshot === null ? Prisma.JsonNull : data.finalSnapshot,
+        overrideReason: data.overrideReason,
+        overriddenById: data.overriddenById,
+        publishedById: data.publishedById,
+        finalApprovedAt: data.finalApprovedAt,
+        finalApprovedById: data.finalApprovedById,
+        finalApprovalNote: data.finalApprovalNote,
+        disputeDeadline: data.disputeDeadline,
+        acknowledgedAt: data.acknowledgedAt,
+        acknowledgementNote: data.acknowledgementNote,
+        reopenedAt: data.reopenedAt,
+        reopenedById: data.reopenedById,
+        reopenReason: data.reopenReason,
+        reopenCount: data.reopenCount,
+        lastReminderAt: data.lastReminderAt,
+        reminderCount: data.reminderCount,
+        calculatedAt: data.calculatedAt,
+        calibratedAt: data.calibratedAt,
+        finalizedAt: data.finalizedAt,
+        publishedAt: data.publishedAt,
+      },
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        publishedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        finalApprovedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reopenedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+      },
+    });
+  }
+
+  async publishPerformanceResults(
+    periodId: string,
+    publishedById: string | undefined,
+    data: PublishPerformanceResultsDTO
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const results = await tx.performanceResult.findMany({
+        where: { periodId },
+      });
+
+      const publishedAt = new Date();
+      const disputeDeadline = new Date(publishedAt);
+      disputeDeadline.setDate(disputeDeadline.getDate() + data.disputeWindowDays);
+
+      for (const result of results) {
+        const finalSnapshot =
+          result.finalSnapshot === null
+            ? (
+                result.calibrationSnapshot === null && result.calculationSnapshot === null
+                  ? Prisma.JsonNull
+                  : ((result.calibrationSnapshot ?? result.calculationSnapshot) as Prisma.InputJsonValue)
+              )
+            : (result.finalSnapshot as Prisma.InputJsonValue);
+
+        await tx.performanceResult.update({
+          where: { id: result.id },
+          data: {
+            status: 'PUBLISHED',
+            publishedAt,
+            publishedById,
+            publishNotes: data.notes?.trim() || null,
+            visibilityPolicy: data.visibilityPolicy as any,
+            disputeDeadline,
+            finalizedAt: result.finalizedAt ?? publishedAt,
+            finalSnapshot,
+          },
+        });
+      }
+
+      return tx.performanceResult.findMany({
+        where: { periodId },
+        include: {
+          period: { select: { id: true, name: true, code: true } },
+          employee: {
+            select: {
+              id: true,
+              fullName: true,
+              employeeNumber: true,
+              email: true,
+              branch: { select: { id: true, name: true } },
+              department: { select: { id: true, name: true } },
+              subDepartment: { select: { id: true, name: true } },
+              position: { select: { id: true, name: true } },
+            },
+          },
+          reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          publishedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          finalApprovedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          reopenedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          disputes: {
+            include: {
+              employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+              respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+        orderBy: [
+          { finalScore: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+      });
+    });
+  }
+
+  async findPublishedResultsByEmployee(companyId: string, employeeId: string) {
+    return prisma.performanceResult.findMany({
+      where: {
+        companyId,
+        employeeId,
+        status: 'PUBLISHED',
+        publishedAt: { not: null },
+      },
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            email: true,
+            branch: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+            subDepartment: { select: { id: true, name: true } },
+            position: { select: { id: true, name: true } },
+          },
+        },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        publishedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        finalApprovedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reopenedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        disputes: {
+          include: {
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            attachments: {
+              include: {
+                document: {
+                  include: {
+                    category: true,
+                  },
+                },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        developmentRecommendations: {
+          include: {
+            course: { select: { id: true, title: true, code: true } },
+            enrollment: true,
+            assignedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        attachments: {
+          include: {
+            document: {
+              include: {
+                category: true,
+              },
+            },
+            createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+      orderBy: [
+        { publishedAt: 'desc' },
+        { updatedAt: 'desc' },
+      ],
+    });
+  }
+
+  async approvePerformanceResults(
+    periodId: string,
+    finalApprovedById: string | undefined,
+    data: ApprovePerformanceResultsDTO
+  ) {
+    const finalApprovedAt = new Date();
+
+    return prisma.$transaction(async (tx) => {
+      await tx.performanceResult.updateMany({
+        where: { periodId },
+        data: {
+          finalApprovedAt,
+          finalApprovedById,
+          finalApprovalNote: data.notes?.trim() || null,
+        },
+      });
+
+      return tx.performanceResult.findMany({
+        where: { periodId },
+        include: {
+          period: { select: { id: true, name: true, code: true } },
+          employee: {
+            select: {
+              id: true,
+              fullName: true,
+              employeeNumber: true,
+              email: true,
+              branch: { select: { id: true, name: true } },
+              department: { select: { id: true, name: true } },
+              subDepartment: { select: { id: true, name: true } },
+              position: { select: { id: true, name: true } },
+            },
+          },
+          reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          publishedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          finalApprovedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          reopenedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          disputes: {
+            include: {
+              employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+              respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+        orderBy: [
+          { finalScore: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+      });
+    });
+  }
+
+  async reopenPerformanceResult(
+    id: string,
+    reopenedById: string | undefined,
+    data: ReopenPerformanceResultDTO
+  ) {
+    return prisma.performanceResult.update({
+      where: { id },
+      data: {
+        status: 'CALCULATED',
+        publishedAt: null,
+        publishedById: null,
+        publishNotes: null,
+        visibilityPolicy: Prisma.JsonNull,
+        disputeDeadline: null,
+        acknowledgedAt: null,
+        acknowledgementNote: null,
+        finalApprovedAt: null,
+        finalApprovedById: null,
+        finalApprovalNote: null,
+        reopenedAt: new Date(),
+        reopenedById,
+        reopenReason: data.reason.trim(),
+        reopenCount: { increment: 1 },
+      },
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            email: true,
+            branch: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+            subDepartment: { select: { id: true, name: true } },
+            position: { select: { id: true, name: true } },
+          },
+        },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        publishedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        finalApprovedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reopenedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        disputes: {
+          include: {
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+  }
+
+  async markResultReminded(id: string) {
+    return prisma.performanceResult.update({
+      where: { id },
+      data: {
+        lastReminderAt: new Date(),
+        reminderCount: { increment: 1 },
+      },
+    });
+  }
+
+  async acknowledgePerformanceResult(id: string, data: AcknowledgePerformanceResultDTO) {
+    return prisma.performanceResult.update({
+      where: { id },
+      data: {
+        acknowledgedAt: new Date(),
+        acknowledgementNote: data.notes?.trim() || null,
+      },
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        publishedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        disputes: {
+          include: {
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+  }
+
+  async createPerformanceResultDispute(
+    resultId: string,
+    companyId: string,
+    employeeId: string,
+    data: CreatePerformanceResultDisputeDTO
+  ) {
+    return prisma.performanceResultDispute.create({
+      data: {
+        resultId,
+        companyId,
+        employeeId,
+        title: data.title.trim(),
+        message: data.message.trim(),
+      },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        result: {
+          include: {
+            period: { select: { id: true, name: true, code: true } },
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async findPerformanceResultDisputeById(id: string) {
+    return prisma.performanceResultDispute.findUnique({
+      where: { id },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        result: {
+          include: {
+            period: { select: { id: true, name: true, code: true } },
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async respondPerformanceResultDispute(
+    id: string,
+    respondedById: string | undefined,
+    data: RespondPerformanceResultDisputeDTO
+  ) {
+    const resolvedAt = ['RESOLVED', 'REJECTED', 'CLOSED'].includes(data.status) ? new Date() : null;
+
+    return prisma.performanceResultDispute.update({
+      where: { id },
+      data: {
+        status: data.status as any,
+        responseMessage: data.response.trim(),
+        respondedById,
+        respondedAt: new Date(),
+        resolvedAt,
+        closedAt: data.status === 'CLOSED' ? new Date() : null,
+      },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        respondedBy: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        result: {
+          include: {
+            period: { select: { id: true, name: true, code: true } },
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async findUsersByEmployeeIds(employeeIds: string[]) {
+    return prisma.user.findMany({
+      where: {
+        employeeId: {
+          in: employeeIds.filter(Boolean),
+        },
+      },
+      select: {
+        id: true,
+        employeeId: true,
+      },
+    });
+  }
+
+  async createNotifications(
+    notifications: Array<{
+      companyId: string;
+      userId: string;
+      title: string;
+      message?: string;
+      type?: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
+      resource?: string;
+      action?: string;
+      referenceId?: string;
+    }>
+  ) {
+    if (!notifications.length) {
+      return { count: 0 };
+    }
+
+    return prisma.notification.createMany({
+      data: notifications.map((notification) => ({
+        companyId: notification.companyId,
+        userId: notification.userId,
+        title: notification.title,
+        message: notification.message,
+        type: (notification.type ?? 'INFO') as any,
+        resource: notification.resource,
+        action: notification.action,
+        referenceId: notification.referenceId,
+      })),
+    });
+  }
+
+  async findTrainingCourseById(id: string) {
+    return prisma.trainingCourse.findFirst({
+      where: { id, deletedAt: null, isActive: true },
+    });
+  }
+
+  async findMatchingTrainingCourses(companyId: string, keywords: string[]) {
+    const normalized = keywords.map((keyword) => keyword.trim()).filter(Boolean);
+    if (!normalized.length) {
+      return [];
+    }
+
+    return prisma.trainingCourse.findMany({
+      where: {
+        companyId,
+        deletedAt: null,
+        isActive: true,
+        OR: normalized.flatMap((keyword) => ([
+          { title: { contains: keyword } },
+          { description: { contains: keyword } },
+          { code: { contains: keyword } },
+        ])),
+      },
+      orderBy: { title: 'asc' },
+      take: 10,
+    });
+  }
+
+  async findActiveTrainingEnrollment(courseId: string, employeeId: string, companyId: string) {
+    return prisma.trainingEnrollment.findFirst({
+      where: {
+        courseId,
+        employeeId,
+        companyId,
+        deletedAt: null,
+      },
+    });
+  }
+
+  async createTrainingEnrollment(data: { courseId: string; employeeId: string; companyId: string; notes?: string }) {
+    return prisma.trainingEnrollment.create({
+      data,
+    });
+  }
+
+  async findDevelopmentRecommendations(periodId: string) {
+    return prisma.performanceDevelopmentRecommendation.findMany({
+      where: { periodId },
+      include: {
+        result: {
+          include: {
+            period: { select: { id: true, name: true, code: true } },
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+        },
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        course: { select: { id: true, title: true, code: true } },
+        enrollment: true,
+        assignedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async deleteDevelopmentRecommendationsByPeriod(periodId: string) {
+    return prisma.performanceDevelopmentRecommendation.deleteMany({
+      where: { periodId },
+    });
+  }
+
+  async createDevelopmentRecommendation(data: {
+    companyId: string;
+    periodId: string;
+    resultId: string;
+    employeeId: string;
+    type?: string;
+    priority?: string;
+    sourceRuleLabel?: string | null;
+    title: string;
+    description?: string | null;
+    courseId?: string | null;
+    notes?: string | null;
+  }) {
+    return prisma.performanceDevelopmentRecommendation.create({
+      data: {
+        companyId: data.companyId,
+        periodId: data.periodId,
+        resultId: data.resultId,
+        employeeId: data.employeeId,
+        type: (data.type ?? 'TRAINING') as any,
+        priority: data.priority ?? 'MEDIUM',
+        sourceRuleLabel: data.sourceRuleLabel,
+        title: data.title,
+        description: data.description,
+        courseId: data.courseId,
+        notes: data.notes,
+      },
+      include: {
+        result: {
+          include: {
+            period: { select: { id: true, name: true, code: true } },
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+        },
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        course: { select: { id: true, title: true, code: true } },
+        enrollment: true,
+        assignedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async findDevelopmentRecommendationById(id: string) {
+    return prisma.performanceDevelopmentRecommendation.findUnique({
+      where: { id },
+      include: {
+        result: {
+          include: {
+            period: { select: { id: true, name: true, code: true } },
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+        },
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        course: { select: { id: true, title: true, code: true } },
+        enrollment: true,
+        assignedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async assignDevelopmentRecommendation(
+    id: string,
+    data: AssignPerformanceDevelopmentRecommendationDTO & {
+      companyId: string;
+      employeeId: string;
+      assignedById?: string;
+      enrollmentId?: string | null;
+    }
+  ) {
+    return prisma.performanceDevelopmentRecommendation.update({
+      where: { id },
+      data: {
+        courseId: data.courseId,
+        status: data.enrollmentId ? 'ENROLLED' : 'ASSIGNED',
+        assignedById: data.assignedById,
+        assignedAt: new Date(),
+        enrollmentId: data.enrollmentId,
+        notes: data.notes?.trim() || null,
+      },
+      include: {
+        result: {
+          include: {
+            period: { select: { id: true, name: true, code: true } },
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+          },
+        },
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        course: { select: { id: true, title: true, code: true } },
+        enrollment: true,
+        assignedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async findDocumentCategoryByCode(companyId: string, code: string) {
+    return prisma.documentCategory.findFirst({
+      where: {
+        companyId,
+        code,
+      },
+    });
+  }
+
+  async createDocumentCategory(data: { companyId: string; name: string; code: string; description?: string }) {
+    return prisma.documentCategory.create({
+      data,
+    });
+  }
+
+  async createManagedDocument(data: {
+    companyId: string;
+    categoryId: string;
+    employeeId?: string;
+    uploadedBy: string;
+    title: string;
+    description?: string;
+    visibility: 'INTERNAL' | 'RESTRICTED' | 'PUBLIC';
+    fileName: string;
+    filePath: string;
+    mimeType: string;
+    fileSize: number;
+  }) {
+    return prisma.document.create({
+      data: {
+        companyId: data.companyId,
+        categoryId: data.categoryId,
+        employeeId: data.employeeId,
+        ownerType: data.employeeId ? 'EMPLOYEE' : 'COMPANY',
+        title: data.title,
+        description: data.description,
+        visibility: data.visibility as any,
+        uploadedBy: data.uploadedBy,
+        fileName: data.fileName,
+        filePath: data.filePath,
+        mimeType: data.mimeType,
+        fileSize: data.fileSize,
+      },
+      include: {
+        category: true,
+        employee: { select: { id: true, fullName: true, employeeNumber: true } },
+        uploader: { select: { id: true, email: true } },
+      },
+    });
+  }
+
+  async createPerformanceResultAttachment(data: {
+    companyId: string;
+    resultId?: string;
+    disputeId?: string;
+    documentId: string;
+    attachmentType: 'RESULT' | 'DISPUTE';
+    createdById?: string;
+  }) {
+    return prisma.performanceResultAttachment.create({
+      data: {
+        companyId: data.companyId,
+        resultId: data.resultId,
+        disputeId: data.disputeId,
+        documentId: data.documentId,
+        attachmentType: data.attachmentType as any,
+        createdById: data.createdById,
+      },
+      include: {
+        document: {
+          include: {
+            category: true,
+            employee: { select: { id: true, fullName: true, employeeNumber: true } },
+            uploader: { select: { id: true, email: true } },
+          },
+        },
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async findAutomationSchedules(periodId: string) {
+    return prisma.performanceAutomationSchedule.findMany({
+      where: { periodId },
+      include: {
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createAutomationSchedule(
+    periodId: string,
+    companyId: string,
+    createdById: string | undefined,
+    data: CreatePerformanceAutomationScheduleDTO & { queueJobId?: string | null }
+  ) {
+    return prisma.performanceAutomationSchedule.create({
+      data: {
+        periodId,
+        companyId,
+        createdById,
+        name: data.name,
+        reminderTarget: data.reminderTarget as any,
+        cadenceHours: data.cadenceHours,
+        queueJobId: data.queueJobId,
+        notes: data.notes,
+        nextRunAt: new Date(Date.now() + data.cadenceHours * 60 * 60 * 1000),
+      },
+      include: {
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async findAutomationScheduleById(id: string) {
+    return prisma.performanceAutomationSchedule.findUnique({
+      where: { id },
+      include: {
+        period: { select: { id: true, name: true, code: true, companyId: true } },
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async markAutomationScheduleRun(id: string, cadenceHours: number) {
+    const now = new Date();
+    const nextRunAt = new Date(now.getTime() + cadenceHours * 60 * 60 * 1000);
+
+    return prisma.performanceAutomationSchedule.update({
+      where: { id },
+      data: {
+        lastRunAt: now,
+        nextRunAt,
+      },
+      include: {
+        period: { select: { id: true, name: true, code: true, companyId: true } },
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+      },
+    });
+  }
+
+  async findCalibrationSessions(periodId: string) {
+    return prisma.performanceCalibrationSession.findMany({
+      where: { periodId },
+      include: {
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+        participants: {
+          include: {
+            result: {
+              include: {
+                employee: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+            decisions: {
+              include: {
+                changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findCalibrationSessionById(id: string) {
+    return prisma.performanceCalibrationSession.findUnique({
+      where: { id },
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+        participants: {
+          include: {
+            result: {
+              include: {
+                employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+                reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+                approver: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+            decisions: {
+              include: {
+                changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+  }
+
+  async createCalibrationSession(
+    periodId: string,
+    companyId: string,
+    createdById: string | undefined,
+    data: CreatePerformanceCalibrationSessionDTO,
+    participantResultIds: string[]
+  ) {
+    return prisma.performanceCalibrationSession.create({
+      data: {
+        periodId,
+        companyId,
+        createdById,
+        name: data.name,
+        code: data.code,
+        scope: data.scope,
+        forcedDistribution: data.forcedDistribution,
+        notes: data.notes,
+        participants: {
+          create: participantResultIds.map((resultId) => ({
+            companyId,
+            resultId,
+          })),
+        },
+      },
+      include: {
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+        participants: {
+          include: {
+            result: {
+              include: {
+                employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async updateCalibrationSession(
+    id: string,
+    data: {
+      status?: Prisma.EnumPerformanceCalibrationSessionStatusFieldUpdateOperationsInput | any;
+      scope?: Prisma.InputJsonValue;
+      forcedDistribution?: Prisma.InputJsonValue;
+      notes?: string | null;
+      openedAt?: Date | null;
+      closedAt?: Date | null;
+      finalizedAt?: Date | null;
+    }
+  ) {
+    return prisma.performanceCalibrationSession.update({
+      where: { id },
+      data: {
+        status: data.status,
+        scope: data.scope,
+        forcedDistribution: data.forcedDistribution,
+        notes: data.notes,
+        openedAt: data.openedAt,
+        closedAt: data.closedAt,
+        finalizedAt: data.finalizedAt,
+      },
+      include: {
+        period: { select: { id: true, name: true, code: true } },
+        createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+        participants: {
+          include: {
+            result: {
+              include: {
+                employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+              },
+            },
+            decisions: {
+              include: {
+                changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+  }
+
+  async openCalibrationSession(id: string) {
+    return prisma.$transaction(async (tx) => {
+      const session = await tx.performanceCalibrationSession.findUnique({
+        where: { id },
+        include: { participants: true },
+      });
+
+      if (!session) {
+        throw new Error('Calibration session not found');
+      }
+
+      await tx.performanceCalibrationSession.update({
+        where: { id },
+        data: {
+          status: 'OPEN',
+          openedAt: new Date(),
+          closedAt: null,
+          finalizedAt: null,
+        },
+      });
+
+      if (session.participants.length) {
+        await tx.performanceResult.updateMany({
+          where: {
+            id: { in: session.participants.map((participant) => participant.resultId) },
+          },
+          data: {
+            status: 'CALIBRATION_IN_PROGRESS',
+          },
+        });
+      }
+
+      return tx.performanceCalibrationSession.findUnique({
+        where: { id },
+        include: {
+          period: { select: { id: true, name: true, code: true } },
+          createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          participants: {
+            include: {
+              result: {
+                include: {
+                  employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+                },
+              },
+              decisions: {
+                include: {
+                  changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+              },
+            },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+    });
+  }
+
+  async finalizeCalibrationSession(id: string) {
+    return prisma.$transaction(async (tx) => {
+      const session = await tx.performanceCalibrationSession.findUnique({
+        where: { id },
+        include: { participants: true },
+      });
+
+      if (!session) {
+        throw new Error('Calibration session not found');
+      }
+
+      const finalizedAt = new Date();
+
+      await tx.performanceCalibrationSession.update({
+        where: { id },
+        data: {
+          status: 'FINALIZED',
+          closedAt: session.closedAt ?? finalizedAt,
+          finalizedAt,
+        },
+      });
+
+      if (session.participants.length) {
+        await tx.performanceCalibrationParticipant.updateMany({
+          where: {
+            sessionId: id,
+            status: 'PENDING',
+          },
+          data: {
+            status: 'CONFIRMED',
+          },
+        });
+
+        const results = await tx.performanceResult.findMany({
+          where: {
+            id: { in: session.participants.map((participant) => participant.resultId) },
+          },
+        });
+
+        for (const result of results) {
+          const finalSnapshot =
+            result.calibrationSnapshot === null && result.calculationSnapshot === null
+              ? Prisma.JsonNull
+              : ((result.calibrationSnapshot ?? result.calculationSnapshot) as Prisma.InputJsonValue);
+
+          await tx.performanceResult.update({
+            where: { id: result.id },
+            data: {
+              status: 'FINALIZED',
+              finalizedAt,
+              finalSnapshot,
+            },
+          });
+        }
+      }
+
+      return tx.performanceCalibrationSession.findUnique({
+        where: { id },
+        include: {
+          period: { select: { id: true, name: true, code: true } },
+          createdBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          participants: {
+            include: {
+              result: {
+                include: {
+                  employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+                },
+              },
+              decisions: {
+                include: {
+                  changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+              },
+            },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+    });
+  }
+
+  async findCalibrationParticipantById(id: string) {
+    return prisma.performanceCalibrationParticipant.findUnique({
+      where: { id },
+      include: {
+        session: {
+          include: {
+            period: { select: { id: true, name: true, code: true } },
+          },
+        },
+        result: {
+          include: {
+            employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+            approver: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+        },
+        decisions: {
+          include: {
+            changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+  }
+
+  async applyCalibrationDecision(
+    participantId: string,
+    companyId: string,
+    changedById: string | undefined,
+    data: PerformanceCalibrationDecisionDTO & {
+      finalGradeCode?: string | null;
+      finalGradeLabel?: string | null;
+      recommendationSummary?: string | null;
+      recommendationRules?: Prisma.InputJsonValue | null;
+      calibrationSnapshot?: Prisma.InputJsonValue | null;
+    }
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const participant = await tx.performanceCalibrationParticipant.findUnique({
+        where: { id: participantId },
+        include: { result: true, session: true },
+      });
+
+      if (!participant) {
+        throw new Error('Calibration participant not found');
+      }
+
+      await tx.performanceCalibrationDecision.create({
+        data: {
+          companyId,
+          sessionId: participant.sessionId,
+          participantId,
+          resultId: participant.resultId,
+          beforeScore: participant.result.finalScore,
+          beforeGradeCode: participant.result.gradeCode,
+          beforeGradeLabel: participant.result.gradeLabel,
+          afterScore: data.finalScore,
+          afterGradeCode: data.finalGradeCode,
+          afterGradeLabel: data.finalGradeLabel,
+          reason: data.reason,
+          changedById,
+        },
+      });
+
+      await tx.performanceCalibrationParticipant.update({
+        where: { id: participantId },
+        data: {
+          status: 'ADJUSTED',
+          beforeScore: participant.beforeScore ?? participant.result.finalScore,
+          beforeGradeCode: participant.beforeGradeCode ?? participant.result.gradeCode,
+          beforeGradeLabel: participant.beforeGradeLabel ?? participant.result.gradeLabel,
+          afterScore: data.finalScore,
+          afterGradeCode: data.finalGradeCode,
+          afterGradeLabel: data.finalGradeLabel,
+          reason: data.reason,
+        },
+      });
+
+      await tx.performanceResult.update({
+        where: { id: participant.resultId },
+        data: {
+          status: 'CALIBRATION_IN_PROGRESS',
+          finalScore: data.finalScore,
+          gradeCode: data.finalGradeCode,
+          gradeLabel: data.finalGradeLabel,
+          recommendationSummary: data.recommendationSummary,
+          recommendationRules: data.recommendationRules === null ? Prisma.JsonNull : data.recommendationRules,
+          overrideReason: data.reason,
+          overriddenById: changedById,
+          calibratedAt: new Date(),
+          calibrationSnapshot: data.calibrationSnapshot === null ? Prisma.JsonNull : data.calibrationSnapshot,
+        },
+      });
+
+      return tx.performanceCalibrationParticipant.findUnique({
+        where: { id: participantId },
+        include: {
+          session: true,
+          result: {
+            include: {
+              employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+            },
+          },
+          decisions: {
+            include: {
+              changedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      });
     });
   }
 

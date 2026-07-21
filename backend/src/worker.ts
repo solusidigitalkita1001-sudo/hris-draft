@@ -8,6 +8,7 @@ import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { prisma, disconnectDatabase, testDatabaseConnection } from '@/shared/database/prisma';
 import { authRepository } from '@/modules/auth/auth.repository';
+import { performanceService } from '@/modules/performance/performance.service';
 
 async function maybeCreateNotification(event: DomainEvent): Promise<void> {
   if (![DomainEvents.USER_LOGGED_IN, DomainEvents.PASSWORD_CHANGED].includes(event.name as any)) {
@@ -91,6 +92,7 @@ async function bootstrapWorker(): Promise<void> {
 
   await rabbitMQBroker.connect();
   await queueManager.getQueueEvents(QueueNames.DOMAIN_EVENTS).waitUntilReady();
+  await queueManager.getQueueEvents(QueueNames.PERFORMANCE_AUTOMATION).waitUntilReady();
 
   queueManager.createWorker<DomainEvent>(
     QueueNames.DOMAIN_EVENTS,
@@ -101,6 +103,14 @@ async function bootstrapWorker(): Promise<void> {
       return { processed: true, eventName: event.name };
     },
     { concurrency: 10 }
+  );
+
+  queueManager.createWorker<{ scheduleId: string }>(
+    QueueNames.PERFORMANCE_AUTOMATION,
+    async (job) => {
+      return performanceService.runPerformanceAutomationSchedule(job.data.scheduleId);
+    },
+    { concurrency: 3 }
   );
 
   await rabbitMQBroker.subscribe<DomainEvent>(
@@ -116,7 +126,7 @@ async function bootstrapWorker(): Promise<void> {
   );
 
   logger.info('Worker ready', {
-    queue: QueueNames.DOMAIN_EVENTS,
+    queues: [QueueNames.DOMAIN_EVENTS, QueueNames.PERFORMANCE_AUTOMATION],
     exchange: config.rabbitmq.exchange,
   });
 

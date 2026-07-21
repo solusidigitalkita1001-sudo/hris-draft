@@ -53,6 +53,7 @@ export interface PerformanceMethodVersion {
   versionNumber: number;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   summary?: string | null;
+  weightMode: 'STRICT_100' | 'FLEXIBLE';
   scoreAggregation: 'WEIGHTED_AVERAGE' | 'SUM' | 'AVERAGE';
   minimumScore?: number | string | null;
   maximumScore?: number | string | null;
@@ -101,7 +102,9 @@ export interface PerformancePeriod {
   description?: string | null;
   readinessSummary?: PerformanceReadinessSummary | null;
   configSnapshot?: PerformanceConfigSnapshot | null;
+  planningSummary?: PerformancePlanningReadiness | null;
   publishedAt?: string | null;
+  planningPublishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   method?: PerformanceMethod;
@@ -125,6 +128,366 @@ export interface PerformanceReadinessSummary {
   };
 }
 
+export interface PerformanceMethodVersionReadiness {
+  versionId: string;
+  methodId: string;
+  versionNumber: number;
+  isReady: boolean;
+  issues: string[];
+  metrics: {
+    componentCount: number;
+    totalWeight: number;
+    status: string;
+    weightMode: 'STRICT_100' | 'FLEXIBLE';
+  };
+}
+
+export interface PerformancePlanningReadiness {
+  periodId: string;
+  periodStatus: string;
+  planningPublishedAt?: string | null;
+  isReady: boolean;
+  issues: string[];
+  metrics: {
+    assignmentCount: number;
+    publishedAssignmentCount: number;
+    targetCount: number;
+    requiredComponentCount: number;
+    configuredTotalWeight: number;
+    weightMode: 'STRICT_100' | 'FLEXIBLE';
+  };
+}
+
+export interface PerformancePlanningEmployeeSummary {
+  id: string;
+  fullName: string;
+  employeeNumber: string;
+  email?: string | null;
+  branch?: { id: string; name: string } | null;
+  department?: { id: string; name: string } | null;
+  subDepartment?: { id: string; name: string } | null;
+  position?: { id: string; name: string; reportsToId?: string | null } | null;
+}
+
+export interface PerformancePlanningTargetProgress {
+  id: string;
+  progressPercent: number;
+  currentValue?: number | string | null;
+  currentText?: string | null;
+  note?: string | null;
+  createdAt: string;
+  actor?: PerformancePlanningEmployeeSummary | null;
+}
+
+export interface PerformancePlanningEvidence {
+  id: string;
+  fileName: string;
+  originalName: string;
+  fileUrl: string;
+  mimeType: string;
+  fileSize: number;
+  notes?: string | null;
+  createdAt: string;
+  uploadedBy?: PerformancePlanningEmployeeSummary | null;
+}
+
+export interface PerformancePlanningTarget {
+  id: string;
+  companyId: string;
+  assignmentId: string;
+  componentId?: string | null;
+  indicatorId?: string | null;
+  formulaId?: string | null;
+  reviewerId?: string | null;
+  approverId?: string | null;
+  name: string;
+  description?: string | null;
+  targetValue?: number | string | null;
+  targetText?: string | null;
+  currentValue?: number | string | null;
+  currentText?: string | null;
+  progressPercent: number;
+  weight: number | string;
+  frequency: 'ONCE' | 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | 'CUSTOM';
+  evidenceRequired: boolean;
+  status: 'DRAFT' | 'PUBLISHED' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'REVISION_REQUIRED' | 'COMPLETED';
+  config?: Record<string, unknown> | null;
+  selfComment?: string | null;
+  reviewerComment?: string | null;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  completedAt?: string | null;
+  component?: PerformanceComponent | null;
+  indicator?: PerformanceIndicator | null;
+  formula?: PerformanceFormula | null;
+  reviewer?: PerformancePlanningEmployeeSummary | null;
+  approver?: PerformancePlanningEmployeeSummary | null;
+  progressLogs: PerformancePlanningTargetProgress[];
+  evidences: PerformancePlanningEvidence[];
+}
+
+export interface PerformancePlanningAssignment {
+  id: string;
+  companyId: string;
+  periodId: string;
+  methodId: string;
+  methodVersionId: string;
+  employeeId: string;
+  reviewerId?: string | null;
+  approverId?: string | null;
+  assignmentSource: 'MANUAL' | 'AUTO_FROM_ORG';
+  status: 'DRAFT' | 'PUBLISHED' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'REVISION_REQUIRED' | 'COMPLETED' | 'REASSIGNED' | 'ARCHIVED';
+  reassignmentReason?: string | null;
+  submissionNotes?: string | null;
+  decisionNotes?: string | null;
+  employeeSnapshot?: Record<string, unknown> | null;
+  orgSnapshot?: Record<string, unknown> | null;
+  planningSnapshot?: Record<string, unknown> | null;
+  executionSnapshot?: Record<string, unknown> | null;
+  publishedAt?: string | null;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  period?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
+  employee: PerformancePlanningEmployeeSummary;
+  reviewer?: PerformancePlanningEmployeeSummary | null;
+  approver?: PerformancePlanningEmployeeSummary | null;
+  targets: PerformancePlanningTarget[];
+}
+
+export interface PerformancePlanningWorkspace {
+  id: string;
+  companyId: string;
+  methodId: string;
+  methodVersionId: string;
+  name: string;
+  code: string;
+  startDate: string;
+  endDate: string;
+  reviewDeadline?: string | null;
+  status: string;
+  planningSummary?: PerformancePlanningReadiness | null;
+  planningPublishedAt?: string | null;
+  method?: PerformanceMethod;
+  methodVersion: PerformanceMethodVersion & { components: PerformanceComponent[] };
+  planningAssignments: PerformancePlanningAssignment[];
+  planningReadiness: PerformancePlanningReadiness;
+}
+
+export interface PerformanceResult {
+  id: string;
+  companyId: string;
+  periodId: string;
+  assignmentId: string;
+  methodId: string;
+  methodVersionId: string;
+  employeeId: string;
+  reviewerId?: string | null;
+  approverId?: string | null;
+  status: 'CALCULATED' | 'CALIBRATION_IN_PROGRESS' | 'CALIBRATED' | 'FINALIZED' | 'PUBLISHED';
+  rawScore?: number | string | null;
+  normalizedScore?: number | string | null;
+  weightedScore?: number | string | null;
+  finalScore?: number | string | null;
+  gradeCode?: string | null;
+  gradeLabel?: string | null;
+  recommendationSummary?: string | null;
+  recommendationRules?: Array<{ label: string; condition: string; action: string; notes?: string | null }> | null;
+  visibilityPolicy?: {
+    showCalculation: boolean;
+    showRecommendations: boolean;
+    showCalibrationHistory: boolean;
+  } | null;
+  publishNotes?: string | null;
+  calculationVersion: number;
+  calculationSnapshot?: Record<string, unknown> | null;
+  calibrationSnapshot?: Record<string, unknown> | null;
+  finalSnapshot?: Record<string, unknown> | null;
+  overrideReason?: string | null;
+  overriddenById?: string | null;
+  publishedById?: string | null;
+  finalApprovedById?: string | null;
+  reopenedById?: string | null;
+  disputeDeadline?: string | null;
+  acknowledgedAt?: string | null;
+  acknowledgementNote?: string | null;
+  finalApprovedAt?: string | null;
+  finalApprovalNote?: string | null;
+  reopenedAt?: string | null;
+  reopenReason?: string | null;
+  reopenCount?: number;
+  lastReminderAt?: string | null;
+  reminderCount?: number;
+  calculatedAt?: string | null;
+  calibratedAt?: string | null;
+  finalizedAt?: string | null;
+  publishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  period?: { id: string; name: string; code: string } | null;
+  employee?: PerformancePlanningEmployeeSummary | null;
+  reviewer?: PerformancePlanningEmployeeSummary | null;
+  approver?: PerformancePlanningEmployeeSummary | null;
+  publishedBy?: PerformancePlanningEmployeeSummary | null;
+  finalApprovedBy?: PerformancePlanningEmployeeSummary | null;
+  reopenedBy?: PerformancePlanningEmployeeSummary | null;
+  assignment?: PerformancePlanningAssignment | null;
+  disputes?: PerformanceResultDispute[];
+  developmentRecommendations?: PerformanceDevelopmentRecommendation[];
+  attachments?: PerformanceResultAttachment[];
+  calibrationParticipants?: PerformanceCalibrationParticipant[];
+}
+
+export interface PerformanceResultDispute {
+  id: string;
+  companyId: string;
+  resultId: string;
+  employeeId: string;
+  status: 'OPEN' | 'RESPONDED' | 'RESOLVED' | 'REJECTED' | 'CLOSED';
+  title: string;
+  message: string;
+  responseMessage?: string | null;
+  respondedById?: string | null;
+  createdAt: string;
+  respondedAt?: string | null;
+  resolvedAt?: string | null;
+  closedAt?: string | null;
+  employee?: PerformancePlanningEmployeeSummary | null;
+  respondedBy?: PerformancePlanningEmployeeSummary | null;
+  attachments?: PerformanceResultAttachment[];
+}
+
+export interface PerformanceResultAttachment {
+  id: string;
+  companyId: string;
+  resultId?: string | null;
+  disputeId?: string | null;
+  attachmentType: 'RESULT' | 'DISPUTE';
+  createdAt: string;
+  createdBy?: PerformancePlanningEmployeeSummary | null;
+  document: {
+    id: string;
+    title: string;
+    description?: string | null;
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    visibility: 'INTERNAL' | 'RESTRICTED' | 'PUBLIC';
+    category?: { id: string; name: string; code: string } | null;
+  };
+}
+
+export interface PerformanceDevelopmentRecommendation {
+  id: string;
+  companyId: string;
+  periodId: string;
+  resultId: string;
+  employeeId: string;
+  courseId?: string | null;
+  enrollmentId?: string | null;
+  type: 'TRAINING' | 'DEVELOPMENT_PLAN' | 'SUCCESSION' | 'COMPENSATION';
+  priority: string;
+  status: 'PENDING' | 'ASSIGNED' | 'ENROLLED' | 'COMPLETED' | 'DISMISSED';
+  sourceRuleLabel?: string | null;
+  title: string;
+  description?: string | null;
+  notes?: string | null;
+  assignedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  course?: { id: string; title: string; code: string } | null;
+  enrollment?: { id: string; status: string; progress: number; completedAt?: string | null } | null;
+  assignedBy?: PerformancePlanningEmployeeSummary | null;
+}
+
+export interface PerformanceAutomationSchedule {
+  id: string;
+  companyId: string;
+  periodId: string;
+  name: string;
+  reminderTarget: 'UNACKNOWLEDGED_RESULTS' | 'OPEN_DISPUTES' | 'ALL';
+  cadenceHours: number;
+  queueJobId?: string | null;
+  isActive: boolean;
+  lastRunAt?: string | null;
+  nextRunAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: PerformancePlanningEmployeeSummary | null;
+}
+
+export interface PerformanceCalibrationDecision {
+  id: string;
+  companyId: string;
+  sessionId: string;
+  participantId: string;
+  resultId: string;
+  beforeScore?: number | string | null;
+  beforeGradeCode?: string | null;
+  beforeGradeLabel?: string | null;
+  afterScore?: number | string | null;
+  afterGradeCode?: string | null;
+  afterGradeLabel?: string | null;
+  reason: string;
+  changedById?: string | null;
+  createdAt: string;
+  changedBy?: PerformancePlanningEmployeeSummary | null;
+}
+
+export interface PerformanceCalibrationParticipant {
+  id: string;
+  companyId: string;
+  sessionId: string;
+  resultId: string;
+  status: 'PENDING' | 'ADJUSTED' | 'CONFIRMED';
+  beforeScore?: number | string | null;
+  beforeGradeCode?: string | null;
+  beforeGradeLabel?: string | null;
+  afterScore?: number | string | null;
+  afterGradeCode?: string | null;
+  afterGradeLabel?: string | null;
+  reason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  result?: PerformanceResult | null;
+  decisions?: PerformanceCalibrationDecision[];
+  session?: {
+    id: string;
+    name: string;
+    code: string;
+    status: string;
+  } | null;
+}
+
+export interface PerformanceCalibrationSession {
+  id: string;
+  companyId: string;
+  periodId: string;
+  name: string;
+  code: string;
+  status: 'DRAFT' | 'OPEN' | 'CLOSED' | 'FINALIZED';
+  scope?: Record<string, unknown> | null;
+  forcedDistribution?: Record<string, unknown> | null;
+  notes?: string | null;
+  createdById?: string | null;
+  openedAt?: string | null;
+  closedAt?: string | null;
+  finalizedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  period?: { id: string; name: string; code: string } | null;
+  createdBy?: PerformancePlanningEmployeeSummary | null;
+  participants: PerformanceCalibrationParticipant[];
+}
+
 export interface PerformanceConfigSnapshot {
   frozenAt: string;
   period: {
@@ -146,6 +509,7 @@ export interface PerformanceConfigSnapshot {
     versionNumber: number;
     status: string;
     summary?: string | null;
+    weightMode: 'STRICT_100' | 'FLEXIBLE';
     scoreAggregation: string;
     minimumScore: number | null;
     maximumScore: number | null;
@@ -156,6 +520,7 @@ export interface PerformanceConfigSnapshot {
     name: string;
     code: string;
     description?: string | null;
+    recommendationRules?: PerformanceRecommendationRule[];
     ranges: Array<{
       id: string;
       label: string;
@@ -279,12 +644,20 @@ export interface PerformanceGradeRange {
   description?: string | null;
 }
 
+export interface PerformanceRecommendationRule {
+  label: string;
+  condition: string;
+  action: string;
+  notes?: string | null;
+}
+
 export interface PerformanceGradeRule {
   id: string;
   companyId: string;
   name: string;
   code: string;
   description?: string | null;
+  recommendationRules?: PerformanceRecommendationRule[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -342,6 +715,7 @@ export interface PerformanceMethodPayload {
 
 export interface PerformanceMethodVersionPayload {
   summary?: string;
+  weightMode?: 'STRICT_100' | 'FLEXIBLE';
   scoreAggregation?: 'WEIGHTED_AVERAGE' | 'SUM' | 'AVERAGE';
   minimumScore?: number;
   maximumScore?: number;
@@ -372,6 +746,161 @@ export interface PerformancePeriodPayload {
   endDate: string;
   reviewDeadline?: string;
   description?: string;
+}
+
+export interface PerformancePlanningAssignmentPayload {
+  employeeId: string;
+  reviewerId?: string;
+  approverId?: string;
+  assignmentSource?: 'MANUAL' | 'AUTO_FROM_ORG';
+}
+
+export interface PerformancePlanningReassignPayload {
+  reviewerId?: string;
+  approverId?: string;
+  reason: string;
+}
+
+export interface PerformancePlanningTargetPayload {
+  componentId: string;
+  indicatorId: string;
+  formulaId?: string;
+  reviewerId?: string;
+  approverId?: string;
+  name?: string;
+  description?: string;
+  targetValue?: number;
+  targetText?: string;
+  weight: number;
+  frequency?: 'ONCE' | 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | 'CUSTOM';
+  evidenceRequired?: boolean;
+  config?: Record<string, unknown>;
+}
+
+export interface PerformancePlanningTargetProgressPayload {
+  progressPercent: number;
+  currentValue?: number;
+  currentText?: string;
+  note?: string;
+}
+
+export interface PerformanceExecutionActionPayload {
+  notes?: string;
+}
+
+export interface PerformanceCalibrationSessionPayload {
+  name: string;
+  code: string;
+  scope?: Record<string, unknown>;
+  forcedDistribution?: Record<string, unknown>;
+  notes?: string;
+}
+
+export interface PerformanceCalibrationDecisionPayload {
+  finalScore: number;
+  reason: string;
+}
+
+export interface PublishPerformanceResultsPayload {
+  visibilityPolicy?: {
+    showCalculation: boolean;
+    showRecommendations: boolean;
+    showCalibrationHistory: boolean;
+  };
+  disputeWindowDays?: number;
+  notes?: string;
+}
+
+export interface AcknowledgePerformanceResultPayload {
+  notes?: string;
+}
+
+export interface PerformanceResultDisputePayload {
+  title: string;
+  message: string;
+}
+
+export interface RespondPerformanceResultDisputePayload {
+  response: string;
+  status: 'RESPONDED' | 'RESOLVED' | 'REJECTED' | 'CLOSED';
+}
+
+export interface ApprovePerformanceResultsPayload {
+  notes?: string;
+}
+
+export interface ReopenPerformanceResultPayload {
+  reason: string;
+}
+
+export interface SendPerformanceResultRemindersPayload {
+  target: 'UNACKNOWLEDGED_RESULTS' | 'OPEN_DISPUTES' | 'ALL';
+  notes?: string;
+}
+
+export interface SyncPerformanceDevelopmentRecommendationsPayload {
+  strategy?: 'REGENERATE' | 'UPSERT_MISSING';
+}
+
+export interface AssignPerformanceDevelopmentRecommendationPayload {
+  courseId: string;
+  notes?: string;
+}
+
+export interface UploadPerformanceAttachmentPayload {
+  file: File;
+  title?: string;
+  description?: string;
+  visibility?: 'INTERNAL' | 'RESTRICTED' | 'PUBLIC';
+}
+
+export interface CreatePerformanceAutomationSchedulePayload {
+  name: string;
+  reminderTarget?: 'UNACKNOWLEDGED_RESULTS' | 'OPEN_DISPUTES' | 'ALL';
+  cadenceHours: number;
+  notes?: string;
+}
+
+export interface PerformanceResultDashboard {
+  period: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  widgets: {
+    completionRate: number;
+    averageScore: number;
+    scoreDistribution: Record<string, number>;
+    resultCount: number;
+    publishedResultCount: number;
+    openDisputeCount: number;
+    pendingFinalApprovalCount: number;
+    pendingAcknowledgmentCount: number;
+    reminderPendingCount: number;
+  };
+  departmentComparison: Array<{
+    departmentName: string;
+    averageScore: number;
+    employeeCount: number;
+  }>;
+  topPerformers: Array<{
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    employeeNumber: string;
+    departmentName: string;
+    finalScore: number;
+    gradeLabel: string;
+  }>;
+  bottomPerformers: Array<{
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    employeeNumber: string;
+    departmentName: string;
+    finalScore: number;
+    gradeLabel: string;
+  }>;
 }
 
 export interface PerformanceFormulaPayload {
@@ -414,6 +943,7 @@ export interface PerformanceGradeRulePayload {
   code: string;
   description?: string;
   isActive?: boolean;
+  recommendationRules?: PerformanceRecommendationRule[];
   ranges: PerformanceGradeRange[];
 }
 
@@ -493,6 +1023,10 @@ class PerformanceService {
     const r = await api.post(`/performance/method-versions/${id}/publish`); return r.data.data;
   }
 
+  async getMethodVersionReadiness(id: string): Promise<PerformanceMethodVersionReadiness> {
+    const r = await api.get(`/performance/method-versions/${id}/readiness`); return r.data.data;
+  }
+
   async getComponents(methodVersionId: string): Promise<PerformanceComponent[]> {
     const r = await api.get(`/performance/method-versions/${methodVersionId}/components`); return r.data.data;
   }
@@ -527,6 +1061,226 @@ class PerformanceService {
 
   async publishPeriod(id: string): Promise<PerformancePeriod> {
     const r = await api.post(`/performance/periods/${id}/publish`); return r.data.data;
+  }
+
+  async getPlanningWorkspace(periodId: string): Promise<PerformancePlanningWorkspace> {
+    const r = await api.get(`/performance/periods/${periodId}/planning`); return r.data.data;
+  }
+
+  async createPlanningAssignment(periodId: string, payload: PerformancePlanningAssignmentPayload): Promise<PerformancePlanningAssignment> {
+    const r = await api.post(`/performance/periods/${periodId}/planning/assignments`, payload); return r.data.data;
+  }
+
+  async updatePlanningAssignment(id: string, payload: Partial<PerformancePlanningAssignmentPayload>): Promise<PerformancePlanningAssignment> {
+    const r = await api.put(`/performance/planning-assignments/${id}`, payload); return r.data.data;
+  }
+
+  async reassignPlanningAssignment(id: string, payload: PerformancePlanningReassignPayload): Promise<PerformancePlanningAssignment> {
+    const r = await api.post(`/performance/planning-assignments/${id}/reassign`, payload); return r.data.data;
+  }
+
+  async deletePlanningAssignment(id: string): Promise<void> {
+    await api.delete(`/performance/planning-assignments/${id}`);
+  }
+
+  async createPlanningTarget(assignmentId: string, payload: PerformancePlanningTargetPayload): Promise<PerformancePlanningTarget> {
+    const r = await api.post(`/performance/planning-assignments/${assignmentId}/targets`, payload); return r.data.data;
+  }
+
+  async updatePlanningTarget(id: string, payload: Partial<PerformancePlanningTargetPayload>): Promise<PerformancePlanningTarget> {
+    const r = await api.put(`/performance/planning-targets/${id}`, payload); return r.data.data;
+  }
+
+  async deletePlanningTarget(id: string): Promise<void> {
+    await api.delete(`/performance/planning-targets/${id}`);
+  }
+
+  async publishPlanning(periodId: string): Promise<PerformancePlanningWorkspace> {
+    const r = await api.post(`/performance/periods/${periodId}/planning/publish`); return r.data.data;
+  }
+
+  async createPlanningTargetProgress(id: string, payload: PerformancePlanningTargetProgressPayload): Promise<PerformancePlanningTarget> {
+    const r = await api.post(`/performance/planning-targets/${id}/progress`, payload); return r.data.data;
+  }
+
+  async uploadPlanningEvidence(id: string, file: File, notes?: string): Promise<PerformancePlanningEvidence> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (notes) {
+      formData.append('notes', notes);
+    }
+
+    const r = await api.post(`/performance/planning-targets/${id}/evidences`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return r.data.data;
+  }
+
+  async submitPlanningAssignment(id: string, payload: PerformanceExecutionActionPayload = {}): Promise<PerformancePlanningAssignment> {
+    const r = await api.post(`/performance/planning-assignments/${id}/submit`, payload); return r.data.data;
+  }
+
+  async approvePlanningAssignment(id: string, payload: PerformanceExecutionActionPayload = {}): Promise<PerformancePlanningAssignment> {
+    const r = await api.post(`/performance/planning-assignments/${id}/approve`, payload); return r.data.data;
+  }
+
+  async rejectPlanningAssignment(id: string, payload: PerformanceExecutionActionPayload = {}): Promise<PerformancePlanningAssignment> {
+    const r = await api.post(`/performance/planning-assignments/${id}/reject`, payload); return r.data.data;
+  }
+
+  async requestPlanningAssignmentRevision(id: string, payload: PerformanceExecutionActionPayload = {}): Promise<PerformancePlanningAssignment> {
+    const r = await api.post(`/performance/planning-assignments/${id}/revision`, payload); return r.data.data;
+  }
+
+  async completePlanningAssignment(id: string, payload: PerformanceExecutionActionPayload = {}): Promise<PerformancePlanningAssignment> {
+    const r = await api.post(`/performance/planning-assignments/${id}/complete`, payload); return r.data.data;
+  }
+
+  async getExecutionApprovalQueue(companyId: string): Promise<PerformancePlanningAssignment[]> {
+    const r = await api.get('/performance/execution/approval-queue', { params: { companyId } }); return r.data.data;
+  }
+
+  async getPerformanceResults(periodId: string): Promise<PerformanceResult[]> {
+    const r = await api.get(`/performance/periods/${periodId}/results`); return r.data.data;
+  }
+
+  async getDevelopmentRecommendations(periodId: string): Promise<PerformanceDevelopmentRecommendation[]> {
+    const r = await api.get(`/performance/periods/${periodId}/development-recommendations`); return r.data.data;
+  }
+
+  async syncDevelopmentRecommendations(
+    periodId: string,
+    payload: SyncPerformanceDevelopmentRecommendationsPayload = {}
+  ): Promise<PerformanceDevelopmentRecommendation[]> {
+    const r = await api.post(`/performance/periods/${periodId}/development-recommendations/sync`, payload);
+    return r.data.data;
+  }
+
+  async assignDevelopmentRecommendation(
+    id: string,
+    payload: AssignPerformanceDevelopmentRecommendationPayload
+  ): Promise<PerformanceDevelopmentRecommendation> {
+    const r = await api.post(`/performance/development-recommendations/${id}/assign`, payload);
+    return r.data.data;
+  }
+
+  async calculatePerformanceResults(periodId: string): Promise<PerformanceResult[]> {
+    const r = await api.post(`/performance/periods/${periodId}/results/calculate`); return r.data.data;
+  }
+
+  async getPerformanceResultDashboard(periodId: string): Promise<PerformanceResultDashboard> {
+    const r = await api.get(`/performance/periods/${periodId}/results/dashboard`); return r.data.data;
+  }
+
+  async approvePerformanceResults(periodId: string, payload: ApprovePerformanceResultsPayload = {}): Promise<PerformanceResult[]> {
+    const r = await api.post(`/performance/periods/${periodId}/results/final-approve`, payload); return r.data.data;
+  }
+
+  async publishPerformanceResults(periodId: string, payload: PublishPerformanceResultsPayload): Promise<PerformanceResult[]> {
+    const r = await api.post(`/performance/periods/${periodId}/results/publish`, payload); return r.data.data;
+  }
+
+  async sendPerformanceResultReminders(periodId: string, payload: SendPerformanceResultRemindersPayload): Promise<{
+    periodId: string;
+    target: 'UNACKNOWLEDGED_RESULTS' | 'OPEN_DISPUTES' | 'ALL';
+    remindedResultCount: number;
+    notificationCount: number;
+  }> {
+    const r = await api.post(`/performance/periods/${periodId}/results/reminders`, payload); return r.data.data;
+  }
+
+  async getMyPublishedResults(companyId: string): Promise<PerformanceResult[]> {
+    const r = await api.get('/performance/results/me', { params: { companyId } }); return r.data.data;
+  }
+
+  async acknowledgePerformanceResult(id: string, payload: AcknowledgePerformanceResultPayload = {}): Promise<PerformanceResult> {
+    const r = await api.post(`/performance/results/${id}/acknowledge`, payload); return r.data.data;
+  }
+
+  async uploadPerformanceResultAttachment(
+    id: string,
+    payload: UploadPerformanceAttachmentPayload
+  ): Promise<PerformanceResultAttachment> {
+    const formData = new FormData();
+    formData.append('file', payload.file);
+    if (payload.title) formData.append('title', payload.title);
+    if (payload.description) formData.append('description', payload.description);
+    if (payload.visibility) formData.append('visibility', payload.visibility);
+
+    const r = await api.post(`/performance/results/${id}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return r.data.data;
+  }
+
+  async createPerformanceResultDispute(id: string, payload: PerformanceResultDisputePayload): Promise<PerformanceResultDispute> {
+    const r = await api.post(`/performance/results/${id}/disputes`, payload); return r.data.data;
+  }
+
+  async uploadPerformanceDisputeAttachment(
+    id: string,
+    payload: UploadPerformanceAttachmentPayload
+  ): Promise<PerformanceResultAttachment> {
+    const formData = new FormData();
+    formData.append('file', payload.file);
+    if (payload.title) formData.append('title', payload.title);
+    if (payload.description) formData.append('description', payload.description);
+    if (payload.visibility) formData.append('visibility', payload.visibility);
+
+    const r = await api.post(`/performance/result-disputes/${id}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return r.data.data;
+  }
+
+  async respondPerformanceResultDispute(id: string, payload: RespondPerformanceResultDisputePayload): Promise<PerformanceResultDispute> {
+    const r = await api.post(`/performance/result-disputes/${id}/respond`, payload); return r.data.data;
+  }
+
+  async reopenPerformanceResult(id: string, payload: ReopenPerformanceResultPayload): Promise<PerformanceResult> {
+    const r = await api.post(`/performance/results/${id}/reopen`, payload); return r.data.data;
+  }
+
+  async getAutomationSchedules(periodId: string): Promise<PerformanceAutomationSchedule[]> {
+    const r = await api.get(`/performance/periods/${periodId}/automation-schedules`); return r.data.data;
+  }
+
+  async createAutomationSchedule(
+    periodId: string,
+    payload: CreatePerformanceAutomationSchedulePayload
+  ): Promise<PerformanceAutomationSchedule> {
+    const r = await api.post(`/performance/periods/${periodId}/automation-schedules`, payload);
+    return r.data.data;
+  }
+
+  async getCalibrationSessions(periodId: string): Promise<PerformanceCalibrationSession[]> {
+    const r = await api.get(`/performance/periods/${periodId}/calibrations`); return r.data.data;
+  }
+
+  async createCalibrationSession(periodId: string, payload: PerformanceCalibrationSessionPayload): Promise<PerformanceCalibrationSession> {
+    const r = await api.post(`/performance/periods/${periodId}/calibrations`, payload); return r.data.data;
+  }
+
+  async openCalibrationSession(id: string): Promise<PerformanceCalibrationSession> {
+    const r = await api.post(`/performance/calibration-sessions/${id}/open`); return r.data.data;
+  }
+
+  async closeCalibrationSession(id: string): Promise<PerformanceCalibrationSession> {
+    const r = await api.post(`/performance/calibration-sessions/${id}/close`); return r.data.data;
+  }
+
+  async finalizeCalibrationSession(id: string): Promise<PerformanceCalibrationSession> {
+    const r = await api.post(`/performance/calibration-sessions/${id}/finalize`); return r.data.data;
+  }
+
+  async applyCalibrationDecision(id: string, payload: PerformanceCalibrationDecisionPayload): Promise<PerformanceCalibrationParticipant> {
+    const r = await api.post(`/performance/calibration-participants/${id}/decision`, payload); return r.data.data;
   }
 
   async getFormulas(companyId: string): Promise<PerformanceFormula[]> {

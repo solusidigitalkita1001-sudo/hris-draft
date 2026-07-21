@@ -7,6 +7,7 @@ import {
   performanceService,
   type PerformanceMethod,
   type PerformanceMethodVersion,
+  type PerformanceMethodVersionReadiness,
   type PerformanceComponent,
   type PerformanceGradeRule,
   type PerformanceWorkflowTemplate,
@@ -27,6 +28,7 @@ const VERSION_STATUS_STYLES: Record<string, string> = {
 
 const COMPONENT_TYPE_OPTIONS = ['KPI', 'GOAL', 'COMPETENCY', 'BEHAVIOR', 'CUSTOM'] as const;
 const AGGREGATION_OPTIONS = ['WEIGHTED_AVERAGE', 'SUM', 'AVERAGE'] as const;
+const WEIGHT_MODE_OPTIONS = ['STRICT_100', 'FLEXIBLE'] as const;
 
 function safeNumber(value: string) {
   if (!value) return undefined;
@@ -54,6 +56,8 @@ export function PerformanceMethodsPage() {
   const [savingReviewWorkflowId, setSavingReviewWorkflowId] = useState('');
   const [savingApprovalWorkflowId, setSavingApprovalWorkflowId] = useState('');
   const [publishingVersionId, setPublishingVersionId] = useState('');
+  const [readinessLoadingId, setReadinessLoadingId] = useState('');
+  const [versionReadiness, setVersionReadiness] = useState<PerformanceMethodVersionReadiness | null>(null);
   const [methodForm, setMethodForm] = useState({
     name: '',
     code: '',
@@ -61,6 +65,7 @@ export function PerformanceMethodsPage() {
   });
   const [versionForm, setVersionForm] = useState({
     summary: '',
+    weightMode: 'STRICT_100' as NonNullable<PerformanceMethodVersionPayload['weightMode']>,
     scoreAggregation: 'WEIGHTED_AVERAGE' as NonNullable<PerformanceMethodVersionPayload['scoreAggregation']>,
     minimumScore: '',
     maximumScore: '',
@@ -254,6 +259,7 @@ export function PerformanceMethodsPage() {
     try {
       const created = await performanceService.createMethodVersion(selectedMethodId, {
         summary: versionForm.summary.trim() || undefined,
+        weightMode: versionForm.weightMode,
         scoreAggregation: versionForm.scoreAggregation,
         minimumScore: safeNumber(versionForm.minimumScore),
         maximumScore: safeNumber(versionForm.maximumScore),
@@ -261,6 +267,7 @@ export function PerformanceMethodsPage() {
       toast.success('Version method berhasil dibuat');
       setVersionForm({
         summary: '',
+        weightMode: 'STRICT_100',
         scoreAggregation: 'WEIGHTED_AVERAGE',
         minimumScore: '',
         maximumScore: '',
@@ -275,6 +282,19 @@ export function PerformanceMethodsPage() {
       setSavingVersion(false);
     }
   }, [loadMethodDetail, loadMethods, selectedMethodId, versionForm]);
+
+  const handleLoadVersionReadiness = useCallback(async (versionId: string) => {
+    setReadinessLoadingId(versionId);
+    try {
+      const data = await performanceService.getMethodVersionReadiness(versionId);
+      setVersionReadiness(data);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || 'Gagal memuat readiness version');
+    } finally {
+      setReadinessLoadingId('');
+    }
+  }, []);
 
   const handleCreateComponent = useCallback(async () => {
     if (!selectedVersionId) {
@@ -402,6 +422,15 @@ export function PerformanceMethodsPage() {
     (sum, component) => sum + Number(component.weight),
     0
   );
+
+  useEffect(() => {
+    if (!selectedVersionId) {
+      setVersionReadiness(null);
+      return;
+    }
+
+    void handleLoadVersionReadiness(selectedVersionId);
+  }, [handleLoadVersionReadiness, selectedVersionId]);
 
   return (
     <div>
@@ -573,6 +602,15 @@ export function PerformanceMethodsPage() {
                         />
                       </div>
                       <div className="space-y-2">
+                        <label className="text-sm font-medium">Weight Mode</label>
+                        <Select2
+                          value={versionForm.weightMode}
+                          onValueChange={(value) => setVersionForm((prev) => ({ ...prev, weightMode: value as typeof prev.weightMode }))}
+                          options={WEIGHT_MODE_OPTIONS.map((value) => ({ value, label: value }))}
+                          placeholder="Pilih weight mode"
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <label className="text-sm font-medium">Score Aggregation</label>
                         <Select2
                           value={versionForm.scoreAggregation}
@@ -630,7 +668,7 @@ export function PerformanceMethodsPage() {
                                 onClick={() => setSelectedVersionId(version.id)}
                               >
                                 <p className="text-sm font-semibold">Version {version.versionNumber}</p>
-                                <p className="text-xs text-muted-foreground">{version.scoreAggregation}</p>
+                                <p className="text-xs text-muted-foreground">{version.weightMode} • {version.scoreAggregation}</p>
                               </button>
                               <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${VERSION_STATUS_STYLES[version.status] || VERSION_STATUS_STYLES.DRAFT}`}>
                                 {version.status}
@@ -676,7 +714,7 @@ export function PerformanceMethodsPage() {
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold">Version Governance</h3>
-                      <p className="text-xs text-muted-foreground">Assign grade rule ke version yang sedang dipilih.</p>
+                      <p className="text-xs text-muted-foreground">Assign grade rule, workflow, dan cek readiness version terpilih.</p>
                     </div>
                     {selectedVersion && (
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${VERSION_STATUS_STYLES[selectedVersion.status] || VERSION_STATUS_STYLES.DRAFT}`}>
@@ -711,6 +749,39 @@ export function PerformanceMethodsPage() {
                         {selectedVersion.status === 'DRAFT'
                           ? 'Version draft masih bisa diubah. Lengkapi grade rule, review workflow, dan approval workflow sebelum publish.'
                           : 'Version non-draft sudah dibekukan. Governance template hanya bisa diganti lewat version draft baru.'}
+                      </div>
+                      <div className={`rounded-xl border px-4 py-3 text-sm ${versionReadiness?.isReady ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20' : 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20'}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-medium">Version Readiness</p>
+                            <p className="text-xs text-muted-foreground">
+                              Weight mode {selectedVersion.weightMode} • total weight {versionTotalWeight.toFixed(2)}%
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleLoadVersionReadiness(selectedVersion.id)}
+                            disabled={readinessLoadingId === selectedVersion.id}
+                          >
+                            {readinessLoadingId === selectedVersion.id ? 'Checking...' : 'Check Readiness'}
+                          </Button>
+                        </div>
+                        {versionReadiness ? (
+                          versionReadiness.isReady ? (
+                            <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-400">
+                              Version siap dipublish. Governance dan weight rule sudah memenuhi syarat dasar.
+                            </p>
+                          ) : (
+                            <ul className="mt-3 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+                              {versionReadiness.issues.map((issue) => (
+                                <li key={issue}>- {issue}</li>
+                              ))}
+                            </ul>
+                          )
+                        ) : (
+                          <p className="mt-3 text-xs text-muted-foreground">Readiness version belum dimuat.</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Review Workflow</label>
@@ -757,7 +828,7 @@ export function PerformanceMethodsPage() {
                     <div>
                       <h3 className="text-sm font-semibold">Selected Version Components</h3>
                       <p className="text-xs text-muted-foreground">
-                        Total weight saat ini: {versionTotalWeight.toFixed(2)}%
+                        Total weight saat ini: {versionTotalWeight.toFixed(2)}% • mode {selectedVersion?.weightMode || '-'}
                       </p>
                     </div>
                     {selectedVersion && (

@@ -124,6 +124,18 @@ export function PerformanceDashboard() {
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/workflows')}>
               Config Workflows
             </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/performance/planning')}>
+              Planning Workspace
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/performance/execution')}>
+              Execution Workspace
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/performance/results')}>
+              Results Workspace
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/performance/my-results')}>
+              My Results
+            </Button>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
               Refresh

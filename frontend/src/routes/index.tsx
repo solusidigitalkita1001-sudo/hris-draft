@@ -50,8 +50,12 @@ import { InterviewFormPage } from '@/modules/recruitment/pages/InterviewFormPage
 import { PerformanceDashboard } from '@/modules/performance/pages/PerformanceDashboard';
 import { PerformanceCyclesPage } from '@/modules/performance/pages/PerformanceCyclesPage';
 import { PerformanceLibrariesPage } from '@/modules/performance/pages/PerformanceLibrariesPage';
+import { PerformanceExecutionPage } from '@/modules/performance/pages/PerformanceExecutionPage';
 import { PerformanceMethodsPage } from '@/modules/performance/pages/PerformanceMethodsPage';
+import { PerformanceMyResultsPage } from '@/modules/performance/pages/PerformanceMyResultsPage';
+import { PerformancePlanningPage } from '@/modules/performance/pages/PerformancePlanningPage';
 import { PerformancePeriodsPage } from '@/modules/performance/pages/PerformancePeriodsPage';
+import { PerformanceResultsPage } from '@/modules/performance/pages/PerformanceResultsPage';
 import { PerformanceWorkflowsPage } from '@/modules/performance/pages/PerformanceWorkflowsPage';
 import { ReviewList } from '@/modules/performance/pages/ReviewList';
 import { GoalList } from '@/modules/performance/pages/GoalList';
@@ -443,6 +447,38 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
             <GoalList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/planning',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformancePlanningPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/execution',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceExecutionPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/results',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceResultsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/my-results',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceMyResultsPage />
           </ProtectedRoute>
         ),
       },

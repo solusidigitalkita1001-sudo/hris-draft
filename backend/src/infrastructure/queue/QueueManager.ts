@@ -6,6 +6,7 @@ import { getRedisConnectionOptions } from '@/infrastructure/cache/redis-options'
 
 export const QueueNames = {
   DOMAIN_EVENTS: 'domain-events',
+  PERFORMANCE_AUTOMATION: 'performance-automation',
 } as const;
 
 export class QueueManager {

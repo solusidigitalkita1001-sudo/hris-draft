@@ -8,6 +8,7 @@ import {
   type PerformanceFormula,
   type PerformanceIndicator,
   type PerformanceGradeRule,
+  type PerformanceRecommendationRule,
   type PerformanceFormulaPayload,
   type PerformanceIndicatorPayload,
   type PerformanceGradeRulePayload,
@@ -43,6 +44,15 @@ function buildEmptyRange(sortOrder: number) {
     maximum: '',
     sortOrder: String(sortOrder),
     description: '',
+  };
+}
+
+function buildEmptyRecommendationRule(): PerformanceRecommendationRule {
+  return {
+    label: '',
+    condition: '',
+    action: '',
+    notes: '',
   };
 }
 
@@ -95,6 +105,7 @@ export function PerformanceLibrariesPage() {
     code: '',
     description: '',
     isActive: true,
+    recommendationRules: [buildEmptyRecommendationRule()],
     ranges: [buildEmptyRange(1), buildEmptyRange(2)],
   });
 
@@ -256,6 +267,15 @@ export function PerformanceLibrariesPage() {
     }));
   }, []);
 
+  const updateRecommendationRule = useCallback((index: number, field: keyof PerformanceRecommendationRule, value: string) => {
+    setGradeRuleForm((prev) => ({
+      ...prev,
+      recommendationRules: prev.recommendationRules.map((rule, ruleIndex) =>
+        ruleIndex === index ? { ...rule, [field]: value } : rule
+      ),
+    }));
+  }, []);
+
   const handleCreateGradeRule = useCallback(async () => {
     if (!companyId) {
       toast.error('Company belum aktif');
@@ -271,6 +291,15 @@ export function PerformanceLibrariesPage() {
       toast.error('Semua grade range wajib lengkap');
       return;
     }
+    if (gradeRuleForm.recommendationRules.some((rule) => rule.label.trim() || rule.condition.trim() || rule.action.trim())) {
+      const hasIncompleteRecommendation = gradeRuleForm.recommendationRules.some(
+        (rule) => !rule.label.trim() || !rule.condition.trim() || !rule.action.trim()
+      );
+      if (hasIncompleteRecommendation) {
+        toast.error('Recommendation rule yang diisi harus lengkap');
+        return;
+      }
+    }
 
     setSavingGradeRule(true);
     try {
@@ -280,6 +309,14 @@ export function PerformanceLibrariesPage() {
         code: gradeRuleForm.code.trim().toUpperCase(),
         description: gradeRuleForm.description.trim() || undefined,
         isActive: gradeRuleForm.isActive,
+        recommendationRules: gradeRuleForm.recommendationRules
+          .filter((rule) => rule.label.trim() || rule.condition.trim() || rule.action.trim())
+          .map((rule) => ({
+            label: rule.label.trim(),
+            condition: rule.condition.trim(),
+            action: rule.action.trim(),
+            notes: rule.notes?.trim() || undefined,
+          })),
         ranges: gradeRuleForm.ranges.map((range, index) => ({
           label: range.label.trim(),
           minimum: Number(range.minimum),
@@ -295,6 +332,7 @@ export function PerformanceLibrariesPage() {
         code: '',
         description: '',
         isActive: true,
+        recommendationRules: [buildEmptyRecommendationRule()],
         ranges: [buildEmptyRange(1), buildEmptyRange(2)],
       });
       await loadData();
@@ -516,6 +554,54 @@ export function PerformanceLibrariesPage() {
                   Active
                 </label>
 
+                <div className="space-y-3 rounded-xl border border-border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">Recommendation Rules</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setGradeRuleForm((prev) => ({
+                          ...prev,
+                          recommendationRules: [...prev.recommendationRules, buildEmptyRecommendationRule()],
+                        }))
+                      }
+                    >
+                      <Plus size={14} className="mr-2" />
+                      Tambah Rule
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {gradeRuleForm.recommendationRules.map((rule, index) => (
+                      <div key={`recommendation-${index}`} className="rounded-xl border border-border p-3">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium">Rule {index + 1}</p>
+                          {gradeRuleForm.recommendationRules.length > 1 && (
+                            <button
+                              type="button"
+                              className="text-xs text-destructive"
+                              onClick={() =>
+                                setGradeRuleForm((prev) => ({
+                                  ...prev,
+                                  recommendationRules: prev.recommendationRules.filter((_, ruleIndex) => ruleIndex !== index),
+                                }))
+                              }
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Input value={rule.label} onChange={(e) => updateRecommendationRule(index, 'label', e.target.value)} placeholder="Promotion Eligible" />
+                          <Input value={rule.action} onChange={(e) => updateRecommendationRule(index, 'action', e.target.value)} placeholder="PROMOTION" />
+                        </div>
+                        <Input className="mt-3" value={rule.condition} onChange={(e) => updateRecommendationRule(index, 'condition', e.target.value)} placeholder="Grade=A AND Attendance>95" />
+                        <Input className="mt-3" value={rule.notes || ''} onChange={(e) => updateRecommendationRule(index, 'notes', e.target.value)} placeholder="Catatan opsional untuk HR" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   {gradeRuleForm.ranges.map((range, index) => (
                     <div key={`${index}-${range.sortOrder}`} className="rounded-xl border border-border p-3">
@@ -585,6 +671,18 @@ export function PerformanceLibrariesPage() {
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">{gradeRule.description || 'Belum ada deskripsi grade rule.'}</p>
+                      {(gradeRule.recommendationRules ?? []).length > 0 && (
+                        <div className="mt-3 space-y-2 rounded-xl bg-muted/40 p-3">
+                          <p className="text-xs font-medium text-muted-foreground">Recommendation Rules</p>
+                          {(gradeRule.recommendationRules ?? []).map((rule, index) => (
+                            <div key={`${gradeRule.id}-recommendation-${index}`} className="rounded-lg bg-background px-3 py-2 text-xs">
+                              <p className="font-medium">{rule.label} • {rule.action}</p>
+                              <p className="mt-1 text-muted-foreground">{rule.condition}</p>
+                              {rule.notes && <p className="mt-1 text-muted-foreground">{rule.notes}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="mt-3 space-y-2">
                         {(gradeRule.ranges ?? []).map((range) => (
                           <div key={`${gradeRule.id}-${range.label}-${range.sortOrder}`} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs">

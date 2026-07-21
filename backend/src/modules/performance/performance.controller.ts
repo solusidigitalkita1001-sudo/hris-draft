@@ -12,6 +12,7 @@ export class PerformanceController {
 
     return {
       userId: req.user.id,
+      employeeId: req.user.employeeId,
       companyId: req.user.companyId,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
@@ -81,6 +82,12 @@ export class PerformanceController {
         req.params.id as string,
         this.getAuditContext(req)
       )));
+    } catch (error) { next(error); }
+  }
+
+  async getMethodVersionReadiness(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await performanceService.getMethodVersionReadiness(req.params.id as string)));
     } catch (error) { next(error); }
   }
 
@@ -277,6 +284,392 @@ export class PerformanceController {
     try {
       res.json(Result.updated(await performanceService.publishPeriod(
         req.params.id as string,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async getPlanningWorkspace(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await performanceService.getPlanningWorkspace(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async createPlanningAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.createPlanningAssignment(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async updatePlanningAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.updatePlanningAssignment(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async reassignPlanningAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.reassignPlanningAssignment(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async deletePlanningAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      await performanceService.deletePlanningAssignment(req.params.id as string, this.getAuditContext(req));
+      res.json(Result.success({ id: req.params.id }, 'Deleted successfully'));
+    } catch (error) { next(error); }
+  }
+
+  async createPlanningTarget(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.createPlanningTarget(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async updatePlanningTarget(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.updatePlanningTarget(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async deletePlanningTarget(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      await performanceService.deletePlanningTarget(req.params.id as string, this.getAuditContext(req));
+      res.json(Result.success({ id: req.params.id }, 'Deleted successfully'));
+    } catch (error) { next(error); }
+  }
+
+  async publishPlanning(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.publishPlanning(
+        req.params.id as string,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async createPlanningTargetProgress(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.createPlanningTargetProgress(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async uploadPlanningEvidence(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.uploadPlanningEvidence(
+        req.params.id as string,
+        req.file as any,
+        req.body.notes as string | undefined,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async submitPlanningAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.submitPlanningAssignment(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async approvePlanningAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.approvePlanningAssignment(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async rejectPlanningAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.rejectPlanningAssignment(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async requestPlanningAssignmentRevision(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.requestPlanningAssignmentRevision(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async completePlanningAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.completePlanningAssignment(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async getExecutionApprovalQueue(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.query.companyId as string;
+      res.json(Result.success(await performanceService.getExecutionApprovalQueue(
+        companyId,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async getPerformanceResults(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await performanceService.getPerformanceResults(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async getDevelopmentRecommendations(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await performanceService.getDevelopmentRecommendations(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async syncDevelopmentRecommendations(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.syncPerformanceDevelopmentRecommendations(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async assignDevelopmentRecommendation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.assignPerformanceDevelopmentRecommendation(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async calculatePerformanceResults(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.calculatePerformanceResults(
+        req.params.id as string,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async getPerformanceResultDashboard(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await performanceService.getPerformanceResultDashboard(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async publishPerformanceResults(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.publishPerformanceResults(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async approvePerformanceResults(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.approvePerformanceResults(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async getMyPublishedResults(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.query.companyId as string;
+      res.json(Result.success(await performanceService.getMyPublishedResults(
+        companyId,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async acknowledgePerformanceResult(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.acknowledgePerformanceResult(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async uploadPerformanceResultAttachment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.uploadPerformanceResultAttachment(
+        req.params.id as string,
+        req.file as any,
+        {
+          title: req.body.title as string | undefined,
+          description: req.body.description as string | undefined,
+          visibility: req.body.visibility as 'INTERNAL' | 'RESTRICTED' | 'PUBLIC' | undefined,
+        },
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async createPerformanceResultDispute(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.createPerformanceResultDispute(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async uploadPerformanceDisputeAttachment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.uploadPerformanceDisputeAttachment(
+        req.params.id as string,
+        req.file as any,
+        {
+          title: req.body.title as string | undefined,
+          description: req.body.description as string | undefined,
+          visibility: req.body.visibility as 'INTERNAL' | 'RESTRICTED' | 'PUBLIC' | undefined,
+        },
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async respondPerformanceResultDispute(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.respondPerformanceResultDispute(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async reopenPerformanceResult(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.reopenPerformanceResult(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async sendPerformanceResultReminders(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.sendPerformanceResultReminders(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async getAutomationSchedules(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await performanceService.getAutomationSchedules(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async createAutomationSchedule(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.createAutomationSchedule(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async getCalibrationSessions(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await performanceService.getCalibrationSessions(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async createCalibrationSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await performanceService.createCalibrationSession(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async openCalibrationSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.openCalibrationSession(
+        req.params.id as string,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async closeCalibrationSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.closeCalibrationSession(
+        req.params.id as string,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async finalizeCalibrationSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.finalizeCalibrationSession(
+        req.params.id as string,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async applyCalibrationDecision(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.applyCalibrationDecision(
+        req.params.id as string,
+        req.body,
         this.getAuditContext(req)
       )));
     } catch (error) { next(error); }
