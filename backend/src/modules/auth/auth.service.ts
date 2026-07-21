@@ -354,6 +354,7 @@ export class AuthService {
     user: {
       id: string;
       email: string;
+      employeeId?: string;
       companyId?: string;
       companyScope: string[];
       groupId?: string;
@@ -368,6 +369,7 @@ export class AuthService {
     const accessToken = jwtHandler.generateAccessToken({
       sub: user.id,
       email: user.email,
+      employeeId: user.employeeId,
       companyId: user.companyId,
       companyScope: user.companyScope,
       groupId: user.groupId,

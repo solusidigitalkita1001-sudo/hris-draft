@@ -36,6 +36,13 @@ export interface AttendanceContextResolution {
   employeeId: string;
   companyId: string;
   branchId: string | null;
+  branch: {
+    id: string;
+    name: string;
+    code: string;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
   departmentId: string | null;
   calendarId: string | null;
   schedule: ResolvedEmployeeDaySchedule;
@@ -143,7 +150,7 @@ export class AttendanceContextService {
       rawBranchId
         ? prisma.branch.findFirst({
             where: { id: rawBranchId, companyId: resolvedCompanyId, deletedAt: null },
-            select: { id: true, latitude: true, longitude: true },
+            select: { id: true, name: true, code: true, latitude: true, longitude: true },
           })
         : null,
       rawDepartmentId
@@ -186,6 +193,15 @@ export class AttendanceContextService {
       employeeId,
       companyId: resolvedCompanyId,
       branchId: resolvedBranch?.id ?? null,
+      branch: resolvedBranch
+        ? {
+            id: resolvedBranch.id,
+            name: resolvedBranch.name,
+            code: resolvedBranch.code,
+            latitude: resolvedBranch.latitude,
+            longitude: resolvedBranch.longitude,
+          }
+        : null,
       departmentId: resolvedDepartment?.id ?? null,
       calendarId: schedule.calendarId,
       schedule,

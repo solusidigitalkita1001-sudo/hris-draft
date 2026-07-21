@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { recruitmentService, type JobPosting, type JobApplication } from '@/services/recruitment.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
+import { useCompanyStore } from '@/stores/company.store';
 import { RefreshCw } from 'lucide-react';
 import { formatDate, getInitials } from '@/utils/format';
+import toast from 'react-hot-toast';
 
 const STAGES = [
   { key: 'NEW', label: 'New', color: 'border-blue-400 bg-blue-50/50 dark:bg-blue-950/30' },
@@ -16,33 +18,47 @@ const STAGES = [
 const REJECTED_STAGES = ['REJECTED', 'WITHDRAWN'];
 
 export function ApplicationPipeline() {
+  const { activeCompany } = useCompanyStore();
   const [postings, setPostings] = useState<JobPosting[]>([]);
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [selectedPosting, setSelectedPosting] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   const fetchPostings = useCallback(async () => {
+    const companyId = activeCompany?.id || '';
+    if (!companyId) {
+      setPostings([]);
+      return;
+    }
+
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await recruitmentService.getJobPostings(companyId);
       setPostings(data.filter((p) => p.status === 'PUBLISHED' || p.status === 'ON_HOLD'));
     } catch (error) {
       console.error('Failed to fetch postings:', error);
+      toast.error('Gagal memuat lowongan recruitment');
     }
-  }, []);
+  }, [activeCompany?.id]);
 
   const fetchApplications = useCallback(async () => {
+    const companyId = activeCompany?.id || '';
+    if (!companyId) {
+      setApplications([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await recruitmentService.getApplications(companyId, selectedPosting || undefined);
       setApplications(data);
     } catch (error) {
       console.error('Failed to fetch applications:', error);
+      toast.error('Gagal memuat application pipeline');
     } finally {
       setLoading(false);
     }
-  }, [selectedPosting]);
+  }, [activeCompany?.id, selectedPosting]);
 
   useEffect(() => {
     fetchPostings();

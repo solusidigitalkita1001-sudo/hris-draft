@@ -2,6 +2,7 @@ import 'express';
 export {};
 
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -100,6 +101,7 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser(config.session.secret));
+app.use('/uploads', express.static(path.resolve(process.cwd(), config.upload.uploadPath)));
 
 // ==================== Request Logging ====================
 app.use((req, res, next) => {

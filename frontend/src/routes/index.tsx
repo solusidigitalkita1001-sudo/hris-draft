@@ -6,6 +6,7 @@ import { ProtectedRoute } from './ProtectedRoute';
 // Pages
 import { LoginPage } from '@/modules/auth/LoginPage';
 import { ForgotPasswordPage } from '@/modules/auth/ForgotPasswordPage';
+import { ProfilePage } from '@/modules/auth/ProfilePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -37,18 +38,28 @@ import { BenefitPlanDetail } from '@/modules/benefit/pages/BenefitPlanDetail';
 // Recruitment Pages
 import { JobPostingList } from '@/modules/recruitment/pages/JobPostingList';
 import { JobPostingDetail } from '@/modules/recruitment/pages/JobPostingDetail';
+import { JobPostingFormPage } from '@/modules/recruitment/pages/JobPostingFormPage';
 import { CandidateList } from '@/modules/recruitment/pages/CandidateList';
+import { CandidateFormPage } from '@/modules/recruitment/pages/CandidateFormPage';
+import { ApplicationCreatePage } from '@/modules/recruitment/pages/ApplicationCreatePage';
 import { ApplicationPipeline } from '@/modules/recruitment/pages/ApplicationPipeline';
 import { InterviewSchedule } from '@/modules/recruitment/pages/InterviewSchedule';
+import { InterviewFormPage } from '@/modules/recruitment/pages/InterviewFormPage';
 
 // Performance Pages
 import { PerformanceDashboard } from '@/modules/performance/pages/PerformanceDashboard';
+import { PerformanceCyclesPage } from '@/modules/performance/pages/PerformanceCyclesPage';
+import { PerformanceLibrariesPage } from '@/modules/performance/pages/PerformanceLibrariesPage';
+import { PerformanceMethodsPage } from '@/modules/performance/pages/PerformanceMethodsPage';
+import { PerformancePeriodsPage } from '@/modules/performance/pages/PerformancePeriodsPage';
+import { PerformanceWorkflowsPage } from '@/modules/performance/pages/PerformanceWorkflowsPage';
 import { ReviewList } from '@/modules/performance/pages/ReviewList';
 import { GoalList } from '@/modules/performance/pages/GoalList';
 
 // Training Pages
 import { CourseList } from '@/modules/training/pages/CourseList';
 import { CourseDetail } from '@/modules/training/pages/CourseDetail';
+import { CourseFormPage } from '@/modules/training/pages/CourseFormPage';
 
 // Attendance Pages
 import { AttendanceList } from '@/modules/attendance/pages/AttendanceList';
@@ -92,6 +103,7 @@ import { NotificationsPage } from '@/modules/notifications/pages/NotificationsPa
 // Admin Pages
 import { AdminUsersPage } from '@/modules/admin/pages/AdminUsersPage';
 import { AdminAuditLogPage } from '@/modules/admin/pages/AdminAuditLogPage';
+import { AdminAuditLogDetailPage } from '@/modules/admin/pages/AdminAuditLogDetailPage';
 import { AdminSettingsPage } from '@/modules/admin/pages/AdminSettingsPage';
 import { EMPLOYEE_SELF_SERVICE_ROLES, OPERATIONAL_ROLES } from '@/lib/access-control';
 
@@ -127,6 +139,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
             <DashboardPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'profile',
+        element: (
+          <ProtectedRoute>
+            <ProfilePage />
           </ProtectedRoute>
         ),
       },
@@ -338,10 +358,34 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'recruitment/postings/new',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'create' }]}>
+            <JobPostingFormPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'recruitment/postings/:id/apply',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'create' }]}>
+            <ApplicationCreatePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: 'recruitment/candidates',
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'read' }]}>
             <CandidateList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'recruitment/candidates/new',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'create' }]}>
+            <CandidateFormPage />
           </ProtectedRoute>
         ),
       },
@@ -358,6 +402,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'read' }]}>
             <InterviewSchedule />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'recruitment/interviews/new',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'recruitment', action: 'create' }]}>
+            <InterviewFormPage />
           </ProtectedRoute>
         ),
       },
@@ -379,10 +431,50 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'performance/cycles',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceCyclesPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: 'performance/goals',
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
             <GoalList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/config/methods',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceMethodsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/config/periods',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformancePeriodsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/config/libraries',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceLibrariesPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/config/workflows',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceWorkflowsPage />
           </ProtectedRoute>
         ),
       },
@@ -596,6 +688,22 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'lms/courses/new',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'training', action: 'create' }]}>
+            <CourseFormPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'lms/courses/:id/edit',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'training', action: 'update' }]}>
+            <CourseFormPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: 'admin/users',
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'user', action: 'read' }]}>
@@ -616,6 +724,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'audit-log', action: 'read' }]}>
             <AdminAuditLogPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/audit/:id',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'audit-log', action: 'read' }]}>
+            <AdminAuditLogDetailPage />
           </ProtectedRoute>
         ),
       },

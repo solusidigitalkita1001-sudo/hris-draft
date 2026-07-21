@@ -27,6 +27,58 @@ export interface Interview {
   application?: { id: string; jobPosting?: { title: string } };
 }
 
+export interface InterviewPayload {
+  applicationId: string;
+  candidateId: string;
+  interviewerId?: string;
+  companyId: string;
+  type: string;
+  title: string;
+  scheduledAt: string;
+  durationMinutes?: number;
+  location?: string;
+  meetingLink?: string;
+  notes?: string;
+}
+
+export interface JobPostingPayload {
+  companyId: string;
+  departmentId?: string;
+  positionId?: string;
+  title: string;
+  code: string;
+  employmentType: string;
+  location?: string;
+  minSalary?: number;
+  maxSalary?: number;
+  currency?: string;
+  description?: string;
+  requirements?: string;
+  responsibilities?: string;
+  vacancies: number;
+}
+
+export interface CandidatePayload {
+  companyId: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone?: string;
+  currentCompany?: string;
+  currentPosition?: string;
+  source?: string;
+  notes?: string;
+}
+
+export interface JobApplicationPayload {
+  jobPostingId: string;
+  candidateId: string;
+  companyId: string;
+  coverLetter?: string;
+  expectedSalary?: number;
+  notes?: string;
+}
+
 class RecruitmentService {
   async getJobPostings(companyId: string, status?: string): Promise<JobPosting[]> {
     const r = await api.get('/recruitment/job-postings', { params: { companyId, status } }); return r.data.data;
@@ -34,7 +86,7 @@ class RecruitmentService {
   async getJobPosting(id: string): Promise<JobPosting> {
     const r = await api.get(`/recruitment/job-postings/${id}`); return r.data.data;
   }
-  async createJobPosting(data: any): Promise<JobPosting> {
+  async createJobPosting(data: JobPostingPayload): Promise<JobPosting> {
     const r = await api.post('/recruitment/job-postings', data); return r.data.data;
   }
   async approveJobPosting(id: string): Promise<JobPosting> {
@@ -49,13 +101,13 @@ class RecruitmentService {
   async getCandidate(id: string): Promise<Candidate> {
     const r = await api.get(`/recruitment/candidates/${id}`); return r.data.data;
   }
-  async createCandidate(data: any): Promise<Candidate> {
+  async createCandidate(data: CandidatePayload): Promise<Candidate> {
     const r = await api.post('/recruitment/candidates', data); return r.data.data;
   }
   async getApplications(companyId: string, jobPostingId?: string): Promise<JobApplication[]> {
     const r = await api.get('/recruitment/applications', { params: { companyId, jobPostingId } }); return r.data.data;
   }
-  async createApplication(data: any): Promise<JobApplication> {
+  async createApplication(data: JobApplicationPayload): Promise<JobApplication> {
     const r = await api.post('/recruitment/applications', data); return r.data.data;
   }
   async updateApplicationStatus(id: string, status: string, notes?: string): Promise<JobApplication> {
@@ -64,7 +116,7 @@ class RecruitmentService {
   async getInterviews(companyId: string): Promise<Interview[]> {
     const r = await api.get('/recruitment/interviews', { params: { companyId } }); return r.data.data;
   }
-  async createInterview(data: any): Promise<Interview> {
+  async createInterview(data: InterviewPayload): Promise<Interview> {
     const r = await api.post('/recruitment/interviews', data); return r.data.data;
   }
 }

@@ -219,7 +219,7 @@ function ClaimForm({
   const [amount, setAmount] = useState('0');
   const [expenseDate, setExpenseDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [description, setDescription] = useState('');
-  const [receiptFilePath, setReceiptFilePath] = useState('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   const selectableTrips = trips.filter((trip) => trip.status === 'APPROVED' || trip.status === 'COMPLETED');
@@ -244,6 +244,13 @@ function ClaimForm({
 
     setSaving(true);
     try {
+      let receiptFilePath: string | undefined;
+
+      if (receiptFile) {
+        const uploadResult = await travelExpenseService.uploadReceipt(receiptFile);
+        receiptFilePath = uploadResult.url;
+      }
+
       await travelExpenseService.createClaim({
         companyId,
         employeeId,
@@ -252,7 +259,7 @@ function ClaimForm({
         amount: parsedAmount,
         expenseDate: dayjs(expenseDate).toISOString(),
         description: description.trim() || undefined,
-        receiptFilePath: receiptFilePath || undefined,
+        receiptFilePath,
       });
       toast.success('Expense claim berhasil dikirim');
       onSuccess();
@@ -303,8 +310,29 @@ function ClaimForm({
         </div>
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Receipt URL / Path</label>
-        <Input value={receiptFilePath} onChange={(event) => setReceiptFilePath(event.target.value)} />
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Upload Receipt</label>
+        <Input
+          type="file"
+          accept=".jpg,.jpeg,.png,.gif,.pdf"
+          onChange={(event) => {
+            const file = event.target.files?.[0] || null;
+            if (file && file.size > 5 * 1024 * 1024) {
+              toast.error('Ukuran file receipt maksimal 5MB');
+              event.target.value = '';
+              setReceiptFile(null);
+              return;
+            }
+            setReceiptFile(file);
+          }}
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Format: JPG, PNG, GIF, atau PDF. Maks 5MB.
+        </p>
+        {receiptFile && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            File terpilih: {receiptFile.name}
+          </p>
+        )}
       </div>
       <div>
         <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Deskripsi</label>

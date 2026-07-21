@@ -2,8 +2,37 @@ import { NextFunction, Request, Response } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { Result } from '@/shared/core/Result';
 import { travelExpenseRepository } from './travel-expense.repository';
+import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { prisma } from '@/shared/database/prisma';
+import config from '@/config';
 
 export class TravelExpenseController {
+  private async getEmployeeContext(req: AuthenticatedRequest) {
+    if (!req.user) {
+      throw new ForbiddenError('Authentication required');
+    }
+
+    const employeeId = req.user.employeeId || (
+      await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { employeeId: true },
+      })
+    )?.employeeId;
+
+    if (!employeeId) {
+      throw new ForbiddenError('This account is not linked to an employee profile');
+    }
+
+    if (!req.user.companyId) {
+      throw new ForbiddenError('This account does not have an active company scope');
+    }
+
+    return {
+      employeeId,
+      companyId: req.user.companyId,
+    };
+  }
+
   async getExpenseCategories(_req: Request, res: Response, next: NextFunction) {
     try {
       res.json(Result.success(travelExpenseRepository.getExpenseCategories()));
@@ -28,14 +57,10 @@ export class TravelExpenseController {
     }
   }
 
-  async findMyTrips(req: Request, res: Response, next: NextFunction) {
+  async findMyTrips(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const employeeId = req.query.employeeId as string | undefined;
+      const { employeeId } = await this.getEmployeeContext(req);
       const status = req.query.status as string | undefined;
-
-      if (!employeeId) {
-        return res.status(400).json(Result.error('employeeId is required'));
-      }
 
       const data = await travelExpenseRepository.findMyTrips(employeeId, status);
       res.json(Result.success(data));
@@ -46,14 +71,12 @@ export class TravelExpenseController {
 
   async createTrip(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const companyId = req.body.companyId || req.user?.companyId;
-      if (!companyId) {
-        return res.status(400).json(Result.error('companyId is required'));
-      }
+      const { companyId, employeeId } = await this.getEmployeeContext(req);
 
       const data = await travelExpenseRepository.createTrip({
         ...req.body,
         companyId,
+        employeeId,
       });
       res.status(201).json(Result.created(data, 'Travel request created'));
     } catch (error) {
@@ -112,14 +135,10 @@ export class TravelExpenseController {
     }
   }
 
-  async findMyClaims(req: Request, res: Response, next: NextFunction) {
+  async findMyClaims(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const employeeId = req.query.employeeId as string | undefined;
+      const { employeeId } = await this.getEmployeeContext(req);
       const status = req.query.status as string | undefined;
-
-      if (!employeeId) {
-        return res.status(400).json(Result.error('employeeId is required'));
-      }
 
       const data = await travelExpenseRepository.findMyClaims(employeeId, status);
       res.json(Result.success(data));
@@ -130,16 +149,40 @@ export class TravelExpenseController {
 
   async createClaim(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const companyId = req.body.companyId || req.user?.companyId;
-      if (!companyId) {
-        return res.status(400).json(Result.error('companyId is required'));
-      }
+      const { companyId, employeeId } = await this.getEmployeeContext(req);
 
       const data = await travelExpenseRepository.createClaim({
         ...req.body,
         companyId,
+        employeeId,
       });
       res.status(201).json(Result.created(data, 'Expense claim created'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async uploadReceipt(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.file) {
+        throw new BadRequestError('Receipt file is required');
+      }
+
+      const receiptUrl = `${config.app.url}/uploads/travel-expenses/receipts/${req.file.filename}`;
+
+      res.status(201).json(
+        Result.created(
+          {
+            fileName: req.file.filename,
+            originalName: req.file.originalname,
+            mimeType: req.file.mimetype,
+            size: req.file.size,
+            filePath: req.file.path,
+            url: receiptUrl,
+          },
+          'Receipt uploaded'
+        )
+      );
     } catch (error) {
       next(error);
     }

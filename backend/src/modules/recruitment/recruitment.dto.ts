@@ -15,6 +15,14 @@ export const createJobPostingSchema = z.object({
   requirements: z.string().optional(),
   responsibilities: z.string().optional(),
   vacancies: z.number().int().positive().default(1),
+}).superRefine((value, ctx) => {
+  if (value.minSalary !== undefined && value.maxSalary !== undefined && value.maxSalary < value.minSalary) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['maxSalary'],
+      message: 'maxSalary must be greater than or equal to minSalary',
+    });
+  }
 });
 
 export const createCandidateSchema = z.object({

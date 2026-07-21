@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { recruitmentService, type Candidate } from '@/services/recruitment.service';
+import { useCompanyStore } from '@/stores/company.store';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import toast from 'react-hot-toast';
 import { Plus, Search, RefreshCw, UserRound, Mail, Phone, Briefcase, Building2 } from 'lucide-react';
-//
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
@@ -28,6 +28,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function CandidateList() {
+  const navigate = useNavigate();
+  const { activeCompany } = useCompanyStore();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -35,7 +37,7 @@ export function CandidateList() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
+      const companyId = activeCompany?.id || '';
       const data = await recruitmentService.getCandidates(companyId);
       setCandidates(data);
     } catch (error) {
@@ -43,7 +45,7 @@ export function CandidateList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeCompany?.id]);
 
   useEffect(() => {
     fetchData();
@@ -57,10 +59,6 @@ export function CandidateList() {
       c.currentCompany?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleAddCandidate = () => {
-    toast('Form tambah candidate belum tersedia. Route create candidate belum disambungkan.');
-  };
-
   return (
     <div>
       <PageHeader
@@ -72,7 +70,7 @@ export function CandidateList() {
               <RefreshCw size={16} className="mr-2" />
               Refresh
             </Button>
-            <Button size="sm" onClick={handleAddCandidate}>
+            <Button size="sm" onClick={() => navigate('/recruitment/candidates/new')}>
               <Plus size={16} className="mr-2" />
               Add Candidate
             </Button>

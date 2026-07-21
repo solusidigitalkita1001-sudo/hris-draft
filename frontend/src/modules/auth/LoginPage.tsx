@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,15 +81,7 @@ export function LoginPage() {
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">{t('auth.login.password')}</Label>
-            <Link
-              to="/forgot-password"
-              className="text-xs text-primary hover:text-primary/80 transition-colors"
-            >
-              {t('auth.login.forgotPassword')}
-            </Link>
-          </div>
+          <Label htmlFor="password">{t('auth.login.password')}</Label>
           <div className="relative">
             <Input
               id="password"
@@ -126,12 +118,6 @@ export function LoginPage() {
           )}
         </Button>
       </form>
-
-      <div className="mt-6 pt-6 border-t border-border">
-        <p className="text-xs text-center text-muted-foreground">
-          {t('common.defaultCredentials')}
-        </p>
-      </div>
     </div>
   );
 }

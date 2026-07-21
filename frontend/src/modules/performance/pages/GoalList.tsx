@@ -3,8 +3,10 @@ import { performanceService, type Goal } from '@/services/performance.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, Plus, Target, TrendingUp, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import toast from 'react-hot-toast';
 
 const PRIORITY_STYLES: Record<string, string> = {
   LOW: 'bg-gray-50 text-gray-600 dark:bg-gray-900 dark:text-gray-400',
@@ -20,23 +22,31 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 };
 
 export function GoalList() {
+  const { activeCompany } = useCompanyStore();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
   const fetchData = useCallback(async () => {
+    const companyId = activeCompany?.id || '';
+    if (!companyId) {
+      setGoals([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await performanceService.getGoals(companyId);
       setGoals(data);
     } catch (error) {
       console.error('Failed to fetch goals:', error);
+      toast.error('Gagal memuat data goals');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeCompany?.id]);
 
   useEffect(() => {
     fetchData();

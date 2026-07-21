@@ -13,6 +13,7 @@ export interface AuditLogEntry {
   userAgent?: string;
   createdAt: string;
   user?: { id: string; email: string };
+  company?: { id: string; name: string };
 }
 
 export interface PaginatedResult<T> {
@@ -22,9 +23,15 @@ export interface PaginatedResult<T> {
 
 class AuditLogService {
   async getAll(params: {
-    companyId: string;
+    companyId?: string;
     action?: string;
     entity?: string;
+    userId?: string;
+    entityId?: string;
+    ipAddress?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResult<AuditLogEntry>> {
@@ -35,6 +42,24 @@ class AuditLogService {
   async get(id: string): Promise<AuditLogEntry> {
     const r = await api.get(`/audit-logs/${id}`);
     return r.data.data;
+  }
+
+  async exportCsv(params: {
+    companyId?: string;
+    action?: string;
+    entity?: string;
+    userId?: string;
+    entityId?: string;
+    ipAddress?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<Blob> {
+    const response = await api.get('/audit-logs/export', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
   }
 }
 

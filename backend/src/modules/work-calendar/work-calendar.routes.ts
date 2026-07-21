@@ -8,7 +8,9 @@ import {
   createHolidaySchema, updateHolidaySchema, copyCalendarSchema,
   createShiftFormulaSchema, updateShiftFormulaSchema,
   createShiftSwapRequestSchema, reviewShiftSwapRequestSchema,
+  workCalendarIdParamsSchema, countWorkingDaysQuerySchema,
 } from './work-calendar.dto';
+import { validateRequest } from '@/shared/middleware/RequestValidator';
 
 const router = Router();
 router.use(authenticate);
@@ -34,7 +36,12 @@ router.post('/:id/generate', authorize({ resource: 'work-calendar', action: 'upd
 router.post('/:id/copy', authorize({ resource: 'work-calendar', action: 'create' }), validate(copyCalendarSchema), workCalendarController.copyCalendar.bind(workCalendarController));
 
 // Working Days Calculation
-router.get('/:id/working-days', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.countWorkingDays.bind(workCalendarController));
+router.get(
+  '/:id/working-days',
+  authorize({ resource: 'work-calendar', action: 'read' }),
+  validateRequest({ params: workCalendarIdParamsSchema, query: countWorkingDaysQuerySchema }),
+  workCalendarController.countWorkingDays.bind(workCalendarController)
+);
 
 // National Holidays
 router.get('/holidays/list', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.findAllHolidays.bind(workCalendarController));

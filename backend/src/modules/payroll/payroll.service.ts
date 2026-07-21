@@ -13,6 +13,7 @@ import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError } from '@/shared/exceptions/AppError';
 import { v4 as uuidv4 } from 'uuid';
+import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 
 export class PayrollService {
   // ==================== Salary Components ====================
@@ -195,6 +196,15 @@ export class PayrollService {
       throw new BadRequestError('Only approved payroll runs can be disbursed');
     }
 
+    const employeeIds = Array.from(new Set((run.payslips || []).map((payslip) => payslip.employeeId)));
+    await employeeLoanRepository.applyPayrollDeductions(
+      run.companyId,
+      employeeIds,
+      new Date(run.period.endDate),
+      new Date(),
+      run.runNumber
+    );
+
     const disbursed = await payrollRepository.updatePayrollRunStatus(id, 'DISBURSED', userId);
 
     await eventBus.publish({
@@ -231,6 +241,16 @@ export class PayrollService {
 
     // Get all employees with active salary in this company
     const employeeSalaries = await payrollRepository.findAllEmployeeSalaries(run.companyId);
+    const loanDeductionComponent = await this.ensureLoanDeductionComponent(run.companyId);
+    const dueLoanInstallments = await employeeLoanRepository.findDueInstallmentsForPayroll(
+      run.companyId,
+      new Date(run.period.endDate)
+    );
+    const loanDeductionByEmployee = dueLoanInstallments.reduce<Record<string, number>>((acc, installment) => {
+      const employeeId = installment.loan.employeeId;
+      acc[employeeId] = (acc[employeeId] || 0) + Number(installment.amount);
+      return acc;
+    }, {});
 
     // Delete existing payslips for this run (recalculation)
     await payrollRepository.deletePayslipsByRunId(runId);
@@ -242,7 +262,18 @@ export class PayrollService {
     for (const salary of employeeSalaries) {
       if (!salary.isActive) continue;
 
-      const { earningsTotal, deductionsTotal, components } = this.calculateEmployeePay(salary);
+      const loanDeductionAmount = loanDeductionByEmployee[salary.employeeId] || 0;
+      const extraComponents = loanDeductionAmount > 0
+        ? [{
+            salaryComponentId: loanDeductionComponent.id,
+            name: 'Potongan Pinjaman Karyawan',
+            type: 'DEDUCTION',
+            amount: loanDeductionAmount,
+            isTaxable: false,
+          }]
+        : [];
+
+      const { earningsTotal, deductionsTotal, components } = this.calculateEmployeePay(salary, extraComponents);
       const netPay = earningsTotal - deductionsTotal;
 
       // Create payslip
@@ -301,7 +332,38 @@ export class PayrollService {
     });
   }
 
-  private calculateEmployeePay(salary: any) {
+  private async ensureLoanDeductionComponent(companyId: string) {
+    const code = 'LOAN_DEDUCTION_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+
+    if (existing) {
+      return existing;
+    }
+
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Potongan Pinjaman Karyawan',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false,
+      description: 'System generated deduction for employee loan installments',
+      sortOrder: 999,
+    });
+  }
+
+  private calculateEmployeePay(
+    salary: any,
+    extraComponents: Array<{
+      salaryComponentId: string;
+      name: string;
+      type: string;
+      amount: number;
+      isTaxable: boolean;
+    }> = []
+  ) {
     let earningsTotal = 0;
     let deductionsTotal = 0;
     const components: Array<{
@@ -337,6 +399,16 @@ export class PayrollService {
         earningsTotal += amount;
       } else {
         deductionsTotal += amount;
+      }
+    }
+
+    for (const comp of extraComponents) {
+      components.push(comp);
+
+      if (comp.type === 'ALLOWANCE') {
+        earningsTotal += comp.amount;
+      } else {
+        deductionsTotal += comp.amount;
       }
     }
 

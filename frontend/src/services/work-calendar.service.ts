@@ -301,7 +301,7 @@ class WorkCalendarService {
   // ─── Working Days ────────────────────────────────────
   async countWorkingDays(calendarId: string, start: string, end: string) {
     const r = await api.get(`/work-calendars/${calendarId}/working-days`, {
-      params: { calendarId, start, end },
+      params: { start, end },
     });
     return r.data.data as { count: number };
   }

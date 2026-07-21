@@ -109,6 +109,9 @@ export function CourseDetail() {
         description={`${course.code}${course.category ? ` · ${course.category.name}` : ''}`}
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate(`/lms/courses/${course.id}/edit`)}>
+              Edit Course
+            </Button>
             <Button size="sm" onClick={handleEnroll} disabled={enrolling}>
               <UserPlus size={16} className="mr-2" />
               {enrolling ? 'Enrolling...' : 'Enroll'}

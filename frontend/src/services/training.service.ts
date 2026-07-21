@@ -1,7 +1,37 @@
 import api from './api';
 
+export interface TrainingCategoryPayload {
+  companyId: string;
+  name: string;
+  code: string;
+  description?: string;
+}
+
 export interface TrainingCategory {
   id: string; name: string; code: string; description?: string; isActive: boolean;
+}
+
+export interface TrainingCoursePayload {
+  categoryId?: string;
+  companyId: string;
+  title: string;
+  code: string;
+  description?: string;
+  duration?: number;
+  durationUnit?: string;
+  provider?: string;
+  isMandatory: boolean;
+}
+
+export interface UpdateTrainingCoursePayload {
+  categoryId?: string | null;
+  title?: string;
+  description?: string;
+  duration?: number;
+  durationUnit?: string;
+  provider?: string;
+  isMandatory?: boolean;
+  isActive?: boolean;
 }
 
 export interface TrainingCourse {
@@ -39,7 +69,7 @@ class TrainingService {
   async getCategories(companyId: string): Promise<TrainingCategory[]> {
     const r = await api.get('/training/categories', { params: { companyId } }); return r.data.data;
   }
-  async createCategory(data: any): Promise<TrainingCategory> {
+  async createCategory(data: TrainingCategoryPayload): Promise<TrainingCategory> {
     const r = await api.post('/training/categories', data); return r.data.data;
   }
 
@@ -50,10 +80,10 @@ class TrainingService {
   async getCourse(id: string): Promise<TrainingCourse> {
     const r = await api.get(`/training/courses/${id}`); return r.data.data;
   }
-  async createCourse(data: any): Promise<TrainingCourse> {
+  async createCourse(data: TrainingCoursePayload): Promise<TrainingCourse> {
     const r = await api.post('/training/courses', data); return r.data.data;
   }
-  async updateCourse(id: string, data: any): Promise<TrainingCourse> {
+  async updateCourse(id: string, data: UpdateTrainingCoursePayload): Promise<TrainingCourse> {
     const r = await api.patch(`/training/courses/${id}`, data); return r.data.data;
   }
 

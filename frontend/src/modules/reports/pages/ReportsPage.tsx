@@ -4,12 +4,21 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Legend,
 } from 'recharts';
-import { reportsService } from '@/services/reports.service';
+import {
+  reportsService,
+  type AttendanceReport,
+  type HeadcountReport,
+  type LeaveReport,
+  type PayrollReport,
+  type RecruitmentReport,
+  type TurnoverReport,
+} from '@/services/reports.service';
 import { payrollService, type PayrollPeriod } from '@/services/payroll.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   Users, Clock, CalendarDays, Banknote, TrendingUp, UserSquare2,
   Download, RefreshCw, BarChart3, PieChart as PieChartIcon,
@@ -18,6 +27,14 @@ import { formatCurrency, formatNumber } from '@/utils/format';
 
 // ─── Types ──────────────────────────────────────────────
 type ReportTab = 'headcount' | 'attendance' | 'leave' | 'payroll' | 'turnover' | 'recruitment';
+type ReportDataMap = {
+  headcount: HeadcountReport;
+  attendance: AttendanceReport;
+  leave: LeaveReport;
+  payroll: PayrollReport;
+  turnover: TurnoverReport;
+  recruitment: RecruitmentReport;
+};
 
 interface TabConfig { key: ReportTab; label: string; icon: React.ReactNode }
 
@@ -68,23 +85,19 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
 
 // ─── Main Component ─────────────────────────────────────
 export function ReportsPage() {
+  const { activeCompany } = useCompanyStore();
   const [activeTab, setActiveTab] = useState<ReportTab>('headcount');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = activeCompany?.id || '';
 
   // Date filters (default: this month)
   const now = dayjs();
   const [startDate, setStartDate] = useState(now.startOf('month').format('YYYY-MM-DD'));
   const [endDate, setEndDate] = useState(now.endOf('month').format('YYYY-MM-DD'));
 
-  // Data states
-  const [headcountData, setHeadcountData] = useState<any>(null);
-  const [attendanceData, setAttendanceData] = useState<any>(null);
-  const [leaveData, setLeaveData] = useState<any>(null);
-  const [payrollData, setPayrollData] = useState<any>(null);
-  const [turnoverData, setTurnoverData] = useState<any>(null);
-  const [recruitmentData, setRecruitmentData] = useState<any>(null);
+  const [reportData, setReportData] = useState<Partial<ReportDataMap>>({});
+  const [lastFetchKeyByTab, setLastFetchKeyByTab] = useState<Partial<Record<ReportTab, string>>>({});
 
   // Period filter for payroll
   const [payrollPeriods, setPayrollPeriods] = useState<PayrollPeriod[]>([]);
@@ -104,8 +117,22 @@ export function ReportsPage() {
     }
   }, [companyId]);
 
+  useEffect(() => {
+    setReportData({});
+    setLastFetchKeyByTab({});
+    setError(null);
+  }, [companyId]);
+
+  const getFetchKey = useCallback((tab: ReportTab) => {
+    if (tab === 'payroll') {
+      return `${companyId}|${periodId || 'all-periods'}`;
+    }
+
+    return `${companyId}|${startDate}|${endDate}`;
+  }, [companyId, endDate, periodId, startDate]);
+
   // ─── Fetch Data ──────────────────────────────────────
-  const fetchAll = useCallback(async () => {
+  const fetchReport = useCallback(async (tab: ReportTab, force = false) => {
     if (!companyId) {
       setError('companyId tidak tersedia');
       setLoading(false);
@@ -117,40 +144,76 @@ export function ReportsPage() {
       setLoading(false);
       return;
     }
-    setLoading(true); setError(null);
+
+    const fetchKey = getFetchKey(tab);
+    if (!force && lastFetchKeyByTab[tab] === fetchKey && reportData[tab]) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
     try {
-      const [hc, att, lev, pr, to, rec] = await Promise.all([
-        reportsService.getHeadcount(companyId),
-        reportsService.getAttendance(companyId, startDate, endDate),
-        reportsService.getLeave(companyId, startDate, endDate),
-        reportsService.getPayroll(companyId, periodId || undefined),
-        reportsService.getTurnover(companyId, startDate, endDate),
-        reportsService.getRecruitment(companyId, startDate, endDate),
-      ]);
-      setHeadcountData(hc); setAttendanceData(att); setLeaveData(lev);
-      setPayrollData(pr); setTurnoverData(to); setRecruitmentData(rec);
+      let data: ReportDataMap[ReportTab];
+
+      switch (tab) {
+        case 'headcount':
+          data = await reportsService.getHeadcount(companyId);
+          break;
+        case 'attendance':
+          data = await reportsService.getAttendance(companyId, startDate, endDate);
+          break;
+        case 'leave':
+          data = await reportsService.getLeave(companyId, startDate, endDate);
+          break;
+        case 'payroll':
+          data = await reportsService.getPayroll(companyId, periodId || undefined);
+          break;
+        case 'turnover':
+          data = await reportsService.getTurnover(companyId, startDate, endDate);
+          break;
+        case 'recruitment':
+          data = await reportsService.getRecruitment(companyId, startDate, endDate);
+          break;
+      }
+
+      setReportData((prev) => ({ ...prev, [tab]: data }));
+      setLastFetchKeyByTab((prev) => ({ ...prev, [tab]: fetchKey }));
     } catch (e: any) {
       setError(e?.response?.data?.message || 'Failed to load reports');
-    } finally { setLoading(false); }
-  }, [companyId, startDate, endDate, periodId]);
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId, endDate, getFetchKey, lastFetchKeyByTab, periodId, reportData, startDate]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    void fetchReport(activeTab);
+  }, [activeTab, fetchReport]);
   useEffect(() => { void loadPayrollPeriods(); }, [loadPayrollPeriods]);
+
+  const headcountData = reportData.headcount;
+  const attendanceData = reportData.attendance;
+  const leaveData = reportData.leave;
+  const payrollData = reportData.payroll;
+  const turnoverData = reportData.turnover;
+  const recruitmentData = reportData.recruitment;
+  const activeTabData = reportData[activeTab];
 
   // ─── Export Handlers ──────────────────────────────────
   const exportCSV = useCallback(() => {
-    if (!headcountData) return;
     switch (activeTab) {
       case 'headcount': {
+        if (!headcountData) return;
         const rows = [['Department', 'Count']];
-        headcountData.byDepartment.forEach((d: any) => rows.push([d.departmentName, String(d.count)]));
+        headcountData.byDepartment.forEach((d) => rows.push([d.departmentName, String(d.count)]));
         downloadCSV(rows, `headcount-${now.format('YYYY-MM')}.csv`);
         break;
       }
       case 'attendance': {
         if (!attendanceData) return;
         const rows = [['Status', 'Count']];
-        attendanceData.byStatus.forEach((s: any) => rows.push([STATUS_LABELS[s.status] || s.status, String(s.count)]));
+        attendanceData.byStatus.forEach((s) => rows.push([STATUS_LABELS[s.status] || s.status, String(s.count)]));
         rows.push(['Terlambat', String(attendanceData.lateCount)]);
         downloadCSV(rows, `attendance-${now.format('YYYY-MM')}.csv`);
         break;
@@ -158,14 +221,14 @@ export function ReportsPage() {
       case 'leave': {
         if (!leaveData) return;
         const rows = [['Leave Type', 'Requests', 'Total Days']];
-        leaveData.byType.forEach((t: any) => rows.push([t.leaveTypeName, String(t.count), String(t.totalDays)]));
+        leaveData.byType.forEach((t) => rows.push([t.leaveTypeName, String(t.count), String(t.totalDays)]));
         downloadCSV(rows, `leave-${now.format('YYYY-MM')}.csv`);
         break;
       }
       case 'payroll': {
         if (!payrollData) return;
         const rows = [['Period', 'Employees', 'Earnings', 'Deductions', 'Net Pay']];
-        payrollData.runs.forEach((r: any) =>
+        payrollData.runs.forEach((r) =>
           rows.push([r.name, String(r.totalEmployees), String(r.totalEarnings), String(r.totalDeductions), String(r.totalNetPay)])
         );
         downloadCSV(rows, `payroll-${now.format('YYYY-MM')}.csv`);
@@ -174,7 +237,7 @@ export function ReportsPage() {
       case 'turnover': {
         if (!turnoverData) return;
         const rows = [['Month', 'Hires', 'Resignations']];
-        turnoverData.monthly.forEach((m: any) =>
+        turnoverData.monthly.forEach((m) =>
           rows.push([`${m.year}-${String(m.month).padStart(2, '0')}`, String(m.hires), String(m.resigns)])
         );
         downloadCSV(rows, `turnover-${now.format('YYYY-MM')}.csv`);
@@ -183,7 +246,7 @@ export function ReportsPage() {
       case 'recruitment': {
         if (!recruitmentData) return;
         const rows = [['Stage', 'Count']];
-        recruitmentData.byStage.forEach((s: any) => rows.push([s.stage, String(s.count)]));
+        recruitmentData.byStage.forEach((s) => rows.push([s.stage, String(s.count)]));
         downloadCSV(rows, `recruitment-${now.format('YYYY-MM')}.csv`);
         break;
       }
@@ -224,10 +287,10 @@ export function ReportsPage() {
                 />
               </div>
             )}
-            <Button variant="outline" size="sm" onClick={fetchAll}>
+            <Button variant="outline" size="sm" onClick={() => void fetchReport(activeTab, true)}>
               <RefreshCw size={16} className="mr-2" /> Refresh
             </Button>
-            <Button size="sm" onClick={exportCSV} disabled={loading}>
+            <Button size="sm" onClick={exportCSV} disabled={loading || !activeTabData}>
               <Download size={16} className="mr-2" /> Export CSV
             </Button>
           </div>
@@ -264,7 +327,11 @@ export function ReportsPage() {
       )}
 
       {/* ─── Content ─────────────────────────────────── */}
-      {!loading && !error && (
+      {!loading && !error && !activeTabData && (
+        <EmptyState icon={<BarChart3 size={40} />} message="Belum ada data untuk tab ini" />
+      )}
+
+      {!loading && !error && activeTabData && (
         <>
           {/* ═══ HEADCOUNT ═══ */}
           {activeTab === 'headcount' && headcountData && (

@@ -1,6 +1,6 @@
 import { recruitmentRepository } from './recruitment.repository';
 import { CreateJobPostingDTO, CreateCandidateDTO, CreateApplicationDTO, UpdateApplicationStatusDTO, CreateInterviewDTO, CreateInterviewFeedbackDTO } from './recruitment.dto';
-import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 
 export class RecruitmentService {
@@ -15,6 +15,24 @@ export class RecruitmentService {
   }
 
   async createJobPosting(data: CreateJobPostingDTO) {
+    if (data.minSalary !== undefined && data.maxSalary !== undefined && data.maxSalary < data.minSalary) {
+      throw new BadRequestError('Maximum salary must be greater than or equal to minimum salary');
+    }
+
+    if (data.departmentId) {
+      const department = await recruitmentRepository.findDepartmentScoped(data.departmentId, data.companyId);
+      if (!department) {
+        throw new BadRequestError('Department does not belong to the selected company');
+      }
+    }
+
+    if (data.positionId) {
+      const position = await recruitmentRepository.findPositionScoped(data.positionId, data.companyId);
+      if (!position) {
+        throw new BadRequestError('Position does not belong to the selected company');
+      }
+    }
+
     return recruitmentRepository.createJobPosting(data);
   }
 
@@ -47,6 +65,28 @@ export class RecruitmentService {
   }
 
   async createApplication(data: CreateApplicationDTO) {
+    const [posting, candidate, existing] = await Promise.all([
+      recruitmentRepository.findJobPostingScoped(data.jobPostingId, data.companyId),
+      recruitmentRepository.findCandidateScoped(data.candidateId, data.companyId),
+      recruitmentRepository.findApplicationByPostingAndCandidate(data.companyId, data.jobPostingId, data.candidateId),
+    ]);
+
+    if (!posting) {
+      throw new NotFoundError('Job posting not found');
+    }
+
+    if (!candidate) {
+      throw new NotFoundError('Candidate not found');
+    }
+
+    if (!['PUBLISHED', 'ON_HOLD'].includes(posting.status)) {
+      throw new BadRequestError('Application can only be created for published or on-hold job postings');
+    }
+
+    if (existing) {
+      throw new ConflictError('Candidate has already applied to this job posting');
+    }
+
     return recruitmentRepository.createApplication(data);
   }
 

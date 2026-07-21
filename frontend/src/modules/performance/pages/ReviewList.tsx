@@ -4,8 +4,10 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, MessageSquare } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import toast from 'react-hot-toast';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -23,6 +25,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function ReviewList() {
+  const { activeCompany } = useCompanyStore();
   const [reviews, setReviews] = useState<PerformanceReview[]>([]);
   const [cycles, setCycles] = useState<ReviewCycle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,9 +34,16 @@ export function ReviewList() {
   const [statusFilter, setStatusFilter] = useState('');
 
   const fetchData = useCallback(async () => {
+    const companyId = activeCompany?.id || '';
+    if (!companyId) {
+      setReviews([]);
+      setCycles([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const params: Record<string, string> = {};
       if (cycleFilter) params.cycleId = cycleFilter;
       if (statusFilter) params.status = statusFilter;
@@ -46,10 +56,11 @@ export function ReviewList() {
       setCycles(cycleData);
     } catch (error) {
       console.error('Failed to fetch reviews:', error);
+      toast.error('Gagal memuat data review');
     } finally {
       setLoading(false);
     }
-  }, [cycleFilter, statusFilter]);
+  }, [activeCompany?.id, cycleFilter, statusFilter]);
 
   useEffect(() => {
     fetchData();

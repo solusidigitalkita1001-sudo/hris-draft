@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { recruitmentService, type JobPosting } from '@/services/recruitment.service';
+import { useCompanyStore } from '@/stores/company.store';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export function JobPostingList() {
   const navigate = useNavigate();
+  const { activeCompany } = useCompanyStore();
   const [postings, setPostings] = useState<JobPosting[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -37,7 +39,7 @@ export function JobPostingList() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
+      const companyId = activeCompany?.id || '';
       const data = await recruitmentService.getJobPostings(
         companyId,
         statusFilter || undefined
@@ -48,7 +50,7 @@ export function JobPostingList() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [activeCompany?.id, statusFilter]);
 
   useEffect(() => {
     fetchData();

@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   documentManagementService,
   type DocumentCategory,
@@ -137,7 +138,7 @@ function UploadDialog({
         title: title.trim(),
         description: description.trim() || undefined,
         visibility,
-        expiresAt: expiresAtIso,
+        expiresAt: expiresAtIso || undefined,
         file,
       });
       toast.success('Dokumen berhasil diupload');
@@ -284,16 +285,26 @@ const expiryFilterTabs: { key: ExpiryFilter; label: string }[] = [
 const EXPIRING_SOON_DAYS = 30;
 
 export function DocumentManagementPage() {
+  const { activeCompany } = useCompanyStore();
   const [documents, setDocuments] = useState<ManagedDocument[]>([]);
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
   const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('ALL');
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
 
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = activeCompany?.id || '';
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
 
   const toggleExpand = (id: string) => {
     setExpandedDocs((prev) => {
@@ -321,7 +332,7 @@ export function DocumentManagementPage() {
         documentManagementService.getCategories(companyId),
         documentManagementService.getDocuments({
           companyId,
-          search: search || undefined,
+          search: debouncedSearch || undefined,
           categoryId: categoryId || undefined,
         }),
       ]);
@@ -333,7 +344,7 @@ export function DocumentManagementPage() {
     } finally {
       setLoading(false);
     }
-  }, [companyId, search, categoryId]);
+  }, [companyId, debouncedSearch, categoryId]);
 
   useEffect(() => {
     fetchData();

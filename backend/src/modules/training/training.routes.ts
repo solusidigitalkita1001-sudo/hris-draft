@@ -13,6 +13,8 @@ router.post('/categories', authorize({ resource: 'training', action: 'create' })
 
 router.get('/courses', authorize({ resource: 'training', action: 'read' }), trainingController.findAllCourses.bind(trainingController));
 router.get('/courses/:id', authorize({ resource: 'training', action: 'read' }), trainingController.findCourseById.bind(trainingController));
+router.post('/courses/:id/enroll', authorize({ resource: 'training', action: 'create' }), trainingController.enrollSelf.bind(trainingController));
+router.post('/courses/:id/complete', authorize({ resource: 'training', action: 'update' }), trainingController.completeSelf.bind(trainingController));
 router.post('/courses', authorize({ resource: 'training', action: 'create' }), validate(createCourseSchema), trainingController.createCourse.bind(trainingController));
 router.patch('/courses/:id', authorize({ resource: 'training', action: 'update' }), validate(updateCourseSchema), trainingController.updateCourse.bind(trainingController));
 

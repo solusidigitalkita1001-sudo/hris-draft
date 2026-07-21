@@ -2,6 +2,93 @@ import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 
 export class ReportsRepository {
+  async dashboardSummary(companyId: string, userId: string, roles: string[]) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date(todayStart);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [totalEmployees, totalDepartments, presentToday, onLeaveToday, pendingApprovals, recentActivity] =
+      await Promise.all([
+        prisma.employee.count({
+          where: {
+            companyId,
+            deletedAt: null,
+          },
+        }),
+        prisma.department.count({
+          where: {
+            companyId,
+            deletedAt: null,
+          },
+        }),
+        prisma.attendance.count({
+          where: {
+            companyId,
+            date: {
+              gte: todayStart,
+              lte: todayEnd,
+            },
+            status: {
+              not: 'ABSENT',
+            },
+            deletedAt: null,
+          },
+        }),
+        prisma.leaveRequest.count({
+          where: {
+            companyId,
+            status: 'APPROVED',
+            startDate: { lte: todayEnd },
+            endDate: { gte: todayStart },
+            deletedAt: null,
+          },
+        }),
+        prisma.workflowInstanceStep.count({
+          where: {
+            instance: { companyId },
+            isCurrent: true,
+            status: 'PENDING',
+            OR: [
+              { approverId: userId },
+              { approverRoleCode: { in: roles } },
+            ],
+          },
+        }),
+        prisma.auditLog.findMany({
+          where: { companyId },
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+          include: {
+            user: {
+              select: {
+                email: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+    return {
+      stats: {
+        totalEmployees,
+        totalDepartments,
+        presentToday,
+        onLeaveToday,
+      },
+      pendingApprovals,
+      recentActivity: recentActivity.map((log) => ({
+        id: log.id,
+        action: log.action,
+        entity: log.entity,
+        entityId: log.entityId,
+        actorEmail: log.user?.email ?? 'System',
+        createdAt: log.createdAt,
+      })),
+    };
+  }
+
   // ─── Headcount Report ──────────────────────────────────
   async headcount(companyId: string, departmentId?: string) {
     const where: Prisma.EmployeeWhereInput = {
@@ -161,41 +248,54 @@ export class ReportsRepository {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    const newHires = await prisma.employee.count({
-      where: {
-        companyId,
-        deletedAt: null,
-        joinDate: { gte: start, lte: end },
-      },
-    });
+    const [newHires, resignations, activeCount] = await Promise.all([
+      prisma.employee.count({
+        where: {
+          companyId,
+          deletedAt: null,
+          joinDate: { gte: start, lte: end },
+        },
+      }),
+      prisma.resignation.count({
+        where: {
+          companyId,
+          status: 'COMPLETED',
+          createdAt: { gte: start, lte: end },
+        },
+      }),
+      prisma.employee.count({
+        where: { companyId, deletedAt: null, employmentStatus: 'ACTIVE' },
+      }),
+    ]);
 
-    const resignations = await prisma.resignation.count({
-      where: {
-        companyId,
-        status: 'COMPLETED',
-        createdAt: { gte: start, lte: end },
-      },
-    });
-
-    const activeCount = await prisma.employee.count({
-      where: { companyId, deletedAt: null, employmentStatus: 'ACTIVE' },
-    });
-
-    // Monthly breakdown
-    const months: { year: number; month: number; hires: number; resigns: number }[] = [];
+    const monthRanges: Array<{ year: number; month: number; monthStart: Date; monthEnd: Date }> = [];
     const current = new Date(start);
     while (current <= end) {
       const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
-      const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
-      const hires = await prisma.employee.count({
-        where: { companyId, deletedAt: null, joinDate: { gte: monthStart, lte: monthEnd } },
+      const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0, 23, 59, 59, 999);
+      monthRanges.push({
+        year: current.getFullYear(),
+        month: current.getMonth() + 1,
+        monthStart,
+        monthEnd,
       });
-      const resigns = await prisma.resignation.count({
-        where: { companyId, status: 'COMPLETED', createdAt: { gte: monthStart, lte: monthEnd } },
-      });
-      months.push({ year: current.getFullYear(), month: current.getMonth() + 1, hires, resigns });
       current.setMonth(current.getMonth() + 1);
     }
+
+    const months = await Promise.all(
+      monthRanges.map(async ({ year, month, monthStart, monthEnd }) => {
+        const [hires, resigns] = await Promise.all([
+          prisma.employee.count({
+            where: { companyId, deletedAt: null, joinDate: { gte: monthStart, lte: monthEnd } },
+          }),
+          prisma.resignation.count({
+            where: { companyId, status: 'COMPLETED', createdAt: { gte: monthStart, lte: monthEnd } },
+          }),
+        ]);
+
+        return { year, month, hires, resigns };
+      })
+    );
 
     return {
       totalActive: activeCount,

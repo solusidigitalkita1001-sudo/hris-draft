@@ -92,6 +92,10 @@ export function JobPostingDetail() {
                 {actionLoading === 'approve' ? 'Publishing...' : 'Publish'}
               </Button>
             )}
+            <Button size="sm" variant="outline" onClick={() => navigate(`/recruitment/postings/${posting.id}/apply`)}>
+              <Users size={16} className="mr-2" />
+              Add Application
+            </Button>
             {(posting.status === 'PUBLISHED' || posting.status === 'ON_HOLD') && (
               <Button size="sm" variant="destructive" onClick={handleClose} disabled={actionLoading === 'close'}>
                 <XCircle size={16} className="mr-2" />

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { notificationRepository } from './notification.repository';
 import { Result } from '@/shared/core/Result';
+import { NotFoundError } from '@/shared/exceptions/AppError';
 
 export class NotificationController {
   async findAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -24,7 +25,7 @@ export class NotificationController {
   async markAsRead(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { ids } = req.body;
-      await notificationRepository.markAsRead(ids);
+      await notificationRepository.markAsRead(ids, req.user!.id);
       res.json(Result.updated(null, 'Notifications marked as read'));
     } catch (error) { next(error); }
   }
@@ -36,9 +37,12 @@ export class NotificationController {
     } catch (error) { next(error); }
   }
 
-  async delete(req: Request, res: Response, next: NextFunction) {
+  async delete(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      await notificationRepository.delete(req.params.id as string);
+      const result = await notificationRepository.delete(req.params.id as string, req.user!.id);
+      if (result.count === 0) {
+        throw new NotFoundError('Notification not found');
+      }
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }

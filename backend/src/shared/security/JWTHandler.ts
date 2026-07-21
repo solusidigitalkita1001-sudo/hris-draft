@@ -17,6 +17,7 @@ export interface TokenPayload {
 export interface AccessTokenPayload {
   sub: string;
   email: string;
+  employeeId?: string;
   companyId?: string;
   companyScope?: string[];
   groupId?: string;
@@ -42,7 +43,12 @@ export class JWTHandler {
     return JWTHandler.instance;
   }
 
-  generateAccessToken(payload: Omit<AccessTokenPayload, 'permissions' | 'roles'> & { permissions?: string[]; roles?: string[] }): string {
+  generateAccessToken(
+    payload: Omit<AccessTokenPayload, 'permissions' | 'roles'> & {
+      permissions?: string[];
+      roles?: string[];
+    }
+  ): string {
     const jti = uuidv4();
     return jwt.sign(
       {
@@ -94,6 +100,7 @@ export class JWTHandler {
       return {
         sub: decoded.sub,
         email: decoded.email,
+        employeeId: decoded.employeeId,
         companyId: decoded.companyId,
         companyScope: decoded.companyScope,
         groupId: decoded.groupId,

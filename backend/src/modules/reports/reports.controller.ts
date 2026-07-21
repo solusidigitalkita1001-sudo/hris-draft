@@ -1,22 +1,43 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { reportsRepository } from './reports.repository';
 import { Result } from '@/shared/core/Result';
+import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
+import { BadRequestError } from '@/shared/exceptions/AppError';
 
 export class ReportsController {
-  async headcount(req: Request, res: Response, next: NextFunction) {
+  private resolveCompanyId(req: AuthenticatedRequest) {
+    const companyId = (req.query.companyId as string | undefined) || req.user?.companyId;
+    if (!companyId) {
+      throw new BadRequestError('companyId is required');
+    }
+    return companyId;
+  }
+
+  async dashboardSummary(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await reportsRepository.dashboardSummary(
+        this.resolveCompanyId(req),
+        req.user!.id,
+        req.user!.roles || [],
+      );
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async headcount(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await reportsRepository.headcount(
-        req.query.companyId as string,
+        this.resolveCompanyId(req),
         req.query.departmentId as string,
       );
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
 
-  async attendance(req: Request, res: Response, next: NextFunction) {
+  async attendance(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await reportsRepository.attendance(
-        req.query.companyId as string,
+        this.resolveCompanyId(req),
         req.query.startDate as string,
         req.query.endDate as string,
       );
@@ -24,10 +45,10 @@ export class ReportsController {
     } catch (error) { next(error); }
   }
 
-  async leave(req: Request, res: Response, next: NextFunction) {
+  async leave(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await reportsRepository.leave(
-        req.query.companyId as string,
+        this.resolveCompanyId(req),
         req.query.startDate as string,
         req.query.endDate as string,
       );
@@ -35,20 +56,20 @@ export class ReportsController {
     } catch (error) { next(error); }
   }
 
-  async payroll(req: Request, res: Response, next: NextFunction) {
+  async payroll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await reportsRepository.payroll(
-        req.query.companyId as string,
+        this.resolveCompanyId(req),
         req.query.periodId as string,
       );
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
 
-  async turnover(req: Request, res: Response, next: NextFunction) {
+  async turnover(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await reportsRepository.turnover(
-        req.query.companyId as string,
+        this.resolveCompanyId(req),
         req.query.startDate as string,
         req.query.endDate as string,
       );
@@ -56,10 +77,10 @@ export class ReportsController {
     } catch (error) { next(error); }
   }
 
-  async recruitment(req: Request, res: Response, next: NextFunction) {
+  async recruitment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await reportsRepository.recruitment(
-        req.query.companyId as string,
+        this.resolveCompanyId(req),
         req.query.startDate as string,
         req.query.endDate as string,
       );

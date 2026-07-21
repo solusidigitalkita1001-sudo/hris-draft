@@ -50,6 +50,7 @@ export interface PayrollPeriod {
   endDate: string;
   payDate: string;
   status: string;
+  notes?: string;
   createdAt: string;
 }
 

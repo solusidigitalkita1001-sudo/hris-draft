@@ -1,4 +1,5 @@
 import { prisma } from '@/shared/database/prisma';
+import { BadRequestError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
 import type {
   CreateWorkflowTemplateDTO,
   StartWorkflowInstanceDTO,
@@ -230,7 +231,11 @@ export class WorkflowEngineRepository {
     });
 
     if (!template) {
-      throw new Error('Workflow template not found');
+      throw new NotFoundError('Workflow template not found');
+    }
+
+    if (template.companyId !== data.companyId) {
+      throw new BadRequestError('Workflow template does not belong to the provided company');
     }
 
     const payload = (data.payload || {}) as Payload;
@@ -257,7 +262,7 @@ export class WorkflowEngineRepository {
     );
 
     if (!applicableStages.length) {
-      throw new Error('No workflow stage matches the provided payload');
+      throw new BadRequestError('No workflow stage matches the provided payload');
     }
 
     return prisma.$transaction(async (tx) => {
@@ -317,14 +322,14 @@ export class WorkflowEngineRepository {
     });
 
     if (!instance) {
-      throw new Error('Workflow instance not found');
+      throw new NotFoundError('Workflow instance not found');
     }
 
     const currentStep = instance.steps.find(
       (step: (typeof instance.steps)[number]) => step.isCurrent && step.status === 'PENDING'
     );
     if (!currentStep) {
-      throw new Error('No pending approval step found');
+      throw new BadRequestError('No pending approval step found');
     }
 
     const canAct =
@@ -333,7 +338,7 @@ export class WorkflowEngineRepository {
       roles.includes('SUPER_ADMIN');
 
     if (!canAct) {
-      throw new Error('You are not allowed to act on this workflow step');
+      throw new ForbiddenError('You are not allowed to act on this workflow step');
     }
 
     return prisma.$transaction(async (tx) => {
@@ -425,7 +430,7 @@ export class WorkflowEngineRepository {
           );
 
           if (!nextStep) {
-            throw new Error('No backup approver or next step available for escalation');
+            throw new BadRequestError('No backup approver or next step available for escalation');
           }
 
           await tx.workflowInstanceStep.update({

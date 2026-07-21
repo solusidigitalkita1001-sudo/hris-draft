@@ -648,11 +648,7 @@ export function OrganizationChartPage() {
             placeholder="Cari division, department, position, atau lead"
           />
         </div>
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span className="rounded-full border border-border px-3 py-2">Klik node untuk detail + daftar orang</span>
-          <span className="rounded-full border border-border px-3 py-2">Expand/collapse per node</span>
-          <span className="rounded-full border border-border px-3 py-2">Struktur mengikuti company aktif</span>
-        </div>
+        
       </div>
 
       {!companyId ? (

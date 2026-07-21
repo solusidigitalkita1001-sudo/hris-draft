@@ -61,9 +61,29 @@ export class AttendanceRepository {
     const updateData: Prisma.AttendanceUpdateInput = {};
     if (data.checkIn !== undefined) updateData.checkIn = new Date(data.checkIn);
     if (data.checkOut !== undefined) updateData.checkOut = new Date(data.checkOut);
+    if (data.method !== undefined) updateData.method = data.method as any;
+    if (data.checkOutLatitude !== undefined) updateData.checkOutLatitude = data.checkOutLatitude;
+    if (data.checkOutLongitude !== undefined) updateData.checkOutLongitude = data.checkOutLongitude;
+    if (data.workDuration !== undefined) updateData.workDuration = data.workDuration;
+    if (data.earlyLeaveMinutes !== undefined) updateData.earlyLeaveMinutes = data.earlyLeaveMinutes;
+    if (data.distanceMeters !== undefined) updateData.distanceMeters = data.distanceMeters;
+    if (data.isWithinRadius !== undefined) updateData.isWithinRadius = data.isWithinRadius;
+    if (data.isException !== undefined) updateData.isException = data.isException;
+    if (data.exceptionType !== undefined) updateData.exceptionType = data.exceptionType as any;
+    if (data.exceptionReason !== undefined) updateData.exceptionReason = data.exceptionReason;
+    if (data.requiresReview !== undefined) updateData.requiresReview = data.requiresReview;
+    if (data.policySnapshot !== undefined) updateData.policySnapshot = data.policySnapshot as Prisma.InputJsonValue;
     if (data.status !== undefined) updateData.status = data.status as any;
     if (data.notes !== undefined) updateData.notes = data.notes;
-    return prisma.attendance.update({ where: { id }, data: updateData });
+    return prisma.attendance.update({
+      where: { id },
+      data: updateData,
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true } },
+        branch: { select: { id: true, name: true, code: true } },
+        attendancePolicy: { select: { id: true, attendanceMethod: true } },
+      },
+    });
   }
 
   async delete(id: string) {
@@ -124,21 +144,27 @@ export class AttendanceRepository {
       where.employee = { departmentId };
     }
 
-    const [records, totalEmployees] = await Promise.all([
-      prisma.attendance.findMany({
+    const [groupedRecords, totalEmployees] = await Promise.all([
+      prisma.attendance.groupBy({
+        by: ['status'],
         where,
-        select: { status: true },
+        _count: { _all: true },
       }),
       departmentId
         ? prisma.employee.count({ where: { companyId, departmentId, deletedAt: null } })
         : prisma.employee.count({ where: { companyId, deletedAt: null } }),
     ]);
 
-    const total = records.length;
-    const present = records.filter((r) => r.status === 'PRESENT').length;
-    const late = records.filter((r) => r.status === 'LATE').length;
-    const absent = records.filter((r) => r.status === 'ABSENT').length;
-    const excused = records.filter((r) => r.status === 'EXCUSED').length;
+    const countsByStatus = groupedRecords.reduce<Record<string, number>>((acc, record) => {
+      acc[record.status] = record._count._all;
+      return acc;
+    }, {});
+
+    const total = groupedRecords.reduce((sum, record) => sum + record._count._all, 0);
+    const present = countsByStatus.PRESENT ?? 0;
+    const late = countsByStatus.LATE ?? 0;
+    const absent = countsByStatus.ABSENT ?? 0;
+    const excused = countsByStatus.EXCUSED ?? 0;
 
     return {
       total,

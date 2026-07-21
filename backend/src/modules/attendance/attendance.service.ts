@@ -1,5 +1,10 @@
 import { attendanceRepository } from './attendance.repository';
-import { CreateAttendanceDTO, UpdateAttendanceDTO, CreateOvertimeDTO } from './attendance.dto';
+import {
+  CreateAttendanceDTO,
+  UpdateAttendanceDTO,
+  CreateOvertimeDTO,
+  CheckoutAttendanceDTO,
+} from './attendance.dto';
 import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import {
@@ -16,6 +21,20 @@ function buildScheduledTime(baseDate: Date, time: string) {
   const scheduled = new Date(baseDate);
   scheduled.setHours(hours, minutes, 0, 0);
   return scheduled;
+}
+
+function buildScheduledEndTime(baseDate: Date, workStart: string | null | undefined, workEnd: string | null | undefined) {
+  if (!workEnd) return null;
+
+  const scheduledEnd = buildScheduledTime(baseDate, workEnd);
+  if (workStart) {
+    const scheduledStart = buildScheduledTime(baseDate, workStart);
+    if (scheduledEnd <= scheduledStart) {
+      scheduledEnd.setDate(scheduledEnd.getDate() + 1);
+    }
+  }
+
+  return scheduledEnd;
 }
 
 function calculateMinutesDifference(laterDate: Date, earlierDate: Date) {
@@ -69,25 +88,27 @@ function isWeekendLikeDayType(dayType: string) {
 
 function evaluateGpsAttendance(options: {
   method: AttendanceCaptureMethod;
-  checkInLatitude?: number;
-  checkInLongitude?: number;
+  latitude?: number;
+  longitude?: number;
   requiresLocation: boolean;
   policyLatitude: number | null;
   policyLongitude: number | null;
   policyRadiusMeters: number | null;
   allowOutsideRadius: boolean;
   outsideRadiusAction: OutsideRadiusAction;
+  phaseLabel?: string;
 }) {
   const {
     method,
-    checkInLatitude,
-    checkInLongitude,
+    latitude,
+    longitude,
     requiresLocation,
     policyLatitude,
     policyLongitude,
     policyRadiusMeters,
     allowOutsideRadius,
     outsideRadiusAction,
+    phaseLabel = 'attendance',
   } = options;
 
   const mustEvaluateLocation = method === AttendanceCaptureMethod.MOBILE_GPS || requiresLocation;
@@ -102,8 +123,8 @@ function evaluateGpsAttendance(options: {
     };
   }
 
-  if (checkInLatitude === undefined || checkInLongitude === undefined) {
-    throw new BadRequestError('Check-in latitude and longitude are required for this attendance method');
+  if (latitude === undefined || longitude === undefined) {
+    throw new BadRequestError(`${phaseLabel} latitude and longitude are required for this attendance method`);
   }
 
   if (policyLatitude === null || policyLongitude === null || policyRadiusMeters === null) {
@@ -111,8 +132,8 @@ function evaluateGpsAttendance(options: {
   }
 
   const distanceMeters = calculateDistanceMeters(
-    checkInLatitude,
-    checkInLongitude,
+    latitude,
+    longitude,
     policyLatitude,
     policyLongitude,
   );
@@ -144,6 +165,40 @@ function evaluateGpsAttendance(options: {
 }
 
 export class AttendanceService {
+  private buildPolicySnapshot(
+    context: Awaited<ReturnType<typeof attendanceContextService.resolve>>,
+    allowedMethods: AttendanceCaptureMethod[],
+    warnings: string[],
+  ) {
+    return {
+      policyId: context.policy.id,
+      calendarId: context.calendarId,
+      scheduleSource: context.schedule.scheduleSource,
+      shiftFormulaId: context.schedule.shiftFormulaId ?? null,
+      shiftFormulaCode: context.schedule.shiftFormulaCode ?? null,
+      shiftFormulaName: context.schedule.shiftFormulaName ?? null,
+      crossesMidnight: context.schedule.crossesMidnight ?? false,
+      branchId: context.branchId,
+      branchName: context.branch?.name ?? null,
+      branchCode: context.branch?.code ?? null,
+      policyMethod: context.policy.attendanceMethod,
+      allowedMethods,
+      lateToleranceMinutes: context.policy.lateToleranceMinutes,
+      earlyCheckoutToleranceMinutes: context.policy.earlyCheckoutToleranceMinutes,
+      requiresLocation: context.policy.requiresLocation,
+      requiresSelfie: context.policy.requiresSelfie,
+      gpsLatitude: context.policy.gpsLatitude,
+      gpsLongitude: context.policy.gpsLongitude,
+      gpsRadiusMeters: context.policy.gpsRadiusMeters,
+      allowOutsideRadius: context.policy.allowOutsideRadius,
+      outsideRadiusAction: context.policy.outsideRadiusAction,
+      dayType: context.schedule.dayType,
+      workStart: context.schedule.workStart ?? null,
+      workEnd: context.schedule.workEnd ?? null,
+      warnings,
+    } as Prisma.InputJsonValue;
+  }
+
   async findAll(companyId: string, filters?: any) {
     return attendanceRepository.findAll(companyId, filters);
   }
@@ -152,6 +207,18 @@ export class AttendanceService {
     const record = await attendanceRepository.findById(id);
     if (!record) throw new NotFoundError('Attendance record not found');
     return record;
+  }
+
+  async getResolvedContext(employeeId: string, attendanceDate: string, companyId?: string) {
+    const resolvedDate = new Date(attendanceDate);
+    const context = await attendanceContextService.resolve(employeeId, resolvedDate, companyId);
+    const allowedMethods = resolveAllowedMethods(context.policy.attendanceMethod);
+
+    return {
+      ...context,
+      allowedMethods,
+      policySnapshot: this.buildPolicySnapshot(context, allowedMethods, context.warnings),
+    };
   }
 
   async create(data: CreateAttendanceDTO) {
@@ -197,14 +264,15 @@ export class AttendanceService {
 
     const gpsEvaluation = evaluateGpsAttendance({
       method,
-      checkInLatitude: data.checkInLatitude,
-      checkInLongitude: data.checkInLongitude,
+      latitude: data.checkInLatitude,
+      longitude: data.checkInLongitude,
       requiresLocation: context.policy.requiresLocation,
       policyLatitude: context.policy.gpsLatitude,
       policyLongitude: context.policy.gpsLongitude,
       policyRadiusMeters: context.policy.gpsRadiusMeters,
       allowOutsideRadius: context.policy.allowOutsideRadius,
       outsideRadiusAction: context.policy.outsideRadiusAction,
+      phaseLabel: 'Check-in',
     });
 
     const mergedWarnings = [
@@ -237,37 +305,105 @@ export class AttendanceService {
       exceptionType: gpsEvaluation.exceptionType ?? (context.warnings[0] as AttendanceExceptionType | undefined),
       exceptionReason: gpsEvaluation.exceptionReason ?? (context.warnings.length > 0 ? 'Attendance context requires branch review' : null),
       requiresReview: gpsEvaluation.requiresReview || context.warnings.length > 0,
-      policySnapshot: {
-        policyId: context.policy.id,
-        calendarId: context.calendarId,
-        scheduleSource: context.schedule.scheduleSource,
-        shiftFormulaId: context.schedule.shiftFormulaId ?? null,
-        shiftFormulaCode: context.schedule.shiftFormulaCode ?? null,
-        shiftFormulaName: context.schedule.shiftFormulaName ?? null,
-        crossesMidnight: context.schedule.crossesMidnight ?? false,
-        branchId: context.branchId,
-        policyMethod: context.policy.attendanceMethod,
-        allowedMethods,
-        lateToleranceMinutes: context.policy.lateToleranceMinutes,
-        earlyCheckoutToleranceMinutes: context.policy.earlyCheckoutToleranceMinutes,
-        requiresLocation: context.policy.requiresLocation,
-        gpsLatitude: context.policy.gpsLatitude,
-        gpsLongitude: context.policy.gpsLongitude,
-        gpsRadiusMeters: context.policy.gpsRadiusMeters,
-        allowOutsideRadius: context.policy.allowOutsideRadius,
-        outsideRadiusAction: context.policy.outsideRadiusAction,
-        dayType: context.schedule.dayType,
-        warnings: mergedWarnings,
-      } as Prisma.InputJsonValue,
+      policySnapshot: this.buildPolicySnapshot(context, allowedMethods, mergedWarnings),
       notes: data.notes,
     });
     logger.info('Attendance recorded', { employeeId: data.employeeId });
     return record;
   }
 
-  async checkOut(id: string, checkOutTime: string) {
-    await this.findById(id);
-    return attendanceRepository.update(id, { checkOut: checkOutTime });
+  async checkOut(id: string, data: CheckoutAttendanceDTO) {
+    const record = await this.findById(id);
+
+    if (!record.checkIn) {
+      throw new BadRequestError('Attendance record has no check-in time');
+    }
+
+    if (record.checkOut) {
+      throw new BadRequestError('Attendance record has already been checked out');
+    }
+
+    const context = await attendanceContextService.resolve(record.employeeId, new Date(record.date), record.companyId);
+    const method = (data.method ?? record.method) as AttendanceCaptureMethod;
+    const allowedMethods = resolveAllowedMethods(context.policy.attendanceMethod);
+
+    if (!allowedMethods.includes(method)) {
+      throw new BadRequestError('Attendance method is not allowed for the resolved branch attendance policy');
+    }
+
+    const gpsEvaluation = evaluateGpsAttendance({
+      method,
+      latitude: data.checkOutLatitude,
+      longitude: data.checkOutLongitude,
+      requiresLocation: context.policy.requiresLocation,
+      policyLatitude: context.policy.gpsLatitude,
+      policyLongitude: context.policy.gpsLongitude,
+      policyRadiusMeters: context.policy.gpsRadiusMeters,
+      allowOutsideRadius: context.policy.allowOutsideRadius,
+      outsideRadiusAction: context.policy.outsideRadiusAction,
+      phaseLabel: 'Check-out',
+    });
+
+    const checkOutTime = new Date(data.checkOut);
+    const scheduledEnd = buildScheduledEndTime(record.date, context.schedule.workStart, context.schedule.workEnd);
+    let earlyLeaveMinutes = 0;
+
+    if (scheduledEnd) {
+      const toleratedEnd = new Date(scheduledEnd);
+      toleratedEnd.setMinutes(toleratedEnd.getMinutes() - context.policy.earlyCheckoutToleranceMinutes);
+      if (checkOutTime < toleratedEnd) {
+        earlyLeaveMinutes = calculateMinutesDifference(scheduledEnd, checkOutTime);
+      }
+    }
+
+    const workDuration = Math.max(
+      0,
+      Math.round((checkOutTime.getTime() - new Date(record.checkIn).getTime()) / 60000),
+    );
+
+    const mergedWarnings = [
+      ...context.warnings,
+      ...(gpsEvaluation.exceptionType ? [gpsEvaluation.exceptionType] : []),
+    ];
+
+    return attendanceRepository.update(id, {
+      checkOut: data.checkOut,
+      method,
+      checkOutLatitude: data.checkOutLatitude,
+      checkOutLongitude: data.checkOutLongitude,
+      workDuration,
+      earlyLeaveMinutes,
+      distanceMeters: record.distanceMeters ?? gpsEvaluation.distanceMeters,
+      isWithinRadius: record.isWithinRadius ?? gpsEvaluation.isWithinRadius,
+      isException: record.isException || gpsEvaluation.isException || earlyLeaveMinutes > 0 || context.warnings.length > 0,
+      exceptionType:
+        record.exceptionType ??
+        gpsEvaluation.exceptionType ??
+        (context.warnings[0] as AttendanceExceptionType | undefined),
+      exceptionReason:
+        record.exceptionReason ??
+        gpsEvaluation.exceptionReason ??
+        (earlyLeaveMinutes > 0
+          ? 'Employee checked out earlier than the tolerated schedule'
+          : context.warnings.length > 0
+            ? 'Attendance context requires branch review'
+            : null),
+      requiresReview: record.requiresReview || gpsEvaluation.requiresReview || earlyLeaveMinutes > 0 || context.warnings.length > 0,
+      policySnapshot: {
+        ...((record.policySnapshot as Record<string, unknown> | null) ?? {}),
+        ...((this.buildPolicySnapshot(context, allowedMethods, mergedWarnings) as unknown as Record<string, unknown>) ?? {}),
+        checkout: {
+          evaluatedAt: checkOutTime.toISOString(),
+          latitude: data.checkOutLatitude ?? null,
+          longitude: data.checkOutLongitude ?? null,
+          distanceMeters: gpsEvaluation.distanceMeters,
+          isWithinRadius: gpsEvaluation.isWithinRadius,
+          earlyLeaveMinutes,
+          workDuration,
+        },
+      },
+      notes: data.notes ?? record.notes ?? undefined,
+    });
   }
 
   async correction(id: string, data: { status: string; notes?: string }) {

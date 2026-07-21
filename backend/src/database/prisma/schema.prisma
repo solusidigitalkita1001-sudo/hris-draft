@@ -80,6 +80,13 @@ model Company {
   payslips                   Payslip[]
   benefitPlans               BenefitPlan[]
   benefitEnrollments         BenefitEnrollment[]
+  performanceFormulas        PerformanceFormula[]
+  performanceIndicators      PerformanceIndicator[]
+  performanceGradeRules      PerformanceGradeRule[]
+  performanceMethods         PerformanceMethod[]
+  performanceMethodVersions  PerformanceMethodVersion[]
+  performanceComponents      PerformanceComponent[]
+  performancePeriods         PerformancePeriod[]
   reviewCycles               ReviewCycle[]
   performanceReviews         PerformanceReview[]
   feedbackRequests           FeedbackRequest[]
@@ -529,6 +536,217 @@ model BenefitDeduction {
 // ============================================================
 // PERFORMANCE MANAGEMENT
 // ============================================================
+
+/// Performance configuration method (e.g. Annual Balanced Scorecard)
+model PerformanceMethod {
+  id                  String                  @id @default(uuid()) @db.VarChar(36)
+  companyId           String                  @map("company_id") @db.VarChar(36)
+  name                String                  @db.VarChar(255)
+  code                String                  @db.VarChar(50)
+  description         String?                 @db.Text
+  status              PerformanceMethodStatus @default(DRAFT)
+  latestVersionNumber Int                     @default(0) @map("latest_version_number")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  deletedAt           DateTime?               @map("deleted_at")
+
+  company  Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  versions PerformanceMethodVersion[]
+  periods  PerformancePeriod[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@map("performance_methods")
+}
+
+/// Frozen-capable method version used by periods
+model PerformanceMethodVersion {
+  id                         String                         @id @default(uuid()) @db.VarChar(36)
+  methodId                   String                         @map("method_id") @db.VarChar(36)
+  companyId                  String                         @map("company_id") @db.VarChar(36)
+  gradeRuleId                String?                        @map("grade_rule_id") @db.VarChar(36)
+  reviewWorkflowTemplateId   String?                        @map("review_workflow_template_id") @db.VarChar(36)
+  approvalWorkflowTemplateId String?                        @map("approval_workflow_template_id") @db.VarChar(36)
+  versionNumber              Int                            @map("version_number")
+  status                     PerformanceMethodVersionStatus @default(DRAFT)
+  summary                    String?                        @db.Text
+  scoreAggregation           PerformanceScoreAggregation    @default(WEIGHTED_AVERAGE) @map("score_aggregation")
+  minimumScore               Decimal?                       @map("minimum_score") @db.Decimal(5, 2)
+  maximumScore               Decimal?                       @map("maximum_score") @db.Decimal(5, 2)
+  normalizationRule          Json?                          @map("normalization_rule")
+  publishedAt                DateTime?                      @map("published_at")
+  createdAt                  DateTime                       @default(now()) @map("created_at")
+  updatedAt                  DateTime                       @updatedAt @map("updated_at")
+
+  method                   PerformanceMethod      @relation(fields: [methodId], references: [id], onDelete: Cascade)
+  company                  Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  components               PerformanceComponent[]
+  reviewWorkflowTemplate   WorkflowTemplate?      @relation("PerformanceReviewWorkflowTemplate", fields: [reviewWorkflowTemplateId], references: [id], onDelete: SetNull)
+  approvalWorkflowTemplate WorkflowTemplate?      @relation("PerformanceApprovalWorkflowTemplate", fields: [approvalWorkflowTemplateId], references: [id], onDelete: SetNull)
+  gradeRule                PerformanceGradeRule?  @relation(fields: [gradeRuleId], references: [id], onDelete: SetNull)
+  periods                  PerformancePeriod[]
+
+  @@unique([methodId, versionNumber])
+  @@index([companyId, status])
+  @@index([methodId, status])
+  @@index([reviewWorkflowTemplateId])
+  @@index([approvalWorkflowTemplateId])
+  @@map("performance_method_versions")
+}
+
+/// Formula definition used by indicator library
+model PerformanceFormula {
+  id                String                     @id @default(uuid()) @db.VarChar(36)
+  companyId         String                     @map("company_id") @db.VarChar(36)
+  name              String                     @db.VarChar(255)
+  code              String                     @db.VarChar(50)
+  description       String?                    @db.Text
+  strategy          PerformanceFormulaStrategy
+  expression        String?                    @db.Text
+  roundingMode      PerformanceRoundingMode    @default(ROUND) @map("rounding_mode")
+  roundingPrecision Int                        @default(2) @map("rounding_precision")
+  minimumScore      Decimal?                   @map("minimum_score") @db.Decimal(5, 2)
+  maximumScore      Decimal?                   @map("maximum_score") @db.Decimal(5, 2)
+  isActive          Boolean                    @default(true) @map("is_active")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+  deletedAt         DateTime?                  @map("deleted_at")
+
+  company    Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  indicators PerformanceIndicator[]
+
+  @@unique([companyId, code])
+  @@index([companyId, strategy, isActive])
+  @@map("performance_formulas")
+}
+
+/// Reusable indicator library for performance components
+model PerformanceIndicator {
+  id               String                     @id @default(uuid()) @db.VarChar(36)
+  companyId        String                     @map("company_id") @db.VarChar(36)
+  formulaId        String?                    @map("formula_id") @db.VarChar(36)
+  name             String                     @db.VarChar(255)
+  code             String                     @db.VarChar(50)
+  description      String?                    @db.Text
+  category         String?                    @db.VarChar(100)
+  perspective      String?                    @db.VarChar(100)
+  measurementType  PerformanceMeasurementType @map("measurement_type")
+  targetType       PerformanceTargetType      @map("target_type")
+  direction        PerformanceDirection
+  unit             String?                    @db.VarChar(50)
+  defaultWeight    Decimal?                   @default(0) @map("default_weight") @db.Decimal(5, 2)
+  minimumValue     Decimal?                   @map("minimum_value") @db.Decimal(12, 2)
+  maximumValue     Decimal?                   @map("maximum_value") @db.Decimal(12, 2)
+  evidenceRequired Boolean                    @default(false) @map("evidence_required")
+  reviewRequired   Boolean                    @default(false) @map("review_required")
+  isActive         Boolean                    @default(true) @map("is_active")
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+  deletedAt        DateTime?                  @map("deleted_at")
+
+  company Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  formula PerformanceFormula? @relation(fields: [formulaId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, code])
+  @@index([companyId, category, isActive])
+  @@index([formulaId])
+  @@map("performance_indicators")
+}
+
+/// Weighted section/component definition inside a method version
+model PerformanceComponent {
+  id              String                   @id @default(uuid()) @db.VarChar(36)
+  methodVersionId String                   @map("method_version_id") @db.VarChar(36)
+  companyId       String                   @map("company_id") @db.VarChar(36)
+  name            String                   @db.VarChar(255)
+  code            String                   @db.VarChar(50)
+  type            PerformanceComponentType @default(CUSTOM)
+  description     String?                  @db.Text
+  weight          Decimal                  @db.Decimal(5, 2)
+  sortOrder       Int                      @default(0) @map("sort_order")
+  isRequired      Boolean                  @default(true) @map("is_required")
+  config          Json?
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  updatedAt       DateTime                 @updatedAt @map("updated_at")
+
+  methodVersion PerformanceMethodVersion @relation(fields: [methodVersionId], references: [id], onDelete: Cascade)
+  company       Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([methodVersionId, code])
+  @@index([companyId, type])
+  @@index([methodVersionId, sortOrder])
+  @@map("performance_components")
+}
+
+/// Grade rule set used by performance method versions
+model PerformanceGradeRule {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  companyId   String    @map("company_id") @db.VarChar(36)
+  name        String    @db.VarChar(255)
+  code        String    @db.VarChar(50)
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company        Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  ranges         PerformanceGradeRange[]
+  methodVersions PerformanceMethodVersion[]
+
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+  @@map("performance_grade_rules")
+}
+
+/// Grade ranges inside a rule set
+model PerformanceGradeRange {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  gradeRuleId String   @map("grade_rule_id") @db.VarChar(36)
+  label       String   @db.VarChar(50)
+  minimum     Decimal  @db.Decimal(5, 2)
+  maximum     Decimal  @db.Decimal(5, 2)
+  sortOrder   Int      @default(0) @map("sort_order")
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  gradeRule PerformanceGradeRule @relation(fields: [gradeRuleId], references: [id], onDelete: Cascade)
+
+  @@index([gradeRuleId, sortOrder])
+  @@map("performance_grade_ranges")
+}
+
+/// Review period configuration that binds a published method version
+model PerformancePeriod {
+  id               String                  @id @default(uuid()) @db.VarChar(36)
+  companyId        String                  @map("company_id") @db.VarChar(36)
+  methodId         String                  @map("method_id") @db.VarChar(36)
+  methodVersionId  String                  @map("method_version_id") @db.VarChar(36)
+  name             String                  @db.VarChar(255)
+  code             String                  @db.VarChar(50)
+  startDate        DateTime                @map("start_date")
+  endDate          DateTime                @map("end_date")
+  reviewDeadline   DateTime?               @map("review_deadline")
+  status           PerformancePeriodStatus @default(DRAFT)
+  description      String?                 @db.Text
+  readinessSummary Json?                   @map("readiness_summary")
+  configSnapshot   Json?                   @map("config_snapshot")
+  publishedAt      DateTime?               @map("published_at")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+  deletedAt        DateTime?               @map("deleted_at")
+
+  company       Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  method        PerformanceMethod        @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  methodVersion PerformanceMethodVersion @relation(fields: [methodVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([methodId])
+  @@index([methodVersionId])
+  @@map("performance_periods")
+}
 
 /// Review cycle (e.g., Q1 2026, H1 2026)
 model ReviewCycle {
@@ -1100,25 +1318,25 @@ model ShiftFormulaDay {
 }
 
 model ShiftSwapRequest {
-  id                 String        @id @default(uuid()) @db.VarChar(36)
-  companyId          String        @map("company_id") @db.VarChar(36)
-  requesterEmployeeId String       @map("requester_employee_id") @db.VarChar(36)
-  targetEmployeeId   String        @map("target_employee_id") @db.VarChar(36)
-  approverEmployeeId String        @map("approver_employee_id") @db.VarChar(36)
-  shiftDate          DateTime      @map("shift_date") @db.Date
-  reason             String        @db.Text
-  status             RequestStatus @default(PENDING)
-  approvalNotes      String?       @map("approval_notes") @db.Text
-  reviewedAt         DateTime?     @map("reviewed_at")
-  cancelledAt        DateTime?     @map("cancelled_at")
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedAt          DateTime      @updatedAt @map("updated_at")
-  deletedAt          DateTime?     @map("deleted_at")
+  id                  String        @id @default(uuid()) @db.VarChar(36)
+  companyId           String        @map("company_id") @db.VarChar(36)
+  requesterEmployeeId String        @map("requester_employee_id") @db.VarChar(36)
+  targetEmployeeId    String        @map("target_employee_id") @db.VarChar(36)
+  approverEmployeeId  String        @map("approver_employee_id") @db.VarChar(36)
+  shiftDate           DateTime      @map("shift_date") @db.Date
+  reason              String        @db.Text
+  status              RequestStatus @default(PENDING)
+  approvalNotes       String?       @map("approval_notes") @db.Text
+  reviewedAt          DateTime?     @map("reviewed_at")
+  cancelledAt         DateTime?     @map("cancelled_at")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+  deletedAt           DateTime?     @map("deleted_at")
 
-  company           Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  requesterEmployee Employee               @relation("ShiftSwapRequester", fields: [requesterEmployeeId], references: [id], onDelete: Cascade)
-  targetEmployee    Employee               @relation("ShiftSwapTarget", fields: [targetEmployeeId], references: [id], onDelete: Cascade)
-  approverEmployee  Employee               @relation("ShiftSwapApprover", fields: [approverEmployeeId], references: [id], onDelete: Restrict)
+  company           Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requesterEmployee Employee                @relation("ShiftSwapRequester", fields: [requesterEmployeeId], references: [id], onDelete: Cascade)
+  targetEmployee    Employee                @relation("ShiftSwapTarget", fields: [targetEmployeeId], references: [id], onDelete: Cascade)
+  approverEmployee  Employee                @relation("ShiftSwapApprover", fields: [approverEmployeeId], references: [id], onDelete: Restrict)
   overrides         EmployeeShiftOverride[]
 
   @@index([companyId, status])
@@ -1130,17 +1348,17 @@ model ShiftSwapRequest {
 }
 
 model EmployeeShiftOverride {
-  id                 String   @id @default(uuid()) @db.VarChar(36)
-  companyId          String   @map("company_id") @db.VarChar(36)
-  employeeId         String   @map("employee_id") @db.VarChar(36)
-  shiftSwapRequestId String?  @map("shift_swap_request_id") @db.VarChar(36)
-  date               DateTime @db.Date
-  source             String   @default("SHIFT_SWAP") @db.VarChar(50)
-  originalSchedule   Json     @map("original_schedule")
-  overrideSchedule   Json     @map("override_schedule")
-  notes              String?  @db.Text
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid()) @db.VarChar(36)
+  companyId          String    @map("company_id") @db.VarChar(36)
+  employeeId         String    @map("employee_id") @db.VarChar(36)
+  shiftSwapRequestId String?   @map("shift_swap_request_id") @db.VarChar(36)
+  date               DateTime  @db.Date
+  source             String    @default("SHIFT_SWAP") @db.VarChar(50)
+  originalSchedule   Json      @map("original_schedule")
+  overrideSchedule   Json      @map("override_schedule")
+  notes              String?   @db.Text
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
   deletedAt          DateTime? @map("deleted_at")
 
   company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1265,10 +1483,10 @@ model Employee {
   assetAssignments             AssetAssignment[]
   exitClearancePICs            ExitClearance[]             @relation("ExitClearancePIC")
   permissionRequests           PermissionRequest[]
-  shiftSwapRequestsAsRequester ShiftSwapRequest[]            @relation("ShiftSwapRequester")
-  shiftSwapRequestsAsTarget    ShiftSwapRequest[]            @relation("ShiftSwapTarget")
-  shiftSwapRequestsToApprove   ShiftSwapRequest[]            @relation("ShiftSwapApprover")
-  shiftOverrides               EmployeeShiftOverride[]       @relation("EmployeeShiftOverrides")
+  shiftSwapRequestsAsRequester ShiftSwapRequest[]          @relation("ShiftSwapRequester")
+  shiftSwapRequestsAsTarget    ShiftSwapRequest[]          @relation("ShiftSwapTarget")
+  shiftSwapRequestsToApprove   ShiftSwapRequest[]          @relation("ShiftSwapApprover")
+  shiftOverrides               EmployeeShiftOverride[]     @relation("EmployeeShiftOverrides")
   loans                        Loan[]
   businessTrips                BusinessTrip[]
   expenseClaims                ExpenseClaim[]
@@ -2318,6 +2536,82 @@ enum ReviewCycleType {
   MONTHLY
 }
 
+enum PerformanceMethodStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum PerformanceMethodVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PerformancePeriodStatus {
+  DRAFT
+  READY
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum PerformanceComponentType {
+  KPI
+  GOAL
+  COMPETENCY
+  BEHAVIOR
+  CUSTOM
+}
+
+enum PerformanceScoreAggregation {
+  WEIGHTED_AVERAGE
+  SUM
+  AVERAGE
+}
+
+enum PerformanceFormulaStrategy {
+  ACHIEVEMENT_PERCENTAGE
+  LOWER_IS_BETTER
+  MANUAL_RATING
+  AVERAGE
+  WEIGHTED_AVERAGE
+  CUSTOM
+}
+
+enum PerformanceRoundingMode {
+  ROUND
+  FLOOR
+  CEIL
+}
+
+enum PerformanceMeasurementType {
+  NUMBER
+  PERCENTAGE
+  CURRENCY
+  DURATION
+  BOOLEAN
+  RATING
+  TEXT
+  CUSTOM_FORMULA
+}
+
+enum PerformanceTargetType {
+  MONTHLY
+  QUARTERLY
+  SEMESTER
+  YEARLY
+  CUSTOM
+}
+
+enum PerformanceDirection {
+  HIGHER_BETTER
+  LOWER_BETTER
+  RANGE
+  EXACT
+  MANUAL
+}
+
 enum ReviewCycleStatus {
   DRAFT
   ACTIVE
@@ -2556,9 +2850,11 @@ model WorkflowTemplate {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  stages    WorkflowStage[]
-  instances WorkflowInstance[]
+  company                Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  stages                 WorkflowStage[]
+  instances              WorkflowInstance[]
+  reviewMethodVersions   PerformanceMethodVersion[] @relation("PerformanceReviewWorkflowTemplate")
+  approvalMethodVersions PerformanceMethodVersion[] @relation("PerformanceApprovalWorkflowTemplate")
 
   @@index([companyId, isActive])
   @@index([approvalType])

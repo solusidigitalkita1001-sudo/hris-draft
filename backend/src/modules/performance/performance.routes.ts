@@ -3,10 +3,80 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { performanceController } from './performance.controller';
-import { createReviewCycleSchema, createReviewSchema, createGoalSchema, updateGoalProgressSchema, createFeedbackRequestSchema, createFeedbackResponseSchema } from './performance.dto';
+import {
+  createReviewCycleSchema,
+  createReviewSchema,
+  createGoalSchema,
+  updateGoalProgressSchema,
+  createFeedbackRequestSchema,
+  createFeedbackResponseSchema,
+  createPerformanceMethodSchema,
+  updatePerformanceMethodSchema,
+  createPerformanceMethodVersionSchema,
+  updatePerformanceMethodVersionSchema,
+  createPerformanceComponentSchema,
+  updatePerformanceComponentSchema,
+  createPerformancePeriodSchema,
+  updatePerformancePeriodSchema,
+  createPerformanceFormulaSchema,
+  updatePerformanceFormulaSchema,
+  createPerformanceIndicatorSchema,
+  updatePerformanceIndicatorSchema,
+  createPerformanceGradeRuleSchema,
+  updatePerformanceGradeRuleSchema,
+  createPerformanceWorkflowTemplateSchema,
+  updatePerformanceWorkflowTemplateSchema,
+} from './performance.dto';
 
 const router = Router();
 router.use(authenticate);
+
+router.get('/methods', authorize({ resource: 'performance', action: 'read' }), performanceController.findAllMethods.bind(performanceController));
+router.get('/methods/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findMethodById.bind(performanceController));
+router.post('/methods', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceMethodSchema), performanceController.createMethod.bind(performanceController));
+router.put('/methods/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformanceMethodSchema), performanceController.updateMethod.bind(performanceController));
+router.get('/methods/:id/versions', authorize({ resource: 'performance', action: 'read' }), performanceController.findMethodVersions.bind(performanceController));
+router.post('/methods/:id/version', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceMethodVersionSchema), performanceController.createMethodVersion.bind(performanceController));
+
+router.get('/method-versions/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findMethodVersionById.bind(performanceController));
+router.put('/method-versions/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformanceMethodVersionSchema), performanceController.updateMethodVersion.bind(performanceController));
+router.post('/method-versions/:id/publish', authorize({ resource: 'performance', action: 'update' }), performanceController.publishMethodVersion.bind(performanceController));
+
+router.get('/review-workflows', authorize({ resource: 'performance', action: 'read' }), performanceController.findReviewWorkflowTemplates.bind(performanceController));
+router.get('/review-workflows/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findReviewWorkflowTemplateById.bind(performanceController));
+router.post('/review-workflows', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceWorkflowTemplateSchema), performanceController.createReviewWorkflowTemplate.bind(performanceController));
+router.put('/review-workflows/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformanceWorkflowTemplateSchema), performanceController.updateReviewWorkflowTemplate.bind(performanceController));
+
+router.get('/approval-workflows', authorize({ resource: 'performance', action: 'read' }), performanceController.findApprovalWorkflowTemplates.bind(performanceController));
+router.get('/approval-workflows/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findApprovalWorkflowTemplateById.bind(performanceController));
+router.post('/approval-workflows', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceWorkflowTemplateSchema), performanceController.createApprovalWorkflowTemplate.bind(performanceController));
+router.put('/approval-workflows/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformanceWorkflowTemplateSchema), performanceController.updateApprovalWorkflowTemplate.bind(performanceController));
+
+router.get('/formulas', authorize({ resource: 'performance', action: 'read' }), performanceController.findAllFormulas.bind(performanceController));
+router.get('/formulas/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findFormulaById.bind(performanceController));
+router.post('/formulas', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceFormulaSchema), performanceController.createFormula.bind(performanceController));
+router.put('/formulas/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformanceFormulaSchema), performanceController.updateFormula.bind(performanceController));
+
+router.get('/indicators', authorize({ resource: 'performance', action: 'read' }), performanceController.findAllIndicators.bind(performanceController));
+router.get('/indicators/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findIndicatorById.bind(performanceController));
+router.post('/indicators', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceIndicatorSchema), performanceController.createIndicator.bind(performanceController));
+router.put('/indicators/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformanceIndicatorSchema), performanceController.updateIndicator.bind(performanceController));
+
+router.get('/grades', authorize({ resource: 'performance', action: 'read' }), performanceController.findAllGradeRules.bind(performanceController));
+router.get('/grades/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findGradeRuleById.bind(performanceController));
+router.post('/grades', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceGradeRuleSchema), performanceController.createGradeRule.bind(performanceController));
+router.put('/grades/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformanceGradeRuleSchema), performanceController.updateGradeRule.bind(performanceController));
+
+router.get('/method-versions/:id/components', authorize({ resource: 'performance', action: 'read' }), performanceController.findComponentsByMethodVersion.bind(performanceController));
+router.post('/method-versions/:id/components', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceComponentSchema), performanceController.createComponent.bind(performanceController));
+router.put('/components/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformanceComponentSchema), performanceController.updateComponent.bind(performanceController));
+
+router.get('/periods', authorize({ resource: 'performance', action: 'read' }), performanceController.findAllPeriods.bind(performanceController));
+router.get('/periods/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findPeriodById.bind(performanceController));
+router.post('/periods', authorize({ resource: 'performance', action: 'create' }), validate(createPerformancePeriodSchema), performanceController.createPeriod.bind(performanceController));
+router.put('/periods/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformancePeriodSchema), performanceController.updatePeriod.bind(performanceController));
+router.get('/periods/:id/readiness', authorize({ resource: 'performance', action: 'read' }), performanceController.getPeriodReadiness.bind(performanceController));
+router.post('/periods/:id/publish', authorize({ resource: 'performance', action: 'update' }), performanceController.publishPeriod.bind(performanceController));
 
 router.get('/review-cycles', authorize({ resource: 'performance', action: 'read' }), performanceController.findAllCycles.bind(performanceController));
 router.post('/review-cycles', authorize({ resource: 'performance', action: 'create' }), validate(createReviewCycleSchema), performanceController.createCycle.bind(performanceController));

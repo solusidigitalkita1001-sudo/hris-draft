@@ -2,12 +2,44 @@ import prisma from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 
 export class UserRepository {
-  async findAll(page: number = 1, limit: number = 20) {
+  async findAll(
+    page: number = 1,
+    limit: number = 20,
+    filters?: { companyId?: string; search?: string }
+  ) {
     const skip = (page - 1) * limit;
+    const where: Prisma.UserWhereInput = { deletedAt: null };
+
+    if (filters?.companyId) {
+      where.OR = [
+        { employee: { companyId: filters.companyId } },
+        { userRoles: { some: { companyId: filters.companyId } } },
+        { companyAccesses: { some: { companyId: filters.companyId } } },
+      ];
+    }
+
+    if (filters?.search) {
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
+
+      where.AND = [
+        ...existingAnd,
+        {
+          OR: [
+            { email: { contains: filters.search } },
+            { employee: { fullName: { contains: filters.search } } },
+            { employee: { employeeNumber: { contains: filters.search } } },
+          ],
+        },
+      ];
+    }
 
     const [data, total] = await Promise.all([
       prisma.user.findMany({
-        where: { deletedAt: null },
+        where,
         skip,
         take: limit,
         select: {
@@ -25,11 +57,17 @@ export class UserRepository {
               company: { select: { id: true, name: true } },
             },
           },
-          _count: { select: { userRoles: true } },
+          userRoles: {
+            include: {
+              role: {
+                select: { id: true, name: true, code: true },
+              },
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.user.count({ where }),
     ]);
 
     return { data, total, page, limit };

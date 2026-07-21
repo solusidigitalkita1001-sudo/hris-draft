@@ -6,6 +6,7 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
+    employeeId?: string;
     companyId?: string;
     companyScope?: string[];
     groupId?: string;
@@ -37,6 +38,7 @@ export function authenticate(req: AuthenticatedRequest, _res: Response, next: Ne
     req.user = {
       id: decoded.sub,
       email: decoded.email,
+      employeeId: decoded.employeeId,
       companyId: decoded.companyId,
       companyScope: decoded.companyScope,
       groupId: decoded.groupId,
@@ -74,6 +76,7 @@ export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, 
     req.user = {
       id: decoded.sub,
       email: decoded.email,
+      employeeId: decoded.employeeId,
       companyId: decoded.companyId,
       companyScope: decoded.companyScope,
       groupId: decoded.groupId,

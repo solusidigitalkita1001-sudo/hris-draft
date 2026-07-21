@@ -4,11 +4,13 @@ import { trainingService, type TrainingCourse, type TrainingCategory } from '@/s
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, Plus, GraduationCap, BookOpen, Users, Clock, Award } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export function CourseList() {
   const navigate = useNavigate();
+  const { activeCompany } = useCompanyStore();
   const [courses, setCourses] = useState<TrainingCourse[]>([]);
   const [categories, setCategories] = useState<TrainingCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,9 +18,16 @@ export function CourseList() {
   const [categoryFilter, setCategoryFilter] = useState('');
 
   const fetchData = useCallback(async () => {
+    const companyId = activeCompany?.id || '';
+    if (!companyId) {
+      setCourses([]);
+      setCategories([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const [courseData, catData] = await Promise.all([
         trainingService.getCourses(companyId, categoryFilter || undefined),
         trainingService.getCategories(companyId),
@@ -27,10 +36,11 @@ export function CourseList() {
       setCategories(catData);
     } catch (error) {
       console.error('Failed to fetch courses:', error);
+      toast.error('Gagal memuat data course');
     } finally {
       setLoading(false);
     }
-  }, [categoryFilter]);
+  }, [activeCompany?.id, categoryFilter]);
 
   useEffect(() => {
     fetchData();
@@ -45,9 +55,6 @@ export function CourseList() {
 
   const totalEnrollments = courses.reduce((sum, c) => sum + (c._count?.enrollments || 0), 0);
   const mandatoryCount = courses.filter((c) => c.isMandatory).length;
-  const handleCreateCourse = () => {
-    toast('Form create course belum tersedia. Route create course belum disambungkan.');
-  };
 
   return (
     <div>
@@ -60,7 +67,7 @@ export function CourseList() {
               <RefreshCw size={16} className="mr-2" />
               Refresh
             </Button>
-            <Button size="sm" onClick={handleCreateCourse}>
+            <Button size="sm" onClick={() => navigate('/lms/courses/new')}>
               <Plus size={16} className="mr-2" />
               New Course
             </Button>

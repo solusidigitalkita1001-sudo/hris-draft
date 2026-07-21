@@ -13,6 +13,12 @@ export class RecruitmentRepository {
     return prisma.jobPosting.findFirst({ where: { id, deletedAt: null }, include: { department: true, position: true, applications: { include: { candidate: { select: { id: true, firstName: true, lastName: true, email: true, currentPosition: true } }, interviews: { include: { feedback: true } } } } } });
   }
 
+  async findJobPostingScoped(id: string, companyId: string) {
+    return prisma.jobPosting.findFirst({
+      where: { id, companyId, deletedAt: null },
+    });
+  }
+
   async createJobPosting(data: CreateJobPostingDTO) {
     return prisma.jobPosting.create({ data: { ...data, minSalary: data.minSalary, maxSalary: data.maxSalary } });
   }
@@ -29,6 +35,26 @@ export class RecruitmentRepository {
     return prisma.candidate.findFirst({ where: { id, deletedAt: null }, include: { applications: { include: { jobPosting: { select: { id: true, title: true } }, interviews: { include: { feedback: true } } } } } });
   }
 
+  async findCandidateScoped(id: string, companyId: string) {
+    return prisma.candidate.findFirst({
+      where: { id, companyId, deletedAt: null },
+    });
+  }
+
+  async findDepartmentScoped(id: string, companyId: string) {
+    return prisma.department.findFirst({
+      where: { id, companyId, deletedAt: null },
+      select: { id: true },
+    });
+  }
+
+  async findPositionScoped(id: string, companyId: string) {
+    return prisma.position.findFirst({
+      where: { id, companyId, deletedAt: null },
+      select: { id: true },
+    });
+  }
+
   async createCandidate(data: CreateCandidateDTO) {
     return prisma.candidate.create({ data });
   }
@@ -41,6 +67,18 @@ export class RecruitmentRepository {
 
   async createApplication(data: CreateApplicationDTO) {
     return prisma.jobApplication.create({ data });
+  }
+
+  async findApplicationByPostingAndCandidate(companyId: string, jobPostingId: string, candidateId: string) {
+    return prisma.jobApplication.findFirst({
+      where: {
+        companyId,
+        jobPostingId,
+        candidateId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
   }
 
   async updateApplicationStatus(id: string, status: any, notes?: string) {

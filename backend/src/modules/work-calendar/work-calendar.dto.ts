@@ -100,6 +100,23 @@ export const reviewShiftSwapRequestSchema = z.object({
   approvalNotes: z.string().max(1000).optional(),
 });
 
+export const workCalendarIdParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export const countWorkingDaysQuerySchema = z.object({
+  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid start date format. Use YYYY-MM-DD'),
+  end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid end date format. Use YYYY-MM-DD'),
+}).superRefine((value, ctx) => {
+  if (new Date(value.end) < new Date(value.start)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['end'],
+      message: 'end must be greater than or equal to start',
+    });
+  }
+});
+
 export type CreateCalendarDTO = z.infer<typeof createCalendarSchema>;
 export type UpdateCalendarDTO = z.infer<typeof updateCalendarSchema>;
 export type UpdateDayDTO = z.infer<typeof updateDaySchema>;
@@ -111,3 +128,5 @@ export type CreateShiftFormulaDTO = z.infer<typeof createShiftFormulaSchema>;
 export type UpdateShiftFormulaDTO = z.infer<typeof updateShiftFormulaSchema>;
 export type CreateShiftSwapRequestDTO = z.infer<typeof createShiftSwapRequestSchema>;
 export type ReviewShiftSwapRequestDTO = z.infer<typeof reviewShiftSwapRequestSchema>;
+export type WorkCalendarIdParamsDTO = z.infer<typeof workCalendarIdParamsSchema>;
+export type CountWorkingDaysQueryDTO = z.infer<typeof countWorkingDaysQuerySchema>;

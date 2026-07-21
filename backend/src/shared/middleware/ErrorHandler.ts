@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import multer from 'multer';
 import { AppError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import config from '@/config';
@@ -67,6 +68,21 @@ export function errorHandler(
     }
 
     res.status(err.statusCode).json(response);
+    return;
+  }
+
+  if (err instanceof multer.MulterError) {
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? 'Uploaded file exceeds the allowed size limit'
+        : err.message;
+
+    res.status(400).json({
+      success: false,
+      code: 'UPLOAD_ERROR',
+      message,
+      ...(correlationId && { correlationId }),
+    });
     return;
   }
 

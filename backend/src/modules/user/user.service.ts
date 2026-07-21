@@ -13,8 +13,8 @@ import { authRepository } from '../auth/auth.repository';
 const logger = new WinstonLogger('UserService');
 
 export class UserService {
-  async findAll(page: number, limit: number) {
-    return userRepository.findAll(page, limit);
+  async findAll(page: number, limit: number, filters?: { companyId?: string; search?: string }) {
+    return userRepository.findAll(page, limit, filters);
   }
 
   async findById(id: string) {
@@ -55,7 +55,18 @@ export class UserService {
       }
     }
 
-    return userRepository.update(id, dto);
+    const updateData: any = {
+      ...(dto.email !== undefined ? { email: dto.email.toLowerCase() } : {}),
+      ...(dto.status !== undefined ? { status: dto.status } : {}),
+    };
+
+    if (dto.employeeId !== undefined) {
+      updateData.employee = dto.employeeId
+        ? { connect: { id: dto.employeeId } }
+        : { disconnect: true };
+    }
+
+    return userRepository.update(id, updateData);
   }
 
   async delete(id: string) {

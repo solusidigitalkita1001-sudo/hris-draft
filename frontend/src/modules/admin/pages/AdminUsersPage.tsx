@@ -1,33 +1,206 @@
-import { useState, useEffect, useCallback } from 'react';
-import { userService, type UserData } from '@/services/user.service';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  userService,
+  type CreateUserPayload,
+  type UpdateUserPayload,
+  type UserData,
+} from '@/services/user.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, RefreshCw, Plus, Shield, UserRound } from 'lucide-react';
+import { Select2 } from '@/components/ui/select2';
+import { employeeService, type Employee } from '@/services/employee.service';
+import { rbacService, type Role } from '@/services/rbac.service';
+import { useCompanyStore } from '@/stores/company.store';
+import {
+  Search,
+  RefreshCw,
+  Plus,
+  Shield,
+  UserRound,
+  Pencil,
+  Trash2,
+  X,
+  KeyRound,
+} from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import toast from 'react-hot-toast';
 
+type FormMode = 'create' | 'edit';
+
 export function AdminUsersPage() {
+  const { activeCompany } = useCompanyStore();
   const [users, setUsers] = useState<UserData[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
-  const companyId = localStorage.getItem('companyId') || '';
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<FormMode>('create');
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const companyId = activeCompany?.id || '';
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    employeeId: '',
+    status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+    roleIds: [] as string[],
+  });
+
+  const resetForm = useCallback(() => {
+    setForm({
+      email: '',
+      password: '',
+      employeeId: '',
+      status: 'ACTIVE',
+      roleIds: [],
+    });
+    setEditingUserId(null);
+    setFormMode('create');
+  }, []);
 
   const fetchData = useCallback(async () => {
+    if (!companyId) {
+      setUsers([]);
+      setEmployees([]);
+      setRoles([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      setUsers(await userService.getAll(companyId));
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+      const [userData, roleData, employeeData] = await Promise.all([
+        userService.getAll(companyId),
+        rbacService.findAll(companyId),
+        employeeService.getEmployees({ companyId, limit: 100, page: 1 }),
+      ]);
+      setUsers(userData);
+      setRoles(roleData);
+      setEmployees(employeeData.data);
+    } catch (e) {
+      console.error(e);
+      toast.error('Gagal memuat data user');
+    } finally {
+      setLoading(false);
+    }
   }, [companyId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const filtered = users.filter((u) =>
+  const filtered = useMemo(() => users.filter((u) =>
     u.email.toLowerCase().includes(search.toLowerCase()) ||
-    u.employee?.fullName?.toLowerCase().includes(search.toLowerCase())
-  );
+    u.employee?.fullName?.toLowerCase().includes(search.toLowerCase()) ||
+    u.employee?.employeeNumber?.toLowerCase().includes(search.toLowerCase())
+  ), [search, users]);
+
   const handleAddUser = () => {
-    toast('Form tambah user belum tersedia. Saya bisa lanjut sambungkan create user bila diperlukan.');
+    resetForm();
+    setFormMode('create');
+    setFormOpen(true);
+  };
+
+  const handleEditUser = (user: UserData) => {
+    setForm({
+      email: user.email,
+      password: '',
+      employeeId: user.employee?.id || '',
+      status: (user.status as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED') || 'ACTIVE',
+      roleIds: user.userRoles?.map((item) => item.role.id) || [],
+    });
+    setEditingUserId(user.id);
+    setFormMode('edit');
+    setFormOpen(true);
+  };
+
+  const toggleRole = (roleId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      roleIds: prev.roleIds.includes(roleId)
+        ? prev.roleIds.filter((id) => id !== roleId)
+        : [...prev.roleIds, roleId],
+    }));
+  };
+
+  const handleSubmit = async () => {
+    if (!companyId) {
+      toast.error('Company belum aktif');
+      return;
+    }
+
+    if (!form.email.trim()) {
+      toast.error('Email wajib diisi');
+      return;
+    }
+
+    if (formMode === 'create' && !form.password.trim()) {
+      toast.error('Password wajib diisi saat create user');
+      return;
+    }
+
+    if (!form.roleIds.length) {
+      toast.error('Minimal pilih satu role');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (formMode === 'create') {
+        const payload: CreateUserPayload = {
+          email: form.email.trim(),
+          password: form.password,
+          employeeId: form.employeeId || undefined,
+        };
+        const createdUser = await userService.create(payload);
+        await userService.assignRoles(createdUser.id, {
+          roleIds: form.roleIds,
+          companyId,
+          scopeType: 'COMPANY',
+        });
+        toast.success('User berhasil dibuat');
+      } else if (editingUserId) {
+        const payload: UpdateUserPayload = {
+          email: form.email.trim(),
+          status: form.status,
+          employeeId: form.employeeId || null,
+        };
+        await userService.update(editingUserId, payload);
+        await userService.assignRoles(editingUserId, {
+          roleIds: form.roleIds,
+          companyId,
+          scopeType: 'COMPANY',
+        });
+        toast.success('User berhasil diperbarui');
+      }
+
+      resetForm();
+      setFormOpen(false);
+      await fetchData();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || 'Gagal menyimpan user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteUser = async (user: UserData) => {
+    const confirmed = window.confirm(`Hapus user ${user.email}?`);
+    if (!confirmed) return;
+
+    try {
+      await userService.delete(user.id);
+      toast.success('User berhasil dihapus');
+      if (editingUserId === user.id) {
+        resetForm();
+        setFormOpen(false);
+      }
+      await fetchData();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || 'Gagal menghapus user');
+    }
   };
 
   return (
@@ -39,6 +212,121 @@ export function AdminUsersPage() {
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
       </div>
+      {formOpen && (
+        <div className="mb-6 rounded-xl border border-border bg-card p-5">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-base font-semibold">
+                {formMode === 'create' ? 'Tambah User' : 'Edit User'}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Sambungkan user ke employee dan assign role yang sesuai.
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => { resetForm(); setFormOpen(false); }}>
+              <X size={16} />
+            </Button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                value={form.email}
+                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="name@company.com"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Password
+                {formMode === 'edit' && <span className="ml-2 text-xs text-muted-foreground">Kosongkan, password tidak diubah di flow ini</span>}
+              </label>
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                placeholder={formMode === 'create' ? 'Minimal 8 karakter' : 'Tidak diubah'}
+                disabled={formMode === 'edit'}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Employee</label>
+              <Select2
+                value={form.employeeId}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, employeeId: value }))}
+                options={[
+                  { value: '', label: 'Tanpa employee link' },
+                  ...employees.map((employee) => ({
+                    value: employee.id,
+                    label: `${employee.fullName} • ${employee.employeeNumber}`,
+                  })),
+                ]}
+                placeholder="Pilih employee"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select2
+                value={form.status}
+                onValueChange={(value) => setForm((prev) => ({
+                  ...prev,
+                  status: value as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+                }))}
+                options={[
+                  { value: 'ACTIVE', label: 'ACTIVE' },
+                  { value: 'INACTIVE', label: 'INACTIVE' },
+                  { value: 'SUSPENDED', label: 'SUSPENDED' },
+                ]}
+                placeholder="Pilih status"
+              />
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <KeyRound size={16} className="text-muted-foreground" />
+              <h4 className="text-sm font-medium">Assign Roles</h4>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {roles.map((role) => {
+                const checked = form.roleIds.includes(role.id);
+                return (
+                  <label
+                    key={role.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+                      checked ? 'border-primary bg-primary/5' : 'border-border bg-background'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={checked}
+                      onChange={() => toggleRole(role.id)}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{role.name}</p>
+                      <p className="text-xs text-muted-foreground">{role.code} • {role.scope}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => { resetForm(); setFormOpen(false); }}>
+              Batal
+            </Button>
+            <Button size="sm" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Menyimpan...' : formMode === 'create' ? 'Buat User' : 'Simpan Perubahan'}
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="table-container">
         <table className="w-full">
           <thead className="table-header">
@@ -48,12 +336,13 @@ export function AdminUsersPage() {
               <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Roles</th>
               <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
               <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Last Login</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {loading ? <tr><td colSpan={5} className="text-center py-12 text-sm text-muted-foreground">Loading...</td></tr>
+            {loading ? <tr><td colSpan={6} className="text-center py-12 text-sm text-muted-foreground">Loading...</td></tr>
             : filtered.length === 0
-              ? <tr><td colSpan={5} className="text-center py-12"><Shield size={32} className="mx-auto text-muted-foreground/40" /><p className="text-sm text-muted-foreground mt-2">No users found</p></td></tr>
+              ? <tr><td colSpan={6} className="text-center py-12"><Shield size={32} className="mx-auto text-muted-foreground/40" /><p className="text-sm text-muted-foreground mt-2">No users found</p></td></tr>
               : filtered.map((u) => (
                   <tr key={u.id} className="table-row-hover">
                     <td className="px-4 py-3">
@@ -76,6 +365,18 @@ export function AdminUsersPage() {
                       }`}>{u.status}</span>
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-muted-foreground">{u.lastLoginAt ? formatDate(u.lastLoginAt) : 'Never'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleEditUser(u)}>
+                          <Pencil size={14} className="mr-2" />
+                          Edit
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleDeleteUser(u)}>
+                          <Trash2 size={14} className="mr-2" />
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
               ))}
           </tbody>

@@ -3,18 +3,25 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { attendanceController } from './attendance.controller';
-import { createAttendanceSchema, createOvertimeSchema } from './attendance.dto';
+import {
+  attendanceContextQuerySchema,
+  attendanceQuerySchema,
+  checkoutAttendanceSchema,
+  createAttendanceSchema,
+  createOvertimeSchema,
+} from './attendance.dto';
 
 const router = Router();
 router.use(authenticate);
 
 // Attendance Records
-router.get('/', authorize({ resource: 'attendance', action: 'read' }), attendanceController.findAll.bind(attendanceController));
+router.get('/', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceQuerySchema, 'query'), attendanceController.findAll.bind(attendanceController));
+router.get('/context', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceContextQuerySchema, 'query'), attendanceController.getContext.bind(attendanceController));
 router.get('/summary', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getSummary.bind(attendanceController));
 router.get('/report', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getReport.bind(attendanceController));
 router.get('/:id', authorize({ resource: 'attendance', action: 'read' }), attendanceController.findById.bind(attendanceController));
 router.post('/', authorize({ resource: 'attendance', action: 'create' }), validate(createAttendanceSchema), attendanceController.create.bind(attendanceController));
-router.patch('/:id/checkout', authorize({ resource: 'attendance', action: 'update' }), attendanceController.checkOut.bind(attendanceController));
+router.patch('/:id/checkout', authorize({ resource: 'attendance', action: 'update' }), validate(checkoutAttendanceSchema), attendanceController.checkOut.bind(attendanceController));
 router.patch('/:id/correction', authorize({ resource: 'attendance', action: 'update' }), attendanceController.correction.bind(attendanceController));
 router.delete('/:id', authorize({ resource: 'attendance', action: 'delete' }), attendanceController.delete.bind(attendanceController));
 

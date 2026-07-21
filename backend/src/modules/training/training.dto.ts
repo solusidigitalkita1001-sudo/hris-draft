@@ -19,9 +19,13 @@ export const createCourseSchema = z.object({
   isMandatory: z.boolean().default(false),
 });
 
-export const updateCourseSchema = createCourseSchema.partial().omit({ companyId: true, code: true }).extend({
-  isActive: z.boolean().optional(),
-});
+export const updateCourseSchema = createCourseSchema
+  .partial()
+  .omit({ companyId: true, code: true })
+  .extend({
+    categoryId: z.string().uuid().nullable().optional(),
+    isActive: z.boolean().optional(),
+  });
 
 export const createSessionSchema = z.object({
   courseId: z.string().uuid(),

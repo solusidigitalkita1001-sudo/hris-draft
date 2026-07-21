@@ -56,8 +56,31 @@ export interface RecruitmentReport {
   byStage: { stage: string; count: number }[];
 }
 
+export interface DashboardSummary {
+  stats: {
+    totalEmployees: number;
+    totalDepartments: number;
+    presentToday: number;
+    onLeaveToday: number;
+  };
+  pendingApprovals: number;
+  recentActivity: Array<{
+    id: string;
+    action: string;
+    entity: string;
+    entityId?: string | null;
+    actorEmail: string;
+    createdAt: string;
+  }>;
+}
+
 // ─── Service ────────────────────────────────────────────
 class ReportsService {
+  async getDashboardSummary(companyId?: string): Promise<DashboardSummary> {
+    const r = await api.get('/reports/summary', { params: companyId ? { companyId } : undefined });
+    return r.data.data;
+  }
+
   async getHeadcount(companyId: string, departmentId?: string): Promise<HeadcountReport> {
     const r = await api.get('/reports/headcount', { params: { companyId, departmentId } });
     return r.data.data;

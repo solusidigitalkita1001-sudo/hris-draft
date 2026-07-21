@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { performanceService, type ReviewCycle, type PerformanceReview } from '@/services/performance.service';
+import { performanceService, type ReviewCycle, type PerformanceReview, type Goal } from '@/services/performance.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
+import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { RefreshCw, BarChart3, Target, MessageSquare, ChevronRight, Star } from 'lucide-react';
 import { formatDate } from '@/utils/format';
@@ -31,26 +32,39 @@ function CycleStatusBadge({ status }: { status: string }) {
 
 export function PerformanceDashboard() {
   const navigate = useNavigate();
+  const { activeCompany } = useCompanyStore();
   const [cycles, setCycles] = useState<ReviewCycle[]>([]);
   const [reviews, setReviews] = useState<PerformanceReview[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    const companyId = activeCompany?.id || '';
+    if (!companyId) {
+      setCycles([]);
+      setReviews([]);
+      setGoals([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
-      const [cycleData, reviewData] = await Promise.all([
+      const [cycleData, reviewData, goalData] = await Promise.all([
         performanceService.getReviewCycles(companyId),
         performanceService.getReviews(companyId),
+        performanceService.getGoals(companyId),
       ]);
       setCycles(cycleData);
       setReviews(reviewData);
+      setGoals(goalData);
     } catch (error) {
       console.error('Failed to fetch performance data:', error);
+      toast.error('Gagal memuat data performance');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeCompany?.id]);
 
   useEffect(() => {
     fetchData();
@@ -81,14 +95,14 @@ export function PerformanceDashboard() {
     },
     {
       label: 'Total Goals',
-      value: '-',
+      value: goals.length,
       icon: Target,
       color: 'text-purple-600 bg-purple-50 dark:bg-purple-950 dark:text-purple-400',
     },
   ];
 
   const handleViewCycles = () => {
-    toast('Halaman review cycles belum tersedia. Saat ini akses tersedia lewat dashboard, reviews, dan goals.');
+    navigate('/performance/cycles');
   };
 
   return (
@@ -97,10 +111,24 @@ export function PerformanceDashboard() {
         title="Performance Management"
         description="Manage review cycles, performance reviews, and goals"
         actions={
-          <Button variant="outline" size="sm" onClick={fetchData}>
-            <RefreshCw size={16} className="mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/methods')}>
+              Config Methods
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/periods')}>
+              Config Periods
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/libraries')}>
+              Config Libraries
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/workflows')}>
+              Config Workflows
+            </Button>
+            <Button variant="outline" size="sm" onClick={fetchData}>
+              <RefreshCw size={16} className="mr-2" />
+              Refresh
+            </Button>
+          </div>
         }
       />
 

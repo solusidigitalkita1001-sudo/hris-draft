@@ -59,28 +59,26 @@ export function TopNavigation() {
     let cancelled = false;
 
     const bootstrapActiveCompany = async () => {
-      if (!user || activeCompany) return;
+      if (!user) return;
 
       try {
         const data = await organizationService.getCompanies();
         const scopedCompanies = getScopedCompanies(data);
         if (cancelled || !scopedCompanies.length) return;
-        const previousCompanyId = localStorage.getItem('companyId');
 
         setStoredCompanies(scopedCompanies);
         setCompanyOptions(scopedCompanies);
 
         const scopedCompany =
+          scopedCompanies.find((company) => company.id === activeCompany?.id) ||
           scopedCompanies.find((company) => company.id === localStorage.getItem('companyId')) ||
           scopedCompanies.find((company) => company.id === user.companyId) ||
           scopedCompanies[0];
 
         if (!scopedCompany) return;
 
-        setActiveCompany(scopedCompany);
-
-        if (previousCompanyId !== scopedCompany.id) {
-          window.location.reload();
+        if (activeCompany?.id !== scopedCompany.id) {
+          setActiveCompany(scopedCompany);
         }
       } catch {
         // silent
@@ -92,14 +90,12 @@ export function TopNavigation() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany, getScopedCompanies, setActiveCompany, setStoredCompanies, user]);
+  }, [activeCompany?.id, getScopedCompanies, setActiveCompany, setStoredCompanies, user]);
 
   const switchCompany = useCallback(
     (company: Company) => {
       setActiveCompany(company);
       setShowCompanySwitcher(false);
-      // Refresh page to reload scope
-      window.location.reload();
     },
     [setActiveCompany]
   );

@@ -56,15 +56,44 @@ export class EmployeeLoanRepository {
     return prisma.loan.create({ data: data as any });
   }
 
-  async approve(id: string, approverId: string, data?: ApproveLoanDTO) {
-    return prisma.loan.update({
-      where: { id },
-      data: {
-        status: 'APPROVED',
-        approverId,
-        approvedAt: new Date(),
-        notes: data?.notes,
-      },
+  async approve(
+    id: string,
+    approverId: string,
+    loan: { totalInstallments: number; installmentAmount: Prisma.Decimal | number },
+    data?: ApproveLoanDTO
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const updatedLoan = await tx.loan.update({
+        where: { id },
+        data: {
+          status: 'ACTIVE',
+          approverId,
+          approvedAt: new Date(),
+          notes: data?.notes,
+        },
+      });
+
+      const existingInstallments = await tx.loanInstallment.count({
+        where: { loanId: id },
+      });
+
+      if (existingInstallments === 0 && loan.totalInstallments > 0) {
+        const amount = Number(loan.installmentAmount);
+        const installments = Array.from({ length: loan.totalInstallments }, (_, i) => {
+          const dueDate = new Date();
+          dueDate.setMonth(dueDate.getMonth() + i + 1);
+          return {
+            loanId: id,
+            amount,
+            dueDate,
+            status: 'PENDING' as const,
+          };
+        });
+
+        await tx.loanInstallment.createMany({ data: installments });
+      }
+
+      return updatedLoan;
     });
   }
 
@@ -96,6 +125,10 @@ export class EmployeeLoanRepository {
   }
 
   async generateInstallments(loanId: string, total: number, amount: number, startDate: Date) {
+    if (total <= 0) {
+      return { count: 0 };
+    }
+
     const installments = Array.from({ length: total }, (_, i) => {
       const dueDate = new Date(startDate);
       dueDate.setMonth(dueDate.getMonth() + i + 1);
@@ -103,6 +136,115 @@ export class EmployeeLoanRepository {
     });
 
     return prisma.loanInstallment.createMany({ data: installments });
+  }
+
+  async findDueInstallmentsForPayroll(companyId: string, periodEndDate: Date) {
+    return prisma.loanInstallment.findMany({
+      where: {
+        status: { in: ['PENDING', 'OVERDUE'] },
+        dueDate: { lte: periodEndDate },
+        loan: {
+          companyId,
+          status: 'ACTIVE',
+        },
+      },
+      include: {
+        loan: {
+          select: {
+            id: true,
+            employeeId: true,
+            remainingBalance: true,
+          },
+        },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+  }
+
+  async applyPayrollDeductions(
+    companyId: string,
+    employeeIds: string[],
+    periodEndDate: Date,
+    paidDate: Date,
+    payrollRunNumber: number
+  ) {
+    if (employeeIds.length === 0) {
+      return { deductedInstallments: 0, affectedLoans: 0 };
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const installments = await tx.loanInstallment.findMany({
+        where: {
+          status: { in: ['PENDING', 'OVERDUE'] },
+          dueDate: { lte: periodEndDate },
+          loan: {
+            companyId,
+            employeeId: { in: employeeIds },
+            status: 'ACTIVE',
+          },
+        },
+        include: {
+          loan: {
+            select: {
+              id: true,
+              remainingBalance: true,
+            },
+          },
+        },
+        orderBy: { dueDate: 'asc' },
+      });
+
+      if (installments.length === 0) {
+        return { deductedInstallments: 0, affectedLoans: 0 };
+      }
+
+      const note = `Deducted via payroll run #${payrollRunNumber}`;
+      const deductionByLoan = new Map<string, number>();
+
+      for (const installment of installments) {
+        deductionByLoan.set(
+          installment.loanId,
+          (deductionByLoan.get(installment.loanId) || 0) + Number(installment.amount)
+        );
+
+        await tx.loanInstallment.update({
+          where: { id: installment.id },
+          data: {
+            status: 'PAID',
+            paidDate,
+            notes: note,
+          },
+        });
+      }
+
+      for (const [loanId, totalDeducted] of deductionByLoan.entries()) {
+        const loan = await tx.loan.findUnique({
+          where: { id: loanId },
+          select: { remainingBalance: true },
+        });
+
+        const remainingBalance = Math.max(Number(loan?.remainingBalance || 0) - totalDeducted, 0);
+        const unpaidInstallmentCount = await tx.loanInstallment.count({
+          where: {
+            loanId,
+            status: { in: ['PENDING', 'OVERDUE'] },
+          },
+        });
+
+        await tx.loan.update({
+          where: { id: loanId },
+          data: {
+            remainingBalance,
+            status: remainingBalance <= 0 || unpaidInstallmentCount === 0 ? 'PAID' : 'ACTIVE',
+          },
+        });
+      }
+
+      return {
+        deductedInstallments: installments.length,
+        affectedLoans: deductionByLoan.size,
+      };
+    });
   }
 }
 

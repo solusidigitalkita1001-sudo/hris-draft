@@ -149,7 +149,7 @@ export class WorkCalendarController {
 
   async countWorkingDays(req: Request, res: Response, next: NextFunction) {
     try {
-      const calendarId = req.query.calendarId as string;
+      const calendarId = req.params.id as string;
       const start = req.query.start as string;
       const end = req.query.end as string;
       const count = await workCalendarRepository.countWorkingDays(calendarId, new Date(start), new Date(end));

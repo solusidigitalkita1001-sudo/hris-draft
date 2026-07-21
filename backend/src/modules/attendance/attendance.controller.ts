@@ -8,6 +8,7 @@ export class AttendanceController {
     try {
       const data = await attendanceService.findAll(req.query.companyId as string, {
         employeeId: req.query.employeeId as string,
+        date: req.query.date as string,
         month: req.query.month as string,
         status: req.query.status as string,
       });
@@ -25,8 +26,19 @@ export class AttendanceController {
     catch (error) { next(error); }
   }
 
+  async getContext(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await attendanceService.getResolvedContext(
+        req.query.employeeId as string,
+        req.query.date as string,
+        req.query.companyId as string | undefined,
+      );
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
   async checkOut(req: Request, res: Response, next: NextFunction) {
-    try { res.json(Result.updated(await attendanceService.checkOut(req.params.id as string, req.body.checkOut))); }
+    try { res.json(Result.updated(await attendanceService.checkOut(req.params.id as string, req.body))); }
     catch (error) { next(error); }
   }
 

@@ -47,8 +47,42 @@ export class TrainingService {
     return trainingRepository.createEnrollment(data);
   }
 
+  async enrollSelf(courseId: string, employeeId: string, companyId: string) {
+    await this.findCourseById(courseId);
+
+    const existing = await trainingRepository.findActiveEnrollment(courseId, employeeId, companyId);
+    if (existing) {
+      throw new ConflictError('You are already enrolled in this course');
+    }
+
+    return trainingRepository.createEnrollment({
+      courseId,
+      employeeId,
+      companyId,
+    });
+  }
+
   async completeEnrollment(id: string) {
     return trainingRepository.updateEnrollment(id, { status: 'COMPLETED' as any, progress: 100, notes: 'Completed' });
+  }
+
+  async completeSelf(courseId: string, employeeId: string, companyId: string) {
+    await this.findCourseById(courseId);
+
+    const enrollment = await trainingRepository.findActiveEnrollment(courseId, employeeId, companyId);
+    if (!enrollment) {
+      throw new NotFoundError('Enrollment not found');
+    }
+
+    if (enrollment.status === 'COMPLETED') {
+      return enrollment;
+    }
+
+    return trainingRepository.updateEnrollment(enrollment.id, {
+      status: 'COMPLETED' as any,
+      progress: 100,
+      notes: 'Completed',
+    });
   }
 }
 

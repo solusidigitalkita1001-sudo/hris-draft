@@ -31,9 +31,12 @@ export class TrainingRepository {
     if (data.description !== undefined) update.description = data.description;
     if (data.duration !== undefined) update.duration = data.duration;
     if (data.durationUnit !== undefined) update.durationUnit = data.durationUnit;
+    if (data.provider !== undefined) update.provider = data.provider;
     if (data.isMandatory !== undefined) update.isMandatory = data.isMandatory;
     if (data.isActive !== undefined) update.isActive = data.isActive;
-    if (data.categoryId !== undefined) update.category = { connect: { id: data.categoryId } };
+    if (data.categoryId !== undefined) {
+      update.category = data.categoryId ? { connect: { id: data.categoryId } } : { disconnect: true };
+    }
     return prisma.trainingCourse.update({ where: { id }, data: update });
   }
 
@@ -57,8 +60,25 @@ export class TrainingRepository {
     return prisma.trainingEnrollment.create({ data });
   }
 
+  async findActiveEnrollment(courseId: string, employeeId: string, companyId: string) {
+    return prisma.trainingEnrollment.findFirst({
+      where: {
+        courseId,
+        employeeId,
+        companyId,
+        deletedAt: null,
+      },
+    });
+  }
+
   async updateEnrollment(id: string, data: { status?: any; progress?: number; notes?: string }) {
-    return prisma.trainingEnrollment.update({ where: { id }, data });
+    return prisma.trainingEnrollment.update({
+      where: { id },
+      data: {
+        ...data,
+        completedAt: data.status === 'COMPLETED' ? new Date() : undefined,
+      },
+    });
   }
 }
 

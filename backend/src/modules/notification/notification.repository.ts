@@ -22,9 +22,9 @@ export class NotificationRepository {
     return prisma.notification.create({ data: data as any });
   }
 
-  async markAsRead(ids: string[]) {
+  async markAsRead(ids: string[], userId: string) {
     return prisma.notification.updateMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, userId },
       data: { isRead: true, readAt: new Date() },
     });
   }
@@ -36,8 +36,8 @@ export class NotificationRepository {
     });
   }
 
-  async delete(id: string) {
-    return prisma.notification.delete({ where: { id } });
+  async delete(id: string, userId: string) {
+    return prisma.notification.deleteMany({ where: { id, userId } });
   }
 
   async getUnreadCount(userId: string) {

@@ -134,8 +134,6 @@ export function EmployeeLoanDetailPage() {
               )}
             </div>
           </div>
-
-          {/* Installment Table */}
           {loan.installments && loan.installments.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Jadwal Cicilan</h3>
@@ -148,6 +146,7 @@ export function EmployeeLoanDetailPage() {
                       <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Jumlah</th>
                       <th className="text-center px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Status</th>
                       <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Dibayar</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Catatan</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -164,11 +163,27 @@ export function EmployeeLoanDetailPage() {
                         <td className="px-3 py-2.5 text-xs text-muted-foreground">
                           {inst.paidDate ? dayjs(inst.paidDate).format('DD MMM YYYY') : '-'}
                         </td>
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                          {inst.notes || '-'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {(!loan.installments || loan.installments.length === 0) && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Jadwal Cicilan</h3>
+              <p className="text-sm text-muted-foreground">
+                {loan.status === 'PENDING'
+                  ? 'Jadwal cicilan akan dibuat setelah pengajuan pinjaman disetujui.'
+                  : loan.status === 'REJECTED' || loan.status === 'CANCELLED'
+                    ? 'Pengajuan ini tidak memiliki jadwal cicilan karena tidak aktif.'
+                    : 'Belum ada jadwal cicilan untuk pinjaman ini.'}
+              </p>
             </div>
           )}
         </div>

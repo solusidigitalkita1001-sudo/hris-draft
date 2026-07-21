@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { employeeLoanRepository } from './employee-loan.repository';
 import { Result } from '@/shared/core/Result';
+import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
 
 export class EmployeeLoanController {
   async findLoanTypes(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -58,18 +59,30 @@ export class EmployeeLoanController {
         remainingBalance: amount,
       });
 
-      // Auto-generate installments if approved amounts
-      if (totalInstallments > 1) {
-        await employeeLoanRepository.generateInstallments(loan.id, totalInstallments, installmentAmount, new Date());
-      }
-
       res.status(201).json(Result.created(loan));
     } catch (error) { next(error); }
   }
 
   async approve(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const data = await employeeLoanRepository.approve(req.params.id as string, req.user!.id, req.body);
+      const existingLoan = await employeeLoanRepository.findById(req.params.id as string);
+      if (!existingLoan) {
+        throw new NotFoundError('Loan not found');
+      }
+
+      if (existingLoan.status !== 'PENDING') {
+        throw new BadRequestError('Only pending loans can be approved');
+      }
+
+      const data = await employeeLoanRepository.approve(
+        req.params.id as string,
+        req.user!.id,
+        {
+          totalInstallments: existingLoan.totalInstallments,
+          installmentAmount: existingLoan.installmentAmount,
+        },
+        req.body
+      );
       res.json(Result.updated(data, 'Loan approved'));
     } catch (error) { next(error); }
   }

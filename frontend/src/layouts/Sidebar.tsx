@@ -210,6 +210,7 @@ const navItems: NavItem[] = [
     access: { requireAuth: true, requiredPermissions: [{ resource: 'performance', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
     children: [
       { labelKey: 'sidebar.performance.dashboard', icon: <BarChart3 size={16} />, path: '/performance' },
+      { labelKey: 'sidebar.performance.cycles', icon: <BarChart3 size={16} />, path: '/performance/cycles' },
       { labelKey: 'sidebar.performance.reviews', icon: <ClipboardList size={16} />, path: '/performance/reviews' },
       { labelKey: 'sidebar.performance.goals', icon: <Target size={16} />, path: '/performance/goals' },
     ],

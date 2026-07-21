@@ -1,8 +1,13 @@
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorizeRole } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { travelExpenseController } from './travel-expense.controller';
+import config from '@/config';
+import { BadRequestError } from '@/shared/exceptions/AppError';
 import {
   approveBusinessTripSchema,
   approveExpenseClaimSchema,
@@ -13,6 +18,31 @@ import {
 } from './travel-expense.dto';
 
 const router = Router();
+
+const uploadDirectory = path.resolve(process.cwd(), 'uploads/travel-expenses/receipts');
+fs.mkdirSync(uploadDirectory, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, uploadDirectory);
+  },
+  filename: (_req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${safeName}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: config.upload.maxFileSize },
+  fileFilter: (_req, file, cb) => {
+    if (!config.upload.allowedMimes.includes(file.mimetype)) {
+      cb(new BadRequestError('Unsupported receipt file type'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 router.use(authenticate);
 
@@ -50,6 +80,12 @@ router.post(
 
 router.get('/claims', authorizeRole(...approverRoles), travelExpenseController.findClaims.bind(travelExpenseController));
 router.get('/claims/my', authorizeRole(...employeeRoles), travelExpenseController.findMyClaims.bind(travelExpenseController));
+router.post(
+  '/claims/receipt-upload',
+  authorizeRole(...employeeRoles),
+  upload.single('receipt'),
+  travelExpenseController.uploadReceipt.bind(travelExpenseController)
+);
 router.post(
   '/claims',
   authorizeRole(...employeeRoles),

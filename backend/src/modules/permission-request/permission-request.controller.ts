@@ -2,8 +2,24 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { permissionRequestRepository } from './permission-request.repository';
 import { Result } from '@/shared/core/Result';
+import { ForbiddenError } from '@/shared/exceptions/AppError';
+import { prisma } from '@/shared/database/prisma';
 
 export class PermissionRequestController {
+  private async getEmployeeId(req: AuthenticatedRequest) {
+    const employeeId = req.user?.employeeId || (
+      await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { employeeId: true },
+      })
+    )?.employeeId;
+
+    if (!employeeId) {
+      throw new ForbiddenError('This account is not linked to an employee profile');
+    }
+    return employeeId;
+  }
+
   async findAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = (req.query.companyId as string) || (req.user as any)?.companyId as string;
@@ -16,9 +32,8 @@ export class PermissionRequestController {
 
   async findMyRequests(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const employeeId = req.query.employeeId as string;
+      const employeeId = await this.getEmployeeId(req);
       const status = req.query.status as string | undefined;
-      if (!employeeId) return res.status(400).json(Result.error('employeeId is required'));
       const data = await permissionRequestRepository.findMyRequests(employeeId, status);
       res.json(Result.success(data));
     } catch (error) { next(error); }
@@ -34,10 +49,11 @@ export class PermissionRequestController {
 
   async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const employeeId = await this.getEmployeeId(req);
       const data = await permissionRequestRepository.create({
         ...req.body,
         companyId: req.user!.companyId,
-        employeeId: req.body.employeeId,
+        employeeId,
       });
       res.status(201).json(Result.created(data));
     } catch (error) { next(error); }
@@ -45,7 +61,7 @@ export class PermissionRequestController {
 
   async cancel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const employeeId = req.body.employeeId || req.user!.id;
+      const employeeId = await this.getEmployeeId(req);
       const result = await permissionRequestRepository.cancel(req.params.id as string, employeeId);
       if (result.count === 0) return res.status(404).json(Result.error('Request not found or already processed'));
       res.json(Result.success(null, 'Request cancelled'));

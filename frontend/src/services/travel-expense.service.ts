@@ -91,6 +91,15 @@ export interface ExpenseCategoryOption {
   label: string;
 }
 
+export interface UploadedReceipt {
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  filePath: string;
+  url: string;
+}
+
 export const BUSINESS_TRIP_STATUS_LABELS: Record<BusinessTripStatus, string> = {
   REQUESTED: 'Diajukan',
   APPROVED: 'Disetujui',
@@ -164,6 +173,18 @@ class TravelExpenseService {
   async createClaim(data: Partial<ExpenseClaim>) {
     const response = await api.post('/travel-expenses/claims', data);
     return response.data.data as ExpenseClaim;
+  }
+
+  async uploadReceipt(file: File) {
+    const formData = new FormData();
+    formData.append('receipt', file);
+
+    const response = await api.post('/travel-expenses/claims/receipt-upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data.data as UploadedReceipt;
   }
 
   async approveClaim(id: string, notes?: string) {

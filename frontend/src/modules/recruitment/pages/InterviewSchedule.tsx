@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { recruitmentService, type Interview } from '@/services/recruitment.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import {
   Search,
@@ -39,23 +41,32 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function InterviewSchedule() {
+  const navigate = useNavigate();
+  const { activeCompany } = useCompanyStore();
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
   const fetchData = useCallback(async () => {
+    const companyId = activeCompany?.id || '';
+    if (!companyId) {
+      setInterviews([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await recruitmentService.getInterviews(companyId);
       setInterviews(data);
     } catch (error) {
       console.error('Failed to fetch interviews:', error);
+      toast.error('Gagal memuat data interview');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeCompany?.id]);
 
   useEffect(() => {
     fetchData();
@@ -78,10 +89,6 @@ export function InterviewSchedule() {
     return acc;
   }, {});
 
-  const handleScheduleInterview = () => {
-    toast('Form schedule interview belum tersedia. Route create interview belum disambungkan.');
-  };
-
   return (
     <div>
       <PageHeader
@@ -93,7 +100,7 @@ export function InterviewSchedule() {
               <RefreshCw size={16} className="mr-2" />
               Refresh
             </Button>
-            <Button size="sm" onClick={handleScheduleInterview}>
+            <Button size="sm" onClick={() => navigate('/recruitment/interviews/new')}>
               <Plus size={16} className="mr-2" />
               Schedule Interview
             </Button>

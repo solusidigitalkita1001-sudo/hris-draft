@@ -9,6 +9,7 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
   email: z.string().email().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).optional(),
+  employeeId: z.string().uuid().optional().nullable(),
 });
 
 export const createUserCompanyAccessSchema = z.object({
