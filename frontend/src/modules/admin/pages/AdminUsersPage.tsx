@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   userService,
   type CreateUserPayload,
@@ -24,6 +25,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { cn } from '@/utils/cn';
 import toast from 'react-hot-toast';
 
 type FormMode = 'create' | 'edit';
@@ -47,6 +49,11 @@ export function AdminUsersPage() {
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
     roleIds: [] as string[],
   });
+
+  const employeeRoleId = useMemo(
+    () => roles.find((role) => role.code === 'EMPLOYEE')?.id || '',
+    [roles]
+  );
 
   const resetForm = useCallback(() => {
     setForm({
@@ -139,8 +146,13 @@ export function AdminUsersPage() {
       return;
     }
 
-    if (!form.roleIds.length) {
+    if (formMode === 'edit' && !form.roleIds.length) {
       toast.error('Minimal pilih satu role');
+      return;
+    }
+
+    if (formMode === 'create' && !employeeRoleId) {
+      toast.error('Role EMPLOYEE tidak ditemukan. Pastikan roles sudah diseed.');
       return;
     }
 
@@ -154,7 +166,7 @@ export function AdminUsersPage() {
         };
         const createdUser = await userService.create(payload);
         await userService.assignRoles(createdUser.id, {
-          roleIds: form.roleIds,
+          roleIds: [employeeRoleId],
           companyId,
           scopeType: 'COMPANY',
         });
@@ -212,121 +224,145 @@ export function AdminUsersPage() {
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
       </div>
-      {formOpen && (
-        <div className="mb-6 rounded-xl border border-border bg-card p-5">
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-base font-semibold">
-                {formMode === 'create' ? 'Tambah User' : 'Edit User'}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Sambungkan user ke employee dan assign role yang sesuai.
-              </p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => { resetForm(); setFormOpen(false); }}>
-              <X size={16} />
-            </Button>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input
-                value={form.email}
-                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                placeholder="name@company.com"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Password
-                {formMode === 'edit' && <span className="ml-2 text-xs text-muted-foreground">Kosongkan, password tidak diubah di flow ini</span>}
-              </label>
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-                placeholder={formMode === 'create' ? 'Minimal 8 karakter' : 'Tidak diubah'}
-                disabled={formMode === 'edit'}
-              />
+      <Dialog.Root
+        open={formOpen}
+        onOpenChange={(open) => {
+          if (!open) resetForm();
+          setFormOpen(open);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/45 backdrop-blur-sm" />
+          <Dialog.Content
+            className={cn(
+              'fixed left-1/2 top-1/2 z-[81] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card shadow-2xl',
+              'focus:outline-none'
+            )}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+              <div>
+                <Dialog.Title className="text-base font-semibold">
+                  {formMode === 'create' ? 'Tambah User' : 'Edit User'}
+                </Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-muted-foreground">
+                  {formMode === 'create'
+                    ? 'Sambungkan user ke employee (opsional).'
+                    : 'Sambungkan user ke employee dan update role sesuai kebutuhan.'}
+                </Dialog.Description>
+              </div>
+              <button
+                type="button"
+                className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={() => setFormOpen(false)}
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Employee</label>
-              <Select2
-                value={form.employeeId}
-                onValueChange={(value) => setForm((prev) => ({ ...prev, employeeId: value }))}
-                options={[
-                  { value: '', label: 'Tanpa employee link' },
-                  ...employees.map((employee) => ({
-                    value: employee.id,
-                    label: `${employee.fullName} • ${employee.employeeNumber}`,
-                  })),
-                ]}
-                placeholder="Pilih employee"
-              />
-            </div>
+            <div className="space-y-5 px-5 py-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Email</label>
+                  <Input
+                    value={form.email}
+                    onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="name@company.com"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select2
-                value={form.status}
-                onValueChange={(value) => setForm((prev) => ({
-                  ...prev,
-                  status: value as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
-                }))}
-                options={[
-                  { value: 'ACTIVE', label: 'ACTIVE' },
-                  { value: 'INACTIVE', label: 'INACTIVE' },
-                  { value: 'SUSPENDED', label: 'SUSPENDED' },
-                ]}
-                placeholder="Pilih status"
-              />
-            </div>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <KeyRound size={16} className="text-muted-foreground" />
-              <h4 className="text-sm font-medium">Assign Roles</h4>
-            </div>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {roles.map((role) => {
-                const checked = form.roleIds.includes(role.id);
-                return (
-                  <label
-                    key={role.id}
-                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
-                      checked ? 'border-primary bg-primary/5' : 'border-border bg-background'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={checked}
-                      onChange={() => toggleRole(role.id)}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{role.name}</p>
-                      <p className="text-xs text-muted-foreground">{role.code} • {role.scope}</p>
-                    </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Password
+                    {formMode === 'edit' && <span className="ml-2 text-xs text-muted-foreground">Kosongkan, password tidak diubah di flow ini</span>}
                   </label>
-                );
-              })}
-            </div>
-          </div>
+                  <Input
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                    placeholder={formMode === 'create' ? 'Minimal 8 karakter' : 'Tidak diubah'}
+                    disabled={formMode === 'edit'}
+                  />
+                </div>
 
-          <div className="mt-5 flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => { resetForm(); setFormOpen(false); }}>
-              Batal
-            </Button>
-            <Button size="sm" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? 'Menyimpan...' : formMode === 'create' ? 'Buat User' : 'Simpan Perubahan'}
-            </Button>
-          </div>
-        </div>
-      )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Employee</label>
+                  <Select2
+                    value={form.employeeId}
+                    onValueChange={(value) => setForm((prev) => ({ ...prev, employeeId: value }))}
+                    options={[
+                      { value: '', label: 'Tanpa employee link' },
+                      ...employees.map((employee) => ({
+                        value: employee.id,
+                        label: `${employee.fullName} • ${employee.employeeNumber}`,
+                      })),
+                    ]}
+                    placeholder="Pilih employee"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Status</label>
+                  <Select2
+                    value={form.status}
+                    onValueChange={(value) => setForm((prev) => ({
+                      ...prev,
+                      status: value as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+                    }))}
+                    options={[
+                      { value: 'ACTIVE', label: 'ACTIVE' },
+                      { value: 'INACTIVE', label: 'INACTIVE' },
+                      { value: 'SUSPENDED', label: 'SUSPENDED' },
+                    ]}
+                    placeholder="Pilih status"
+                  />
+                </div>
+              </div>
+
+              {formMode === 'edit' && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <KeyRound size={16} className="text-muted-foreground" />
+                    <h4 className="text-sm font-medium">Roles</h4>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {roles.map((role) => {
+                      const checked = form.roleIds.includes(role.id);
+                      return (
+                        <label
+                          key={role.id}
+                          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+                            checked ? 'border-primary bg-primary/5' : 'border-border bg-background'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={checked}
+                            onChange={() => toggleRole(role.id)}
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{role.name}</p>
+                            <p className="text-xs text-muted-foreground">{role.code} • {role.scope}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
+              <Button variant="outline" size="sm" onClick={() => setFormOpen(false)} disabled={submitting}>
+                Batal
+              </Button>
+              <Button size="sm" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? 'Menyimpan...' : formMode === 'create' ? 'Buat User' : 'Simpan Perubahan'}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <div className="table-container">
         <table className="w-full">
           <thead className="table-header">
