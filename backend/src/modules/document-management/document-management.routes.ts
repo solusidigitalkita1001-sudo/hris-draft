@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import multer from 'multer';
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
+import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import { documentManagementController } from './document-management.controller';
 
 const router = Router();
@@ -11,13 +13,28 @@ const router = Router();
 const uploadDirectory = path.resolve(process.cwd(), 'uploads/documents');
 fs.mkdirSync(uploadDirectory, { recursive: true });
 
+// HR documents: pdf, images, and Office formats. Executables carry other
+// signatures (or none) and are rejected by the magic-byte check.
+const DOCUMENT_ALLOWED_MIMES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/zip', // Office OOXML files are zip containers
+];
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadDirectory);
   },
   filename: (_req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${Date.now()}-${safeName}`);
+    // Task 1.2: store under an unguessable UUID; original name is kept in DB (fileName).
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
+    cb(null, `${crypto.randomUUID()}${ext}`);
   },
 });
 
@@ -55,6 +72,7 @@ router.post(
   '/',
   authorize({ resource: 'document', action: 'create' }),
   upload.single('file'),
+  validateFileMagicBytes(DOCUMENT_ALLOWED_MIMES),
   documentManagementController.createDocument.bind(documentManagementController)
 );
 router.get(
