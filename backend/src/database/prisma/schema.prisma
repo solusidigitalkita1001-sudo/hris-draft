@@ -1894,6 +1894,7 @@ model Employee {
   employeeCategory    EmployeeCategory @default(OFFICE) @map("employee_category")
   shiftStartDate      DateTime?        @map("shift_start_date") @db.Date
   bankName            String?          @map("bank_name") @db.VarChar(100)
+  bankCode            String?          @map("bank_code") @db.VarChar(20)
   bankAccount         String?          @map("bank_account") @db.VarChar(50)
   bankAccountHolder   String?          @map("bank_account_holder") @db.VarChar(255)
   taxId               String?          @map("tax_id") @db.VarChar(50)

@@ -5,6 +5,8 @@ import {
   isValidBPJSKetenagakerjaan,
   isValidBPJSKesehatan,
   normalizePhoneID,
+  isValidBankAccount,
+  BANK_CODES,
 } from '@/shared/validators/indonesian-identity';
 
 // Normalizes to E.164 (+62...) on input; rejects invalid Indonesian numbers (VAL-001/002).
@@ -21,7 +23,7 @@ const phoneField = z
     return normalized;
   });
 
-export const createEmployeeSchema = z.object({
+const employeeBaseSchema = z.object({
   companyId: z.string().uuid(),
   branchId: z.string().uuid().optional(),
   departmentId: z.string().uuid().optional(),
@@ -53,6 +55,7 @@ export const createEmployeeSchema = z.object({
   shiftFormulaId: z.string().uuid().optional().nullable(),
   shiftStartDate: z.string().datetime().optional().nullable(),
   bankName: z.string().optional(),
+  bankCode: z.enum(BANK_CODES).optional(),
   bankAccount: z.string().optional(),
   bankAccountHolder: z.string().optional(),
   taxId: z
@@ -69,7 +72,26 @@ export const createEmployeeSchema = z.object({
     .optional(),
 });
 
-export const updateEmployeeSchema = createEmployeeSchema.partial().omit({ companyId: true, employeeNumber: true });
+// VAL-006: account number length must match the selected bank.
+const bankAccountRefine = (
+  data: { bankCode?: string; bankAccount?: string },
+  ctx: z.RefinementCtx
+) => {
+  if (data.bankCode && data.bankAccount && !isValidBankAccount(data.bankCode, data.bankAccount)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['bankAccount'],
+      message: `Nomor rekening tidak valid untuk bank ${data.bankCode}`,
+    });
+  }
+};
+
+export const createEmployeeSchema = employeeBaseSchema.superRefine(bankAccountRefine);
+
+export const updateEmployeeSchema = employeeBaseSchema
+  .partial()
+  .omit({ companyId: true, employeeNumber: true })
+  .superRefine(bankAccountRefine);
 
 export const employeeQuerySchema = z.object({
   companyId: z.string().uuid(),

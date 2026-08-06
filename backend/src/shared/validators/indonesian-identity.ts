@@ -72,3 +72,22 @@ export function normalizePhoneID(input: string): string | null {
 export function isValidPhoneID(input: string): boolean {
   return normalizePhoneID(input) !== null;
 }
+
+// VAL-006: account-number length per bank. OTHER is lenient (8-20 digits).
+export const BANK_CODES = ['BNI', 'BCA', 'MANDIRI', 'BRI', 'OTHER'] as const;
+export type BankCode = (typeof BANK_CODES)[number];
+
+const BANK_ACCOUNT_LENGTHS: Record<string, number> = {
+  BNI: 10,
+  BCA: 10,
+  MANDIRI: 13,
+  BRI: 15,
+};
+
+export function isValidBankAccount(bankCode: string, account: string): boolean {
+  const digits = account.replace(/[\s-]/g, '');
+  if (!/^\d+$/.test(digits)) return false;
+  const len = BANK_ACCOUNT_LENGTHS[bankCode];
+  if (len === undefined) return digits.length >= 8 && digits.length <= 20; // OTHER / unknown
+  return digits.length === len;
+}
