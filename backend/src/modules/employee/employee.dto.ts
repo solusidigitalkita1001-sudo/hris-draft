@@ -1,4 +1,25 @@
 import { z } from 'zod';
+import {
+  isValidNIK,
+  isValidNPWP,
+  isValidBPJSKetenagakerjaan,
+  isValidBPJSKesehatan,
+  normalizePhoneID,
+} from '@/shared/validators/indonesian-identity';
+
+// Normalizes to E.164 (+62...) on input; rejects invalid Indonesian numbers (VAL-001/002).
+const phoneField = z
+  .string()
+  .optional()
+  .transform((v, ctx) => {
+    if (v === undefined || v === '') return v;
+    const normalized = normalizePhoneID(v);
+    if (!normalized) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nomor HP tidak valid' });
+      return z.NEVER;
+    }
+    return normalized;
+  });
 
 export const createEmployeeSchema = z.object({
   companyId: z.string().uuid(),
@@ -6,12 +27,15 @@ export const createEmployeeSchema = z.object({
   departmentId: z.string().uuid().optional(),
   subDepartmentId: z.string().uuid().optional(),
   positionId: z.string().uuid().optional(),
-  employeeNumber: z.string().min(1).max(50),
+  employeeNumber: z.string().min(1).max(50).optional(),
   firstName: z.string().min(1).max(255),
   lastName: z.string().min(1).max(255),
   email: z.string().email().optional(),
-  phone: z.string().optional(),
-  idNumber: z.string().optional(),
+  phone: phoneField,
+  idNumber: z
+    .string()
+    .refine(isValidNIK, 'NIK harus 16 digit dengan kode provinsi & tanggal lahir valid')
+    .optional(),
   placeOfBirth: z.string().optional(),
   dateOfBirth: z.string().datetime().optional(),
   gender: z.string().optional(),
@@ -29,9 +53,18 @@ export const createEmployeeSchema = z.object({
   bankName: z.string().optional(),
   bankAccount: z.string().optional(),
   bankAccountHolder: z.string().optional(),
-  taxId: z.string().optional(),
-  bpjsKetenagakerjaan: z.string().optional(),
-  bpjsKesehatan: z.string().optional(),
+  taxId: z
+    .string()
+    .refine(isValidNPWP, 'NPWP harus 15 digit (format 9.999.999.9-999.999)')
+    .optional(),
+  bpjsKetenagakerjaan: z
+    .string()
+    .refine(isValidBPJSKetenagakerjaan, 'BPJS Ketenagakerjaan harus 11 digit')
+    .optional(),
+  bpjsKesehatan: z
+    .string()
+    .refine(isValidBPJSKesehatan, 'BPJS Kesehatan harus 13 digit')
+    .optional(),
 });
 
 export const updateEmployeeSchema = createEmployeeSchema.partial().omit({ companyId: true, employeeNumber: true });
