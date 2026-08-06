@@ -51,6 +51,28 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
+// Task 2.9 (OPS-004): route heavy read-only queries to a replica when one is
+// configured; otherwise this is just the primary. Read-heavy repositories can
+// opt in by using `prismaRead` for findMany/aggregate; writes/transactions must
+// stay on `prisma`. No hard dependency — absent env => single primary.
+const globalForReplica = globalThis as unknown as { prismaRead?: PrismaClient };
+
+function createReadClient(): PrismaClient {
+  if (!config.database.readReplicaUrl) return prisma;
+  const replica = new PrismaClient({
+    datasources: { db: { url: config.database.readReplicaUrl } },
+    log: [{ level: 'error', emit: 'stdout' }],
+  });
+  logger.info('Read replica configured — routing reads to replica');
+  return replica;
+}
+
+export const prismaRead: PrismaClient = globalForReplica.prismaRead ?? createReadClient();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForReplica.prismaRead = prismaRead;
+}
+
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
     await prisma.$connect();

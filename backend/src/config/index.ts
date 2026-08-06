@@ -22,6 +22,7 @@ const envSchema = z.object({
   DB_CONNECTION_LIMIT: z.coerce.number().int().positive().default(40),
   DB_POOL_TIMEOUT: z.coerce.number().int().positive().default(10),
   DB_SLOW_QUERY_MS: z.coerce.number().int().positive().default(2000),
+  READ_REPLICA_DATABASE_URL: z.string().optional(), // Task 2.9: optional read replica
 
   // Redis
   REDIS_ENABLED: z.coerce.boolean().default(true),
@@ -117,6 +118,7 @@ function buildConfig(env: Env) {
     },
     database: {
       url: env.DATABASE_URL,
+      readReplicaUrl: env.READ_REPLICA_DATABASE_URL,
       connectionLimit: env.DB_CONNECTION_LIMIT,
       poolTimeout: env.DB_POOL_TIMEOUT,
       slowQueryMs: env.DB_SLOW_QUERY_MS,
