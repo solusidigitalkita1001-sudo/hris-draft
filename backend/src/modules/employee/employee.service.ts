@@ -415,69 +415,127 @@ export class EmployeeService {
       relax_column_count: true,
     });
 
-    const errors: { row: number; employeeNumber?: string; message: string }[] = [];
-    let success = 0;
-    let failed = 0;
+    // Task 2.5 (FTR-004): validate ALL rows in memory first; only if everything
+    // is valid do we insert — in a single transaction (all-or-nothing).
+    const errors: { row: number; column?: string; value?: unknown; message: string }[] = [];
+    const valid: CreateEmployeeDTO[] = [];
+    const seenNumbers = new Set<string>();
+    const seenEmails = new Set<string>();
 
     for (let i = 0; i < records.length; i++) {
-      const rowIndex = i + 2; // +2 because row 1 is header, so data starts at row 2
+      const rowIndex = i + 2; // row 1 is the header
       const row = records[i] as Record<string, string>;
 
-      try {
-        const payload: CreateEmployeeDTO = {
-          companyId,
-          employeeNumber: row.employeeNumber || row.nik || '',
-          firstName: row.firstName || row.first_name || '',
-          lastName: row.lastName || row.last_name || '',
-          email: row.email || undefined,
-          phone: row.phone || undefined,
-          idNumber: row.idNumber || row.id_number || row.ktp || undefined,
-          placeOfBirth: row.placeOfBirth || row.place_of_birth || undefined,
-          dateOfBirth: row.dateOfBirth || row.date_of_birth || undefined,
-          gender: (row.gender || undefined) as any,
-          religion: (row.religion || undefined) as any,
-          maritalStatus: (row.maritalStatus || row.marital_status || undefined) as any,
-          bloodType: (row.bloodType || row.blood_type || undefined) as any,
-          nationality: row.nationality || 'Indonesia',
-          address: row.address || undefined,
-          joinDate: row.joinDate || row.join_date || undefined,
-          employmentType: (row.employmentType || row.employment_type || 'PERMANENT') as any,
-          employeeCategory: (row.employeeCategory || row.employee_category || 'OFFICE') as any,
-          shiftFormulaId: row.shiftFormulaId || row.shift_formula_id || null,
-          shiftStartDate: row.shiftStartDate || row.shift_start_date || null,
-          branchId: row.branchId || row.branch_id || undefined,
-          departmentId: row.departmentId || row.department_id || undefined,
-          subDepartmentId: row.subDepartmentId || row.sub_department_id || undefined,
-          positionId: row.positionId || row.position_id || undefined,
-          bankName: row.bankName || row.bank_name || undefined,
-          bankAccount: row.bankAccount || row.bank_account || undefined,
-          bankAccountHolder: row.bankAccountHolder || row.bank_account_holder || undefined,
-          taxId: row.taxId || row.tax_id || row.npwp || undefined,
-          bpjsKetenagakerjaan: row.bpjsKetenagakerjaan || row.bpjs_ketenagakerjaan || undefined,
-          bpjsKesehatan: row.bpjsKesehatan || row.bpjs_kesehatan || undefined,
-          avatar: row.avatar || undefined,
-        };
+      const payload = {
+        companyId,
+        employeeNumber: row.employeeNumber || row.nik || undefined,
+        firstName: row.firstName || row.first_name || '',
+        lastName: row.lastName || row.last_name || '',
+        email: row.email || undefined,
+        phone: row.phone || undefined,
+        idNumber: row.idNumber || row.id_number || row.ktp || undefined,
+        placeOfBirth: row.placeOfBirth || row.place_of_birth || undefined,
+        dateOfBirth: row.dateOfBirth || row.date_of_birth || undefined,
+        gender: (row.gender || undefined) as any,
+        religion: (row.religion || undefined) as any,
+        maritalStatus: (row.maritalStatus || row.marital_status || undefined) as any,
+        bloodType: (row.bloodType || row.blood_type || undefined) as any,
+        nationality: row.nationality || 'Indonesia',
+        address: row.address || undefined,
+        joinDate: row.joinDate || row.join_date || undefined,
+        employmentType: (row.employmentType || row.employment_type || 'PERMANENT') as any,
+        employeeCategory: (row.employeeCategory || row.employee_category || 'OFFICE') as any,
+        shiftFormulaId: row.shiftFormulaId || row.shift_formula_id || null,
+        shiftStartDate: row.shiftStartDate || row.shift_start_date || null,
+        branchId: row.branchId || row.branch_id || undefined,
+        departmentId: row.departmentId || row.department_id || undefined,
+        subDepartmentId: row.subDepartmentId || row.sub_department_id || undefined,
+        positionId: row.positionId || row.position_id || undefined,
+        bankName: row.bankName || row.bank_name || undefined,
+        bankAccount: row.bankAccount || row.bank_account || undefined,
+        bankAccountHolder: row.bankAccountHolder || row.bank_account_holder || undefined,
+        taxId: row.taxId || row.tax_id || row.npwp || undefined,
+        bpjsKetenagakerjaan: row.bpjsKetenagakerjaan || row.bpjs_ketenagakerjaan || undefined,
+        bpjsKesehatan: row.bpjsKesehatan || row.bpjs_kesehatan || undefined,
+        avatar: row.avatar || undefined,
+      };
 
-        const parsed = createEmployeeSchema.parse(payload);
-        await this.create(parsed);
-        success++;
-      } catch (err: any) {
-        failed++;
-        errors.push({
-          row: rowIndex,
-          employeeNumber: row.employeeNumber || row.nik || 'N/A',
-          message: err?.message || err?.toString() || 'Unknown error',
-        });
+      const result = createEmployeeSchema.safeParse(payload);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          const col = String(issue.path[0] ?? '');
+          errors.push({ row: rowIndex, column: col, value: (payload as any)[col], message: issue.message });
+        }
+        continue;
       }
+
+      const dto = result.data;
+      // Business checks that don't need the DB (age/resign, in-file duplicates).
+      try {
+        this.validateEmployeeDates(dto);
+      } catch (err: any) {
+        errors.push({ row: rowIndex, column: 'joinDate', value: dto.joinDate, message: err?.message });
+        continue;
+      }
+      if (dto.employeeNumber) {
+        if (seenNumbers.has(dto.employeeNumber)) {
+          errors.push({ row: rowIndex, column: 'employeeNumber', value: dto.employeeNumber, message: 'employeeNumber duplikat di dalam file' });
+          continue;
+        }
+        seenNumbers.add(dto.employeeNumber);
+      }
+      if (dto.email) {
+        if (seenEmails.has(dto.email)) {
+          errors.push({ row: rowIndex, column: 'email', value: dto.email, message: 'Email duplikat di dalam file' });
+          continue;
+        }
+        seenEmails.add(dto.email);
+      }
+      valid.push(dto);
     }
 
-    logger.info('CSV import completed', { total: records.length, success, failed });
+    // Any error → insert nothing, return a structured report.
+    if (errors.length > 0) {
+      logger.warn('CSV import rejected', { totalRows: records.length, invalidCount: records.length - valid.length });
+      return {
+        totalRows: records.length,
+        validCount: valid.length,
+        invalidCount: records.length - valid.length,
+        inserted: 0,
+        errors,
+      };
+    }
 
+    // All valid → one transaction.
+    await prisma.$transaction(async (tx) => {
+      for (const dto of valid) {
+        const employeeNumber = dto.employeeNumber
+          || await generateSystemCode({
+            prefix: 'EMP',
+            label: `${dto.firstName} ${dto.lastName}`,
+            exists: async (candidate) =>
+              Boolean(await tx.employee.findFirst({ where: { companyId, employeeNumber: candidate } })),
+          });
+        await tx.employee.create({
+          data: {
+            ...dto,
+            employeeNumber,
+            fullName: `${dto.firstName} ${dto.lastName}`,
+            dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+            joinDate: dto.joinDate ? new Date(dto.joinDate) : undefined,
+            shiftStartDate: dto.shiftStartDate ? new Date(dto.shiftStartDate) : undefined,
+          },
+        });
+      }
+    }, { timeout: 120_000 });
+
+    logger.info('CSV import completed', { totalRows: records.length, inserted: valid.length });
     return {
-      total: records.length,
-      success,
-      failed,
-      errors,
+      totalRows: records.length,
+      validCount: valid.length,
+      invalidCount: 0,
+      inserted: valid.length,
+      errors: [],
     };
   }
 
