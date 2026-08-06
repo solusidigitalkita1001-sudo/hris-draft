@@ -1880,10 +1880,10 @@ model Employee {
   idNumber            String?          @map("id_number") @db.VarChar(50)
   placeOfBirth        String?          @map("place_of_birth") @db.VarChar(255)
   dateOfBirth         DateTime?        @map("date_of_birth")
-  gender              String?          @db.VarChar(20)
-  religion            String?          @db.VarChar(50)
-  maritalStatus       String?          @map("marital_status") @db.VarChar(20)
-  bloodType           String?          @map("blood_type") @db.VarChar(5)
+  gender              Gender?
+  religion            Religion?
+  maritalStatus       MaritalStatus?   @map("marital_status")
+  bloodType           BloodType?       @map("blood_type")
   nationality         String?          @default("Indonesia") @db.VarChar(50)
   address             String?          @db.Text
   avatar              String?          @db.VarChar(500)
@@ -1980,6 +1980,8 @@ model Employee {
   @@index([employmentStatus])
   @@index([branchId])
   @@index([shiftFormulaId])
+  @@unique([companyId, idNumber])
+  @@unique([companyId, phone])
   @@map("employees")
 }
 
@@ -2903,6 +2905,35 @@ enum EmploymentStatus {
   TERMINATED
   PROBATION
   CONTRACT_END
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum Religion {
+  ISLAM
+  KRISTEN_PROTESTAN
+  KRISTEN_KATOLIK
+  HINDU
+  BUDDHA
+  KONGHUCU
+  LAINNYA
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+enum BloodType {
+  A
+  B
+  AB
+  O
 }
 
 enum EmploymentType {

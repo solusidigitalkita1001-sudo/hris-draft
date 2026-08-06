@@ -38,10 +38,12 @@ export const createEmployeeSchema = z.object({
     .optional(),
   placeOfBirth: z.string().optional(),
   dateOfBirth: z.string().datetime().optional(),
-  gender: z.string().optional(),
-  religion: z.string().optional(),
-  maritalStatus: z.string().optional(),
-  bloodType: z.string().optional(),
+  gender: z.enum(['MALE', 'FEMALE']).optional(),
+  religion: z
+    .enum(['ISLAM', 'KRISTEN_PROTESTAN', 'KRISTEN_KATOLIK', 'HINDU', 'BUDDHA', 'KONGHUCU', 'LAINNYA'])
+    .optional(),
+  maritalStatus: z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
+  bloodType: z.enum(['A', 'B', 'AB', 'O']).optional(),
   nationality: z.string().default('Indonesia'),
   address: z.string().optional(),
   avatar: z.string().optional(),
