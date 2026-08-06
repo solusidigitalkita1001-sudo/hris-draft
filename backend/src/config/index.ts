@@ -19,6 +19,9 @@ const envSchema = z.object({
 
   // Database — required
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  DB_CONNECTION_LIMIT: z.coerce.number().int().positive().default(40),
+  DB_POOL_TIMEOUT: z.coerce.number().int().positive().default(10),
+  DB_SLOW_QUERY_MS: z.coerce.number().int().positive().default(2000),
 
   // Redis
   REDIS_ENABLED: z.coerce.boolean().default(true),
@@ -112,7 +115,12 @@ function buildConfig(env: Env) {
       env: env.NODE_ENV,
       apiPrefix: env.API_PREFIX,
     },
-    database: { url: env.DATABASE_URL },
+    database: {
+      url: env.DATABASE_URL,
+      connectionLimit: env.DB_CONNECTION_LIMIT,
+      poolTimeout: env.DB_POOL_TIMEOUT,
+      slowQueryMs: env.DB_SLOW_QUERY_MS,
+    },
     redis: {
       enabled: env.REDIS_ENABLED,
       url: env.REDIS_URL,
