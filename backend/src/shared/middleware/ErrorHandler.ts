@@ -1,9 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
+import { Prisma } from '@prisma/client';
 import { AppError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import config from '@/config';
 import { ZodError } from 'zod';
+
+// Task 1.12 (VAL-008): map DB unique-constraint violations to a friendly 409.
+function uniqueViolationMessage(target: unknown): string {
+  const fields = Array.isArray(target) ? target.join(',') : String(target ?? '');
+  if (fields.includes('id_number')) return 'NIK sudah terdaftar di perusahaan ini';
+  if (fields.includes('phone')) return 'Nomor HP sudah terdaftar di perusahaan ini';
+  if (fields.includes('email')) return 'Email sudah digunakan';
+  if (fields.includes('employee_number')) return 'Nomor pegawai sudah digunakan';
+  return 'Data sudah terdaftar (duplikat)';
+}
 
 export function errorHandler(
   err: Error,
@@ -68,6 +79,16 @@ export function errorHandler(
     }
 
     res.status(err.statusCode).json(response);
+    return;
+  }
+
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    res.status(409).json({
+      success: false,
+      code: 'CONFLICT',
+      message: uniqueViolationMessage((err.meta as { target?: unknown })?.target),
+      ...(correlationId && { correlationId }),
+    });
     return;
   }
 

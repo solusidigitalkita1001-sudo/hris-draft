@@ -49,7 +49,6 @@ function AssetForm({ onSave, onClose }: {
   onClose: () => void;
 }) {
   const [name, setName] = useState('');
-  const [assetCode, setAssetCode] = useState('');
   const [category, setCategory] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [purchaseValue, setPurchaseValue] = useState<number | ''>('');
@@ -59,12 +58,10 @@ function AssetForm({ onSave, onClose }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return toast.error('Asset name is required');
-    if (!assetCode.trim()) return toast.error('Asset code is required');
     setSaving(true);
     try {
       await onSave({
         name: name.trim(),
-        assetCode: assetCode.trim(),
         category: category.trim() || undefined,
         serialNumber: serialNumber.trim() || undefined,
         purchaseValue: purchaseValue === '' ? undefined : Number(purchaseValue),
@@ -86,8 +83,9 @@ function AssetForm({ onSave, onClose }: {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Asset Code *</label>
-        <Input value={assetCode} onChange={(e) => setAssetCode(e.target.value)} placeholder="e.g. IT-LPT-001" required />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Asset Code</label>
+        <Input value="" disabled placeholder="Akan dibuat otomatis oleh sistem" />
+        <p className="mt-1 text-[11px] text-muted-foreground">Asset code digenerate sistem saat create.</p>
       </div>
 
       <div>

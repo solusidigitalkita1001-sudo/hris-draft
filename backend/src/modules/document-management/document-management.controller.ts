@@ -1,4 +1,4 @@
-import { NextFunction, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import path from 'path';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
@@ -87,6 +87,33 @@ export class DocumentManagementController {
 
       const file = await documentManagementService.getDownloadPayload(req.params.id as string, req.user);
       res.download(path.resolve(file.absolutePath), file.fileName);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Task 1.3: issue a short-lived signed URL (authenticated).
+  async getSignedUrl(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) {
+        return res.status(401).json(Result.error('Authentication required'));
+      }
+      const data = await documentManagementService.getSignedUrl(req.params.id as string, req.user);
+      res.status(200).json(Result.success(data, 'Signed URL generated'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Task 1.3: serve a file by HMAC signature (public — no auth, signature is the token).
+  async serveSignedFile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const file = await documentManagementService.getFileBySignature(
+        req.params.id as string,
+        req.query.expires as string | undefined,
+        req.query.sig as string | undefined
+      );
+      res.type(file.mimeType).sendFile(path.resolve(file.absolutePath));
     } catch (error) {
       next(error);
     }

@@ -182,7 +182,7 @@ export class EmployeeRepository {
     return prisma.employee.findFirst({ where: { companyId, employeeNumber, deletedAt: null } });
   }
 
-  async create(data: CreateEmployeeDTO) {
+  async create(data: CreateEmployeeDTO & { employeeNumber: string }) {
     return prisma.employee.create({
       data: {
         ...data,

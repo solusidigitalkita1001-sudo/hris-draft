@@ -45,7 +45,7 @@ services:
       MYSQL_USER: hris_user
       MYSQL_PASSWORD: hris_password
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d

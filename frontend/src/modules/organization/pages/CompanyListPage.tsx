@@ -45,17 +45,17 @@ function CompanyForm({ initial, groups, onSave, onClose }: {
   onSave: (data: any) => Promise<void>; onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
-  const [code, setCode] = useState(initial?.code || '');
   const [groupId, setGroupId] = useState(initial?.groupId || (groups[0]?.id || ''));
   const [taxId, setTaxId] = useState(initial?.taxId || '');
   const [saving, setSaving] = useState(false);
+  const isEdit = Boolean(initial?.id);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !code.trim() || !groupId) return toast.error('Name, code, and group are required');
+    if (!name.trim() || !groupId) return toast.error('Name and group are required');
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), code: code.trim().toUpperCase(), groupId, taxId: taxId.trim() || undefined });
+      await onSave({ name: name.trim(), groupId, taxId: taxId.trim() || undefined });
       onClose();
     } catch { /* handled */ }
     finally { setSaving(false); }
@@ -79,8 +79,8 @@ function CompanyForm({ initial, groups, onSave, onClose }: {
       <div className="grid grid-cols-2 gap-3">
         <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Company Name *</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. PT Maju Jaya" required /></div>
-        <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Code *</label>
-          <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. MJ" required /></div>
+        <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Code</label>
+          <Input value={isEdit ? initial?.code || '' : ''} disabled placeholder="Akan dibuat otomatis oleh sistem" /></div>
       </div>
       <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Tax ID (optional)</label>
         <Input value={taxId} onChange={(e) => setTaxId(e.target.value)} /></div>

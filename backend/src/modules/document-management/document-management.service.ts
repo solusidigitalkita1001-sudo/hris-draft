@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import config from '@/config';
 import { prisma } from '@/shared/database/prisma';
 import {
   BadRequestError,
@@ -12,6 +13,10 @@ import {
   DocumentQueryDTO,
 } from './document-management.dto';
 import { documentManagementRepository } from './document-management.repository';
+import {
+  generateSignedDocumentPath,
+  verifyDocumentSignature,
+} from '@/shared/security/signed-url';
 
 export class DocumentManagementService {
   async findCategories(companyId?: string, groupId?: string) {
@@ -109,6 +114,37 @@ export class DocumentManagementService {
       mimeType: file.mimetype,
       fileSize: file.size,
     });
+  }
+
+  // Task 1.3: issue a short-lived signed URL after the normal access check.
+  async getSignedUrl(id: string, user: { id: string; companyId?: string; groupId?: string; roles?: string[] }) {
+    const document = await documentManagementRepository.findDocumentById(id);
+    if (!document) throw new NotFoundError('Document not found');
+
+    if (!this.canAccessCompany(user, document.companyId) || !this.canAccessGroup(user, document.groupId || undefined)) {
+      throw new ForbiddenError('You do not have access to this document');
+    }
+
+    const { path: signedPath, expiresAt } = generateSignedDocumentPath(id);
+    await documentManagementRepository.logAccess(document.id, user.id, 'VIEW');
+    return { url: `${config.app.url}${signedPath}`, expiresAt };
+  }
+
+  // Serve by signature only — the HMAC is the authorization, so no user context.
+  async getFileBySignature(id: string, expires?: string, sig?: string) {
+    if (!verifyDocumentSignature(id, expires, sig)) {
+      throw new ForbiddenError('Invalid or expired document URL');
+    }
+    const document = await documentManagementRepository.findDocumentById(id);
+    if (!document) throw new NotFoundError('Document not found');
+
+    const absolutePath = path.resolve(document.filePath);
+    try {
+      await fs.access(absolutePath);
+    } catch {
+      throw new NotFoundError('Stored file not found');
+    }
+    return { absolutePath, fileName: document.fileName, mimeType: document.mimeType };
   }
 
   async getDownloadPayload(id: string, user: { id: string; companyId?: string; groupId?: string; roles?: string[] }) {

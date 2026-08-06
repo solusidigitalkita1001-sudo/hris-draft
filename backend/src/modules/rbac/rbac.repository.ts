@@ -6,8 +6,12 @@ export class RoleRepository {
   async findAll(companyId?: string, groupId?: string) {
     const where: Prisma.RoleWhereInput = { deletedAt: null };
 
-    if (companyId) where.companyId = companyId;
-    if (groupId) where.groupId = groupId;
+    if (companyId || groupId) {
+      const scopedFilters: Prisma.RoleWhereInput[] = [{ isSystem: true }];
+      if (companyId) scopedFilters.push({ companyId });
+      if (groupId) scopedFilters.push({ groupId });
+      where.OR = scopedFilters;
+    }
 
     return prisma.role.findMany({
       where,
@@ -34,7 +38,7 @@ export class RoleRepository {
     return prisma.role.findUnique({ where: { code } });
   }
 
-  async create(data: CreateRoleDTO) {
+  async create(data: CreateRoleDTO & { code: string }) {
     return prisma.role.create({ data });
   }
 

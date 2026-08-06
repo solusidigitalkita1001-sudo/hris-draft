@@ -3,6 +3,7 @@ import multer from 'multer';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
+import { auditLog } from '@/shared/middleware/AuditLog';
 import { employeeController } from './employee.controller';
 import {
   createEmployeeSchema, updateEmployeeSchema, createCareerTransactionSchema,
@@ -40,14 +41,14 @@ router.post(
   employeeController.createCompanyAssignment.bind(employeeController)
 );
 router.post('/import', authorize({ resource: 'employee', action: 'create' }), upload.single('file'), employeeController.importCsv.bind(employeeController));
-router.put('/:id', authorize({ resource: 'employee', action: 'update' }), validate(updateEmployeeSchema), employeeController.update.bind(employeeController));
+router.put('/:id', authorize({ resource: 'employee', action: 'update' }), auditLog({ action: 'UPDATE', entity: 'Employee', model: 'employee' }), validate(updateEmployeeSchema), employeeController.update.bind(employeeController));
 router.put(
   '/:id/company-assignments/:assignmentId',
   authorize({ resource: 'employee', action: 'update' }),
   validate(updateEmployeeCompanyAssignmentSchema),
   employeeController.updateCompanyAssignment.bind(employeeController)
 );
-router.delete('/:id', authorize({ resource: 'employee', action: 'delete' }), employeeController.delete.bind(employeeController));
+router.delete('/:id', authorize({ resource: 'employee', action: 'delete' }), auditLog({ action: 'DELETE', entity: 'Employee', model: 'employee' }), employeeController.delete.bind(employeeController));
 router.delete(
   '/:id/company-assignments/:assignmentId',
   authorize({ resource: 'employee', action: 'update' }),

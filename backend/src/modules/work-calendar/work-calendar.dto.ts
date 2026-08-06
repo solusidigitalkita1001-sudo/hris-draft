@@ -79,7 +79,7 @@ const shiftFormulaDaySchema = z.object({
 
 export const createShiftFormulaSchema = z.object({
   companyId: z.string().uuid(),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   name: z.string().min(1).max(150),
   description: z.string().optional(),
   isActive: z.boolean().optional().default(true),

@@ -635,7 +635,17 @@ export class WorkCalendarRepository {
     });
   }
 
-  async createShiftFormula(data: CreateShiftFormulaDTO & { createdBy: string }) {
+  async findShiftFormulaByCode(companyId: string, code: string) {
+    return prisma.shiftFormula.findFirst({
+      where: {
+        companyId,
+        code,
+        deletedAt: null,
+      },
+    });
+  }
+
+  async createShiftFormula(data: CreateShiftFormulaDTO & { createdBy: string; code: string }) {
     const days = validateShiftFormulaDays(data.days);
 
     return prisma.shiftFormula.create({

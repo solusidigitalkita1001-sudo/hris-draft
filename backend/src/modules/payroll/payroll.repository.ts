@@ -32,7 +32,7 @@ export class PayrollRepository {
     });
   }
 
-  async createSalaryComponent(data: CreateSalaryComponentDTO) {
+  async createSalaryComponent(data: CreateSalaryComponentDTO & { code: string }) {
     return prisma.salaryComponent.create({
       data: {
         companyId: data.companyId,
@@ -84,7 +84,15 @@ export class PayrollRepository {
       where,
       include: {
         employee: {
-          select: { id: true, fullName: true, employeeNumber: true },
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            maritalStatus: true,
+            taxId: true,
+            // dependents for PTKP (Task 2.6)
+            _count: { select: { families: { where: { isDependent: true } } } },
+          },
         },
         components: {
           include: {
@@ -205,7 +213,7 @@ export class PayrollRepository {
     });
   }
 
-  async createPayrollPeriod(data: CreatePayrollPeriodDTO) {
+  async createPayrollPeriod(data: CreatePayrollPeriodDTO & { code: string }) {
     return prisma.payrollPeriod.create({
       data: {
         companyId: data.companyId,

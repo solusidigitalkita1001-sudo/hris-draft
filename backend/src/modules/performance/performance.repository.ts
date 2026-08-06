@@ -166,7 +166,7 @@ export class PerformanceRepository {
     });
   }
 
-  async createMethod(data: CreatePerformanceMethodDTO) {
+  async createMethod(data: CreatePerformanceMethodDTO & { code: string }) {
     return prisma.performanceMethod.create({
       data,
     });
@@ -457,7 +457,7 @@ export class PerformanceRepository {
     });
   }
 
-  async createFormula(data: CreatePerformanceFormulaDTO) {
+  async createFormula(data: CreatePerformanceFormulaDTO & { code: string }) {
     return prisma.performanceFormula.create({
       data: {
         ...data,
@@ -504,7 +504,7 @@ export class PerformanceRepository {
     });
   }
 
-  async createIndicator(data: CreatePerformanceIndicatorDTO) {
+  async createIndicator(data: CreatePerformanceIndicatorDTO & { code: string }) {
     return prisma.performanceIndicator.create({
       data: {
         ...data,
@@ -573,7 +573,7 @@ export class PerformanceRepository {
     });
   }
 
-  async createGradeRule(data: CreatePerformanceGradeRuleDTO) {
+  async createGradeRule(data: CreatePerformanceGradeRuleDTO & { code: string }) {
     return prisma.performanceGradeRule.create({
       data: {
         companyId: data.companyId,
@@ -668,7 +668,7 @@ export class PerformanceRepository {
     });
   }
 
-  async createComponent(methodVersionId: string, companyId: string, data: CreatePerformanceComponentDTO) {
+  async createComponent(methodVersionId: string, companyId: string, data: CreatePerformanceComponentDTO & { code: string }) {
     return prisma.performanceComponent.create({
       data: {
         methodVersionId,
@@ -767,7 +767,7 @@ export class PerformanceRepository {
     });
   }
 
-  async createPeriod(data: CreatePerformancePeriodDTO) {
+  async createPeriod(data: CreatePerformancePeriodDTO & { code: string }) {
     return prisma.performancePeriod.create({
       data: {
         ...data,
@@ -931,10 +931,7 @@ export class PerformanceRepository {
     });
   }
 
-  async findPlanningAssignmentById(id: string) {
-    return prisma.performancePlanningAssignment.findFirst({
-      where: { id, deletedAt: null },
-      include: {
+  private readonly planningAssignmentDetailInclude = {
         period: {
           include: {
             methodVersion: {
@@ -983,7 +980,20 @@ export class PerformanceRepository {
           },
           orderBy: { createdAt: 'asc' },
         },
-      },
+  } satisfies Prisma.PerformancePlanningAssignmentInclude;
+
+  async findPlanningAssignmentById(id: string) {
+    return prisma.performancePlanningAssignment.findFirst({
+      where: { id, deletedAt: null },
+      include: this.planningAssignmentDetailInclude,
+    });
+  }
+
+  // Task 2.2: batch-load full assignment details in one query (was N+1 in calc).
+  async findPlanningAssignmentsByIds(ids: string[]) {
+    return prisma.performancePlanningAssignment.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      include: this.planningAssignmentDetailInclude,
     });
   }
 
@@ -1350,6 +1360,98 @@ export class PerformanceRepository {
         { submittedAt: 'asc' },
         { updatedAt: 'desc' },
       ],
+    });
+  }
+
+  async findMyExecutionAssignments(companyId: string, employeeId: string) {
+    return prisma.performancePlanningAssignment.findMany({
+      where: {
+        companyId,
+        employeeId,
+        deletedAt: null,
+        period: {
+          deletedAt: null,
+          status: 'PUBLISHED',
+          planningPublishedAt: { not: null },
+        },
+      },
+      include: {
+        period: { select: { id: true, name: true, code: true, startDate: true, endDate: true, reviewDeadline: true, planningPublishedAt: true } },
+        employee: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+    });
+  }
+
+  async findExecutionAssignmentByIdForActor(id: string, actorEmployeeId: string) {
+    return prisma.performancePlanningAssignment.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        period: {
+          deletedAt: null,
+          status: 'PUBLISHED',
+          planningPublishedAt: { not: null },
+        },
+        OR: [
+          { employeeId: actorEmployeeId },
+          { reviewerId: actorEmployeeId },
+          { approverId: actorEmployeeId },
+          { targets: { some: { reviewerId: actorEmployeeId, deletedAt: null } } },
+          { targets: { some: { approverId: actorEmployeeId, deletedAt: null } } },
+        ],
+      },
+      include: {
+        period: {
+          include: {
+            methodVersion: {
+              include: {
+                components: {
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            email: true,
+            branch: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+            subDepartment: { select: { id: true, name: true } },
+            position: { select: { id: true, name: true, reportsToId: true } },
+          },
+        },
+        reviewer: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        approver: { select: { id: true, fullName: true, employeeNumber: true, email: true } },
+        targets: {
+          where: { deletedAt: null },
+          include: {
+            component: true,
+            indicator: { include: { formula: true } },
+            formula: true,
+            reviewer: { select: { id: true, fullName: true, employeeNumber: true } },
+            approver: { select: { id: true, fullName: true, employeeNumber: true } },
+            progressLogs: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                actor: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+            evidences: {
+              orderBy: { createdAt: 'desc' },
+              include: {
+                uploadedBy: { select: { id: true, fullName: true, employeeNumber: true } },
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -2530,7 +2632,7 @@ export class PerformanceRepository {
     periodId: string,
     companyId: string,
     createdById: string | undefined,
-    data: CreatePerformanceCalibrationSessionDTO,
+    data: CreatePerformanceCalibrationSessionDTO & { code: string },
     participantResultIds: string[]
   ) {
     return prisma.performanceCalibrationSession.create({
@@ -2879,7 +2981,11 @@ export class PerformanceRepository {
     return prisma.reviewCycle.findFirst({ where: { id, deletedAt: null } });
   }
 
-  async createCycle(data: CreateReviewCycleDTO) {
+  async findCycleByCode(code: string) {
+    return prisma.reviewCycle.findUnique({ where: { code } });
+  }
+
+  async createCycle(data: CreateReviewCycleDTO & { code: string }) {
     return prisma.reviewCycle.create({
       data: { ...data, type: data.type as any, startDate: new Date(data.startDate), endDate: new Date(data.endDate), reviewDeadline: data.reviewDeadline ? new Date(data.reviewDeadline) : undefined },
     });

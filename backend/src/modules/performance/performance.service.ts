@@ -21,6 +21,7 @@ import {
   UpdatePerformancePlanningTargetDTO,
   CreatePerformanceTargetProgressDTO,
   PerformanceExecutionActionDTO,
+  UpdateExecutionTargetCommentDTO,
   CreatePerformanceCalibrationSessionDTO,
   PerformanceCalibrationDecisionDTO,
   PublishPerformanceResultsDTO,
@@ -49,6 +50,7 @@ import { NotFoundError, BadRequestError, ConflictError, ForbiddenError } from '@
 import { logger } from '@/shared/logger/WinstonLogger';
 import { createAuditLog } from '@/shared/middleware/AuditLog';
 import { queueManager, QueueNames } from '@/infrastructure/queue/QueueManager';
+import { generateSystemCode } from '@/shared/utils/system-code';
 
 interface PerformanceAuditContext {
   userId: string;
@@ -73,6 +75,21 @@ interface PerformanceAttachmentUploadInput {
   title?: string;
   description?: string;
   visibility?: 'INTERNAL' | 'RESTRICTED' | 'PUBLIC';
+}
+
+interface ForcedDistributionConfig {
+  mode: 'COUNT' | 'PERCENT';
+  buckets: Record<string, number>;
+  tolerance: number;
+}
+
+interface ForcedDistributionAnalysis {
+  mode: 'COUNT' | 'PERCENT';
+  target: Record<string, number>;
+  actual: Record<string, number>;
+  delta: Record<string, number>;
+  isCompliant: boolean;
+  violations: string[];
 }
 
 const PERFORMANCE_ATTACHMENT_CATEGORY_PREFIX = 'PERFORMANCE_RESULT_ATTACHMENT';
@@ -186,6 +203,148 @@ export class PerformanceService {
         throw new BadRequestError(`Workflow stage ${stage.name} requires approverId`);
       }
     }
+  }
+
+  private parseForcedDistribution(input: unknown): ForcedDistributionConfig | null {
+    if (!input || typeof input !== 'object') {
+      return null;
+    }
+
+    const raw = input as any;
+    const mode = raw.mode === 'PERCENT' ? 'PERCENT' : 'COUNT';
+    const bucketsInput = raw.buckets;
+    if (!bucketsInput || typeof bucketsInput !== 'object') {
+      return null;
+    }
+
+    const buckets: Record<string, number> = {};
+    for (const [key, value] of Object.entries(bucketsInput as Record<string, unknown>)) {
+      if (!key.trim()) continue;
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        return null;
+      }
+      buckets[key] = numeric;
+    }
+
+    if (Object.keys(buckets).length === 0) {
+      return null;
+    }
+
+    const tolerance = raw.tolerance === undefined || raw.tolerance === null ? 0 : Number(raw.tolerance);
+    if (!Number.isFinite(tolerance) || tolerance < 0) {
+      return null;
+    }
+
+    return {
+      mode,
+      buckets,
+      tolerance: Math.floor(tolerance),
+    };
+  }
+
+  private buildForcedDistributionTargets(config: ForcedDistributionConfig, total: number) {
+    if (config.mode === 'COUNT') {
+      const normalized: Record<string, number> = {};
+      for (const [key, value] of Object.entries(config.buckets)) {
+        normalized[key] = Math.floor(value);
+      }
+      return normalized;
+    }
+
+    const items = Object.entries(config.buckets).map(([key, pct]) => ({
+      key,
+      pct,
+    }));
+    const rawCounts = items.map((item) => ({
+      key: item.key,
+      raw: (item.pct / 100) * total,
+    }));
+    const floors = rawCounts.map((item) => ({
+      key: item.key,
+      value: Math.floor(item.raw),
+      remainder: item.raw - Math.floor(item.raw),
+    }));
+
+    let allocated = floors.reduce((sum, item) => sum + item.value, 0);
+    let remaining = total - allocated;
+    floors.sort((a, b) => b.remainder - a.remainder);
+
+    for (let index = 0; index < floors.length && remaining > 0; index += 1) {
+      floors[index].value += 1;
+      remaining -= 1;
+      allocated += 1;
+    }
+
+    const targets: Record<string, number> = {};
+    for (const item of floors) {
+      targets[item.key] = item.value;
+    }
+    return targets;
+  }
+
+  private resolveDistributionKey(
+    grade: { gradeCode?: string | null; gradeLabel?: string | null },
+    targetKeys?: Set<string>
+  ) {
+    const gradeCode = grade.gradeCode?.trim() || null;
+    const gradeLabel = grade.gradeLabel?.trim() || null;
+
+    if (targetKeys && gradeCode && targetKeys.has(gradeCode)) {
+      return gradeCode;
+    }
+    if (targetKeys && gradeLabel && targetKeys.has(gradeLabel)) {
+      return gradeLabel;
+    }
+
+    return gradeCode || gradeLabel || 'UNSPECIFIED';
+  }
+
+  private buildCalibrationDistribution(
+    session: NonNullable<Awaited<ReturnType<typeof performanceRepository.findCalibrationSessionById>>>,
+    targetKeys?: Set<string>
+  ) {
+    const counts: Record<string, number> = {};
+    for (const participant of session.participants ?? []) {
+      const key = this.resolveDistributionKey({
+        gradeCode: participant.result?.gradeCode ?? null,
+        gradeLabel: participant.result?.gradeLabel ?? null,
+      }, targetKeys);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  private buildForcedDistributionAnalysis(
+    session: NonNullable<Awaited<ReturnType<typeof performanceRepository.findCalibrationSessionById>>>,
+    config: ForcedDistributionConfig
+  ): ForcedDistributionAnalysis {
+    const total = session.participants?.length ?? 0;
+    const target = this.buildForcedDistributionTargets(config, total);
+    const targetKeys = new Set(Object.keys(target));
+    const actual = this.buildCalibrationDistribution(session, targetKeys);
+    const keys = new Set([...Object.keys(target), ...Object.keys(actual)]);
+    const delta: Record<string, number> = {};
+    const violations: string[] = [];
+
+    for (const key of Array.from(keys.values())) {
+      const expected = target[key] ?? 0;
+      const value = actual[key] ?? 0;
+      const diff = value - expected;
+      delta[key] = diff;
+      if (Math.abs(diff) > config.tolerance) {
+        violations.push(`${key}: target ${expected}, actual ${value}`);
+      }
+    }
+
+    return {
+      mode: config.mode,
+      target,
+      actual,
+      delta,
+      isCompliant: violations.length === 0,
+      violations,
+    };
   }
 
   private ensurePlanningPeriodAvailable(period: { status: string } | null) {
@@ -1426,7 +1585,11 @@ export class PerformanceService {
   }
 
   async createMethod(data: CreatePerformanceMethodDTO, context: PerformanceAuditContext) {
-    const code = this.normalizeCode(data.code);
+    const code = await generateSystemCode({
+      prefix: 'PFM-MTH',
+      label: data.name,
+      exists: async (candidate) => Boolean(await performanceRepository.findMethodByCompanyAndCode(data.companyId, candidate)),
+    });
     const existing = await performanceRepository.findMethodByCompanyAndCode(data.companyId, code);
     if (existing) {
       throw new ConflictError('Performance method code already exists');
@@ -1717,7 +1880,11 @@ export class PerformanceService {
   }
 
   async createFormula(data: CreatePerformanceFormulaDTO, context: PerformanceAuditContext) {
-    const code = this.normalizeCode(data.code);
+    const code = await generateSystemCode({
+      prefix: 'PFM-FML',
+      label: data.name,
+      exists: async (candidate) => Boolean(await performanceRepository.findFormulaByCompanyAndCode(data.companyId, candidate)),
+    });
     const existing = await performanceRepository.findFormulaByCompanyAndCode(data.companyId, code);
     if (existing) {
       throw new ConflictError('Performance formula code already exists');
@@ -1774,7 +1941,11 @@ export class PerformanceService {
   }
 
   async createIndicator(data: CreatePerformanceIndicatorDTO, context: PerformanceAuditContext) {
-    const code = this.normalizeCode(data.code);
+    const code = await generateSystemCode({
+      prefix: 'PFM-IND',
+      label: data.name,
+      exists: async (candidate) => Boolean(await performanceRepository.findIndicatorByCompanyAndCode(data.companyId, candidate)),
+    });
     const existing = await performanceRepository.findIndicatorByCompanyAndCode(data.companyId, code);
     if (existing) {
       throw new ConflictError('Performance indicator code already exists');
@@ -1849,7 +2020,11 @@ export class PerformanceService {
   }
 
   async createGradeRule(data: CreatePerformanceGradeRuleDTO, context: PerformanceAuditContext) {
-    const code = this.normalizeCode(data.code);
+    const code = await generateSystemCode({
+      prefix: 'PFM-GRD',
+      label: data.name,
+      exists: async (candidate) => Boolean(await performanceRepository.findGradeRuleByCompanyAndCode(data.companyId, candidate)),
+    });
     const existing = await performanceRepository.findGradeRuleByCompanyAndCode(data.companyId, code);
     if (existing) {
       throw new ConflictError('Performance grade rule code already exists');
@@ -1929,7 +2104,11 @@ export class PerformanceService {
     const version = await this.findMethodVersionById(methodVersionId);
     this.ensureEditableMethodVersion(version.status);
 
-    const code = this.normalizeCode(data.code);
+    const code = await generateSystemCode({
+      prefix: 'PFM-CMP',
+      label: data.name,
+      exists: async (candidate) => version.components.some((component) => component.code === candidate),
+    });
     const duplicate = version.components.find((component) => component.code === code);
     if (duplicate) {
       throw new ConflictError('Component code already exists in this method version');
@@ -1996,7 +2175,11 @@ export class PerformanceService {
       throw new BadRequestError('Selected method version does not belong to the selected method');
     }
 
-    const code = this.normalizeCode(data.code);
+    const code = await generateSystemCode({
+      prefix: 'PFM-PRD',
+      label: data.name,
+      exists: async (candidate) => Boolean(await performanceRepository.findPeriodByCompanyAndCode(data.companyId, candidate)),
+    });
     const existing = await performanceRepository.findPeriodByCompanyAndCode(data.companyId, code);
     if (existing) {
       throw new ConflictError('Performance period code already exists');
@@ -2712,6 +2895,73 @@ export class PerformanceService {
     return performanceRepository.findExecutionApprovalQueue(companyId, context.employeeId);
   }
 
+  async getMyExecutionAssignments(companyId: string, context: PerformanceAuditContext) {
+    const employeeId = this.ensureExecutionActor(context);
+    return performanceRepository.findMyExecutionAssignments(companyId, employeeId);
+  }
+
+  async getExecutionAssignmentById(id: string, context: PerformanceAuditContext) {
+    const employeeId = this.ensureExecutionActor(context);
+    const assignment = await performanceRepository.findExecutionAssignmentByIdForActor(id, employeeId);
+    if (!assignment) {
+      throw new NotFoundError('Performance planning assignment not found');
+    }
+
+    this.ensureExecutionWorkspaceAvailable(assignment.period as any);
+    return assignment;
+  }
+
+  async updateExecutionTargetComment(id: string, data: UpdateExecutionTargetCommentDTO, context: PerformanceAuditContext) {
+    const current = await performanceRepository.findPlanningTargetById(id);
+    if (!current) {
+      throw new NotFoundError('Performance planning target not found');
+    }
+
+    this.ensureExecutionWorkspaceAvailable(current.assignment.period as any);
+    const actorRole = this.resolveExecutionTargetActorRole(current, context);
+    const sanitized = data.comment?.trim();
+    const commentValue = sanitized ? sanitized : null;
+
+    if (actorRole === 'EMPLOYEE') {
+      this.ensureAssignmentExecutionMutable(current.assignment.status);
+
+      const updated = await performanceRepository.updatePlanningTarget(id, {
+        status: this.nextExecutionTargetStatus(current.status),
+        selfComment: commentValue,
+        submittedAt: null,
+        reviewedAt: null,
+        completedAt: null,
+      } as any);
+
+      await performanceRepository.updatePlanningAssignment(current.assignmentId, {
+        status: this.nextExecutionAssignmentStatus(current.assignment.status),
+        executionSnapshot: null,
+        submittedAt: null,
+        reviewedAt: null,
+        completedAt: null,
+        decisionNotes: null,
+      } as any);
+
+      await this.logAudit(context, 'COMMENT', 'performance-planning-target', id, current.selfComment, updated.selfComment);
+      return updated;
+    }
+
+    if (current.assignment.status !== 'SUBMITTED') {
+      throw new BadRequestError('Reviewer comment is only allowed for submitted assignments');
+    }
+
+    const updated = await performanceRepository.updatePlanningTarget(id, {
+      reviewerComment: commentValue,
+    } as any);
+
+    await performanceRepository.updatePlanningAssignment(current.assignmentId, {
+      executionSnapshot: null,
+    } as any);
+
+    await this.logAudit(context, 'COMMENT', 'performance-planning-target', id, current.reviewerComment, updated.reviewerComment);
+    return updated;
+  }
+
   async getPerformanceResults(periodId: string) {
     await this.findPeriodById(periodId);
     return performanceRepository.findResultsByPeriod(periodId);
@@ -2940,9 +3190,15 @@ export class PerformanceService {
       throw new BadRequestError('No approved or completed execution assignments are ready for calculation');
     }
 
+    // Task 2.2: batch-load all details up front instead of one query per assignment.
+    const details = await performanceRepository.findPlanningAssignmentsByIds(
+      eligibleAssignments.map((a) => a.id)
+    );
+    const detailById = new Map(details.map((d) => [d.id, d]));
+
     const results = [];
     for (const assignment of eligibleAssignments) {
-      const detail = await performanceRepository.findPlanningAssignmentById(assignment.id);
+      const detail = detailById.get(assignment.id);
       if (!detail) {
         throw new NotFoundError('Performance planning assignment not found');
       }
@@ -3403,7 +3659,27 @@ export class PerformanceService {
 
   async getCalibrationSessions(periodId: string) {
     await this.findPeriodById(periodId);
-    return performanceRepository.findCalibrationSessions(periodId);
+    const sessions = await performanceRepository.findCalibrationSessions(periodId);
+    const enriched = await Promise.all(
+      sessions.map(async (session) => {
+        const config = this.parseForcedDistribution(session.forcedDistribution);
+        if (!config) {
+          return session as any;
+        }
+
+        const detail = await performanceRepository.findCalibrationSessionById(session.id);
+        if (!detail) {
+          return session as any;
+        }
+
+        return {
+          ...(session as any),
+          distributionAnalysis: this.buildForcedDistributionAnalysis(detail as any, config),
+        };
+      })
+    );
+
+    return enriched as any;
   }
 
   async createCalibrationSession(
@@ -3420,7 +3696,13 @@ export class PerformanceService {
     }
 
     const existingSessions = await performanceRepository.findCalibrationSessions(periodId);
-    if (existingSessions.some((session) => session.code.trim().toLowerCase() === data.code.trim().toLowerCase())) {
+    const code = await generateSystemCode({
+      prefix: 'PFM-CAL',
+      label: data.name,
+      exists: async (candidate) => existingSessions.some((session) => session.code.trim().toLowerCase() === candidate.trim().toLowerCase()),
+    });
+
+    if (existingSessions.some((session) => session.code.trim().toLowerCase() === code.trim().toLowerCase())) {
       throw new ConflictError('Calibration session code already exists for this period');
     }
 
@@ -3431,7 +3713,7 @@ export class PerformanceService {
       {
         ...data,
         name: data.name.trim(),
-        code: this.normalizeCode(data.code),
+        code,
         notes: data.notes?.trim(),
       },
       results.map((result) => result.id)
@@ -3485,6 +3767,14 @@ export class PerformanceService {
       throw new BadRequestError('Calibration session can only be finalized from open or closed state');
     }
 
+    const config = this.parseForcedDistribution(current.forcedDistribution);
+    if (config) {
+      const analysis = this.buildForcedDistributionAnalysis(current as any, config);
+      if (!analysis.isCompliant) {
+        throw new BadRequestError(`Forced distribution mismatch: ${analysis.violations.join(', ')}`);
+      }
+    }
+
     const finalized = await performanceRepository.finalizeCalibrationSession(id);
     await this.logAudit(context, 'FINALIZE', 'performance-calibration-session', id, current, finalized);
     return finalized;
@@ -3506,6 +3796,42 @@ export class PerformanceService {
     }
 
     const grade = this.mapGradeResult(data.finalScore, period.methodVersion.gradeRule);
+
+    const forcedConfig = this.parseForcedDistribution(participant.session.forcedDistribution);
+    if (forcedConfig) {
+      const sessionDetail = await performanceRepository.findCalibrationSessionById(participant.sessionId);
+      if (sessionDetail) {
+        const targets = this.buildForcedDistributionTargets(forcedConfig, sessionDetail.participants.length);
+        const targetKeys = new Set(Object.keys(targets));
+        const currentCounts = this.buildCalibrationDistribution(sessionDetail as any, targetKeys);
+        const oldKey = this.resolveDistributionKey({
+          gradeCode: participant.result.gradeCode,
+          gradeLabel: participant.result.gradeLabel,
+        }, targetKeys);
+        const newKey = this.resolveDistributionKey({
+          gradeCode: grade.gradeCode ?? null,
+          gradeLabel: grade.gradeLabel ?? null,
+        }, targetKeys);
+
+        const nextCounts: Record<string, number> = { ...currentCounts };
+        nextCounts[oldKey] = Math.max(0, (nextCounts[oldKey] ?? 0) - 1);
+        nextCounts[newKey] = (nextCounts[newKey] ?? 0) + 1;
+
+        const violations: string[] = [];
+        for (const key of Object.keys(targets)) {
+          const limit = targets[key] + forcedConfig.tolerance;
+          const value = nextCounts[key] ?? 0;
+          if (value > limit) {
+            violations.push(`${key}: limit ${limit}, next ${value}`);
+          }
+        }
+
+        if (violations.length > 0) {
+          throw new BadRequestError(`Forced distribution exceeded: ${violations.join(', ')}`);
+        }
+      }
+    }
+
     const updated = await performanceRepository.applyCalibrationDecision(
       id,
       participant.companyId,
@@ -3546,7 +3872,16 @@ export class PerformanceService {
   }
 
   async createCycle(data: CreateReviewCycleDTO) {
-    return performanceRepository.createCycle(data);
+    const code = await generateSystemCode({
+      prefix: 'PFM-CYC',
+      label: data.name,
+      exists: async (candidate) => Boolean(await performanceRepository.findCycleByCode(candidate)),
+    });
+
+    return performanceRepository.createCycle({
+      ...data,
+      code,
+    });
   }
 
   async findAllReviews(companyId: string, filters?: { employeeId?: string; cycleId?: string; status?: string }) {

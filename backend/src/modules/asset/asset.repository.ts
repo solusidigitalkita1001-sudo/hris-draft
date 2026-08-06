@@ -24,7 +24,13 @@ export class AssetRepository {
     });
   }
 
-  async create(data: CreateAssetDTO) {
+  async findByAssetCode(assetCode: string) {
+    return prisma.asset.findUnique({
+      where: { assetCode },
+    });
+  }
+
+  async create(data: CreateAssetDTO & { assetCode: string }) {
     return prisma.asset.create({ data: { ...data, purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : undefined, purchaseValue: data.purchaseValue, currentValue: data.purchaseValue } });
   }
 

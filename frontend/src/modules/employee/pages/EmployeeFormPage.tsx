@@ -131,6 +131,7 @@ export function EmployeeFormPage() {
     try {
       const payload = {
         ...form,
+        employeeNumber: isEdit ? form.employeeNumber : undefined,
         companyId,
         joinDate: form.joinDate ? new Date(form.joinDate).toISOString() : undefined,
         shiftStartDate: form.shiftStartDate ? new Date(form.shiftStartDate).toISOString() : null,
@@ -171,7 +172,7 @@ export function EmployeeFormPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Employee Number *</label>
-                  <Input value={form.employeeNumber} onChange={(e) => handleChange('employeeNumber', e.target.value)} required className="h-9" />
+                  <Input value={isEdit ? form.employeeNumber : ''} disabled className="h-9" placeholder="Akan dibuat otomatis oleh sistem" />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">ID Number (KTP)</label>

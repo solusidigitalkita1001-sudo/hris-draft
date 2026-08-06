@@ -67,7 +67,17 @@ export async function seedRoles(): Promise<void> {
   for (const role of roles) {
     await prisma.role.upsert({
       where: { code: role.code },
-      update: {},
+      update: {
+        name: role.name,
+        description: role.description,
+        scope: role.scope,
+        isSystem: role.isSystem,
+        priority: role.priority,
+        status: 'ACTIVE',
+        companyId: null,
+        groupId: null,
+        deletedAt: null,
+      },
       create: role,
     });
   }

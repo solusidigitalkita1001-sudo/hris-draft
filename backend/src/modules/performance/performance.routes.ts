@@ -30,6 +30,7 @@ import {
   updatePerformancePlanningTargetSchema,
   createPerformanceTargetProgressSchema,
   performanceExecutionActionSchema,
+  updateExecutionTargetCommentSchema,
   createPerformanceCalibrationSessionSchema,
   performanceCalibrationDecisionSchema,
   publishPerformanceResultsSchema,
@@ -170,6 +171,9 @@ router.delete('/planning-targets/:id', authorize({ resource: 'performance', acti
 router.post('/planning-targets/:id/progress', authorize({ resource: 'performance', action: 'update' }), validate(createPerformanceTargetProgressSchema), performanceController.createPlanningTargetProgress.bind(performanceController));
 router.post('/planning-targets/:id/evidences', authorize({ resource: 'performance', action: 'update' }), evidenceUpload.single('file'), performanceController.uploadPlanningEvidence.bind(performanceController));
 router.get('/execution/approval-queue', authorize({ resource: 'performance', action: 'read' }), performanceController.getExecutionApprovalQueue.bind(performanceController));
+router.get('/execution/my-assignments', authorize({ resource: 'performance', action: 'read' }), performanceController.getMyExecutionAssignments.bind(performanceController));
+router.get('/execution/assignments/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.getExecutionAssignmentById.bind(performanceController));
+router.patch('/execution/targets/:id/comment', authorize({ resource: 'performance', action: 'update' }), validate(updateExecutionTargetCommentSchema), performanceController.updateExecutionTargetComment.bind(performanceController));
 router.get('/periods/:id/results', authorize({ resource: 'performance', action: 'read' }), performanceController.getPerformanceResults.bind(performanceController));
 router.get('/periods/:id/development-recommendations', authorize({ resource: 'performance', action: 'read' }), performanceController.getDevelopmentRecommendations.bind(performanceController));
 router.post('/periods/:id/development-recommendations/sync', authorize({ resource: 'performance', action: 'update' }), validate(syncPerformanceDevelopmentRecommendationsSchema), performanceController.syncDevelopmentRecommendations.bind(performanceController));

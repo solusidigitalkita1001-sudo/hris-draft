@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createCategorySchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   description: z.string().optional(),
 });
 
@@ -11,7 +11,7 @@ export const createCourseSchema = z.object({
   categoryId: z.string().uuid().optional(),
   companyId: z.string().uuid(),
   title: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   description: z.string().optional(),
   duration: z.number().int().positive().optional(),
   durationUnit: z.string().optional(),

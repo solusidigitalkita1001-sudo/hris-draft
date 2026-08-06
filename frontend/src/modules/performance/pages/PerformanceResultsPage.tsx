@@ -97,6 +97,7 @@ export function PerformanceResultsPage() {
   const [sessionForm, setSessionForm] = useState({
     name: '',
     code: '',
+    forcedDistribution: '',
     notes: '',
   });
   const [decisionForm, setDecisionForm] = useState({
@@ -349,19 +350,31 @@ export function PerformanceResultsPage() {
       toast.error('Pilih period terlebih dahulu');
       return;
     }
-    if (!sessionForm.name.trim() || !sessionForm.code.trim()) {
-      toast.error('Nama dan kode session wajib diisi');
+    if (!sessionForm.name.trim()) {
+      toast.error('Nama session wajib diisi');
       return;
     }
 
     setCreatingSession(true);
     try {
+      const rawForcedDistribution = sessionForm.forcedDistribution.trim();
+      let forcedDistribution: any = undefined;
+      if (rawForcedDistribution) {
+        try {
+          forcedDistribution = JSON.parse(rawForcedDistribution);
+        } catch {
+          toast.error('Forced distribution harus valid JSON');
+          setCreatingSession(false);
+          return;
+        }
+      }
+
       const created = await performanceService.createCalibrationSession(selectedPeriodId, {
         name: sessionForm.name.trim(),
-        code: sessionForm.code.trim(),
+        forcedDistribution,
         notes: sessionForm.notes.trim() || undefined,
       });
-      setSessionForm({ name: '', code: '', notes: '' });
+      setSessionForm({ name: '', code: '', forcedDistribution: '', notes: '' });
       setSelectedSessionId(created.id);
       toast.success('Calibration session berhasil dibuat');
       await refreshWorkspace();
@@ -966,9 +979,16 @@ export function PerformanceResultsPage() {
                 placeholder="Nama session calibration"
               />
               <Input
-                value={sessionForm.code}
-                onChange={(event) => setSessionForm((prev) => ({ ...prev, code: event.target.value.toUpperCase() }))}
-                placeholder="Kode session"
+                value=""
+                placeholder="Akan dibuat otomatis oleh sistem"
+                disabled
+              />
+              <p className="text-xs text-muted-foreground">Code calibration session digenerate otomatis saat create.</p>
+              <textarea
+                value={sessionForm.forcedDistribution}
+                onChange={(event) => setSessionForm((prev) => ({ ...prev, forcedDistribution: event.target.value }))}
+                placeholder={'Forced distribution (JSON)\n{"mode":"COUNT","buckets":{"A":3,"B":5,"C":2},"tolerance":0}'}
+                className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
               <textarea
                 value={sessionForm.notes}
@@ -1248,6 +1268,65 @@ export function PerformanceResultsPage() {
                 <Button size="sm" variant="outline" onClick={() => void handleSessionAction('finalize')} disabled={actingSession}>
                   Finalize
                 </Button>
+              </div>
+            )}
+
+            {selectedSession && (
+              <div className="mt-4 rounded-xl border border-border bg-background p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">Distribution Analysis</p>
+                    <p className="text-xs text-muted-foreground">Target vs actual distribution untuk calibration session.</p>
+                  </div>
+                  {selectedSession.distributionAnalysis ? (
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        selectedSession.distributionAnalysis.isCompliant
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+                          : 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-400'
+                      }`}
+                    >
+                      {selectedSession.distributionAnalysis.isCompliant ? 'COMPLIANT' : 'VIOLATION'}
+                    </span>
+                  ) : selectedSession.forcedDistribution ? (
+                    <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                      INVALID CONFIG
+                    </span>
+                  ) : (
+                    <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-950 dark:text-slate-400">
+                      NONE
+                    </span>
+                  )}
+                </div>
+
+                {!selectedSession.distributionAnalysis ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {selectedSession.forcedDistribution
+                      ? 'Forced distribution ada, tapi formatnya belum bisa dianalisis. Pakai format {"mode":"COUNT","buckets":{...},"tolerance":0}.'
+                      : 'Session ini tidak memakai forced distribution.'}
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {Array.from(new Set([
+                      ...Object.keys(selectedSession.distributionAnalysis.target || {}),
+                      ...Object.keys(selectedSession.distributionAnalysis.actual || {}),
+                    ])).map((key) => (
+                      <div key={key} className="grid grid-cols-4 gap-2 rounded-lg border border-border px-3 py-2 text-xs">
+                        <span className="font-medium">{key}</span>
+                        <span className="text-muted-foreground">Target {selectedSession.distributionAnalysis?.target?.[key] ?? 0}</span>
+                        <span className="text-muted-foreground">Actual {selectedSession.distributionAnalysis?.actual?.[key] ?? 0}</span>
+                        <span className="text-muted-foreground">Δ {selectedSession.distributionAnalysis?.delta?.[key] ?? 0}</span>
+                      </div>
+                    ))}
+
+                    {selectedSession.distributionAnalysis.violations?.length ? (
+                      <div className="rounded-lg border border-border bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                        <p className="font-medium">Violations</p>
+                        <p className="mt-1">{selectedSession.distributionAnalysis.violations.join(', ')}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
             )}
           </div>

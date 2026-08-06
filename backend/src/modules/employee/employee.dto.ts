@@ -1,23 +1,51 @@
 import { z } from 'zod';
+import {
+  isValidNIK,
+  isValidNPWP,
+  isValidBPJSKetenagakerjaan,
+  isValidBPJSKesehatan,
+  normalizePhoneID,
+  isValidBankAccount,
+  BANK_CODES,
+} from '@/shared/validators/indonesian-identity';
 
-export const createEmployeeSchema = z.object({
+// Normalizes to E.164 (+62...) on input; rejects invalid Indonesian numbers (VAL-001/002).
+const phoneField = z
+  .string()
+  .optional()
+  .transform((v, ctx) => {
+    if (v === undefined || v === '') return v;
+    const normalized = normalizePhoneID(v);
+    if (!normalized) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nomor HP tidak valid' });
+      return z.NEVER;
+    }
+    return normalized;
+  });
+
+const employeeBaseSchema = z.object({
   companyId: z.string().uuid(),
   branchId: z.string().uuid().optional(),
   departmentId: z.string().uuid().optional(),
   subDepartmentId: z.string().uuid().optional(),
   positionId: z.string().uuid().optional(),
-  employeeNumber: z.string().min(1).max(50),
+  employeeNumber: z.string().min(1).max(50).optional(),
   firstName: z.string().min(1).max(255),
   lastName: z.string().min(1).max(255),
   email: z.string().email().optional(),
-  phone: z.string().optional(),
-  idNumber: z.string().optional(),
+  phone: phoneField,
+  idNumber: z
+    .string()
+    .refine(isValidNIK, 'NIK harus 16 digit dengan kode provinsi & tanggal lahir valid')
+    .optional(),
   placeOfBirth: z.string().optional(),
   dateOfBirth: z.string().datetime().optional(),
-  gender: z.string().optional(),
-  religion: z.string().optional(),
-  maritalStatus: z.string().optional(),
-  bloodType: z.string().optional(),
+  gender: z.enum(['MALE', 'FEMALE']).optional(),
+  religion: z
+    .enum(['ISLAM', 'KRISTEN_PROTESTAN', 'KRISTEN_KATOLIK', 'HINDU', 'BUDDHA', 'KONGHUCU', 'LAINNYA'])
+    .optional(),
+  maritalStatus: z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
+  bloodType: z.enum(['A', 'B', 'AB', 'O']).optional(),
   nationality: z.string().default('Indonesia'),
   address: z.string().optional(),
   avatar: z.string().optional(),
@@ -27,14 +55,43 @@ export const createEmployeeSchema = z.object({
   shiftFormulaId: z.string().uuid().optional().nullable(),
   shiftStartDate: z.string().datetime().optional().nullable(),
   bankName: z.string().optional(),
+  bankCode: z.enum(BANK_CODES).optional(),
   bankAccount: z.string().optional(),
   bankAccountHolder: z.string().optional(),
-  taxId: z.string().optional(),
-  bpjsKetenagakerjaan: z.string().optional(),
-  bpjsKesehatan: z.string().optional(),
+  taxId: z
+    .string()
+    .refine(isValidNPWP, 'NPWP harus 15 digit (format 9.999.999.9-999.999)')
+    .optional(),
+  bpjsKetenagakerjaan: z
+    .string()
+    .refine(isValidBPJSKetenagakerjaan, 'BPJS Ketenagakerjaan harus 11 digit')
+    .optional(),
+  bpjsKesehatan: z
+    .string()
+    .refine(isValidBPJSKesehatan, 'BPJS Kesehatan harus 13 digit')
+    .optional(),
 });
 
-export const updateEmployeeSchema = createEmployeeSchema.partial().omit({ companyId: true, employeeNumber: true });
+// VAL-006: account number length must match the selected bank.
+const bankAccountRefine = (
+  data: { bankCode?: string; bankAccount?: string },
+  ctx: z.RefinementCtx
+) => {
+  if (data.bankCode && data.bankAccount && !isValidBankAccount(data.bankCode, data.bankAccount)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['bankAccount'],
+      message: `Nomor rekening tidak valid untuk bank ${data.bankCode}`,
+    });
+  }
+};
+
+export const createEmployeeSchema = employeeBaseSchema.superRefine(bankAccountRefine);
+
+export const updateEmployeeSchema = employeeBaseSchema
+  .partial()
+  .omit({ companyId: true, employeeNumber: true })
+  .superRefine(bankAccountRefine);
 
 export const employeeQuerySchema = z.object({
   companyId: z.string().uuid(),

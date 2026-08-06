@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const createBenefitPlanSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   type: z.string().min(1).max(50),
   description: z.string().optional(),
   provider: z.string().optional(),

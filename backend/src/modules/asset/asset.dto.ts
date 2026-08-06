@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createAssetSchema = z.object({
   companyId: z.string().uuid(),
   categoryId: z.string().uuid().optional(),
-  assetCode: z.string().min(1).max(50),
+  assetCode: z.string().min(1).max(50).optional(),
   name: z.string().min(1).max(150),
   serialNumber: z.string().optional(),
   purchaseDate: z.string().datetime().optional(),

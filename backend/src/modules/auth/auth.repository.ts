@@ -17,6 +17,8 @@ export class AuthRepository {
         lastLoginAt: true,
         failedAttempts: true,
         lockedUntil: true,
+        twoFactorEnabled: true,
+        twoFactorSecret: true,
         employeeId: true,
         employee: {
           select: {
@@ -208,8 +210,17 @@ export class AuthRepository {
       where: { id: userId },
       data: {
         passwordHash,
+        passwordVersion: 2,
         mustChangePassword: false,
       },
+    });
+  }
+
+  // Silent Argon2 upgrade on login — does NOT touch mustChangePassword.
+  async rehashPassword(userId: string, passwordHash: string) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, passwordVersion: 2 },
     });
   }
 

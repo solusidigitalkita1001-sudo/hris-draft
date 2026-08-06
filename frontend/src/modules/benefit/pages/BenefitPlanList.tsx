@@ -47,7 +47,6 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
 }) {
   const companyId = localStorage.getItem('companyId') || '';
   const [name, setName] = useState(initial?.name || '');
-  const [code, setCode] = useState(initial?.code || '');
   const [type, setType] = useState(initial?.type || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [provider, setProvider] = useState(initial?.provider || '');
@@ -58,14 +57,13 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !code.trim() || !type) {
-      return toast.error('Name, code, and type are required');
+    if (!name.trim() || !type) {
+      return toast.error('Name and type are required');
     }
     setSaving(true);
     try {
       await onSave({
         name: name.trim(),
-        code: code.trim().toUpperCase(),
         type,
         description: description.trim() || undefined,
         provider: provider.trim() || undefined,
@@ -87,8 +85,9 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Health Insurance" required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code *</label>
-          <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. HI-001" required />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code</label>
+          <Input value={initial?.code || ''} disabled placeholder="Akan dibuat otomatis oleh sistem" />
+          <p className="mt-1 text-[11px] text-muted-foreground">Code benefit plan digenerate sistem dan tidak bisa diedit manual.</p>
         </div>
       </div>
 

@@ -7,7 +7,7 @@ export interface ReviewCycle {
 export interface ReviewCyclePayload {
   companyId: string;
   name: string;
-  code: string;
+  code?: string;
   type: 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | 'MONTHLY';
   startDate: string;
   endDate: string;
@@ -261,6 +261,39 @@ export interface PerformancePlanningAssignment {
   targets: PerformancePlanningTarget[];
 }
 
+export interface PerformanceExecutionAssignmentSummary {
+  id: string;
+  companyId: string;
+  periodId: string;
+  methodId: string;
+  methodVersionId: string;
+  employeeId: string;
+  reviewerId?: string | null;
+  approverId?: string | null;
+  assignmentSource: 'MANUAL' | 'AUTO_FROM_ORG';
+  status: PerformancePlanningAssignment['status'];
+  submissionNotes?: string | null;
+  decisionNotes?: string | null;
+  publishedAt?: string | null;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  period?: {
+    id: string;
+    name: string;
+    code: string;
+    startDate: string;
+    endDate: string;
+    reviewDeadline?: string | null;
+    planningPublishedAt?: string | null;
+  } | null;
+  employee: PerformancePlanningEmployeeSummary;
+  reviewer?: PerformancePlanningEmployeeSummary | null;
+  approver?: PerformancePlanningEmployeeSummary | null;
+}
+
 export interface PerformancePlanningWorkspace {
   id: string;
   companyId: string;
@@ -476,6 +509,14 @@ export interface PerformanceCalibrationSession {
   status: 'DRAFT' | 'OPEN' | 'CLOSED' | 'FINALIZED';
   scope?: Record<string, unknown> | null;
   forcedDistribution?: Record<string, unknown> | null;
+  distributionAnalysis?: {
+    mode: 'COUNT' | 'PERCENT';
+    target: Record<string, number>;
+    actual: Record<string, number>;
+    delta: Record<string, number>;
+    isCompliant: boolean;
+    violations: string[];
+  } | null;
   notes?: string | null;
   createdById?: string | null;
   openedAt?: string | null;
@@ -709,7 +750,7 @@ export interface PerformanceWorkflowTemplate {
 export interface PerformanceMethodPayload {
   companyId: string;
   name: string;
-  code: string;
+  code?: string;
   description?: string;
 }
 
@@ -727,7 +768,7 @@ export interface PerformanceMethodVersionPayload {
 
 export interface PerformanceComponentPayload {
   name: string;
-  code: string;
+  code?: string;
   type?: 'KPI' | 'GOAL' | 'COMPETENCY' | 'BEHAVIOR' | 'CUSTOM';
   description?: string;
   weight: number;
@@ -741,7 +782,7 @@ export interface PerformancePeriodPayload {
   methodId: string;
   methodVersionId: string;
   name: string;
-  code: string;
+  code?: string;
   startDate: string;
   endDate: string;
   reviewDeadline?: string;
@@ -790,7 +831,7 @@ export interface PerformanceExecutionActionPayload {
 
 export interface PerformanceCalibrationSessionPayload {
   name: string;
-  code: string;
+  code?: string;
   scope?: Record<string, unknown>;
   forcedDistribution?: Record<string, unknown>;
   notes?: string;
@@ -906,7 +947,7 @@ export interface PerformanceResultDashboard {
 export interface PerformanceFormulaPayload {
   companyId: string;
   name: string;
-  code: string;
+  code?: string;
   description?: string;
   strategy: PerformanceFormula['strategy'];
   expression?: string;
@@ -921,7 +962,7 @@ export interface PerformanceIndicatorPayload {
   companyId: string;
   formulaId?: string;
   name: string;
-  code: string;
+  code?: string;
   description?: string;
   category?: string;
   perspective?: string;
@@ -940,7 +981,7 @@ export interface PerformanceIndicatorPayload {
 export interface PerformanceGradeRulePayload {
   companyId: string;
   name: string;
-  code: string;
+  code?: string;
   description?: string;
   isActive?: boolean;
   recommendationRules?: PerformanceRecommendationRule[];
@@ -1140,6 +1181,18 @@ class PerformanceService {
 
   async getExecutionApprovalQueue(companyId: string): Promise<PerformancePlanningAssignment[]> {
     const r = await api.get('/performance/execution/approval-queue', { params: { companyId } }); return r.data.data;
+  }
+
+  async getMyExecutionAssignments(companyId: string): Promise<PerformanceExecutionAssignmentSummary[]> {
+    const r = await api.get('/performance/execution/my-assignments', { params: { companyId } }); return r.data.data;
+  }
+
+  async getExecutionAssignmentById(id: string): Promise<PerformancePlanningAssignment> {
+    const r = await api.get(`/performance/execution/assignments/${id}`); return r.data.data;
+  }
+
+  async updateExecutionTargetComment(id: string, comment?: string | null): Promise<PerformancePlanningTarget> {
+    const r = await api.patch(`/performance/execution/targets/${id}/comment`, { comment }); return r.data.data;
   }
 
   async getPerformanceResults(periodId: string): Promise<PerformanceResult[]> {

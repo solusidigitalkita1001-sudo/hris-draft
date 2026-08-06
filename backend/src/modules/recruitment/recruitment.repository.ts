@@ -13,13 +13,17 @@ export class RecruitmentRepository {
     return prisma.jobPosting.findFirst({ where: { id, deletedAt: null }, include: { department: true, position: true, applications: { include: { candidate: { select: { id: true, firstName: true, lastName: true, email: true, currentPosition: true } }, interviews: { include: { feedback: true } } } } } });
   }
 
+  async findJobPostingByCode(code: string) {
+    return prisma.jobPosting.findUnique({ where: { code } });
+  }
+
   async findJobPostingScoped(id: string, companyId: string) {
     return prisma.jobPosting.findFirst({
       where: { id, companyId, deletedAt: null },
     });
   }
 
-  async createJobPosting(data: CreateJobPostingDTO) {
+  async createJobPosting(data: CreateJobPostingDTO & { code: string }) {
     return prisma.jobPosting.create({ data: { ...data, minSalary: data.minSalary, maxSalary: data.maxSalary } });
   }
 

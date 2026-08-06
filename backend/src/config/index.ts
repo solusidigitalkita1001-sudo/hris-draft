@@ -1,196 +1,202 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { z } from 'zod';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-interface Config {
-  app: {
-    name: string;
-    port: number;
-    url: string;
-    env: string;
-    apiPrefix: string;
-  };
-  database: {
-    url: string;
-  };
-  redis: {
-    enabled: boolean;
-    url: string;
-    host: string;
-    port: number;
-    password: string;
-    db: number;
-    keyPrefix: string;
-  };
-  rabbitmq: {
-    url: string;
-    exchange: string;
-    queuePrefix: string;
-    prefetch: number;
-    enabled: boolean;
-  };
-  queue: {
-    enabled: boolean;
-    defaultAttempts: number;
-    defaultBackoffMs: number;
-  };
-  jwt: {
-    accessSecret: string;
-    refreshSecret: string;
-    accessExpiresIn: string;
-    refreshExpiresIn: string;
-    issuer: string;
-  };
-  password: {
-    saltRounds: number;
-    minLength: number;
-    maxLength: number;
-    maxLoginAttempts: number;
-    lockoutDurationMinutes: number;
-  };
-  rateLimit: {
-    windowMs: number;
-    maxRequests: number;
-    authMax: number;
-  };
-  cors: {
-    origins: string[];
-  };
-  mail: {
-    host: string;
-    port: number;
-    user: string;
-    pass: string;
-    from: string;
-    fromName: string;
-  };
-  upload: {
-    maxFileSize: number;
-    allowedMimes: string[];
-    uploadPath: string;
-  };
-  logging: {
-    level: string;
-    dir: string;
-  };
-  session: {
-    secret: string;
-  };
-  csrf: {
-    secret: string;
-  };
-  encryption: {
-    key: string;
+// Task 0.1 (SEC-001, SEC-002, OPS-002): validate env at bootstrap.
+// Security secrets are REQUIRED with no fallback — the app must refuse to start
+// rather than run on a guessable default key.
+const csv = (val?: string) => (val ? val.split(',').map((s) => s.trim()).filter(Boolean) : undefined);
+
+const envSchema = z.object({
+  // App
+  APP_NAME: z.string().default('HRMS Enterprise API'),
+  APP_PORT: z.coerce.number().int().positive().default(3000),
+  APP_URL: z.string().default('http://localhost:3000'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  API_PREFIX: z.string().default('/api/v1'),
+
+  // Database — required
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  DB_CONNECTION_LIMIT: z.coerce.number().int().positive().default(40),
+  DB_POOL_TIMEOUT: z.coerce.number().int().positive().default(10),
+  DB_SLOW_QUERY_MS: z.coerce.number().int().positive().default(2000),
+  READ_REPLICA_DATABASE_URL: z.string().optional(), // Task 2.9: optional read replica
+
+  // Redis
+  REDIS_ENABLED: z.coerce.boolean().default(true),
+  REDIS_URL: z.string().default(''),
+  REDIS_HOST: z.string().default('localhost'),
+  REDIS_PORT: z.coerce.number().int().default(6379),
+  REDIS_PASSWORD: z.string().default(''),
+  REDIS_DB: z.coerce.number().int().default(0),
+  REDIS_KEY_PREFIX: z.string().default('hrms:'),
+
+  // RabbitMQ
+  RABBITMQ_URL: z.string().default('amqp://guest:guest@localhost:5672'),
+  RABBITMQ_EXCHANGE: z.string().default('hrms.domain-events'),
+  RABBITMQ_QUEUE_PREFIX: z.string().default('hrms'),
+  RABBITMQ_PREFETCH: z.coerce.number().int().default(20),
+  RABBITMQ_ENABLED: z.coerce.boolean().default(true),
+
+  // Queue
+  QUEUE_ENABLED: z.coerce.boolean().optional(),
+  QUEUE_DEFAULT_ATTEMPTS: z.coerce.number().int().default(3),
+  QUEUE_DEFAULT_BACKOFF_MS: z.coerce.number().int().default(5000),
+
+  // JWT — required secrets, no fallback
+  JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET must be at least 16 chars'),
+  JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET must be at least 16 chars'),
+  JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
+  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+  JWT_ISSUER: z.string().default('hrms-enterprise'),
+
+  // Password
+  BCRYPT_SALT_ROUNDS: z.coerce.number().int().default(12),
+  PASSWORD_MIN_LENGTH: z.coerce.number().int().default(8),
+  PASSWORD_MAX_LENGTH: z.coerce.number().int().default(128),
+  MAX_LOGIN_ATTEMPTS: z.coerce.number().int().default(5),
+  LOCKOUT_DURATION_MINUTES: z.coerce.number().int().default(15),
+
+  // Rate limit
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(900000),
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().default(100),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().default(10),
+
+  // CORS
+  CORS_ORIGINS: z.string().default('http://localhost:5173'),
+
+  // Mail
+  SMTP_HOST: z.string().default('smtp.mailtrap.io'),
+  SMTP_PORT: z.coerce.number().int().default(2525),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  SMTP_FROM: z.string().default('noreply@hrms.com'),
+  SMTP_FROM_NAME: z.string().default('HRMS Enterprise'),
+
+  // Upload
+  UPLOAD_MAX_FILE_SIZE: z.coerce.number().int().default(5242880),
+  UPLOAD_ALLOWED_MIMES: z.string().default('image/jpeg,image/png,image/gif,application/pdf'),
+  UPLOAD_PATH: z.string().default('uploads'),
+
+  // Logging
+  LOG_LEVEL: z.string().default('debug'),
+  LOG_DIR: z.string().default('logs'),
+
+  // Security secrets — required, no fallback
+  SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 chars'),
+  CSRF_SECRET: z.string().min(16, 'CSRF_SECRET must be at least 16 chars'),
+  ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 chars (AES-256)'),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+/**
+ * Parse and validate environment. Throws a descriptive Error listing every
+ * missing/invalid variable. Exported so tests can assert failure behavior.
+ */
+export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  const result = envSchema.safeParse(source);
+  if (!result.success) {
+    const details = result.error.issues
+      .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
+      .join('\n');
+    throw new Error(`Invalid environment configuration:\n${details}`);
+  }
+  return result.data;
+}
+
+function buildConfig(env: Env) {
+  return {
+    app: {
+      name: env.APP_NAME,
+      port: env.APP_PORT,
+      url: env.APP_URL,
+      env: env.NODE_ENV,
+      apiPrefix: env.API_PREFIX,
+    },
+    database: {
+      url: env.DATABASE_URL,
+      readReplicaUrl: env.READ_REPLICA_DATABASE_URL,
+      connectionLimit: env.DB_CONNECTION_LIMIT,
+      poolTimeout: env.DB_POOL_TIMEOUT,
+      slowQueryMs: env.DB_SLOW_QUERY_MS,
+    },
+    redis: {
+      enabled: env.REDIS_ENABLED,
+      url: env.REDIS_URL,
+      host: env.REDIS_HOST,
+      port: env.REDIS_PORT,
+      password: env.REDIS_PASSWORD,
+      db: env.REDIS_DB,
+      keyPrefix: env.REDIS_KEY_PREFIX,
+    },
+    rabbitmq: {
+      url: env.RABBITMQ_URL,
+      exchange: env.RABBITMQ_EXCHANGE,
+      queuePrefix: env.RABBITMQ_QUEUE_PREFIX,
+      prefetch: env.RABBITMQ_PREFETCH,
+      enabled: env.RABBITMQ_ENABLED,
+    },
+    queue: {
+      enabled: env.QUEUE_ENABLED ?? env.REDIS_ENABLED,
+      defaultAttempts: env.QUEUE_DEFAULT_ATTEMPTS,
+      defaultBackoffMs: env.QUEUE_DEFAULT_BACKOFF_MS,
+    },
+    jwt: {
+      accessSecret: env.JWT_ACCESS_SECRET,
+      refreshSecret: env.JWT_REFRESH_SECRET,
+      accessExpiresIn: env.JWT_ACCESS_EXPIRES_IN,
+      refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
+      issuer: env.JWT_ISSUER,
+    },
+    password: {
+      saltRounds: env.BCRYPT_SALT_ROUNDS,
+      minLength: env.PASSWORD_MIN_LENGTH,
+      maxLength: env.PASSWORD_MAX_LENGTH,
+      maxLoginAttempts: env.MAX_LOGIN_ATTEMPTS,
+      lockoutDurationMinutes: env.LOCKOUT_DURATION_MINUTES,
+    },
+    rateLimit: {
+      windowMs: env.RATE_LIMIT_WINDOW_MS,
+      maxRequests: env.RATE_LIMIT_MAX_REQUESTS,
+      authMax: env.AUTH_RATE_LIMIT_MAX,
+    },
+    cors: { origins: csv(env.CORS_ORIGINS) ?? ['http://localhost:5173'] },
+    mail: {
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      user: env.SMTP_USER,
+      pass: env.SMTP_PASS,
+      from: env.SMTP_FROM,
+      fromName: env.SMTP_FROM_NAME,
+    },
+    upload: {
+      maxFileSize: env.UPLOAD_MAX_FILE_SIZE,
+      allowedMimes: csv(env.UPLOAD_ALLOWED_MIMES) ?? [],
+      uploadPath: env.UPLOAD_PATH,
+    },
+    logging: { level: env.LOG_LEVEL, dir: env.LOG_DIR },
+    session: { secret: env.SESSION_SECRET },
+    csrf: { secret: env.CSRF_SECRET },
+    encryption: { key: env.ENCRYPTION_KEY },
   };
 }
 
-function getEnv(key: string, defaultValue?: string): string {
-  return process.env[key] || defaultValue || '';
+export type Config = ReturnType<typeof buildConfig>;
+
+function initConfig(): Config {
+  try {
+    return buildConfig(loadEnv());
+  } catch (err) {
+    // Fail fast with a clear message and non-zero exit — do NOT run on defaults.
+    // eslint-disable-next-line no-console
+    console.error(`\n[FATAL] ${(err as Error).message}\n`);
+    process.exit(1);
+  }
 }
 
-function getEnvInt(key: string, defaultValue: number): number {
-  const val = process.env[key];
-  return val ? parseInt(val, 10) : defaultValue;
-}
-
-function getEnvBool(key: string, defaultValue: boolean): boolean {
-  const val = process.env[key];
-  if (val === undefined) return defaultValue;
-
-  return !['false', '0', 'no', 'off'].includes(val.toLowerCase());
-}
-
-function getEnvArray(key: string, defaultValue: string[]): string[] {
-  const val = process.env[key];
-  return val ? val.split(',').map((s) => s.trim()) : defaultValue;
-}
-
-export const config: Config = {
-  app: {
-    name: getEnv('APP_NAME', 'HRMS Enterprise API'),
-    port: getEnvInt('APP_PORT', 3000),
-    url: getEnv('APP_URL', 'http://localhost:3000'),
-    env: getEnv('NODE_ENV', 'development'),
-    apiPrefix: getEnv('API_PREFIX', '/api/v1'),
-  },
-  database: {
-    url: getEnv('DATABASE_URL', 'mysql://root:password@localhost:3306/hris_enterprise'),
-  },
-  redis: {
-    enabled: getEnvBool('REDIS_ENABLED', true),
-    url: getEnv('REDIS_URL', ''),
-    host: getEnv('REDIS_HOST', 'localhost'),
-    port: getEnvInt('REDIS_PORT', 6379),
-    password: getEnv('REDIS_PASSWORD', ''),
-    db: getEnvInt('REDIS_DB', 0),
-    keyPrefix: getEnv('REDIS_KEY_PREFIX', 'hrms:'),
-  },
-  rabbitmq: {
-    url: getEnv('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672'),
-    exchange: getEnv('RABBITMQ_EXCHANGE', 'hrms.domain-events'),
-    queuePrefix: getEnv('RABBITMQ_QUEUE_PREFIX', 'hrms'),
-    prefetch: getEnvInt('RABBITMQ_PREFETCH', 20),
-    enabled: getEnv('RABBITMQ_ENABLED', 'true') !== 'false',
-  },
-  queue: {
-    enabled: getEnvBool('QUEUE_ENABLED', getEnvBool('REDIS_ENABLED', true)),
-    defaultAttempts: getEnvInt('QUEUE_DEFAULT_ATTEMPTS', 3),
-    defaultBackoffMs: getEnvInt('QUEUE_DEFAULT_BACKOFF_MS', 5000),
-  },
-  jwt: {
-    accessSecret: getEnv('JWT_ACCESS_SECRET', 'fallback-secret-not-secure'),
-    refreshSecret: getEnv('JWT_REFRESH_SECRET', 'fallback-secret-not-secure'),
-    accessExpiresIn: getEnv('JWT_ACCESS_EXPIRES_IN', '15m'),
-    refreshExpiresIn: getEnv('JWT_REFRESH_EXPIRES_IN', '7d'),
-    issuer: getEnv('JWT_ISSUER', 'hrms-enterprise'),
-  },
-  password: {
-    saltRounds: getEnvInt('BCRYPT_SALT_ROUNDS', 12),
-    minLength: getEnvInt('PASSWORD_MIN_LENGTH', 8),
-    maxLength: getEnvInt('PASSWORD_MAX_LENGTH', 128),
-    maxLoginAttempts: getEnvInt('MAX_LOGIN_ATTEMPTS', 5),
-    lockoutDurationMinutes: getEnvInt('LOCKOUT_DURATION_MINUTES', 15),
-  },
-  rateLimit: {
-    windowMs: getEnvInt('RATE_LIMIT_WINDOW_MS', 900000),
-    maxRequests: getEnvInt('RATE_LIMIT_MAX_REQUESTS', 100),
-    authMax: getEnvInt('AUTH_RATE_LIMIT_MAX', 10),
-  },
-  cors: {
-    origins: getEnvArray('CORS_ORIGINS', ['http://localhost:5173']),
-  },
-  mail: {
-    host: getEnv('SMTP_HOST', 'smtp.mailtrap.io'),
-    port: getEnvInt('SMTP_PORT', 2525),
-    user: getEnv('SMTP_USER', ''),
-    pass: getEnv('SMTP_PASS', ''),
-    from: getEnv('SMTP_FROM', 'noreply@hrms.com'),
-    fromName: getEnv('SMTP_FROM_NAME', 'HRMS Enterprise'),
-  },
-  upload: {
-    maxFileSize: getEnvInt('UPLOAD_MAX_FILE_SIZE', 5242880),
-    allowedMimes: getEnvArray('UPLOAD_ALLOWED_MIMES', [
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'application/pdf',
-    ]),
-    uploadPath: getEnv('UPLOAD_PATH', 'uploads'),
-  },
-  logging: {
-    level: getEnv('LOG_LEVEL', 'debug'),
-    dir: getEnv('LOG_DIR', 'logs'),
-  },
-  session: {
-    secret: getEnv('SESSION_SECRET', 'fallback-session-secret'),
-  },
-  csrf: {
-    secret: getEnv('CSRF_SECRET', 'fallback-csrf-secret'),
-  },
-  encryption: {
-    key: getEnv('ENCRYPTION_KEY', 'fallback-encryption-key-32chars!!'),
-  },
-};
+export const config: Config = initConfig();
 
 export default config;

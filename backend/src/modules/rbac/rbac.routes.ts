@@ -15,6 +15,9 @@ const router = Router();
 
 router.use(authenticate);
 
+// Permissions catalog
+router.get('/permissions/all', authorize({ resource: 'rbac', action: 'read' }), permissionController.findAll.bind(permissionController));
+
 // Roles
 router.get('/', authorize({ resource: 'rbac', action: 'read' }), roleController.findAll.bind(roleController));
 router.get('/:id', authorize({ resource: 'rbac', action: 'read' }), roleController.findById.bind(roleController));
@@ -25,8 +28,5 @@ router.delete('/:id', authorize({ resource: 'rbac', action: 'delete' }), roleCon
 // Role permissions
 router.get('/:id/permissions', authorize({ resource: 'rbac', action: 'read' }), roleController.getPermissions.bind(roleController));
 router.put('/:id/permissions', authorize({ resource: 'rbac', action: 'update' }), validate(assignPermissionsSchema), roleController.assignPermissions.bind(roleController));
-
-// Permissions catalog
-router.get('/permissions/all', authorize({ resource: 'rbac', action: 'read' }), permissionController.findAll.bind(permissionController));
 
 export default router;

@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createReviewCycleSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   type: z.enum(['QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL', 'MONTHLY']).default('QUARTERLY'),
   startDate: z.string().datetime(),
   endDate: z.string().datetime(),
@@ -92,7 +92,7 @@ const performanceWorkflowStageSchema = z.object({
 export const createPerformanceMethodSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   description: z.string().optional(),
 });
 
@@ -127,7 +127,7 @@ export const updatePerformanceMethodVersionSchema = z.object({
 
 export const createPerformanceComponentSchema = z.object({
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   type: z.enum(['KPI', 'GOAL', 'COMPETENCY', 'BEHAVIOR', 'CUSTOM']).default('CUSTOM'),
   description: z.string().optional(),
   weight: z.number().positive().max(100),
@@ -152,7 +152,7 @@ export const createPerformancePeriodSchema = z.object({
   methodId: z.string().uuid(),
   methodVersionId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   startDate: z.string().datetime(),
   endDate: z.string().datetime(),
   reviewDeadline: z.string().datetime().optional(),
@@ -231,9 +231,13 @@ export const performanceExecutionActionSchema = z.object({
   notes: z.string().max(5000).optional(),
 });
 
+export const updateExecutionTargetCommentSchema = z.object({
+  comment: z.string().max(5000).nullable().optional(),
+});
+
 export const createPerformanceCalibrationSessionSchema = z.object({
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   scope: jsonValueSchema,
   forcedDistribution: jsonValueSchema,
   notes: z.string().max(5000).optional(),
@@ -304,7 +308,7 @@ export const createPerformanceAutomationScheduleSchema = z.object({
 export const createPerformanceFormulaSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   description: z.string().optional(),
   strategy: z.enum(['ACHIEVEMENT_PERCENTAGE', 'LOWER_IS_BETTER', 'MANUAL_RATING', 'AVERAGE', 'WEIGHTED_AVERAGE', 'CUSTOM']),
   expression: z.string().optional(),
@@ -321,7 +325,7 @@ export const createPerformanceIndicatorSchema = z.object({
   companyId: z.string().uuid(),
   formulaId: z.string().uuid().optional(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   description: z.string().optional(),
   category: z.string().max(100).optional(),
   perspective: z.string().max(100).optional(),
@@ -350,7 +354,7 @@ export const performanceGradeRangeSchema = z.object({
 export const createPerformanceGradeRuleSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   description: z.string().optional(),
   recommendationRules: z.array(performanceRecommendationRuleSchema).default([]),
   isActive: z.boolean().default(true),
@@ -404,6 +408,7 @@ export type CreatePerformancePlanningTargetDTO = z.infer<typeof createPerformanc
 export type UpdatePerformancePlanningTargetDTO = z.infer<typeof updatePerformancePlanningTargetSchema>;
 export type CreatePerformanceTargetProgressDTO = z.infer<typeof createPerformanceTargetProgressSchema>;
 export type PerformanceExecutionActionDTO = z.infer<typeof performanceExecutionActionSchema>;
+export type UpdateExecutionTargetCommentDTO = z.infer<typeof updateExecutionTargetCommentSchema>;
 export type CreatePerformanceCalibrationSessionDTO = z.infer<typeof createPerformanceCalibrationSessionSchema>;
 export type PerformanceCalibrationDecisionDTO = z.infer<typeof performanceCalibrationDecisionSchema>;
 export type PublishPerformanceResultsDTO = z.infer<typeof publishPerformanceResultsSchema>;

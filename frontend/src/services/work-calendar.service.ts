@@ -342,7 +342,7 @@ class WorkCalendarService {
 
   async createShiftFormula(data: {
     companyId: string;
-    code: string;
+    code?: string;
     name: string;
     description?: string;
     isActive?: boolean;

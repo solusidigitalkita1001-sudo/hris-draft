@@ -7,7 +7,11 @@ export class TrainingRepository {
     return prisma.trainingCategory.findMany({ where: { companyId, deletedAt: null }, orderBy: { name: 'asc' } });
   }
 
-  async createCategory(data: CreateCategoryDTO) {
+  async findCategoryByCode(code: string) {
+    return prisma.trainingCategory.findUnique({ where: { code } });
+  }
+
+  async createCategory(data: CreateCategoryDTO & { code: string }) {
     return prisma.trainingCategory.create({ data });
   }
 
@@ -21,7 +25,11 @@ export class TrainingRepository {
     return prisma.trainingCourse.findFirst({ where: { id, deletedAt: null }, include: { category: true, materials: { orderBy: { sortOrder: 'asc' } }, sessions: { where: { deletedAt: null }, orderBy: { startDate: 'desc' } }, enrollments: { where: { deletedAt: null }, include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } } } } });
   }
 
-  async createCourse(data: CreateCourseDTO) {
+  async findCourseByCode(code: string) {
+    return prisma.trainingCourse.findUnique({ where: { code } });
+  }
+
+  async createCourse(data: CreateCourseDTO & { code: string }) {
     return prisma.trainingCourse.create({ data });
   }
 

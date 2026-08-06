@@ -51,7 +51,7 @@ export class GroupRepository {
     });
   }
 
-  async create(data: CreateGroupDTO) {
+  async create(data: CreateGroupDTO & { code: string }) {
     return prisma.companyGroup.create({
       data: {
         name: data.name,

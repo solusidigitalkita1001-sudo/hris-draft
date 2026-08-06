@@ -1831,6 +1831,7 @@ model User {
   id                 String     @id @default(uuid()) @db.VarChar(36)
   email              String     @unique @db.VarChar(255)
   passwordHash       String     @map("password_hash") @db.VarChar(255)
+  passwordVersion    Int        @default(1) @map("password_version")
   employeeId         String?    @unique @map("employee_id") @db.VarChar(36)
   status             UserStatus @default(ACTIVE)
   mustChangePassword Boolean    @default(true) @map("must_change_password")
@@ -1839,6 +1840,7 @@ model User {
   lockedUntil        DateTime?  @map("locked_until")
   twoFactorEnabled   Boolean    @default(false) @map("two_factor_enabled")
   twoFactorSecret    String?    @map("two_factor_secret") @db.VarChar(255)
+  twoFactorRecoveryCodes String? @map("two_factor_recovery_codes") @db.Text
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
   deletedAt          DateTime?  @map("deleted_at")
@@ -1880,10 +1882,10 @@ model Employee {
   idNumber            String?          @map("id_number") @db.VarChar(50)
   placeOfBirth        String?          @map("place_of_birth") @db.VarChar(255)
   dateOfBirth         DateTime?        @map("date_of_birth")
-  gender              String?          @db.VarChar(20)
-  religion            String?          @db.VarChar(50)
-  maritalStatus       String?          @map("marital_status") @db.VarChar(20)
-  bloodType           String?          @map("blood_type") @db.VarChar(5)
+  gender              Gender?
+  religion            Religion?
+  maritalStatus       MaritalStatus?   @map("marital_status")
+  bloodType           BloodType?       @map("blood_type")
   nationality         String?          @default("Indonesia") @db.VarChar(50)
   address             String?          @db.Text
   avatar              String?          @db.VarChar(500)
@@ -1893,6 +1895,7 @@ model Employee {
   employeeCategory    EmployeeCategory @default(OFFICE) @map("employee_category")
   shiftStartDate      DateTime?        @map("shift_start_date") @db.Date
   bankName            String?          @map("bank_name") @db.VarChar(100)
+  bankCode            String?          @map("bank_code") @db.VarChar(20)
   bankAccount         String?          @map("bank_account") @db.VarChar(50)
   bankAccountHolder   String?          @map("bank_account_holder") @db.VarChar(255)
   taxId               String?          @map("tax_id") @db.VarChar(50)
@@ -1980,6 +1983,8 @@ model Employee {
   @@index([employmentStatus])
   @@index([branchId])
   @@index([shiftFormulaId])
+  @@unique([companyId, idNumber])
+  @@unique([companyId, phone])
   @@map("employees")
 }
 
@@ -2903,6 +2908,35 @@ enum EmploymentStatus {
   TERMINATED
   PROBATION
   CONTRACT_END
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum Religion {
+  ISLAM
+  KRISTEN_PROTESTAN
+  KRISTEN_KATOLIK
+  HINDU
+  BUDDHA
+  KONGHUCU
+  LAINNYA
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+enum BloodType {
+  A
+  B
+  AB
+  O
 }
 
 enum EmploymentType {

@@ -134,11 +134,6 @@ export function CourseFormPage() {
       return;
     }
 
-    if (!isEditMode && !form.code.trim()) {
-      toast.error('Code course wajib diisi');
-      return;
-    }
-
     setSaving(true);
     try {
       if (isEditMode && id) {
@@ -162,7 +157,6 @@ export function CourseFormPage() {
         companyId,
         categoryId: form.categoryId || undefined,
         title: form.title.trim(),
-        code: form.code.trim().toUpperCase(),
         description: form.description.trim() || undefined,
         duration: form.duration ? Number(form.duration) : undefined,
         durationUnit: form.duration ? form.durationUnit : undefined,
@@ -214,11 +208,11 @@ export function CourseFormPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Code</label>
             <Input
-              value={form.code}
-              onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-              placeholder="TRN-LEAD-001"
-              disabled={isEditMode}
+              value={isEditMode ? form.code : ''}
+              placeholder="Akan dibuat otomatis oleh sistem"
+              disabled
             />
+            {!isEditMode ? <p className="text-xs text-muted-foreground">Code course digenerate otomatis saat create.</p> : null}
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Category</label>

@@ -24,7 +24,7 @@ export class SubDepartmentRepository {
     return prisma.subDepartment.findUnique({ where: { code } });
   }
 
-  async create(data: CreateSubDepartmentDTO) {
+  async create(data: CreateSubDepartmentDTO & { code: string }) {
     return prisma.subDepartment.create({ data });
   }
 
