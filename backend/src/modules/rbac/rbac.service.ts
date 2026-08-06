@@ -165,10 +165,15 @@ export class RoleService {
   }
 
   async assignToUser(userId: string, dto: AssignUserRolesDTO) {
-    // Verify roles exist
-    for (const roleId of dto.roleIds) {
-      const role = await roleRepository.findById(roleId);
-      if (!role) throw new NotFoundError(`Role ${roleId} not found`);
+    // Verify roles exist in a single query (was N+1 over roleIds).
+    const roles = await prisma.role.findMany({
+      where: { id: { in: dto.roleIds }, deletedAt: null },
+      select: { id: true },
+    });
+    if (roles.length !== new Set(dto.roleIds).size) {
+      const found = new Set(roles.map((r) => r.id));
+      const missing = dto.roleIds.find((id) => !found.has(id));
+      throw new NotFoundError(`Role ${missing} not found`);
     }
 
     // Remove existing roles
