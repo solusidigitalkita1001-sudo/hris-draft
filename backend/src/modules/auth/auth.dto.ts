@@ -10,6 +10,12 @@ export const loginSchema = z.object({
     .string()
     .min(1, 'Password is required')
     .max(128, 'Password must not exceed 128 characters'),
+  // Task 1.1: TOTP 6-digit code or a recovery code, required only when MFA is on.
+  totp: z.string().trim().min(6).max(20).optional(),
+});
+
+export const mfaCodeSchema = z.object({
+  code: z.string().trim().min(6).max(20),
 });
 
 export const refreshTokenSchema = z.object({
@@ -55,6 +61,7 @@ export const resetPasswordSchema = z.object({
 });
 
 export type LoginDTO = z.infer<typeof loginSchema>;
+export type MfaCodeDTO = z.infer<typeof mfaCodeSchema>;
 export type RefreshTokenDTO = z.infer<typeof refreshTokenSchema>;
 export type ChangePasswordDTO = z.infer<typeof changePasswordSchema>;
 export type ForgotPasswordDTO = z.infer<typeof forgotPasswordSchema>;

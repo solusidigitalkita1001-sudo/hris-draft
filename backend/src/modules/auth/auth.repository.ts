@@ -17,6 +17,8 @@ export class AuthRepository {
         lastLoginAt: true,
         failedAttempts: true,
         lockedUntil: true,
+        twoFactorEnabled: true,
+        twoFactorSecret: true,
         employeeId: true,
         employee: {
           select: {

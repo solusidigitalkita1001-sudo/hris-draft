@@ -8,6 +8,7 @@ import {
   validateLogin,
   validateRefreshToken,
   validateChangePassword,
+  validateMfaCode,
 } from './auth.validation';
 
 const router = Router();
@@ -39,6 +40,9 @@ router.post('/refresh', authLimiter, validate(validateRefreshToken), authControl
 // Protected routes (auth required)
 router.post('/logout', authenticate, authController.logout.bind(authController));
 router.post('/change-password', authenticate, validate(validateChangePassword), authController.changePassword.bind(authController));
+router.post('/mfa/setup', authenticate, authController.setupMfa.bind(authController));
+router.post('/mfa/enable', authenticate, validate(validateMfaCode), authController.enableMfa.bind(authController));
+router.post('/mfa/disable', authenticate, validate(validateMfaCode), authController.disableMfa.bind(authController));
 router.get('/me', authenticate, authController.getProfile.bind(authController));
 router.get('/sessions', authenticate, authController.getSessions.bind(authController));
 router.delete('/sessions/:id', authenticate, authController.revokeSession.bind(authController));

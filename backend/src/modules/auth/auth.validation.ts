@@ -5,11 +5,13 @@ import {
   changePasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  mfaCodeSchema,
 } from './auth.dto';
 
 export const validateLogin = loginSchema;
 export const validateRefreshToken = refreshTokenSchema;
 export const validateChangePassword = changePasswordSchema;
+export const validateMfaCode = mfaCodeSchema;
 export const validateForgotPassword = forgotPasswordSchema;
 export const validateResetPassword = resetPasswordSchema;
 

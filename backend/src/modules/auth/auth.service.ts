@@ -9,13 +9,23 @@ import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import {
+  AppError,
   AuthError,
+  BadRequestError,
   ForbiddenError,
+  NotFoundError,
   TooManyRequestsError,
   ConflictError,
 } from '@/shared/exceptions/AppError';
 import config from '@/config';
 import { AuthResponse, LoginDTO, ChangePasswordDTO } from './auth.dto';
+import {
+  generateTotpSecret,
+  totpAuthUrl,
+  totpQrDataUrl,
+  verifyTotp,
+  generateRecoveryCodes,
+} from '@/shared/security/mfa';
 
 const logger = new WinstonLogger('AuthService');
 
@@ -132,6 +142,18 @@ export class AuthService {
       await authRepository.rehashPassword(user.id, upgraded);
     }
 
+    // Task 1.1: MFA second factor. Password was correct; now require TOTP/recovery.
+    if (user.twoFactorEnabled) {
+      if (!dto.totp) {
+        throw new AppError('MFA code required', 401, 'MFA_REQUIRED', true);
+      }
+      const mfaOk = await this.verifyMfaCode(user.id, user.twoFactorSecret, dto.totp);
+      if (!mfaOk) {
+        await this.handleFailedAttempt(user.id, email, ipAddress);
+        throw new AuthError('Invalid MFA code');
+      }
+    }
+
     // Check recent failed attempts
     const recentAttempts = await authRepository.getRecentLoginAttempts(
       user.id,
@@ -206,6 +228,83 @@ export class AuthService {
         },
       });
     }
+  }
+
+  // ==================== MFA (Task 1.1) ====================
+
+  /** Verify a 6-digit TOTP, or consume a one-time recovery code. */
+  private async verifyMfaCode(
+    userId: string,
+    secret: string | null,
+    code: string
+  ): Promise<boolean> {
+    if (secret && verifyTotp(secret, code)) return true;
+
+    // Fall back to recovery codes (hashed, single-use).
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { twoFactorRecoveryCodes: true },
+    });
+    const hashes: string[] = user?.twoFactorRecoveryCodes
+      ? JSON.parse(user.twoFactorRecoveryCodes)
+      : [];
+    for (let i = 0; i < hashes.length; i++) {
+      if (await passwordHandler.compare(code.trim().toUpperCase(), hashes[i])) {
+        hashes.splice(i, 1); // consume
+        await prisma.user.update({
+          where: { id: userId },
+          data: { twoFactorRecoveryCodes: JSON.stringify(hashes) },
+        });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Step 1: generate a secret + QR. MFA not active until enableMfa() confirms a code. */
+  async setupMfa(userId: string): Promise<{ secret: string; otpauthUrl: string; qrDataUrl: string }> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundError('User not found');
+    if (user.twoFactorEnabled) throw new BadRequestError('MFA is already enabled');
+
+    const secret = generateTotpSecret();
+    const otpauthUrl = totpAuthUrl(user.email, secret);
+    await prisma.user.update({ where: { id: userId }, data: { twoFactorSecret: secret } });
+
+    return { secret, otpauthUrl, qrDataUrl: await totpQrDataUrl(otpauthUrl) };
+  }
+
+  /** Step 2: confirm a code, activate MFA, return one-time recovery codes (shown once). */
+  async enableMfa(userId: string, code: string): Promise<{ recoveryCodes: string[] }> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundError('User not found');
+    if (user.twoFactorEnabled) throw new BadRequestError('MFA is already enabled');
+    if (!user.twoFactorSecret) throw new BadRequestError('Call MFA setup first');
+    if (!verifyTotp(user.twoFactorSecret, code)) throw new BadRequestError('Invalid MFA code');
+
+    const recoveryCodes = generateRecoveryCodes();
+    const hashes = await Promise.all(recoveryCodes.map((c) => passwordHandler.hash(c)));
+    await prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: true, twoFactorRecoveryCodes: JSON.stringify(hashes) },
+    });
+    logger.info('MFA enabled', { userId });
+    return { recoveryCodes };
+  }
+
+  /** Disable MFA after verifying a current TOTP/recovery code. */
+  async disableMfa(userId: string, code: string): Promise<void> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundError('User not found');
+    if (!user.twoFactorEnabled) throw new BadRequestError('MFA is not enabled');
+    if (!(await this.verifyMfaCode(userId, user.twoFactorSecret, code))) {
+      throw new BadRequestError('Invalid MFA code');
+    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorRecoveryCodes: null },
+    });
+    logger.info('MFA disabled', { userId });
   }
 
   /**

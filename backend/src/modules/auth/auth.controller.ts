@@ -3,7 +3,7 @@ import { authService } from './auth.service';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { Result } from '@/shared/core/Result';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
-import { LoginDTO, RefreshTokenDTO, ChangePasswordDTO } from './auth.dto';
+import { LoginDTO, RefreshTokenDTO, ChangePasswordDTO, MfaCodeDTO } from './auth.dto';
 
 const logger = new WinstonLogger('AuthController');
 
@@ -119,6 +119,38 @@ export class AuthController {
       await authService.revokeSession(req.params.id as string, req.user!.id);
 
       res.status(200).json(Result.success(null, 'Session revoked successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/v1/auth/mfa/setup */
+  async setupMfa(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.setupMfa(req.user!.id);
+      res.status(200).json(Result.success(result, 'Scan the QR with your authenticator app'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/v1/auth/mfa/enable */
+  async enableMfa(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const dto: MfaCodeDTO = req.body;
+      const result = await authService.enableMfa(req.user!.id, dto.code);
+      res.status(200).json(Result.success(result, 'MFA enabled. Store your recovery codes safely.'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/v1/auth/mfa/disable */
+  async disableMfa(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const dto: MfaCodeDTO = req.body;
+      await authService.disableMfa(req.user!.id, dto.code);
+      res.status(200).json(Result.success(null, 'MFA disabled'));
     } catch (error) {
       next(error);
     }

@@ -1840,6 +1840,7 @@ model User {
   lockedUntil        DateTime?  @map("locked_until")
   twoFactorEnabled   Boolean    @default(false) @map("two_factor_enabled")
   twoFactorSecret    String?    @map("two_factor_secret") @db.VarChar(255)
+  twoFactorRecoveryCodes String? @map("two_factor_recovery_codes") @db.Text
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
   deletedAt          DateTime?  @map("deleted_at")
