@@ -126,6 +126,12 @@ export class AuthService {
       throw new AuthError('Invalid email or password');
     }
 
+    // Task 1.5: transparently upgrade legacy bcrypt hashes to Argon2id on login.
+    if (passwordHandler.needsRehash(user.passwordHash)) {
+      const upgraded = await passwordHandler.hash(password);
+      await authRepository.rehashPassword(user.id, upgraded);
+    }
+
     // Check recent failed attempts
     const recentAttempts = await authRepository.getRecentLoginAttempts(
       user.id,

@@ -1,3 +1,4 @@
+import argon2 from 'argon2';
 import bcrypt from 'bcryptjs';
 import config from '@/config';
 import { ValidationError } from '@/shared/exceptions/AppError';
@@ -14,13 +15,23 @@ export class PasswordHandler {
     return PasswordHandler.instance;
   }
 
+  // Task 1.5 (SEC-014): all new hashes are Argon2id. Legacy bcrypt hashes are
+  // still verifiable so existing users can log in and be transparently rehashed.
   async hash(password: string): Promise<string> {
-    const salt = await bcrypt.genSalt(config.password.saltRounds);
-    return bcrypt.hash(password, salt);
+    return argon2.hash(password, { type: argon2.argon2id });
   }
 
   async compare(password: string, hash: string): Promise<boolean> {
+    if (hash.startsWith('$argon2')) {
+      return argon2.verify(hash, password);
+    }
+    // Legacy bcrypt ($2a/$2b/$2y).
     return bcrypt.compare(password, hash);
+  }
+
+  /** True if the stored hash is not Argon2id and should be re-hashed on next login. */
+  needsRehash(hash: string): boolean {
+    return !hash.startsWith('$argon2');
   }
 
   validate(password: string): void {

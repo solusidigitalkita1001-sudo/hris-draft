@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import { passwordHandler } from '@/shared/security/PasswordHandler';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -588,7 +588,7 @@ export async function seedTestData(): Promise<void> {
   // 4. EMPLOYEES
   // ===================================================
   console.log('  Creating employees...');
-  const passwordHash = await bcrypt.hash('Employee123!', 12);
+  const passwordHash = await passwordHandler.hash('Employee123!');
   const baseEmployees = [
     {
       employeeNumber: 'EMP001',

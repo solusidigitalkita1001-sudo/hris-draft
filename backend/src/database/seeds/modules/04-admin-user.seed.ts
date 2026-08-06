@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import { passwordHandler } from '@/shared/security/PasswordHandler';
 
 const prisma = new PrismaClient();
 
@@ -14,7 +14,7 @@ export async function seedAdminUser(): Promise<void> {
     return;
   }
 
-  const passwordHash = await bcrypt.hash('Admin123!', 12);
+  const passwordHash = await passwordHandler.hash('Admin123!');
 
   const user = await prisma.user.create({
     data: {
