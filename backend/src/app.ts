@@ -116,6 +116,10 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser(config.session.secret));
+// Task 1.3 (SEC-010): documents must go through the signed-URL route, never raw static.
+app.use('/uploads/documents', (_req: Request, res: Response) => {
+  res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Use a signed document URL' });
+});
 app.use('/uploads', express.static(path.resolve(process.cwd(), config.upload.uploadPath)));
 
 // ==================== Request Logging ====================

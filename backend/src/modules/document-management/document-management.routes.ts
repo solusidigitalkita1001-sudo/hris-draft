@@ -26,6 +26,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+// Task 1.3: public signature-verified file serve — MUST be before authenticate.
+router.get('/:id/file', documentManagementController.serveSignedFile.bind(documentManagementController));
+
 router.use(authenticate);
 
 router.get(
@@ -53,6 +56,11 @@ router.post(
   authorize({ resource: 'document', action: 'create' }),
   upload.single('file'),
   documentManagementController.createDocument.bind(documentManagementController)
+);
+router.get(
+  '/:id/signed-url',
+  authorize({ resource: 'document', action: 'read' }),
+  documentManagementController.getSignedUrl.bind(documentManagementController)
 );
 router.get(
   '/:id/download',
