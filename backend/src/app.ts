@@ -2,6 +2,9 @@ import 'express';
 export {};
 
 import express from 'express';
+import type { Request, Response } from 'express';
+import type { IncomingMessage, ServerResponse } from 'http';
+import crypto from 'crypto';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -47,14 +50,26 @@ const app = express();
 // Trust proxy for rate limiting behind Nginx
 app.set('trust proxy', 1);
 
+// Task 1.6 (SEC-013): per-request CSP nonce. Replaces 'unsafe-inline' so any
+// inline style/script must carry this nonce.
+app.use((_req: Request, res: Response, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
+// helmet types its directive callbacks with Node's http types; res carries the
+// Express locals at runtime.
+const nonce = (_req: IncomingMessage, res: ServerResponse) =>
+  `'nonce-${(res as unknown as Response).locals.nonce}'`;
+
 // Helmet security headers
 app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", nonce],
+        scriptSrc: ["'self'", nonce],
         imgSrc: ["'self'", 'data:', 'https:'],
         connectSrc: ["'self'", config.app.url],
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
