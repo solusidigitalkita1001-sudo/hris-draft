@@ -5,7 +5,7 @@ export const createJobPostingSchema = z.object({
   departmentId: z.string().uuid().optional(),
   positionId: z.string().uuid().optional(),
   title: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   employmentType: z.string().default('FULL_TIME'),
   location: z.string().optional(),
   minSalary: z.number().positive().optional(),

@@ -72,7 +72,7 @@ export class CompanyRepository {
     });
   }
 
-  async create(data: CreateCompanyDTO) {
+  async create(data: CreateCompanyDTO & { code: string }) {
     return prisma.company.create({
       data: {
         groupId: data.groupId,

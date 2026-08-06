@@ -30,7 +30,7 @@ export class BranchRepository {
     });
   }
 
-  async create(data: CreateBranchDTO) {
+  async create(data: CreateBranchDTO & { code: string }) {
     return prisma.branch.create({ data });
   }
 

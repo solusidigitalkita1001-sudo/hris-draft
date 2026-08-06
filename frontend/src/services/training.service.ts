@@ -3,7 +3,7 @@ import api from './api';
 export interface TrainingCategoryPayload {
   companyId: string;
   name: string;
-  code: string;
+  code?: string;
   description?: string;
 }
 
@@ -15,7 +15,7 @@ export interface TrainingCoursePayload {
   categoryId?: string;
   companyId: string;
   title: string;
-  code: string;
+  code?: string;
   description?: string;
   duration?: number;
   durationUnit?: string;

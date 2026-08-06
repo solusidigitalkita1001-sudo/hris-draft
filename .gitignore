@@ -4,4 +4,15 @@ dbg
 **/dbg/
 docker-compose.prod.yml
 docker-compose.yml
+
+# IDE / Tool specific folders
+.claude/
+
+# ===== Markdown Policy =====
+# Default ignore random .md files...
 *.md
+# ... tapi JANGAN ignore dokumentasi HRIS .docs/ folder & project README!
+!.docs/**/*.md
+!README.md
+!CONTRIBUTING.md
+!CHANGELOG.md

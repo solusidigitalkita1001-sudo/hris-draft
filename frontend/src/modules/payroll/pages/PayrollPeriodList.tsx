@@ -80,7 +80,6 @@ function PeriodForm({
   const isEdit = Boolean(initial?.id);
 
   const [name, setName] = useState(initial?.name || '');
-  const [code, setCode] = useState(initial?.code || '');
   const [frequency, setFrequency] = useState<string>(initial?.frequency || 'MONTHLY');
   const [startDate, setStartDate] = useState(initial?.startDate ? dayjs(initial.startDate).format('YYYY-MM-DD') : dayjs().startOf('month').format('YYYY-MM-DD'));
   const [endDate, setEndDate] = useState(initial?.endDate ? dayjs(initial.endDate).format('YYYY-MM-DD') : dayjs().endOf('month').format('YYYY-MM-DD'));
@@ -92,10 +91,7 @@ function PeriodForm({
     event.preventDefault();
 
     const trimmedName = name.trim();
-    const trimmedCode = code.trim().toUpperCase();
-
     if (!trimmedName) return toast.error('Nama period wajib diisi');
-    if (!isEdit && !trimmedCode) return toast.error('Code wajib diisi');
 
     if (!startDate || !endDate || !payDate) return toast.error('Tanggal wajib lengkap');
     if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) return toast.error('End date tidak boleh lebih kecil dari start date');
@@ -105,7 +101,7 @@ function PeriodForm({
     try {
       await onSave({
         name: trimmedName,
-        ...(isEdit ? {} : { code: trimmedCode, frequency, startDate: toIsoNoon(startDate), endDate: toIsoNoon(endDate), payDate: toIsoNoon(payDate) }),
+        ...(isEdit ? {} : { frequency, startDate: toIsoNoon(startDate), endDate: toIsoNoon(endDate), payDate: toIsoNoon(payDate) }),
         notes: notes.trim() || undefined,
       });
       onClose();
@@ -123,8 +119,9 @@ function PeriodForm({
           <Input value={name} onChange={(event) => setName(event.target.value)} required />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Code {isEdit ? '' : '*'}</label>
-          <Input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} disabled={isEdit} required={!isEdit} />
+          <label className="text-sm font-medium">Code</label>
+          <Input value={initial?.code || ''} disabled placeholder="Akan dibuat otomatis oleh sistem" />
+          <p className="text-xs text-muted-foreground">Code payroll period digenerate sistem saat create.</p>
         </div>
       </div>
 

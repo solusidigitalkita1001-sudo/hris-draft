@@ -72,8 +72,8 @@ export function JobPostingFormPage() {
       return;
     }
 
-    if (!form.title.trim() || !form.code.trim()) {
-      toast.error('Title dan code wajib diisi');
+    if (!form.title.trim()) {
+      toast.error('Title wajib diisi');
       return;
     }
 
@@ -87,6 +87,7 @@ export function JobPostingFormPage() {
       const payload: JobPostingPayload = {
         ...form,
         companyId,
+        code: undefined,
         departmentId: form.departmentId || undefined,
         positionId: form.positionId || undefined,
         location: form.location?.trim() || undefined,
@@ -128,7 +129,8 @@ export function JobPostingFormPage() {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Code</label>
-            <Input value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))} placeholder="REC-FE-001" />
+            <Input value="" placeholder="Akan dibuat otomatis oleh sistem" disabled />
+            <p className="text-xs text-muted-foreground">Code job posting digenerate otomatis saat create.</p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Department</label>

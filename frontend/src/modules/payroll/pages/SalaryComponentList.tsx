@@ -69,9 +69,7 @@ function SalaryComponentForm({
   onSave: (data: Partial<SalaryComponent>) => Promise<void>;
   onClose: () => void;
 }) {
-  const isEdit = Boolean(initial?.id);
   const [name, setName] = useState(initial?.name || '');
-  const [code, setCode] = useState(initial?.code || '');
   const [type, setType] = useState<SalaryComponent['type']>(initial?.type || 'ALLOWANCE');
   const [calculationMethod, setCalculationMethod] = useState<string>(initial?.calculationMethod || 'FIXED');
   const [amount, setAmount] = useState(initial?.amount !== undefined && initial?.amount !== null ? String(initial.amount) : '');
@@ -87,15 +85,8 @@ function SalaryComponentForm({
     event.preventDefault();
 
     const trimmedName = name.trim();
-    const trimmedCode = code.trim().toUpperCase();
-
     if (!trimmedName) {
       toast.error('Name wajib diisi');
-      return;
-    }
-
-    if (!isEdit && !trimmedCode) {
-      toast.error('Code wajib diisi');
       return;
     }
 
@@ -120,7 +111,6 @@ function SalaryComponentForm({
     try {
       await onSave({
         name: trimmedName,
-        ...(isEdit ? {} : { code: trimmedCode }),
         type,
         calculationMethod,
         amount: calculationMethod === 'FIXED' ? parsedAmount : undefined,
@@ -146,14 +136,13 @@ function SalaryComponentForm({
           <Input value={name} onChange={(event) => setName(event.target.value)} required />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Code {isEdit ? '' : '*'}</label>
+          <label className="text-sm font-medium">Code</label>
           <Input
-            value={code}
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
-            disabled={isEdit}
-            required={!isEdit}
-            placeholder="e.g. BASIC_SALARY"
+            value={initial?.code || ''}
+            disabled
+            placeholder="Akan dibuat otomatis oleh sistem"
           />
+          <p className="text-xs text-muted-foreground">Code salary component digenerate sistem dan tidak bisa diedit manual.</p>
         </div>
       </div>
 

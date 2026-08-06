@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const createSalaryComponentSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   type: z.enum(['ALLOWANCE', 'DEDUCTION']),
   calculationMethod: z.enum(['FIXED', 'PERCENTAGE', 'FORMULA']).default('FIXED'),
   amount: z.number().positive().optional(),
@@ -46,7 +46,7 @@ export const updateEmployeeSalarySchema = z.object({
 export const createPayrollPeriodSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  code: z.string().min(1).max(50),
+  code: z.string().min(1).max(50).optional(),
   frequency: z.enum(['MONTHLY', 'BIWEEKLY', 'WEEKLY']).default('MONTHLY'),
   startDate: z.string().datetime(),
   endDate: z.string().datetime(),

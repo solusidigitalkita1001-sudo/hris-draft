@@ -449,6 +449,35 @@ export class PerformanceController {
     } catch (error) { next(error); }
   }
 
+  async getMyExecutionAssignments(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.query.companyId as string;
+      res.json(Result.success(await performanceService.getMyExecutionAssignments(
+        companyId,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async getExecutionAssignmentById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await performanceService.getExecutionAssignmentById(
+        req.params.id as string,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async updateExecutionTargetComment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await performanceService.updateExecutionTargetComment(
+        req.params.id as string,
+        req.body,
+        this.getAuditContext(req)
+      )));
+    } catch (error) { next(error); }
+  }
+
   async getPerformanceResults(req: Request, res: Response, next: NextFunction) {
     try {
       res.json(Result.success(await performanceService.getPerformanceResults(req.params.id as string)));

@@ -81,7 +81,7 @@ function ShiftFormulaForm({
   companyId: string;
   onSave: (payload: {
     companyId: string;
-    code: string;
+    code?: string;
     name: string;
     description?: string;
     isActive: boolean;
@@ -89,7 +89,6 @@ function ShiftFormulaForm({
   }) => Promise<void>;
   onClose: () => void;
 }) {
-  const [code, setCode] = useState(initial?.code || '');
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
@@ -125,8 +124,8 @@ function ShiftFormulaForm({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!code.trim() || !name.trim()) {
-      toast.error('Code dan nama formula wajib diisi');
+    if (!name.trim()) {
+      toast.error('Nama formula wajib diisi');
       return;
     }
 
@@ -134,7 +133,6 @@ function ShiftFormulaForm({
     try {
       await onSave({
         companyId,
-        code: code.trim(),
         name: name.trim(),
         description: description.trim() || undefined,
         isActive,
@@ -159,8 +157,9 @@ function ShiftFormulaForm({
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code *</label>
-          <Input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="SHIFT-3REGU" required />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code</label>
+          <Input value={initial?.code || ''} disabled placeholder="Akan dibuat otomatis oleh sistem" />
+          <p className="mt-1 text-[11px] text-muted-foreground">Code shift formula digenerate sistem saat create.</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">Nama Formula *</label>
@@ -300,7 +299,7 @@ export function ShiftFormulaPage() {
 
   const handleCreate = async (payload: {
     companyId: string;
-    code: string;
+    code?: string;
     name: string;
     description?: string;
     isActive: boolean;
@@ -318,7 +317,7 @@ export function ShiftFormulaPage() {
 
   const handleUpdate = async (payload: {
     companyId: string;
-    code: string;
+    code?: string;
     name: string;
     description?: string;
     isActive: boolean;

@@ -109,7 +109,6 @@ function BranchForm({ initial, companies, onSave, onClose }: {
   const { t } = useI18n();
   const [companyId, setCompanyId] = useState(initial?.companyId || '');
   const [name, setName] = useState(initial?.name || '');
-  const [code, setCode] = useState(initial?.code || '');
   const [address, setAddress] = useState(initial?.address || '');
   const [phone, setPhone] = useState(initial?.phone || '');
   const [email, setEmail] = useState(initial?.email || '');
@@ -117,17 +116,17 @@ function BranchForm({ initial, companies, onSave, onClose }: {
   const [latitude, setLatitude] = useState(initial?.latitude?.toString() || '');
   const [longitude, setLongitude] = useState(initial?.longitude?.toString() || '');
   const [saving, setSaving] = useState(false);
+  const isEdit = Boolean(initial?.id);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!companyId) return toast.error(t('organization.branches.form.companyRequired'));
-    if (!name.trim() || !code.trim()) return toast.error(t('organization.branches.form.requiredFields'));
+    if (!name.trim()) return toast.error(t('organization.branches.form.requiredFields'));
     setSaving(true);
     try {
       await onSave({
         companyId,
         name: name.trim(),
-        code: code.trim().toUpperCase(),
         address: address.trim(),
         phone: phone.trim(),
         email: email.trim(),
@@ -157,8 +156,8 @@ function BranchForm({ initial, companies, onSave, onClose }: {
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('organization.branches.form.branchNamePlaceholder')} required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.code')} *</label>
-          <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder={t('organization.branches.form.codePlaceholder')} required />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('organization.branches.form.code')}</label>
+          <Input value={isEdit ? initial?.code || '' : ''} disabled placeholder="Akan dibuat otomatis oleh sistem" />
         </div>
       </div>
       <div>

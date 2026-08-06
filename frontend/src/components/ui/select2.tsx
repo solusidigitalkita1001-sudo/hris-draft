@@ -62,7 +62,7 @@ export function Select2({
           position="popper"
           sideOffset={6}
           className={cn(
-            'z-[70] max-h-80 min-w-[12rem] overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-xl',
+            'z-[90] max-h-80 min-w-[12rem] overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-xl',
             contentClassName
           )}
         >

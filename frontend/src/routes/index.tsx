@@ -51,6 +51,8 @@ import { PerformanceDashboard } from '@/modules/performance/pages/PerformanceDas
 import { PerformanceCyclesPage } from '@/modules/performance/pages/PerformanceCyclesPage';
 import { PerformanceLibrariesPage } from '@/modules/performance/pages/PerformanceLibrariesPage';
 import { PerformanceExecutionPage } from '@/modules/performance/pages/PerformanceExecutionPage';
+import { PerformanceSelfReviewPage } from '@/modules/performance/pages/PerformanceSelfReviewPage';
+import { PerformanceManagerReviewPage } from '@/modules/performance/pages/PerformanceManagerReviewPage';
 import { PerformanceMethodsPage } from '@/modules/performance/pages/PerformanceMethodsPage';
 import { PerformanceMyResultsPage } from '@/modules/performance/pages/PerformanceMyResultsPage';
 import { PerformancePlanningPage } from '@/modules/performance/pages/PerformancePlanningPage';
@@ -463,6 +465,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
             <PerformanceExecutionPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/self-review',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceSelfReviewPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'performance/manager-review',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+            <PerformanceManagerReviewPage />
           </ProtectedRoute>
         ),
       },

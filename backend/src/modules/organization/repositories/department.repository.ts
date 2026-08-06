@@ -55,7 +55,7 @@ export class DepartmentRepository {
     return prisma.department.findUnique({ where: { code } });
   }
 
-  async create(data: CreateDepartmentDTO) {
+  async create(data: CreateDepartmentDTO & { code: string }) {
     return prisma.department.create({
       data: {
         divisionId: data.divisionId,

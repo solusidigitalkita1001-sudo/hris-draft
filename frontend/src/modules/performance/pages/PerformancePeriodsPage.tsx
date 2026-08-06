@@ -420,8 +420,8 @@ export function PerformancePeriodsPage() {
       return;
     }
 
-    if (!form.methodId || !form.methodVersionId || !form.name.trim() || !form.code.trim() || !form.startDate || !form.endDate) {
-      toast.error('Method, version, nama, code, start date, dan end date wajib diisi');
+    if (!form.methodId || !form.methodVersionId || !form.name.trim() || !form.startDate || !form.endDate) {
+      toast.error('Method, version, nama, start date, dan end date wajib diisi');
       return;
     }
 
@@ -437,7 +437,6 @@ export function PerformancePeriodsPage() {
         methodId: form.methodId,
         methodVersionId: form.methodVersionId,
         name: form.name.trim(),
-        code: form.code.trim().toUpperCase(),
         startDate: toIsoDateBoundary(form.startDate) as string,
         endDate: toIsoDateBoundary(form.endDate, true) as string,
         reviewDeadline: toIsoDateBoundary(form.reviewDeadline, true),
@@ -559,10 +558,11 @@ export function PerformancePeriodsPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Code</label>
             <Input
-              value={form.code}
-              onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-              placeholder="APR-2026-ANNUAL"
+              value=""
+              placeholder="Akan dibuat otomatis oleh sistem"
+              disabled
             />
+            <p className="text-xs text-muted-foreground">Code period digenerate otomatis saat create.</p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Start Date</label>

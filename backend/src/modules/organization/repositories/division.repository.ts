@@ -31,7 +31,7 @@ export class DivisionRepository {
     return prisma.division.findUnique({ where: { code } });
   }
 
-  async create(data: CreateDivisionDTO) {
+  async create(data: CreateDivisionDTO & { code: string }) {
     return prisma.division.create({
       data: {
         companyId: data.companyId,

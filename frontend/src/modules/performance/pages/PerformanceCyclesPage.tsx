@@ -98,8 +98,8 @@ export function PerformanceCyclesPage() {
       return;
     }
 
-    if (!form.name.trim() || !form.code.trim() || !form.startDate || !form.endDate) {
-      toast.error('Nama, kode, tanggal mulai, dan tanggal selesai wajib diisi');
+    if (!form.name.trim() || !form.startDate || !form.endDate) {
+      toast.error('Nama, tanggal mulai, dan tanggal selesai wajib diisi');
       return;
     }
 
@@ -113,7 +113,6 @@ export function PerformanceCyclesPage() {
       const payload: ReviewCyclePayload = {
         companyId,
         name: form.name.trim(),
-        code: form.code.trim().toUpperCase(),
         type: form.type,
         startDate: toIsoDateBoundary(form.startDate) as string,
         endDate: toIsoDateBoundary(form.endDate, true) as string,
@@ -187,10 +186,11 @@ export function PerformanceCyclesPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Code</label>
               <Input
-                value={form.code}
-                onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                placeholder="PR-2026-ANNUAL"
+                value=""
+                placeholder="Akan dibuat otomatis oleh sistem"
+                disabled
               />
+              <p className="text-xs text-muted-foreground">Code cycle digenerate otomatis saat create.</p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Type</label>

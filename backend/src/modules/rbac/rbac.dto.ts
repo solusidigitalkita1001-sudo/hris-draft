@@ -4,7 +4,7 @@ export const createRoleSchema = z.object({
   companyId: z.string().uuid().optional(),
   groupId: z.string().uuid().optional(),
   name: z.string().min(2, 'Role name must be at least 2 characters').max(255),
-  code: z.string().min(2, 'Role code must be at least 2 characters').max(50).toUpperCase(),
+  code: z.string().min(2, 'Role code must be at least 2 characters').max(50).toUpperCase().optional(),
   description: z.string().optional(),
   scope: z.enum(['GLOBAL', 'GROUP', 'COMPANY']).default('COMPANY'),
   priority: z.number().int().min(0).default(0),

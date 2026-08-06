@@ -43,7 +43,7 @@ export class BenefitRepository {
     });
   }
 
-  async createPlan(data: CreateBenefitPlanDTO) {
+  async createPlan(data: CreateBenefitPlanDTO & { code: string }) {
     return prisma.benefitPlan.create({
       data: {
         companyId: data.companyId,

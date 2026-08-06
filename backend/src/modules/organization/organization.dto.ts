@@ -3,7 +3,7 @@ import { z } from 'zod';
 // ==================== Company Group ====================
 export const createGroupSchema = z.object({
   name: z.string().min(2, 'Group name must be at least 2 characters').max(255),
-  code: z.string().min(2, 'Group code must be at least 2 characters').max(50).toUpperCase(),
+  code: z.string().min(2, 'Group code must be at least 2 characters').max(50).toUpperCase().optional(),
   taxId: z.string().max(50).optional(),
   address: z.string().optional(),
   phone: z.string().max(50).optional(),
@@ -17,7 +17,7 @@ export const updateGroupSchema = createGroupSchema.partial();
 export const createCompanySchema = z.object({
   groupId: z.string().uuid(),
   name: z.string().min(2, 'Company name must be at least 2 characters').max(255),
-  code: z.string().min(2, 'Company code must be at least 2 characters').max(50).toUpperCase(),
+  code: z.string().min(2, 'Company code must be at least 2 characters').max(50).toUpperCase().optional(),
   taxId: z.string().max(50).optional(),
   address: z.string().optional(),
   phone: z.string().max(50).optional(),
@@ -35,7 +35,7 @@ export const updateCompanySchema = createCompanySchema.partial().omit({ groupId:
 export const createBranchSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(2).max(255),
-  code: z.string().min(2).max(50).toUpperCase(),
+  code: z.string().min(2).max(50).toUpperCase().optional(),
   address: z.string().optional(),
   phone: z.string().max(50).optional(),
   email: z.string().email().max(255).optional(),
@@ -72,7 +72,7 @@ export const upsertBranchAttendancePolicySchema = z.object({
 export const createDivisionSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(2).max(255),
-  code: z.string().min(2).max(50).toUpperCase(),
+  code: z.string().min(2).max(50).toUpperCase().optional(),
   headId: z.string().uuid().optional(),
   description: z.string().optional(),
 });
@@ -85,7 +85,7 @@ export const createDepartmentSchema = z.object({
   companyId: z.string().uuid(),
   parentId: z.string().uuid().optional(),
   name: z.string().min(2).max(255),
-  code: z.string().min(2).max(50).toUpperCase(),
+  code: z.string().min(2).max(50).toUpperCase().optional(),
   headId: z.string().uuid().optional(),
   description: z.string().optional(),
   costCenter: z.string().max(50).optional(),
@@ -97,7 +97,7 @@ export const updateDepartmentSchema = createDepartmentSchema.partial().omit({ co
 export const createSubDepartmentSchema = z.object({
   departmentId: z.string().uuid(),
   name: z.string().min(2).max(255),
-  code: z.string().min(2).max(50).toUpperCase(),
+  code: z.string().min(2).max(50).toUpperCase().optional(),
   headId: z.string().uuid().optional(),
   description: z.string().optional(),
 });
@@ -109,7 +109,7 @@ export const createPositionSchema = z.object({
   departmentId: z.string().uuid().optional(),
   companyId: z.string().uuid(),
   name: z.string().min(2).max(255),
-  code: z.string().min(2).max(50).toUpperCase(),
+  code: z.string().min(2).max(50).toUpperCase().optional(),
   gradeLevel: z.number().int().min(1).max(99).optional(),
   minSalary: z.number().min(0).optional(),
   maxSalary: z.number().min(0).optional(),

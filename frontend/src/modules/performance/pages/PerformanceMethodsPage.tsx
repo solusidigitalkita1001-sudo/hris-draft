@@ -223,8 +223,8 @@ export function PerformanceMethodsPage() {
       return;
     }
 
-    if (!methodForm.name.trim() || !methodForm.code.trim()) {
-      toast.error('Nama dan code method wajib diisi');
+    if (!methodForm.name.trim()) {
+      toast.error('Nama method wajib diisi');
       return;
     }
 
@@ -233,7 +233,6 @@ export function PerformanceMethodsPage() {
       const payload: PerformanceMethodPayload = {
         companyId,
         name: methodForm.name.trim(),
-        code: methodForm.code.trim().toUpperCase(),
         description: methodForm.description.trim() || undefined,
       };
       const created = await performanceService.createMethod(payload);
@@ -302,8 +301,8 @@ export function PerformanceMethodsPage() {
       return;
     }
 
-    if (!componentForm.name.trim() || !componentForm.code.trim() || !componentForm.weight) {
-      toast.error('Nama, code, dan weight component wajib diisi');
+    if (!componentForm.name.trim() || !componentForm.weight) {
+      toast.error('Nama dan weight component wajib diisi');
       return;
     }
 
@@ -311,7 +310,6 @@ export function PerformanceMethodsPage() {
     try {
       await performanceService.createComponent(selectedVersionId, {
         name: componentForm.name.trim(),
-        code: componentForm.code.trim().toUpperCase(),
         type: componentForm.type,
         weight: Number(componentForm.weight),
         sortOrder: componentForm.sortOrder ? Number(componentForm.sortOrder) : 0,
@@ -482,10 +480,11 @@ export function PerformanceMethodsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Code</label>
                 <Input
-                  value={methodForm.code}
-                  onChange={(e) => setMethodForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                  placeholder="BSC-ANNUAL"
+                  value=""
+                  placeholder="Akan dibuat otomatis oleh sistem"
+                  disabled
                 />
+                <p className="text-xs text-muted-foreground">Code method digenerate otomatis saat create.</p>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Description</label>
@@ -855,11 +854,11 @@ export function PerformanceMethodsPage() {
                         <div className="space-y-2">
                           <label className="text-sm font-medium">Code</label>
                           <Input
-                            value={componentForm.code}
-                            onChange={(e) => setComponentForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                            placeholder="GOAL"
-                            disabled={selectedVersion.status !== 'DRAFT'}
+                            value=""
+                            placeholder="Akan dibuat otomatis oleh sistem"
+                            disabled
                           />
+                          <p className="text-xs text-muted-foreground">Code component digenerate otomatis saat create.</p>
                         </div>
                         <div className="space-y-2">
                           <label className="text-sm font-medium">Type</label>

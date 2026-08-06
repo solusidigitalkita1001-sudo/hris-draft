@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   Shield, Plus, RefreshCw, Pencil, Trash2, Search,
   Users, CheckCircle, XCircle, Globe,
@@ -58,27 +59,33 @@ function RoleForm({ initial, onSave, onClose }: {
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
-  const [code, setCode] = useState(initial?.code || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [scope, setScope] = useState(initial?.scope || 'COMPANY');
   const [priority, setPriority] = useState(initial?.priority ?? 0);
   const [saving, setSaving] = useState(false);
-  const companyId = localStorage.getItem('companyId') || '';
+  const { activeCompany } = useCompanyStore();
+  const companyId = activeCompany?.id || '';
+  const isEditing = Boolean(initial?.id);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return toast.error('Role name is required');
-    if (!code.trim()) return toast.error('Role code is required');
+    if (!companyId) return toast.error('Company belum aktif');
+
+    const payload: Record<string, unknown> = {
+      name: name.trim(),
+      description: description.trim() || undefined,
+      priority,
+    };
+
+    if (!isEditing) {
+      payload.scope = 'COMPANY';
+      payload.companyId = companyId;
+    }
+
     setSaving(true);
     try {
-      await onSave({
-        name: name.trim(),
-        code: code.trim(),
-        description: description.trim() || undefined,
-        scope,
-        priority,
-        companyId,
-      });
+      await onSave(payload);
       onClose();
     } catch { /* handled */ }
     finally { setSaving(false); }
@@ -92,14 +99,13 @@ function RoleForm({ initial, onSave, onClose }: {
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. HR Manager" required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code *</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code</label>
           <Input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="e.g. HR_MANAGER"
-            required
-            disabled={initial?.isSystem}
+            value={initial?.code || ''}
+            placeholder="Akan dibuat otomatis oleh sistem"
+            disabled
           />
+          <p className="mt-1 text-[11px] text-muted-foreground">Code role digenerate sistem dan tidak bisa diedit manual.</p>
         </div>
       </div>
 
@@ -109,13 +115,11 @@ function RoleForm({ initial, onSave, onClose }: {
           <Select2
             value={scope}
             onValueChange={(value) => setScope(value as 'GLOBAL' | 'GROUP' | 'COMPANY')}
-            options={[
-              { value: 'COMPANY', label: 'Company' },
-              { value: 'GROUP', label: 'Group' },
-              { value: 'GLOBAL', label: 'Global' },
-            ]}
+            options={[{ value: 'COMPANY', label: 'Company' }]}
             className="h-9"
+            disabled
           />
+          <p className="mt-1 text-[11px] text-muted-foreground">Custom role dari halaman ini hanya boleh scope `COMPANY`.</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">Priority</label>
@@ -293,6 +297,7 @@ function PermissionManager({ role, open, onClose }: {
 
 // ─── Main Page ──────────────────────────────────────────
 export function RoleListPage() {
+  const { activeCompany } = useCompanyStore();
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -300,7 +305,7 @@ export function RoleListPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = activeCompany?.id || '';
 
   const fetchData = useCallback(async () => {
     if (!companyId) return;
@@ -393,6 +398,16 @@ export function RoleListPage() {
         />
       </div>
 
+      <div className="mb-4 rounded-xl border border-border bg-card p-4 text-sm">
+        <p className="font-medium">Ketentuan RBAC</p>
+        <div className="mt-2 grid gap-1 text-muted-foreground">
+          <p>System role: hanya bisa dilihat, tidak bisa edit, delete, atau update permissions.</p>
+          <p>Custom role: bisa update `name`, `code`, `description`, `priority`, dan permissions.</p>
+          <p>Scope binding (`scope`, `companyId`, `groupId`) tidak boleh diubah setelah role dibuat.</p>
+          <p>Custom role dari halaman ini dibuat sebagai role `COMPANY` pada company aktif.</p>
+        </div>
+      </div>
+
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
@@ -478,7 +493,8 @@ export function RoleListPage() {
               <div className="flex items-center gap-1 pt-3 border-t border-border">
                 <button
                   onClick={() => setPermissionRole(role)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={role.isSystem}
                 >
                   <Lock size={13} /> Permissions
                 </button>

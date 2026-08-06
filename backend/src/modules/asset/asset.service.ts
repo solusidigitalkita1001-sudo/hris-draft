@@ -1,7 +1,8 @@
 import { assetRepository } from './asset.repository';
 import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO } from './asset.dto';
-import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { generateSystemCode } from '@/shared/utils/system-code';
 
 export class AssetService {
   async findAll(companyId: string, status?: string) {
@@ -15,7 +16,17 @@ export class AssetService {
   }
 
   async create(data: CreateAssetDTO) {
-    return assetRepository.create(data);
+    const assetCode = await generateSystemCode({
+      prefix: 'AST',
+      label: data.name,
+      exists: async (candidate) => Boolean(await assetRepository.findByAssetCode(candidate)),
+    });
+    const existing = await assetRepository.findByAssetCode(assetCode);
+    if (existing) throw new ConflictError('Asset code already exists');
+    return assetRepository.create({
+      ...data,
+      assetCode,
+    });
   }
 
   async assign(assetId: string, data: AssignAssetDTO, userId: string) {

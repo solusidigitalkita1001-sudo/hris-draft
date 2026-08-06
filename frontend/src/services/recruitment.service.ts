@@ -46,7 +46,7 @@ export interface JobPostingPayload {
   departmentId?: string;
   positionId?: string;
   title: string;
-  code: string;
+  code?: string;
   employmentType: string;
   location?: string;
   minSalary?: number;

@@ -2,6 +2,7 @@ import { recruitmentRepository } from './recruitment.repository';
 import { CreateJobPostingDTO, CreateCandidateDTO, CreateApplicationDTO, UpdateApplicationStatusDTO, CreateInterviewDTO, CreateInterviewFeedbackDTO } from './recruitment.dto';
 import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { generateSystemCode } from '@/shared/utils/system-code';
 
 export class RecruitmentService {
   async findAllJobPostings(companyId: string, status?: string) {
@@ -33,7 +34,16 @@ export class RecruitmentService {
       }
     }
 
-    return recruitmentRepository.createJobPosting(data);
+    const code = await generateSystemCode({
+      prefix: 'REC-JOB',
+      label: data.title,
+      exists: async (candidate) => Boolean(await recruitmentRepository.findJobPostingByCode(candidate)),
+    });
+
+    return recruitmentRepository.createJobPosting({
+      ...data,
+      code,
+    });
   }
 
   async approveJobPosting(id: string) {

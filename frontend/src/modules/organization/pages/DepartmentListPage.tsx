@@ -39,14 +39,14 @@ function DeptForm({ initial, onSave, onClose }: {
 }) {
   const companyId = localStorage.getItem('companyId') || '';
   const [name, setName] = useState(initial?.name || '');
-  const [code, setCode] = useState(initial?.code || '');
   const [costCenter, setCostCenter] = useState(initial?.costCenter || '');
   const [saving, setSaving] = useState(false);
+  const isEdit = Boolean(initial?.id);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !code.trim()) return toast.error('Name and code are required');
+    if (!name.trim()) return toast.error('Name is required');
     setSaving(true);
-    try { await onSave({ name: name.trim(), code: code.trim().toUpperCase(), companyId, costCenter: costCenter.trim() || undefined }); onClose(); }
+    try { await onSave({ name: name.trim(), companyId, costCenter: costCenter.trim() || undefined }); onClose(); }
     catch { /* handled */ }
     finally { setSaving(false); }
   };
@@ -54,7 +54,7 @@ function DeptForm({ initial, onSave, onClose }: {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Department Name *</label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Human Resources" required /></div>
-        <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Code *</label><Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. HR" required /></div>
+        <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Code</label><Input value={isEdit ? initial?.code || '' : ''} disabled placeholder="Akan dibuat otomatis oleh sistem" /></div>
       </div>
       <div><label className="block text-xs font-medium text-muted-foreground mb-1.5">Cost Center (optional)</label><Input value={costCenter} onChange={(e) => setCostCenter(e.target.value)} placeholder="e.g. CC-HR-001" /></div>
       <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button><Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button></div>

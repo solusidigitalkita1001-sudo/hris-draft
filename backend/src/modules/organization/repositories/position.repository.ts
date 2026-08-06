@@ -39,7 +39,7 @@ export class PositionRepository {
     return prisma.position.findUnique({ where: { code } });
   }
 
-  async create(data: CreatePositionDTO) {
+  async create(data: CreatePositionDTO & { code: string }) {
     return prisma.position.create({ data });
   }
 

@@ -2,6 +2,7 @@ import { trainingRepository } from './training.repository';
 import { CreateCategoryDTO, CreateCourseDTO, UpdateCourseDTO, CreateSessionDTO, CreateEnrollmentDTO, UpdateEnrollmentDTO } from './training.dto';
 import { NotFoundError, ConflictError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { generateSystemCode } from '@/shared/utils/system-code';
 
 export class TrainingService {
   async findAllCategories(companyId: string) {
@@ -9,7 +10,16 @@ export class TrainingService {
   }
 
   async createCategory(data: CreateCategoryDTO) {
-    return trainingRepository.createCategory(data);
+    const code = await generateSystemCode({
+      prefix: 'TRN-CAT',
+      label: data.name,
+      exists: async (candidate) => Boolean(await trainingRepository.findCategoryByCode(candidate)),
+    });
+
+    return trainingRepository.createCategory({
+      ...data,
+      code,
+    });
   }
 
   async findAllCourses(companyId: string, categoryId?: string) {
@@ -23,7 +33,16 @@ export class TrainingService {
   }
 
   async createCourse(data: CreateCourseDTO) {
-    return trainingRepository.createCourse(data);
+    const code = await generateSystemCode({
+      prefix: 'TRN-CRS',
+      label: data.title,
+      exists: async (candidate) => Boolean(await trainingRepository.findCourseByCode(candidate)),
+    });
+
+    return trainingRepository.createCourse({
+      ...data,
+      code,
+    });
   }
 
   async updateCourse(id: string, data: UpdateCourseDTO) {
