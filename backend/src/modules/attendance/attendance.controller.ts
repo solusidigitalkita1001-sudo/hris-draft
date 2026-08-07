@@ -97,6 +97,14 @@ export class AttendanceController {
     try { res.json(Result.updated(await attendanceService.rejectOvertime(req.params.id as string))); }
     catch (error) { next(error); }
   }
+
+  async calculateOvertimePay(req: Request, res: Response, next: NextFunction) {
+    try {
+      const dayType = req.query.dayType === 'HOLIDAY' ? 'HOLIDAY' : 'WORKDAY';
+      const workweekDays = req.query.workweekDays === '6' ? 6 : 5;
+      res.json(Result.success(await attendanceService.calculateOvertimePay(req.params.id as string, { dayType, workweekDays })));
+    } catch (error) { next(error); }
+  }
 }
 
 export const attendanceController = new AttendanceController();

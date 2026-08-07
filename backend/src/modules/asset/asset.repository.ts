@@ -1,6 +1,11 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO } from './asset.dto';
+import {
+  generateDepreciationSchedule,
+  bookValueAfterMonths,
+  DepreciationMethod,
+} from '@/shared/asset/depreciation';
 
 export class AssetRepository {
   async findAll(companyId: string, status?: string) {
@@ -22,6 +27,71 @@ export class AssetRepository {
         assignments: { include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } }, orderBy: { assignedAt: 'desc' } },
       },
     });
+  }
+
+  /**
+   * Hitung skema depresiasi & nilai buku aset. Metode + umur ekonomis diambil dari
+   * AssetCategory (fallback ke override query). asOfMonths → nilai buku untuk beban aset
+   * hilang saat resign. Read-only (tidak persist).
+   */
+  async buildDepreciation(
+    id: string,
+    overrides?: {
+      method?: DepreciationMethod;
+      salvageValue?: number;
+      usefulLifeYears?: number;
+      asOfMonths?: number;
+    }
+  ) {
+    const asset = await prisma.asset.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, name: true, assetCode: true, purchaseValue: true, purchaseDate: true, categoryId: true },
+    });
+    if (!asset) return null;
+
+    const category = asset.categoryId
+      ? await prisma.assetCategory.findUnique({
+          where: { id: asset.categoryId },
+          select: { depreciationMethod: true, usefulLifeMonths: true },
+        })
+      : null;
+
+    const method = (overrides?.method ??
+      (category?.depreciationMethod as DepreciationMethod) ??
+      'STRAIGHT_LINE') as DepreciationMethod;
+    const usefulLifeYears =
+      overrides?.usefulLifeYears ??
+      (category?.usefulLifeMonths ? category.usefulLifeMonths / 12 : 4);
+    const purchaseValue = Number(asset.purchaseValue ?? 0);
+    const salvageValue = overrides?.salvageValue ?? 0;
+
+    const schedule = generateDepreciationSchedule({ purchaseValue, salvageValue, usefulLifeYears, method });
+
+    // Nilai buku saat ini berdasarkan umur aktual sejak pembelian (atau override asOfMonths).
+    let asOfMonths = overrides?.asOfMonths;
+    if (asOfMonths === undefined && asset.purchaseDate) {
+      const now = new Date();
+      asOfMonths =
+        (now.getUTCFullYear() - asset.purchaseDate.getUTCFullYear()) * 12 +
+        (now.getUTCMonth() - asset.purchaseDate.getUTCMonth());
+    }
+    const currentBookValue =
+      asOfMonths === undefined
+        ? purchaseValue
+        : bookValueAfterMonths({ purchaseValue, salvageValue, usefulLifeYears, method, asOfMonths });
+
+    return {
+      assetId: asset.id,
+      assetCode: asset.assetCode,
+      name: asset.name,
+      method,
+      purchaseValue,
+      salvageValue,
+      usefulLifeYears,
+      asOfMonths: asOfMonths ?? null,
+      currentBookValue,
+      schedule,
+    };
   }
 
   async findByAssetCode(assetCode: string) {

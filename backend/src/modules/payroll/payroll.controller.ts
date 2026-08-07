@@ -97,6 +97,18 @@ export class PayrollController {
     }
   }
 
+  async calculateEmployeeThr(req: Request, res: Response, next: NextFunction) {
+    try {
+      const employeeId = req.params.employeeId as string;
+      const dateQuery = req.query.date as string | undefined;
+      const referenceDate = dateQuery ? new Date(dateQuery) : undefined;
+      const data = await payrollService.calculateEmployeeThr(employeeId, referenceDate);
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // ==================== Payroll Periods ====================
 
   async findAllPayrollPeriods(req: Request, res: Response, next: NextFunction) {

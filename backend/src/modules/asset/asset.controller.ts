@@ -12,6 +12,17 @@ export class AssetController {
     try { res.json(Result.success(await assetService.findById(req.params.id as string))); }
     catch (error) { next(error); }
   }
+  async getDepreciation(req: Request, res: Response, next: NextFunction) {
+    try {
+      const q = req.query;
+      res.json(Result.success(await assetService.getDepreciation(req.params.id as string, {
+        method: q.method as string | undefined,
+        salvageValue: q.salvageValue ? Number(q.salvageValue) : undefined,
+        usefulLifeYears: q.usefulLifeYears ? Number(q.usefulLifeYears) : undefined,
+        asOfMonths: q.asOfMonths ? Number(q.asOfMonths) : undefined,
+      })));
+    } catch (error) { next(error); }
+  }
   async create(req: Request, res: Response, next: NextFunction) {
     try { res.status(201).json(Result.created(await assetService.create(req.body))); }
     catch (error) { next(error); }

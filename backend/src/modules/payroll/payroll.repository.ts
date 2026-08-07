@@ -132,6 +132,22 @@ export class PayrollRepository {
     });
   }
 
+  /** Input untuk kalkulasi THR: upah aktif + tanggal masuk karyawan. */
+  async findThrInputs(employeeId: string) {
+    const [salary, employee] = await Promise.all([
+      prisma.employeeSalary.findFirst({
+        where: { employeeId, isActive: true, deletedAt: null },
+        orderBy: { effectiveDate: 'desc' },
+        select: { baseSalary: true },
+      }),
+      prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { id: true, fullName: true, employeeNumber: true, joinDate: true },
+      }),
+    ]);
+    return { salary, employee };
+  }
+
   async createEmployeeSalary(data: CreateEmployeeSalaryDTO) {
     const { components, ...salaryData } = data;
     return prisma.employeeSalary.create({

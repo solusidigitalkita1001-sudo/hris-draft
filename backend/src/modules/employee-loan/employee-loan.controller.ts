@@ -100,6 +100,15 @@ export class EmployeeLoanController {
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
+
+  async getAmortization(req: Request, res: Response, next: NextFunction) {
+    try {
+      const method = req.query.method === 'EFFECTIVE' ? 'EFFECTIVE' : 'FLAT';
+      const data = await employeeLoanRepository.buildAmortization(req.params.id as string, method);
+      if (!data) throw new NotFoundError('Loan not found');
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
 }
 
 export const employeeLoanController = new EmployeeLoanController();

@@ -3,6 +3,7 @@ import { CreateJobPostingDTO, CreateCandidateDTO, CreateApplicationDTO, UpdateAp
 import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { generateSystemCode } from '@/shared/utils/system-code';
+import { employeeService } from '@/modules/employee/employee.service';
 
 export class RecruitmentService {
   async findAllJobPostings(companyId: string, status?: string) {
@@ -101,7 +102,49 @@ export class RecruitmentService {
   }
 
   async updateApplicationStatus(id: string, data: UpdateApplicationStatusDTO) {
+    // Business Rule Gap: kandidat HIRED → otomatis buat draft employee + checklist onboarding.
+    if (data.status === 'HIRED') {
+      return this.hireApplication(id, data.notes);
+    }
     return recruitmentRepository.updateApplicationStatus(id, data.status as any, data.notes);
+  }
+
+  /**
+   * Konversi lamaran menjadi karyawan: buat draft Employee dari data kandidat,
+   * generate checklist onboarding default, lalu tandai lamaran HIRED. Idempotent —
+   * jika lamaran sudah HIRED, tidak membuat employee/checklist ganda.
+   */
+  async hireApplication(id: string, notes?: string) {
+    const application = await recruitmentRepository.findApplicationWithCandidate(id);
+    if (!application) throw new NotFoundError('Application not found');
+    if (application.status === 'HIRED') {
+      throw new BadRequestError('Lamaran sudah berstatus HIRED');
+    }
+
+    const c = application.candidate;
+
+    // Buat draft employee (email diikutkan hanya jika belum dipakai, agar tidak konflik unik).
+    const employee = await employeeService.create({
+      companyId: application.companyId,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      email: c.email ?? undefined,
+      phone: c.phone ?? undefined,
+      employmentType: 'PROBATION',
+      employeeCategory: 'OFFICE',
+      nationality: 'Indonesia',
+    } as any);
+
+    await recruitmentRepository.generateOnboardingChecklists(application.companyId, employee.id);
+    const updated = await recruitmentRepository.updateApplicationStatus(id, 'HIRED', notes);
+
+    logger.info('Candidate hired → employee draft + onboarding created', {
+      applicationId: id,
+      candidateId: c.id,
+      employeeId: employee.id,
+    });
+
+    return { application: updated, employee, onboardingChecklistGenerated: true };
   }
 
   async findAllInterviews(companyId: string) {

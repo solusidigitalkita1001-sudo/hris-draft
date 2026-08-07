@@ -7,6 +7,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', authorize({ resource: 'audit-log', action: 'read' }), auditLogController.findAll.bind(auditLogController));
+router.get('/verify-integrity', authorize({ resource: 'audit-log', action: 'read' }), auditLogController.verifyIntegrity.bind(auditLogController));
 router.get('/export', authorize({ resource: 'audit-log', action: 'read' }), auditLogController.exportCsv.bind(auditLogController));
 router.get('/:id', authorize({ resource: 'audit-log', action: 'read' }), auditLogController.findById.bind(auditLogController));
 

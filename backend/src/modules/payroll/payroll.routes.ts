@@ -85,6 +85,12 @@ router.patch(
   payrollController.updateEmployeeSalary.bind(payrollController)
 );
 
+router.get(
+  '/employees/:employeeId/thr',
+  authorize({ resource: 'payroll', action: 'read' }),
+  payrollController.calculateEmployeeThr.bind(payrollController)
+);
+
 // ==================== Payroll Periods ====================
 router.get(
   '/periods',

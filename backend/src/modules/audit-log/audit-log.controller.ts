@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/shared/database/prisma';
 import { Result } from '@/shared/core/Result';
+import { verifyAuditChain } from '@/shared/security/audit-hash';
 
 export class AuditLogController {
   private buildWhere(req: Request): Prisma.AuditLogWhereInput {
@@ -93,6 +94,42 @@ export class AuditLogController {
       });
       if (!log) return res.status(404).json(Result.error('Audit log not found'));
       res.json(Result.success(log));
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * Verifikasi integritas rantai audit (anti-tamper). Menghitung ulang HMAC tiap entry
+   * pada 1 company (urut createdAt asc) dan mendeteksi baris pertama yang dipalsukan.
+   */
+  async verifyIntegrity(req: Request, res: Response, next: NextFunction) {
+    try {
+      const companyId = (req.query.companyId as string) || (req as any).user?.companyId;
+      const logs = await prisma.auditLog.findMany({
+        where: companyId ? { companyId } : {},
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          companyId: true,
+          userId: true,
+          action: true,
+          entity: true,
+          entityId: true,
+          oldValue: true,
+          newValue: true,
+          createdAt: true,
+          hash: true,
+          prevHash: true,
+        },
+      });
+
+      const result = verifyAuditChain(logs);
+      res.json(
+        Result.success({
+          totalEntries: logs.length,
+          intact: result.ok,
+          tamperedAt: result.tamperedAt,
+        })
+      );
     } catch (error) { next(error); }
   }
 

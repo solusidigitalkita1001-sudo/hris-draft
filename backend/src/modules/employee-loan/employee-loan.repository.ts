@@ -1,6 +1,7 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import type { CreateLoanDTO, ApproveLoanDTO } from './employee-loan.dto';
+import { generateAmortizationSchedule, AmortizationMethod } from '@/shared/payroll/amortization';
 
 export class EmployeeLoanRepository {
   // ─── Loan Types ───────────────────────────────────────
@@ -114,6 +115,34 @@ export class EmployeeLoanRepository {
       where: { id, employeeId, status: 'PENDING' },
       data: { status: 'CANCELLED' },
     });
+  }
+
+  /**
+   * Bangun tabel amortisasi (pokok + bunga per bulan) untuk sebuah pinjaman
+   * berdasarkan pokok pinjaman, suku bunga LoanType, dan tenor. Read-only (tidak persist).
+   */
+  async buildAmortization(loanId: string, method: AmortizationMethod = 'FLAT') {
+    const loan = await prisma.loan.findUnique({
+      where: { id: loanId },
+      include: { loanType: { select: { name: true, interestRate: true } } },
+    });
+    if (!loan) return null;
+
+    const schedule = generateAmortizationSchedule({
+      principal: Number(loan.amount),
+      annualRatePercent: Number(loan.loanType.interestRate),
+      tenorMonths: loan.totalInstallments,
+      method,
+    });
+
+    return {
+      loanId: loan.id,
+      loanType: loan.loanType.name,
+      principal: Number(loan.amount),
+      annualRatePercent: Number(loan.loanType.interestRate),
+      tenorMonths: loan.totalInstallments,
+      ...schedule,
+    };
   }
 
   // ─── Installments ─────────────────────────────────────

@@ -94,6 +94,8 @@ interface ForcedDistributionAnalysis {
 
 const PERFORMANCE_ATTACHMENT_CATEGORY_PREFIX = 'PERFORMANCE_RESULT_ATTACHMENT';
 const PERFORMANCE_AUTOMATION_JOB_NAME = 'performance-automation-reminder';
+// Business Rule: batas maksimum penyesuaian (adjustment) nilai kalibrasi per karyawan per periode.
+const MAX_CALIBRATION_ADJUSTMENTS = 3;
 
 export class PerformanceService {
   private normalizeCode(code: string) {
@@ -3788,6 +3790,16 @@ export class PerformanceService {
 
     if (participant.session.status !== 'OPEN') {
       throw new BadRequestError('Calibration decision can only be applied in open session');
+    }
+
+    // Business Rule (hardening): maksimum 3 kali penyesuaian kalibrasi per karyawan.
+    // Setiap applyCalibrationDecision membuat 1 row PerformanceCalibrationDecision,
+    // sehingga jumlah keputusan sebelumnya = jumlah penyesuaian yang sudah dilakukan.
+    if (participant.decisions.length >= MAX_CALIBRATION_ADJUSTMENTS) {
+      throw new BadRequestError(
+        `Batas maksimum ${MAX_CALIBRATION_ADJUSTMENTS} kali penyesuaian kalibrasi per karyawan sudah tercapai ` +
+          `(sudah ${participant.decisions.length} kali). Tidak dapat melakukan penyesuaian lagi.`
+      );
     }
 
     const period = await this.findPeriodById(participant.session.periodId);

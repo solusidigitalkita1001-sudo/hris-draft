@@ -91,6 +91,31 @@ export class RecruitmentRepository {
     return prisma.jobApplication.update({ where: { id }, data });
   }
 
+  async findApplicationWithCandidate(id: string) {
+    return prisma.jobApplication.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        candidate: true,
+        jobPosting: { select: { id: true, title: true } },
+      },
+    });
+  }
+
+  /** Buat checklist onboarding default untuk employee baru hasil rekrutmen (HIRED). */
+  async generateOnboardingChecklists(companyId: string, employeeId: string) {
+    const defaults = [
+      { itemName: 'Siapkan laptop & akun sistem', category: 'IT' },
+      { itemName: 'Buat email & akses aplikasi', category: 'IT' },
+      { itemName: 'Tandatangan kontrak kerja', category: 'HR' },
+      { itemName: 'Registrasi BPJS & NPWP', category: 'HR' },
+      { itemName: 'Siapkan meja kerja & kartu akses', category: 'GA' },
+      { itemName: 'Orientasi hari pertama', category: 'HR' },
+    ];
+    return prisma.onboardingChecklist.createMany({
+      data: defaults.map((d) => ({ companyId, employeeId, itemName: d.itemName, category: d.category })),
+    });
+  }
+
   async findAllInterviews(companyId: string) {
     return prisma.interview.findMany({ where: { companyId, deletedAt: null }, include: { candidate: { select: { id: true, firstName: true, lastName: true } }, application: { select: { id: true, jobPosting: { select: { title: true } } } }, feedback: true }, orderBy: { scheduledAt: 'desc' } });
   }

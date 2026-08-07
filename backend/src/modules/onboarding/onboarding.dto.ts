@@ -23,6 +23,14 @@ export const createResignationSchema = z.object({
   noticePeriodDays: z.number().int().default(30),
 });
 
+export const finalPayrollSchema = z.object({
+  reason: z.enum(['RESIGN', 'TERMINATION', 'CONTRACT_END', 'RETIREMENT', 'DEATH']).optional(),
+  severanceFactor: z.number().min(0).max(3).optional(),
+  upmkFactor: z.number().min(0).max(3).optional(),
+  compensationOfRights: z.number().min(0).optional(),
+  monthlyWorkingDays: z.number().int().min(1).max(31).optional(),
+});
+
 export const createClearanceSchema = z.object({
   resignationId: z.string().uuid(),
   department: z.string().min(1).max(50),

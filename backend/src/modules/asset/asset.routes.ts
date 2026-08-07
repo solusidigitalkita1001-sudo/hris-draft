@@ -10,6 +10,7 @@ router.use(authenticate);
 
 router.get('/', authorize({ resource: 'employee', action: 'read' }), assetController.findAll.bind(assetController));
 router.get('/:id', authorize({ resource: 'employee', action: 'read' }), assetController.findById.bind(assetController));
+router.get('/:id/depreciation', authorize({ resource: 'employee', action: 'read' }), assetController.getDepreciation.bind(assetController));
 router.post('/', authorize({ resource: 'employee', action: 'create' }), validate(createAssetSchema), assetController.create.bind(assetController));
 router.post('/:id/assign', authorize({ resource: 'employee', action: 'update' }), validate(assignAssetSchema), assetController.assign.bind(assetController));
 router.post('/:id/return', authorize({ resource: 'employee', action: 'update' }), assetController.returnAsset.bind(assetController));

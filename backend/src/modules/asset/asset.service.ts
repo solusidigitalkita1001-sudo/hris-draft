@@ -15,6 +15,16 @@ export class AssetService {
     return asset;
   }
 
+  /** Skema depresiasi + nilai buku aset (Business Rule Gap: 4 metode depresiasi). */
+  async getDepreciation(
+    id: string,
+    overrides?: { method?: any; salvageValue?: number; usefulLifeYears?: number; asOfMonths?: number }
+  ) {
+    const result = await assetRepository.buildDepreciation(id, overrides);
+    if (!result) throw new NotFoundError('Asset not found');
+    return result;
+  }
+
   async create(data: CreateAssetDTO) {
     const assetCode = await generateSystemCode({
       prefix: 'AST',

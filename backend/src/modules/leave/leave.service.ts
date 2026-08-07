@@ -3,6 +3,7 @@ import { CreateLeaveTypeDTO, CreateLeaveRequestDTO, CreateLeaveBalanceDTO } from
 import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import prisma from '@/shared/database/prisma';
+import { calculateOpeningBalance } from '@/shared/leave/accrual';
 
 export class LeaveService {
   async findAllLeaveTypes(companyId: string) {
@@ -99,6 +100,63 @@ export class LeaveService {
 
   async setLeaveBalance(data: CreateLeaveBalanceDTO) {
     return leaveRepository.upsertLeaveBalance(data);
+  }
+
+  /**
+   * Akrual hak cuti tahunan seorang karyawan (Business Rule Gap: pro-rate join date + carry-over).
+   *
+   * Menghitung total hak cuti awal tahun = pro-rata berdasarkan tanggal masuk (floor)
+   * + carry-over sisa cuti tahun sebelumnya (dibatasi maks, default 1 hari), lalu meng-upsert
+   * ke leave_balances tanpa menimpa hari yang sudah terpakai.
+   */
+  async accrueAnnualBalance(params: {
+    employeeId: string;
+    leaveTypeId: string;
+    year?: number;
+    maxCarryOver?: number;
+  }) {
+    const year = params.year ?? new Date().getFullYear();
+    const { employee, leaveType, previousBalance } = await leaveRepository.findAccrualInputs(
+      params.employeeId,
+      params.leaveTypeId,
+      year
+    );
+
+    if (!employee) throw new NotFoundError('Employee not found');
+    if (!leaveType) throw new NotFoundError('Leave type not found');
+    if (!leaveType.isAnnual) {
+      throw new BadRequestError('Akrual hanya berlaku untuk tipe cuti tahunan (isAnnual)');
+    }
+    if (!employee.joinDate) {
+      throw new BadRequestError('Tanggal masuk (joinDate) karyawan belum diisi, tidak bisa pro-rate');
+    }
+
+    const { entitlement, carryOver, totalDays } = calculateOpeningBalance({
+      joinDate: employee.joinDate,
+      year,
+      annualQuota: leaveType.maxDays,
+      previousRemaining: previousBalance?.remainingDays ?? 0,
+      maxCarryOver: params.maxCarryOver,
+    });
+
+    const balance = await leaveRepository.upsertAccruedBalance({
+      employeeId: employee.id,
+      companyId: employee.companyId,
+      leaveTypeId: leaveType.id,
+      year,
+      totalDays,
+    });
+
+    logger.info('Leave balance accrued', {
+      employeeId: employee.id,
+      leaveTypeId: leaveType.id,
+      year,
+      entitlement,
+      carryOver,
+      totalDays,
+    });
+
+    return { ...balance, breakdown: { entitlement, carryOver, totalDays } };
   }
 }
 

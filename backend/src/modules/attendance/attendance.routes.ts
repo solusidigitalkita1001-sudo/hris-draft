@@ -28,6 +28,7 @@ router.delete('/:id', authorize({ resource: 'attendance', action: 'delete' }), a
 // Overtime
 router.get('/overtime', authorize({ resource: 'attendance', action: 'read' }), attendanceController.findAllOvertime.bind(attendanceController));
 router.post('/overtime', authorize({ resource: 'attendance', action: 'create' }), validate(createOvertimeSchema), attendanceController.createOvertime.bind(attendanceController));
+router.get('/overtime/:id/pay', authorize({ resource: 'attendance', action: 'read' }), attendanceController.calculateOvertimePay.bind(attendanceController));
 router.patch('/overtime/:id/approve', authorize({ resource: 'attendance', action: 'approve' }), attendanceController.approveOvertime.bind(attendanceController));
 router.patch('/overtime/:id/reject', authorize({ resource: 'attendance', action: 'approve' }), attendanceController.rejectOvertime.bind(attendanceController));
 

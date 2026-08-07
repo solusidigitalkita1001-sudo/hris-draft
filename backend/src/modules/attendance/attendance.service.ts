@@ -7,6 +7,7 @@ import {
 } from './attendance.dto';
 import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { calculateOvertimePay, OvertimeDayType } from '@/shared/attendance/overtime';
 import {
   AttendanceCaptureMethod,
   AttendanceExceptionType,
@@ -453,6 +454,34 @@ export class AttendanceService {
 
   async rejectOvertime(id: string) {
     return attendanceRepository.updateOvertimeStatus(id, 'REJECTED');
+  }
+
+  /**
+   * Hitung upah lembur sesuai UU Pasal 78 / PP 35/2021 (Business Rule Gap Attendance).
+   * dayType: WORKDAY (jam-1 1,5× lalu 2×) atau HOLIDAY (2×/3×/4× bertingkat).
+   */
+  async calculateOvertimePay(
+    id: string,
+    opts?: { dayType?: OvertimeDayType; workweekDays?: 5 | 6 }
+  ) {
+    const data = await attendanceRepository.findOvertimeWithWage(id);
+    if (!data) throw new NotFoundError('Overtime request not found');
+    if (!data.salary) throw new BadRequestError('Data gaji aktif karyawan tidak ditemukan');
+
+    const result = calculateOvertimePay({
+      monthlyWage: Number(data.salary.baseSalary),
+      hours: Number(data.overtime.durationHours),
+      dayType: opts?.dayType ?? 'WORKDAY',
+      workweekDays: opts?.workweekDays ?? 5,
+    });
+
+    return {
+      overtimeId: id,
+      employee: data.overtime.employee,
+      durationHours: Number(data.overtime.durationHours),
+      dayType: opts?.dayType ?? 'WORKDAY',
+      ...result,
+    };
   }
 }
 

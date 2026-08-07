@@ -83,6 +83,72 @@ export class LeaveRepository {
       create: { ...data, remainingDays: data.totalDays },
     });
   }
+
+  /** Ambil data yang diperlukan untuk kalkulasi akrual pro-rate + carry-over. */
+  async findAccrualInputs(employeeId: string, leaveTypeId: string, year: number) {
+    const [employee, leaveType, previousBalance] = await Promise.all([
+      prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { id: true, companyId: true, joinDate: true },
+      }),
+      prisma.leaveType.findUnique({
+        where: { id: leaveTypeId },
+        select: { id: true, companyId: true, isAnnual: true, maxDays: true },
+      }),
+      prisma.leaveBalance.findUnique({
+        where: { employeeId_leaveTypeId_year: { employeeId, leaveTypeId, year: year - 1 } },
+        select: { remainingDays: true },
+      }),
+    ]);
+    return { employee, leaveType, previousBalance };
+  }
+
+  /**
+   * Upsert balance hasil akrual. Saat update, sisa (remainingDays) dihitung ulang
+   * = totalDays - usedDays yang sudah terpakai (tidak menimpa cuti yang sudah diambil).
+   */
+  async upsertAccruedBalance(data: {
+    employeeId: string;
+    companyId: string;
+    leaveTypeId: string;
+    year: number;
+    totalDays: number;
+  }) {
+    return prisma.$transaction(async (tx) => {
+      const existing = await tx.leaveBalance.findUnique({
+        where: {
+          employeeId_leaveTypeId_year: {
+            employeeId: data.employeeId,
+            leaveTypeId: data.leaveTypeId,
+            year: data.year,
+          },
+        },
+        select: { id: true, usedDays: true },
+      });
+
+      if (existing) {
+        return tx.leaveBalance.update({
+          where: { id: existing.id },
+          data: {
+            totalDays: data.totalDays,
+            remainingDays: Math.max(0, data.totalDays - existing.usedDays),
+          },
+        });
+      }
+
+      return tx.leaveBalance.create({
+        data: {
+          employeeId: data.employeeId,
+          companyId: data.companyId,
+          leaveTypeId: data.leaveTypeId,
+          year: data.year,
+          totalDays: data.totalDays,
+          usedDays: 0,
+          remainingDays: data.totalDays,
+        },
+      });
+    });
+  }
 }
 
 export const leaveRepository = new LeaveRepository();

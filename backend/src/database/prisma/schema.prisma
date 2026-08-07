@@ -2380,6 +2380,8 @@ model AuditLog {
   newValue  String?  @map("new_value") @db.Text
   ipAddress String?  @map("ip_address") @db.VarChar(50)
   userAgent String?  @map("user_agent") @db.VarChar(500)
+  hash      String?  @db.VarChar(64)
+  prevHash  String?  @map("prev_hash") @db.VarChar(64)
   createdAt DateTime @default(now()) @map("created_at")
 
   company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)

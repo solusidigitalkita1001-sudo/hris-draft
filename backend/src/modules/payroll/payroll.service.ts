@@ -17,6 +17,7 @@ import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.re
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { calculateBpjs } from '@/shared/payroll/bpjs';
 import { calculatePph21 } from '@/shared/payroll/pph21';
+import { calculateThr } from '@/shared/payroll/thr';
 
 export class PayrollService {
   // ==================== Salary Components ====================
@@ -97,6 +98,35 @@ export class PayrollService {
   async updateEmployeeSalary(id: string, data: UpdateEmployeeSalaryDTO) {
     await this.findEmployeeSalaryById(id);
     return payrollRepository.updateEmployeeSalary(id, data);
+  }
+
+  /**
+   * Hitung THR seorang karyawan (Business Rule Gap: Permenaker 6/2016).
+   * ≥12 bulan = 1× upah; 1–<12 bulan = prorata (masa kerja/12 × upah); <1 bulan = tidak berhak.
+   */
+  async calculateEmployeeThr(employeeId: string, referenceDate?: Date) {
+    const { salary, employee } = await payrollRepository.findThrInputs(employeeId);
+    if (!employee) throw new NotFoundError('Employee not found');
+    if (!employee.joinDate) {
+      throw new BadRequestError('Tanggal masuk (joinDate) karyawan belum diisi');
+    }
+    if (!salary) {
+      throw new BadRequestError('Data gaji aktif karyawan tidak ditemukan');
+    }
+
+    const result = calculateThr({
+      monthlyWage: Number(salary.baseSalary),
+      joinDate: employee.joinDate,
+      referenceDate: referenceDate ?? new Date(),
+    });
+
+    logger.info('THR calculated', { employeeId, tenureMonths: result.tenureMonths, amount: result.amount });
+
+    return {
+      employee: { id: employee.id, fullName: employee.fullName, employeeNumber: employee.employeeNumber },
+      monthlyWage: Number(salary.baseSalary),
+      ...result,
+    };
   }
 
   // ==================== Payroll Periods ====================

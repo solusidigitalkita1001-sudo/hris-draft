@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from './Authenticate';
 import prisma from '@/shared/database/prisma';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { computeAuditHash } from '@/shared/security/audit-hash';
 
 interface AuditLogOptions {
   action: string;
@@ -100,6 +101,28 @@ export function auditLog(options: AuditLogOptions) {
           const { oldValue, newValue } =
             before || after ? diffAuditFields(before, after) : {};
 
+          const createdAt = new Date();
+          // Hash-chain: kaitkan dengan hash entry terakhir pada company yang sama.
+          const previous = await prisma.auditLog.findFirst({
+            where: { companyId: req.user.companyId ?? null },
+            orderBy: { createdAt: 'desc' },
+            select: { hash: true },
+          });
+          const prevHash = previous?.hash ?? '';
+          const hash = computeAuditHash(
+            {
+              companyId: req.user.companyId,
+              userId: req.user.id,
+              action: options.action,
+              entity: options.entity,
+              entityId,
+              oldValue: oldValue ?? null,
+              newValue: newValue ?? null,
+              createdAt,
+            },
+            prevHash
+          );
+
           await prisma.auditLog.create({
             data: {
               companyId: req.user.companyId,
@@ -111,6 +134,9 @@ export function auditLog(options: AuditLogOptions) {
               newValue,
               ipAddress: req.ip,
               userAgent: req.headers['user-agent']?.substring(0, 500),
+              hash,
+              prevHash: prevHash || null,
+              createdAt,
             },
           });
         } catch (error) {

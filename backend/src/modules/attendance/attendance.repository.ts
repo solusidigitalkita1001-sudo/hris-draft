@@ -127,6 +127,22 @@ export class AttendanceRepository {
     return prisma.overtimeRequest.update({ where: { id }, data: updateData });
   }
 
+  /** Ambil overtime request + upah aktif karyawan untuk kalkulasi upah lembur. */
+  async findOvertimeWithWage(id: string) {
+    const overtime = await prisma.overtimeRequest.findFirst({
+      where: { id, deletedAt: null },
+      include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
+    });
+    if (!overtime) return null;
+
+    const salary = await prisma.employeeSalary.findFirst({
+      where: { employeeId: overtime.employeeId, isActive: true, deletedAt: null },
+      orderBy: { effectiveDate: 'desc' },
+      select: { baseSalary: true },
+    });
+    return { overtime, salary };
+  }
+
   /**
    * Get attendance summary counts grouped by status for a given company, month, and year.
    * Returns only aggregate counts, not the individual records.

@@ -92,6 +92,35 @@ export class OnboardingRepository {
       data: defaults.map((d) => ({ resignationId, department: d.department, checklistItem: d.checklistItem })),
     });
   }
+
+  /**
+   * Ambil input yang diperlukan untuk perhitungan final payroll / pesangon:
+   * data resignation, tanggal masuk karyawan, upah aktif, dan total sisa cuti tahunan.
+   */
+  async findFinalPayrollInputs(resignationId: string) {
+    const resignation = await prisma.resignation.findFirst({
+      where: { id: resignationId },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true, joinDate: true } },
+      },
+    });
+    if (!resignation) return null;
+
+    const activeSalary = await prisma.employeeSalary.findFirst({
+      where: { employeeId: resignation.employeeId, isActive: true, deletedAt: null },
+      orderBy: { effectiveDate: 'desc' },
+      select: { baseSalary: true },
+    });
+
+    const year = new Date(resignation.lastWorkingDate).getFullYear();
+    const annualBalances = await prisma.leaveBalance.findMany({
+      where: { employeeId: resignation.employeeId, year, leaveType: { isAnnual: true } },
+      select: { remainingDays: true },
+    });
+    const unusedLeaveDays = annualBalances.reduce((sum, b) => sum + b.remainingDays, 0);
+
+    return { resignation, activeSalary, unusedLeaveDays };
+  }
 }
 
 export const onboardingRepository = new OnboardingRepository();

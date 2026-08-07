@@ -40,5 +40,9 @@ export class OnboardingController {
     try { res.json(Result.updated(await onboardingService.updateClearance(req.params.id as string, req.body.status, req.body.notes))); }
     catch (error) { next(error); }
   }
+  async calculateFinalPayroll(req: Request, res: Response, next: NextFunction) {
+    try { res.json(Result.success(await onboardingService.calculateFinalPayroll(req.params.id as string, req.body))); }
+    catch (error) { next(error); }
+  }
 }
 export const onboardingController = new OnboardingController();

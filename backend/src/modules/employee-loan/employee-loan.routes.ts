@@ -23,5 +23,6 @@ router.patch('/:id/reject', authorize({ resource: 'employee-loan', action: 'upda
 
 // Installments
 router.get('/:id/installments', authorize({ resource: 'employee-loan', action: 'read' }), employeeLoanController.getInstallments.bind(employeeLoanController));
+router.get('/:id/amortization', authorize({ resource: 'employee-loan', action: 'read' }), employeeLoanController.getAmortization.bind(employeeLoanController));
 
 export default router;
