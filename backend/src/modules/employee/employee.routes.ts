@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { authenticate } from '@/shared/middleware/Authenticate';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { auditLog } from '@/shared/middleware/AuditLog';
@@ -19,6 +20,7 @@ import {
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 

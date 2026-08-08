@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { parsePagination } from '@/shared/middleware/Pagination';
@@ -19,6 +20,7 @@ const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 // ==================== Salary Components ====================
 router.get(
@@ -158,7 +160,7 @@ router.patch(
 
 router.patch(
   '/runs/:id/disburse',
-  authorize({ resource: 'payroll', action: 'approve' }),
+  authorize({ resource: 'payroll', action: 'disburse' }),
   validate(payrollRunIdParamSchema, 'params'),
   payrollController.disbursePayrollRun.bind(payrollController)
 );

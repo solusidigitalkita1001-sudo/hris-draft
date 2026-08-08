@@ -18,13 +18,18 @@ export function requireCompanyAccess() {
       return;
     }
 
-    const allowedCompanyIds = req.user.companyScope || (req.user.companyId ? [req.user.companyId] : []);
+    const allowedCompanyIds =
+      req.user.companyScope && req.user.companyScope.length > 0
+        ? req.user.companyScope
+        : req.user.companyId
+          ? [req.user.companyId]
+          : [];
 
     // Get requested company from params, query, or body
     const requestedCompanyId =
       req.params.companyId ||
-      req.query.companyId as string ||
-      req.body.companyId;
+      (req.query.companyId as string) ||
+      req.body?.companyId;
 
     // If accessing a specific company, validate access
     if (requestedCompanyId && !allowedCompanyIds.includes(requestedCompanyId)) {
@@ -32,13 +37,19 @@ export function requireCompanyAccess() {
     }
 
     // Attach company context to request for downstream use
-    req.company = {
-      id: requestedCompanyId || req.user.companyId || allowedCompanyIds[0],
-      groupId: req.user.groupId,
-    };
-
-    if (!req.company.id) {
+    const effectiveCompanyId = requestedCompanyId || req.user.companyId || allowedCompanyIds[0];
+    if (!effectiveCompanyId) {
       throw new ForbiddenError('No accessible company scope found for this request');
+    }
+    req.company = { id: effectiveCompanyId, groupId: req.user.groupId };
+
+    // Normalisasi terpusat: paksa companyId yang dibaca controller ke scope efektif,
+    // sehingga endpoint tidak bisa dilewati dengan mengganti companyId di query/body.
+    if (req.query && typeof req.query === 'object') {
+      (req.query as Record<string, unknown>).companyId = effectiveCompanyId;
+    }
+    if (req.body && typeof req.body === 'object' && 'companyId' in req.body) {
+      (req.body as Record<string, unknown>).companyId = effectiveCompanyId;
     }
 
     next();

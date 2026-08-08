@@ -18,6 +18,8 @@ import { generateSystemCode } from '@/shared/utils/system-code';
 import { calculateBpjs } from '@/shared/payroll/bpjs';
 import { calculatePph21 } from '@/shared/payroll/pph21';
 import { calculateThr } from '@/shared/payroll/thr';
+import { prisma } from '@/shared/database/prisma';
+import { calculateOvertimePay } from '@/shared/attendance/overtime';
 
 export class PayrollService {
   // ==================== Salary Components ====================
@@ -295,6 +297,7 @@ export class PayrollService {
     // Get all employees with active salary in this company
     const employeeSalaries = await payrollRepository.findAllEmployeeSalaries(run.companyId);
     const loanDeductionComponent = await this.ensureLoanDeductionComponent(run.companyId);
+    const overtimeEarningComponent = await this.ensureOvertimeEarningComponent(run.companyId);
     const dueLoanInstallments = await employeeLoanRepository.findDueInstallmentsForPayroll(
       run.companyId,
       new Date(run.period.endDate)
@@ -302,6 +305,21 @@ export class PayrollService {
     const loanDeductionByEmployee = dueLoanInstallments.reduce<Record<string, number>>((acc, installment) => {
       const employeeId = installment.loan.employeeId;
       acc[employeeId] = (acc[employeeId] || 0) + Number(installment.amount);
+      return acc;
+    }, {});
+
+    // Aggregate approved overtime hours per employee within the pay period
+    const approvedOvertimes = await prisma.overtimeRequest.findMany({
+      where: {
+        companyId: run.companyId,
+        status: 'APPROVED',
+        date: { gte: new Date(run.period.startDate), lte: new Date(run.period.endDate) },
+        deletedAt: null,
+      },
+      select: { employeeId: true, durationHours: true },
+    });
+    const overtimeHoursByEmployee = approvedOvertimes.reduce<Record<string, number>>((acc, ot) => {
+      acc[ot.employeeId] = (acc[ot.employeeId] || 0) + Number(ot.durationHours);
       return acc;
     }, {});
 
@@ -316,15 +334,30 @@ export class PayrollService {
       if (!salary.isActive) continue;
 
       const loanDeductionAmount = loanDeductionByEmployee[salary.employeeId] || 0;
-      const extraComponents = loanDeductionAmount > 0
-        ? [{
-            salaryComponentId: loanDeductionComponent.id,
-            name: 'Potongan Pinjaman Karyawan',
-            type: 'DEDUCTION',
-            amount: loanDeductionAmount,
-            isTaxable: false,
-          }]
-        : [];
+      const overtimeHoursForEmployee = overtimeHoursByEmployee[salary.employeeId] || 0;
+      const overtimePayAmount = overtimeHoursForEmployee > 0
+        ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: overtimeHoursForEmployee, dayType: 'WORKDAY' }).amount
+        : 0;
+
+      const extraComponents: Array<{ salaryComponentId: string; name: string; type: string; amount: number; isTaxable: boolean }> = [];
+      if (loanDeductionAmount > 0) {
+        extraComponents.push({
+          salaryComponentId: loanDeductionComponent.id,
+          name: 'Potongan Pinjaman Karyawan',
+          type: 'DEDUCTION',
+          amount: loanDeductionAmount,
+          isTaxable: false,
+        });
+      }
+      if (overtimePayAmount > 0) {
+        extraComponents.push({
+          salaryComponentId: overtimeEarningComponent.id,
+          name: 'Tunjangan Lembur',
+          type: 'ALLOWANCE',
+          amount: overtimePayAmount,
+          isTaxable: true,
+        });
+      }
 
       const emp = salary.employee as { maritalStatus?: string | null; taxId?: string | null; _count?: { families: number } };
       const taxContext = {
@@ -350,7 +383,7 @@ export class PayrollService {
         presentDays: 0,
         leaveDays: 0,
         absentDays: 0,
-        overtimeHours: 0,
+        overtimeHours: overtimeHoursForEmployee,
         status: 'DRAFT',
       });
 
@@ -389,6 +422,24 @@ export class PayrollService {
       employeeCount,
       totalEarnings,
       totalDeductions,
+    });
+  }
+
+  private async ensureOvertimeEarningComponent(companyId: string) {
+    const code = 'OVERTIME_EARNING_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Tunjangan Lembur',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: true,
+      isProrated: false,
+      description: 'System generated: overtime pay per PP 35/2021',
+      sortOrder: 998,
     });
   }
 

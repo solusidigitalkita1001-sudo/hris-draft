@@ -6,6 +6,7 @@ import { divisionController } from './controllers/division.controller';
 import { departmentController } from './controllers/department.controller';
 import { positionController } from './controllers/position.controller';
 import { authenticate } from '@/shared/middleware/Authenticate';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { parsePagination } from '@/shared/middleware/Pagination';
@@ -29,6 +30,7 @@ const router = Router();
 
 // All organization routes require authentication
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 // ==================== Company Groups ====================
 router.get('/groups', authorize({ resource: 'organization', action: 'read' }), groupController.findAll.bind(groupController));

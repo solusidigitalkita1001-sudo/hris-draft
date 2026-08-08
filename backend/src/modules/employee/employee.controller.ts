@@ -190,14 +190,14 @@ export class EmployeeController {
 
   async updateFamily(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await employeeService.updateFamily(req.params.familyId as string, req.body);
+      const item = await employeeService.updateFamily(req.params.id as string, req.params.familyId as string, req.body);
       res.json(Result.updated(item));
     } catch (error) { next(error); }
   }
 
   async deleteFamily(req: Request, res: Response, next: NextFunction) {
     try {
-      await employeeService.deleteFamily(req.params.familyId as string);
+      await employeeService.deleteFamily(req.params.id as string, req.params.familyId as string);
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }
@@ -221,14 +221,14 @@ export class EmployeeController {
 
   async updateEducation(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await employeeService.updateEducation(req.params.educationId as string, req.body);
+      const item = await employeeService.updateEducation(req.params.id as string, req.params.educationId as string, req.body);
       res.json(Result.updated(item));
     } catch (error) { next(error); }
   }
 
   async deleteEducation(req: Request, res: Response, next: NextFunction) {
     try {
-      await employeeService.deleteEducation(req.params.educationId as string);
+      await employeeService.deleteEducation(req.params.id as string, req.params.educationId as string);
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }
@@ -252,14 +252,14 @@ export class EmployeeController {
 
   async updateEmergencyContact(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await employeeService.updateEmergencyContact(req.params.emergencyId as string, req.body);
+      const item = await employeeService.updateEmergencyContact(req.params.id as string, req.params.emergencyId as string, req.body);
       res.json(Result.updated(item));
     } catch (error) { next(error); }
   }
 
   async deleteEmergencyContact(req: Request, res: Response, next: NextFunction) {
     try {
-      await employeeService.deleteEmergencyContact(req.params.emergencyId as string);
+      await employeeService.deleteEmergencyContact(req.params.id as string, req.params.emergencyId as string);
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }
@@ -283,14 +283,14 @@ export class EmployeeController {
 
   async updateTraining(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await employeeService.updateTraining(req.params.trainingId as string, req.body);
+      const item = await employeeService.updateTraining(req.params.id as string, req.params.trainingId as string, req.body);
       res.json(Result.updated(item));
     } catch (error) { next(error); }
   }
 
   async deleteTraining(req: Request, res: Response, next: NextFunction) {
     try {
-      await employeeService.deleteTraining(req.params.trainingId as string);
+      await employeeService.deleteTraining(req.params.id as string, req.params.trainingId as string);
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }
@@ -314,14 +314,14 @@ export class EmployeeController {
 
   async updateSkill(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await employeeService.updateSkill(req.params.skillId as string, req.body);
+      const item = await employeeService.updateSkill(req.params.id as string, req.params.skillId as string, req.body);
       res.json(Result.updated(item));
     } catch (error) { next(error); }
   }
 
   async deleteSkill(req: Request, res: Response, next: NextFunction) {
     try {
-      await employeeService.deleteSkill(req.params.skillId as string);
+      await employeeService.deleteSkill(req.params.id as string, req.params.skillId as string);
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }
@@ -345,14 +345,14 @@ export class EmployeeController {
 
   async updateExperience(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await employeeService.updateExperience(req.params.experienceId as string, req.body);
+      const item = await employeeService.updateExperience(req.params.id as string, req.params.experienceId as string, req.body);
       res.json(Result.updated(item));
     } catch (error) { next(error); }
   }
 
   async deleteExperience(req: Request, res: Response, next: NextFunction) {
     try {
-      await employeeService.deleteExperience(req.params.experienceId as string);
+      await employeeService.deleteExperience(req.params.id as string, req.params.experienceId as string);
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }
@@ -377,14 +377,14 @@ export class EmployeeController {
 
   async updateAttachment(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await employeeService.updateAttachment(req.params.attachmentId as string, req.body);
+      const item = await employeeService.updateAttachment(req.params.id as string, req.params.attachmentId as string, req.body);
       res.json(Result.updated(item));
     } catch (error) { next(error); }
   }
 
   async deleteAttachment(req: Request, res: Response, next: NextFunction) {
     try {
-      await employeeService.deleteAttachment(req.params.attachmentId as string);
+      await employeeService.deleteAttachment(req.params.id as string, req.params.attachmentId as string);
       res.json(Result.deleted());
     } catch (error) { next(error); }
   }

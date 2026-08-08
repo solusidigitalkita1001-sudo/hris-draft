@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { attendanceController } from './attendance.controller';
@@ -13,6 +14,7 @@ import {
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 // Attendance Records
 router.get('/', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceQuerySchema, 'query'), attendanceController.findAll.bind(attendanceController));

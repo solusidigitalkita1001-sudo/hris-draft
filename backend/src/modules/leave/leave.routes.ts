@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { leaveController } from './leave.controller';
@@ -7,6 +8,7 @@ import { createLeaveTypeSchema, createLeaveRequestSchema, createLeaveBalanceSche
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 // Leave Types
 router.get('/types', authorize({ resource: 'leave', action: 'read' }), leaveController.findAllLeaveTypes.bind(leaveController));

@@ -1,10 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { attendanceService } from './attendance.service';
 import { Result } from '@/shared/core/Result';
 
 export class AttendanceController {
-  async findAll(req: Request, res: Response, next: NextFunction) {
+  async findAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await attendanceService.findAll(req.query.companyId as string, {
         employeeId: req.query.employeeId as string,
@@ -16,17 +16,20 @@ export class AttendanceController {
     } catch (error) { next(error); }
   }
 
-  async findById(req: Request, res: Response, next: NextFunction) {
+  async findById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try { res.json(Result.success(await attendanceService.findById(req.params.id as string))); }
     catch (error) { next(error); }
   }
 
-  async create(req: Request, res: Response, next: NextFunction) {
-    try { res.status(201).json(Result.created(await attendanceService.create(req.body))); }
-    catch (error) { next(error); }
+  async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      // Employee-linked users can only clock in for themselves
+      if (req.user?.employeeId) req.body.employeeId = req.user.employeeId;
+      res.status(201).json(Result.created(await attendanceService.create(req.body)));
+    } catch (error) { next(error); }
   }
 
-  async getContext(req: Request, res: Response, next: NextFunction) {
+  async getContext(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await attendanceService.getResolvedContext(
         req.query.employeeId as string,
@@ -37,12 +40,12 @@ export class AttendanceController {
     } catch (error) { next(error); }
   }
 
-  async checkOut(req: Request, res: Response, next: NextFunction) {
+  async checkOut(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try { res.json(Result.updated(await attendanceService.checkOut(req.params.id as string, req.body))); }
     catch (error) { next(error); }
   }
 
-  async delete(req: Request, res: Response, next: NextFunction) {
+  async delete(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try { await attendanceService.delete(req.params.id as string); res.json(Result.deleted()); }
     catch (error) { next(error); }
   }
@@ -54,7 +57,7 @@ export class AttendanceController {
     } catch (error) { next(error); }
   }
 
-  async getSummary(req: Request, res: Response, next: NextFunction) {
+  async getSummary(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { companyId, month, year } = req.query as { companyId: string; month: string; year: string };
       const data = await attendanceService.getSummary(companyId, month, year);
@@ -62,7 +65,7 @@ export class AttendanceController {
     } catch (error) { next(error); }
   }
 
-  async getReport(req: Request, res: Response, next: NextFunction) {
+  async getReport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { companyId, month, year } = req.query as { companyId: string; month: string; year: string };
       const csv = await attendanceService.getReport(companyId, month, year);
@@ -73,7 +76,7 @@ export class AttendanceController {
   }
 
   // Overtime
-  async findAllOvertime(req: Request, res: Response, next: NextFunction) {
+  async findAllOvertime(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await attendanceService.findAllOvertime(req.query.companyId as string, {
         employeeId: req.query.employeeId as string,
@@ -83,7 +86,7 @@ export class AttendanceController {
     } catch (error) { next(error); }
   }
 
-  async createOvertime(req: Request, res: Response, next: NextFunction) {
+  async createOvertime(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try { res.status(201).json(Result.created(await attendanceService.createOvertime(req.body))); }
     catch (error) { next(error); }
   }
@@ -93,12 +96,12 @@ export class AttendanceController {
     catch (error) { next(error); }
   }
 
-  async rejectOvertime(req: Request, res: Response, next: NextFunction) {
+  async rejectOvertime(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try { res.json(Result.updated(await attendanceService.rejectOvertime(req.params.id as string))); }
     catch (error) { next(error); }
   }
 
-  async calculateOvertimePay(req: Request, res: Response, next: NextFunction) {
+  async calculateOvertimePay(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const dayType = req.query.dayType === 'HOLIDAY' ? 'HOLIDAY' : 'WORKDAY';
       const workweekDays = req.query.workweekDays === '6' ? 6 : 5;

@@ -285,11 +285,30 @@ export class EmployeeService {
     return employeeRepository.createFamily(employeeId, data);
   }
 
-  async updateFamily(id: string, data: UpdateEmployeeFamilyDTO) {
+  /** Pastikan sub-entity benar milik employee tsb (cegah IDOR lintas employee). */
+  private async assertSubEntityOwnership(
+    model:
+      | 'employeeFamily'
+      | 'employeeEducation'
+      | 'employeeEmergencyContact'
+      | 'employeeTraining'
+      | 'employeeSkill'
+      | 'employeeExperience'
+      | 'employeeAttachment',
+    id: string,
+    employeeId: string
+  ) {
+    const record = await (prisma as any)[model].findFirst({ where: { id, employeeId }, select: { id: true } });
+    if (!record) throw new NotFoundError('Data tidak ditemukan');
+  }
+
+  async updateFamily(employeeId: string, id: string, data: UpdateEmployeeFamilyDTO) {
+    await this.assertSubEntityOwnership('employeeFamily', id, employeeId);
     return employeeRepository.updateFamily(id, data);
   }
 
-  async deleteFamily(id: string) {
+  async deleteFamily(employeeId: string, id: string) {
+    await this.assertSubEntityOwnership('employeeFamily', id, employeeId);
     return employeeRepository.deleteFamily(id);
   }
 
@@ -304,11 +323,13 @@ export class EmployeeService {
     return employeeRepository.createEducation(employeeId, data);
   }
 
-  async updateEducation(id: string, data: UpdateEmployeeEducationDTO) {
+  async updateEducation(employeeId: string, id: string, data: UpdateEmployeeEducationDTO) {
+    await this.assertSubEntityOwnership('employeeEducation', id, employeeId);
     return employeeRepository.updateEducation(id, data);
   }
 
-  async deleteEducation(id: string) {
+  async deleteEducation(employeeId: string, id: string) {
+    await this.assertSubEntityOwnership('employeeEducation', id, employeeId);
     return employeeRepository.deleteEducation(id);
   }
 
@@ -323,11 +344,13 @@ export class EmployeeService {
     return employeeRepository.createEmergencyContact(employeeId, data);
   }
 
-  async updateEmergencyContact(id: string, data: UpdateEmployeeEmergencyContactDTO) {
+  async updateEmergencyContact(employeeId: string, id: string, data: UpdateEmployeeEmergencyContactDTO) {
+    await this.assertSubEntityOwnership('employeeEmergencyContact', id, employeeId);
     return employeeRepository.updateEmergencyContact(id, data);
   }
 
-  async deleteEmergencyContact(id: string) {
+  async deleteEmergencyContact(employeeId: string, id: string) {
+    await this.assertSubEntityOwnership('employeeEmergencyContact', id, employeeId);
     return employeeRepository.deleteEmergencyContact(id);
   }
 
@@ -342,11 +365,13 @@ export class EmployeeService {
     return employeeRepository.createTraining(employeeId, data);
   }
 
-  async updateTraining(id: string, data: UpdateEmployeeTrainingDTO) {
+  async updateTraining(employeeId: string, id: string, data: UpdateEmployeeTrainingDTO) {
+    await this.assertSubEntityOwnership('employeeTraining', id, employeeId);
     return employeeRepository.updateTraining(id, data);
   }
 
-  async deleteTraining(id: string) {
+  async deleteTraining(employeeId: string, id: string) {
+    await this.assertSubEntityOwnership('employeeTraining', id, employeeId);
     return employeeRepository.deleteTraining(id);
   }
 
@@ -361,11 +386,13 @@ export class EmployeeService {
     return employeeRepository.createSkill(employeeId, data);
   }
 
-  async updateSkill(id: string, data: UpdateEmployeeSkillDTO) {
+  async updateSkill(employeeId: string, id: string, data: UpdateEmployeeSkillDTO) {
+    await this.assertSubEntityOwnership('employeeSkill', id, employeeId);
     return employeeRepository.updateSkill(id, data);
   }
 
-  async deleteSkill(id: string) {
+  async deleteSkill(employeeId: string, id: string) {
+    await this.assertSubEntityOwnership('employeeSkill', id, employeeId);
     return employeeRepository.deleteSkill(id);
   }
 
@@ -380,11 +407,13 @@ export class EmployeeService {
     return employeeRepository.createExperience(employeeId, data);
   }
 
-  async updateExperience(id: string, data: UpdateEmployeeExperienceDTO) {
+  async updateExperience(employeeId: string, id: string, data: UpdateEmployeeExperienceDTO) {
+    await this.assertSubEntityOwnership('employeeExperience', id, employeeId);
     return employeeRepository.updateExperience(id, data);
   }
 
-  async deleteExperience(id: string) {
+  async deleteExperience(employeeId: string, id: string) {
+    await this.assertSubEntityOwnership('employeeExperience', id, employeeId);
     return employeeRepository.deleteExperience(id);
   }
 
@@ -399,11 +428,13 @@ export class EmployeeService {
     return employeeRepository.createAttachment(employeeId, data);
   }
 
-  async updateAttachment(id: string, data: UpdateEmployeeAttachmentDTO) {
+  async updateAttachment(employeeId: string, id: string, data: UpdateEmployeeAttachmentDTO) {
+    await this.assertSubEntityOwnership('employeeAttachment', id, employeeId);
     return employeeRepository.updateAttachment(id, data);
   }
 
-  async deleteAttachment(id: string) {
+  async deleteAttachment(employeeId: string, id: string) {
+    await this.assertSubEntityOwnership('employeeAttachment', id, employeeId);
     return employeeRepository.deleteAttachment(id);
   }
 
@@ -578,10 +609,12 @@ export class EmployeeService {
 
     const csvEscape = (val: any): string => {
       const str = val == null ? '' : String(val);
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
+      // Prefix formula-injection chars so Excel/Sheets don't execute them as formulas
+      const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+      if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) {
+        return `"${safe.replace(/"/g, '""')}"`;
       }
-      return str;
+      return safe;
     };
 
     const rows = employees.map((emp: any) =>

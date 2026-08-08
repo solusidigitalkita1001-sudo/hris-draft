@@ -223,11 +223,12 @@ export class PayrollController {
     }
   }
 
-  async findMyPayslips(req: Request, res: Response, next: NextFunction) {
+  async findMyPayslips(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const employeeId = req.query.employeeId as string;
+      // Self-service: employeeId WAJIB dari token, bukan dari query (cegah intip slip gaji orang lain).
+      const employeeId = req.user?.employeeId;
       if (!employeeId) {
-        return res.status(400).json(Result.error('Employee ID is required'));
+        return res.status(400).json(Result.error('Akun ini tidak tertaut ke data karyawan'));
       }
       const data = await payrollService.findPayslipsByEmployee(employeeId);
       res.json(Result.success(data));

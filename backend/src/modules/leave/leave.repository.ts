@@ -1,6 +1,7 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import { CreateLeaveTypeDTO, CreateLeaveRequestDTO, CreateLeaveBalanceDTO } from './leave.dto';
+import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 
 export class LeaveRepository {
   // Leave Types
@@ -41,7 +42,12 @@ export class LeaveRepository {
   async createLeaveRequest(data: CreateLeaveRequestDTO) {
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
-    const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
+    // Count working days per employee's work calendar (excludes weekends & holidays)
+    const calendar = await workCalendarRepository.findEmployeeCalendar(data.employeeId);
+    const workingDays = calendar ? await workCalendarRepository.countWorkingDays(calendar.id, start, end) : 0;
+    const totalDays = workingDays > 0
+      ? workingDays
+      : Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
 
     return prisma.leaveRequest.create({
       data: {
