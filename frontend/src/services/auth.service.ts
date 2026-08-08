@@ -43,33 +43,28 @@ class AuthService {
     const response = await api.post('/auth/login', data);
     const result = response.data.data;
 
-    // Store tokens
+    // Refresh token is now in httpOnly cookie set by server — only store access token
     localStorage.setItem(appConfig.authTokenKey, result.tokens.accessToken);
-    localStorage.setItem(appConfig.refreshTokenKey, result.tokens.refreshToken);
 
     return result;
   }
 
   async logout(): Promise<void> {
-    const refreshToken = localStorage.getItem(appConfig.refreshTokenKey);
     try {
-      await api.post('/auth/logout', { refreshToken });
+      // Cookie is sent automatically; no need to send refreshToken in body
+      await api.post('/auth/logout');
     } catch {
       // Ignore logout errors
     }
     localStorage.removeItem(appConfig.authTokenKey);
-    localStorage.removeItem(appConfig.refreshTokenKey);
   }
 
   async refreshToken(): Promise<AuthResponse> {
-    const refreshToken = localStorage.getItem(appConfig.refreshTokenKey);
-    if (!refreshToken) throw new Error('No refresh token');
-
-    const response = await api.post('/auth/refresh', { refreshToken });
+    // Cookie is sent automatically; backend reads from httpOnly cookie
+    const response = await api.post('/auth/refresh');
     const result = response.data.data;
 
     localStorage.setItem(appConfig.authTokenKey, result.tokens.accessToken);
-    localStorage.setItem(appConfig.refreshTokenKey, result.tokens.refreshToken);
 
     return result;
   }

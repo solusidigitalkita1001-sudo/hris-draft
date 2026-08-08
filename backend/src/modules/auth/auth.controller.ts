@@ -3,9 +3,31 @@ import { authService } from './auth.service';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { Result } from '@/shared/core/Result';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
-import { LoginDTO, RefreshTokenDTO, ChangePasswordDTO, MfaCodeDTO } from './auth.dto';
+import { LoginDTO, ChangePasswordDTO, MfaCodeDTO } from './auth.dto';
+import config from '@/config';
 
 const logger = new WinstonLogger('AuthController');
+
+const REFRESH_COOKIE = 'rt';
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: config.app.env === 'production',
+  sameSite: 'lax' as const,
+  path: '/api/v1/auth',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
+function setRefreshCookie(res: Response, token: string) {
+  res.cookie(REFRESH_COOKIE, token, COOKIE_OPTS);
+}
+
+function clearRefreshCookie(res: Response) {
+  res.clearCookie(REFRESH_COOKIE, { ...COOKIE_OPTS, maxAge: 0 });
+}
+
+function getRefreshToken(req: Request): string | undefined {
+  return req.cookies?.[REFRESH_COOKIE] ?? req.body?.refreshToken;
+}
 
 /**
  * Auth Controller - handles HTTP request/response for authentication
@@ -24,8 +46,12 @@ export class AuthController {
 
       const result = await authService.login(dto, ipAddress, userAgent);
 
+      // Move refresh token to httpOnly cookie so JS can't read it
+      setRefreshCookie(res, result.tokens.refreshToken);
+      const { refreshToken: _rt, ...safeTokens } = result.tokens;
+
       res.status(200).json(
-        Result.success(result, 'Login successful')
+        Result.success({ ...result, tokens: safeTokens }, 'Login successful')
       );
     } catch (error) {
       next(error);
@@ -38,8 +64,9 @@ export class AuthController {
    */
   async logout(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { refreshToken } = req.body;
+      const refreshToken = getRefreshToken(req) ?? '';
       await authService.logout(refreshToken);
+      clearRefreshCookie(res);
 
       res.status(200).json(Result.success(null, 'Logout successful'));
     } catch (error) {
@@ -53,14 +80,18 @@ export class AuthController {
    */
   async refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const dto: RefreshTokenDTO = req.body;
+      const refreshToken = getRefreshToken(req);
       const ipAddress = req.ip;
       const userAgent = req.headers['user-agent'];
 
-      const result = await authService.refreshTokens(dto.refreshToken, ipAddress, userAgent);
+      if (!refreshToken) throw new Error('No refresh token');
+      const result = await authService.refreshTokens(refreshToken, ipAddress, userAgent);
+
+      setRefreshCookie(res, result.tokens.refreshToken);
+      const { refreshToken: _rt, ...safeTokens } = result.tokens;
 
       res.status(200).json(
-        Result.success(result, 'Token refreshed successfully')
+        Result.success({ ...result, tokens: safeTokens }, 'Token refreshed successfully')
       );
     } catch (error) {
       next(error);

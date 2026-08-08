@@ -20,7 +20,6 @@ const processQueue = (error: unknown, token: string | null = null) => {
 
 const clearClientSession = () => {
   localStorage.removeItem(appConfig.authTokenKey);
-  localStorage.removeItem(appConfig.refreshTokenKey);
   localStorage.removeItem(appConfig.companyKey);
   localStorage.removeItem('companyId');
   localStorage.removeItem('employeeId');
@@ -31,6 +30,7 @@ const clearClientSession = () => {
 const api = axios.create({
   baseURL: appConfig.apiUrl,
   timeout: 30000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
@@ -70,24 +70,15 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem(appConfig.refreshTokenKey);
-
-      if (!refreshToken) {
-        // No refresh token, force logout
-        clearClientSession();
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
-
       try {
-        const { data } = await axios.post(`${appConfig.apiUrl}/auth/refresh`, {
-          refreshToken,
+        // Cookie is sent automatically; backend issues new cookie + access token
+        const { data } = await axios.post(`${appConfig.apiUrl}/auth/refresh`, null, {
+          withCredentials: true,
         });
 
-        const { accessToken, refreshToken: newRefreshToken } = data.data.tokens;
+        const { accessToken } = data.data.tokens;
 
         localStorage.setItem(appConfig.authTokenKey, accessToken);
-        localStorage.setItem(appConfig.refreshTokenKey, newRefreshToken);
 
         processQueue(null, accessToken);
 
