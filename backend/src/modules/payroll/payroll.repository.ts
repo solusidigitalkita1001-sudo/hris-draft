@@ -261,6 +261,13 @@ export class PayrollRepository {
     });
   }
 
+  async confirmAttendanceReview(id: string, userId: string) {
+    return prisma.payrollPeriod.update({
+      where: { id },
+      data: { attendanceReviewedAt: new Date(), attendanceReviewedBy: userId },
+    });
+  }
+
   // ==================== Payroll Runs ====================
 
   async findAllPayrollRuns(companyId: string) {

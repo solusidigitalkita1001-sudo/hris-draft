@@ -191,11 +191,66 @@ export class PayrollService {
     return run;
   }
 
+  async getAttendanceSummaryForPeriod(periodId: string) {
+    const period = await this.findPayrollPeriodById(periodId);
+    const periodStart = new Date(period.startDate);
+    const periodEnd = new Date(period.endDate);
+
+    const [attendanceGroups, approvedLeaves, overtimes] = await Promise.all([
+      prisma.attendance.groupBy({
+        by: ['employeeId', 'status'],
+        where: { companyId: period.companyId, date: { gte: periodStart, lte: periodEnd }, deletedAt: null },
+        _count: { id: true },
+      }),
+      prisma.leaveRequest.findMany({
+        where: {
+          companyId: period.companyId, status: 'APPROVED', deletedAt: null,
+          OR: [
+            { startDate: { gte: periodStart, lte: periodEnd } },
+            { endDate: { gte: periodStart, lte: periodEnd } },
+            { startDate: { lte: periodStart }, endDate: { gte: periodEnd } },
+          ],
+        },
+        select: { employeeId: true, totalDays: true },
+      }),
+      prisma.overtimeRequest.findMany({
+        where: { companyId: period.companyId, status: 'APPROVED', date: { gte: periodStart, lte: periodEnd }, deletedAt: null },
+        select: { employeeId: true, durationHours: true },
+      }),
+    ]);
+
+    const summary: Record<string, { present: number; absent: number; leave: number; overtime: number }> = {};
+    for (const row of attendanceGroups) {
+      if (!summary[row.employeeId]) summary[row.employeeId] = { present: 0, absent: 0, leave: 0, overtime: 0 };
+      if (row.status === 'PRESENT' || row.status === 'LATE') summary[row.employeeId].present += row._count.id;
+      else if (row.status === 'ABSENT') summary[row.employeeId].absent += row._count.id;
+    }
+    for (const lr of approvedLeaves) {
+      if (!summary[lr.employeeId]) summary[lr.employeeId] = { present: 0, absent: 0, leave: 0, overtime: 0 };
+      summary[lr.employeeId].leave += lr.totalDays;
+    }
+    for (const ot of overtimes) {
+      if (!summary[ot.employeeId]) summary[ot.employeeId] = { present: 0, absent: 0, leave: 0, overtime: 0 };
+      summary[ot.employeeId].overtime += Number(ot.durationHours);
+    }
+
+    return { period, attendanceReviewedAt: period.attendanceReviewedAt, summary };
+  }
+
+  async confirmAttendanceReview(periodId: string, userId: string) {
+    const period = await this.findPayrollPeriodById(periodId);
+    if (period.status === 'CLOSED') throw new BadRequestError('Period sudah ditutup');
+    return payrollRepository.confirmAttendanceReview(periodId, userId);
+  }
+
   async createPayrollRun(data: CreatePayrollRunDTO, userId?: string) {
     // Validate period exists and is not closed
     const period = await this.findPayrollPeriodById(data.periodId);
     if (period.status === 'CLOSED') {
       throw new BadRequestError('Cannot create payroll run for a closed period');
+    }
+    if (!period.attendanceReviewedAt) {
+      throw new BadRequestError('Attendance harus dikonfirmasi terlebih dahulu sebelum payroll run bisa dieksekusi. Gunakan endpoint PUT /payroll/periods/:id/confirm-attendance.');
     }
 
     // Get run number

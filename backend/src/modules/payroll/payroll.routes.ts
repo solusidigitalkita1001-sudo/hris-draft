@@ -129,6 +129,16 @@ router.patch(
   validate(idParamSchema, 'params'),
   payrollController.closePayrollPeriod.bind(payrollController)
 );
+router.get(
+  '/periods/:id/attendance-summary',
+  authorize({ resource: 'payroll', action: 'read' }),
+  payrollController.getAttendanceSummary.bind(payrollController)
+);
+router.put(
+  '/periods/:id/confirm-attendance',
+  authorize({ resource: 'payroll', action: 'update' }),
+  payrollController.confirmAttendanceReview.bind(payrollController)
+);
 
 // ==================== Payroll Runs ====================
 router.get(

@@ -160,6 +160,18 @@ export class PayrollController {
     }
   }
 
+  async getAttendanceSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await payrollService.getAttendanceSummaryForPeriod(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async confirmAttendanceReview(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(await payrollService.confirmAttendanceReview(req.params.id as string, req.user!.id)));
+    } catch (error) { next(error); }
+  }
+
   // ==================== Payroll Runs ====================
 
   async findAllPayrollRuns(req: Request, res: Response, next: NextFunction) {

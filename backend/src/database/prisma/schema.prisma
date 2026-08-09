@@ -371,7 +371,9 @@ model PayrollPeriod {
   startDate DateTime         @map("start_date")
   endDate   DateTime         @map("end_date")
   payDate   DateTime         @map("pay_date")
-  status    PayrollStatus    @default(DRAFT)
+  status                  PayrollStatus    @default(DRAFT)
+  attendanceReviewedAt    DateTime?        @map("attendance_reviewed_at")
+  attendanceReviewedBy    String?          @map("attendance_reviewed_by") @db.VarChar(36)
   notes     String?          @db.Text
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
