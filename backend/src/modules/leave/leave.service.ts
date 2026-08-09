@@ -1,6 +1,6 @@
 import { leaveRepository } from './leave.repository';
 import { CreateLeaveTypeDTO, CreateLeaveRequestDTO, CreateLeaveBalanceDTO } from './leave.dto';
-import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import prisma from '@/shared/database/prisma';
 import { calculateOpeningBalance } from '@/shared/leave/accrual';
@@ -42,7 +42,7 @@ export class LeaveService {
   // Task 1.15 (VAL-011): approve under row locks so concurrent approvals can't
   // over-draw the balance. The FOR UPDATE locks serialize on the balance row;
   // the PENDING guard prevents a request being approved (and deducted) twice.
-  async approveLeave(id: string, userId: string) {
+  async approveLeave(id: string, userId: string, approverEmployeeId?: string | null) {
     return prisma.$transaction(async (tx) => {
       const [req] = await tx.$queryRaw<
         Array<{
@@ -57,6 +57,9 @@ export class LeaveService {
         FROM leave_requests WHERE id = ${id} FOR UPDATE`;
 
       if (!req) throw new NotFoundError('Leave request not found');
+      if (approverEmployeeId && approverEmployeeId === req.employee_id) {
+        throw new ForbiddenError('Cannot approve your own leave request');
+      }
       if (req.status !== 'PENDING') {
         throw new BadRequestError('Leave request sudah diproses');
       }
@@ -89,8 +92,11 @@ export class LeaveService {
     });
   }
 
-  async rejectLeave(id: string, reason?: string) {
-    await this.findLeaveRequestById(id);
+  async rejectLeave(id: string, reason?: string, approverEmployeeId?: string | null) {
+    const request = await this.findLeaveRequestById(id);
+    if (approverEmployeeId && approverEmployeeId === request.employeeId) {
+      throw new ForbiddenError('Cannot reject your own leave request');
+    }
     return leaveRepository.updateLeaveStatus(id, 'REJECTED', undefined, reason);
   }
 

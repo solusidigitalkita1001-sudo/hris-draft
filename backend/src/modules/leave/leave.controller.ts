@@ -39,12 +39,12 @@ export class LeaveController {
   }
 
   async approve(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-    try { res.json(Result.updated(await leaveService.approveLeave(req.params.id as string, req.user!.id))); }
+    try { res.json(Result.updated(await leaveService.approveLeave(req.params.id as string, req.user!.id, req.user!.employeeId))); }
     catch (error) { next(error); }
   }
 
   async reject(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-    try { res.json(Result.updated(await leaveService.rejectLeave(req.params.id as string, req.body.reason))); }
+    try { res.json(Result.updated(await leaveService.rejectLeave(req.params.id as string, req.body.reason, req.user!.employeeId))); }
     catch (error) { next(error); }
   }
 
