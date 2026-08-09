@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { companyService } from '../services/company.service';
+import { branchRepository } from '../repositories/branch.repository';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 
@@ -58,6 +59,25 @@ export class CompanyController {
     } catch (error) {
       next(error);
     }
+  }
+
+  async getDefaultAttendancePolicy(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(Result.success(await branchRepository.findCompanyDefaultPolicy(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async upsertDefaultAttendancePolicy(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(Result.updated(await branchRepository.upsertCompanyDefaultPolicy(req.params.id as string, req.body)));
+    } catch (error) { next(error); }
+  }
+
+  async deleteDefaultAttendancePolicy(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await branchRepository.softDeleteCompanyDefaultPolicy(req.params.id as string);
+      res.json(Result.deleted('Company default attendance policy deleted'));
+    } catch (error) { next(error); }
   }
 }
 

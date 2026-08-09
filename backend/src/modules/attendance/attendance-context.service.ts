@@ -180,14 +180,14 @@ export class AttendanceContextService {
 
     const branchPolicy = resolvedBranch
       ? await prisma.branchAttendancePolicy.findFirst({
-          where: {
-            branchId: resolvedBranch.id,
-            companyId: resolvedCompanyId,
-            deletedAt: null,
-            isActive: true,
-          },
+          where: { branchId: resolvedBranch.id, companyId: resolvedCompanyId, deletedAt: null, isActive: true },
         })
       : null;
+
+    // Fallback: company-level default policy when branch has no specific policy
+    const effectivePolicy = branchPolicy ?? await prisma.branchAttendancePolicy.findFirst({
+      where: { companyId: resolvedCompanyId, branchId: null, deletedAt: null, isActive: true },
+    });
 
     return {
       employeeId,
@@ -205,7 +205,7 @@ export class AttendanceContextService {
       departmentId: resolvedDepartment?.id ?? null,
       calendarId: schedule.calendarId,
       schedule,
-      policy: buildFallbackPolicy(branchPolicy, resolvedBranch),
+      policy: buildFallbackPolicy(effectivePolicy, resolvedBranch),
       warnings,
     };
   }

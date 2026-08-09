@@ -45,6 +45,9 @@ router.get('/companies/:id', authorize({ resource: 'organization', action: 'read
 router.post('/companies', authorize({ resource: 'organization', action: 'create' }), validate(createCompanySchema), companyController.create.bind(companyController));
 router.put('/companies/:id', authorize({ resource: 'organization', action: 'update' }), validate(updateCompanySchema), companyController.update.bind(companyController));
 router.delete('/companies/:id', authorize({ resource: 'organization', action: 'delete' }), companyController.delete.bind(companyController));
+router.get('/companies/:id/attendance-policy', authorize({ resource: 'organization', action: 'read' }), companyController.getDefaultAttendancePolicy.bind(companyController));
+router.put('/companies/:id/attendance-policy', authorize({ resource: 'organization', action: 'update' }), validate(upsertBranchAttendancePolicySchema), companyController.upsertDefaultAttendancePolicy.bind(companyController));
+router.delete('/companies/:id/attendance-policy', authorize({ resource: 'organization', action: 'delete' }), companyController.deleteDefaultAttendancePolicy.bind(companyController));
 
 // ==================== Branches ====================
 router.get('/branches', authorize({ resource: 'organization', action: 'read' }), branchController.findAll.bind(branchController));

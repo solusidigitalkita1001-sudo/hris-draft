@@ -166,7 +166,7 @@ model Branch {
   company                Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
   employees              Employee[]
   attendances            Attendance[]
-  attendancePolicy       BranchAttendancePolicy?
+  attendancePolicies     BranchAttendancePolicy[]
   careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromBranch")
   careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToBranch")
 
@@ -2778,7 +2778,7 @@ model AttendanceCorrection {
 model BranchAttendancePolicy {
   id                            String                 @id @default(uuid()) @db.VarChar(36)
   companyId                     String                 @map("company_id") @db.VarChar(36)
-  branchId                      String                 @unique @map("branch_id") @db.VarChar(36)
+  branchId                      String?                @map("branch_id") @db.VarChar(36)
   attendanceMethod              AttendancePolicyMethod @default(MANUAL) @map("attendance_method")
   gpsLatitude                   Float?                 @map("gps_latitude")
   gpsLongitude                  Float?                 @map("gps_longitude")
@@ -2800,9 +2800,10 @@ model BranchAttendancePolicy {
   deletedAt                     DateTime?              @map("deleted_at")
 
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branch      Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
   attendances Attendance[]
 
+  @@unique([companyId, branchId])
   @@index([companyId])
   @@index([attendanceMethod])
   @@index([isActive])
