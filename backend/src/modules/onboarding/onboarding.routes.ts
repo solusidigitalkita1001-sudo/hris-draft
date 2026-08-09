@@ -4,9 +4,11 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { onboardingController } from './onboarding.controller';
 import { createChecklistSchema, updateChecklistSchema, createResignationSchema, finalPayrollSchema } from './onboarding.dto';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/checklists', authorize({ resource: 'employee', action: 'read' }), onboardingController.getChecklists.bind(onboardingController));
 router.post('/checklists', authorize({ resource: 'employee', action: 'create' }), validate(createChecklistSchema), onboardingController.createChecklist.bind(onboardingController));

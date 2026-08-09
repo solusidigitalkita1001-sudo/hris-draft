@@ -66,6 +66,14 @@ export class TravelExpenseRepository {
     });
   }
 
+  async findTripById(id: string) {
+    return prisma.businessTrip.findUnique({ where: { id }, select: { id: true, employeeId: true, status: true } });
+  }
+
+  async findClaimById(id: string) {
+    return prisma.expenseClaim.findUnique({ where: { id }, select: { id: true, employeeId: true, status: true } });
+  }
+
   async approveTrip(id: string, approverId: string, data?: ApproveBusinessTripDTO) {
     return prisma.businessTrip.update({
       where: { id },

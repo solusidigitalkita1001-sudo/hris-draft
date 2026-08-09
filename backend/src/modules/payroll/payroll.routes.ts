@@ -15,6 +15,7 @@ import {
   createPayrollRunSchema,
 } from './payroll.dto';
 import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema } from './payroll.validation';
+import { auditLog } from '@/shared/middleware/AuditLog';
 
 const router = Router();
 
@@ -154,6 +155,7 @@ router.post(
 router.patch(
   '/runs/:id/approve',
   authorize({ resource: 'payroll', action: 'approve' }),
+  auditLog({ action: 'APPROVE', entity: 'PayrollRun', model: 'payrollRun', getEntityId: (req) => req.params.id as string }),
   validate(payrollRunIdParamSchema, 'params'),
   payrollController.approvePayrollRun.bind(payrollController)
 );
@@ -161,6 +163,7 @@ router.patch(
 router.patch(
   '/runs/:id/disburse',
   authorize({ resource: 'payroll', action: 'disburse' }),
+  auditLog({ action: 'DISBURSE', entity: 'PayrollRun', model: 'payrollRun', getEntityId: (req) => req.params.id as string }),
   validate(payrollRunIdParamSchema, 'params'),
   payrollController.disbursePayrollRun.bind(payrollController)
 );

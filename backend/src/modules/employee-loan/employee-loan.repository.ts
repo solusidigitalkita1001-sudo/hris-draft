@@ -12,6 +12,10 @@ export class EmployeeLoanRepository {
     });
   }
 
+  async findLoanTypeById(id: string) {
+    return prisma.loanType.findFirst({ where: { id, deletedAt: null } });
+  }
+
   // ─── Loans ────────────────────────────────────────────
   async findAll(companyId: string, status?: string) {
     const where: Prisma.LoanWhereInput = { companyId };

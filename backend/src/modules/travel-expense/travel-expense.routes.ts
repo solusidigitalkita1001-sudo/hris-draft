@@ -16,6 +16,7 @@ import {
   createTravelAdvanceSchema,
   reimburseExpenseClaimSchema,
 } from './travel-expense.dto';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 
@@ -45,6 +46,7 @@ const upload = multer({
 });
 
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 const employeeRoles = ['GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER', 'EMPLOYEE'];
 const approverRoles = ['GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'];

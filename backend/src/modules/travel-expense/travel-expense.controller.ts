@@ -86,6 +86,11 @@ export class TravelExpenseController {
 
   async approveTrip(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const trip = await travelExpenseRepository.findTripById(req.params.id as string);
+      if (!trip) return res.status(404).json(Result.error('Travel request not found'));
+      if (req.user!.employeeId && req.user!.employeeId === trip.employeeId) {
+        throw new ForbiddenError('Cannot approve your own travel request');
+      }
       const data = await travelExpenseRepository.approveTrip(req.params.id as string, req.user!.id, req.body);
       res.json(Result.updated(data, 'Travel request approved'));
     } catch (error) {
@@ -95,6 +100,11 @@ export class TravelExpenseController {
 
   async rejectTrip(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const trip = await travelExpenseRepository.findTripById(req.params.id as string);
+      if (!trip) return res.status(404).json(Result.error('Travel request not found'));
+      if (req.user!.employeeId && req.user!.employeeId === trip.employeeId) {
+        throw new ForbiddenError('Cannot reject your own travel request');
+      }
       const data = await travelExpenseRepository.rejectTrip(req.params.id as string, req.user!.id, req.body);
       res.json(Result.updated(data, 'Travel request rejected'));
     } catch (error) {
@@ -190,6 +200,11 @@ export class TravelExpenseController {
 
   async approveClaim(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const claim = await travelExpenseRepository.findClaimById(req.params.id as string);
+      if (!claim) return res.status(404).json(Result.error('Expense claim not found'));
+      if (req.user!.employeeId && req.user!.employeeId === claim.employeeId) {
+        throw new ForbiddenError('Cannot approve your own expense claim');
+      }
       const data = await travelExpenseRepository.approveClaim(req.params.id as string, req.user!.id, req.body);
       res.json(Result.updated(data, 'Expense claim approved'));
     } catch (error) {
@@ -199,6 +214,11 @@ export class TravelExpenseController {
 
   async rejectClaim(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const claim = await travelExpenseRepository.findClaimById(req.params.id as string);
+      if (!claim) return res.status(404).json(Result.error('Expense claim not found'));
+      if (req.user!.employeeId && req.user!.employeeId === claim.employeeId) {
+        throw new ForbiddenError('Cannot reject your own expense claim');
+      }
       const data = await travelExpenseRepository.rejectClaim(req.params.id as string, req.user!.id, req.body);
       res.json(Result.updated(data, 'Expense claim rejected'));
     } catch (error) {

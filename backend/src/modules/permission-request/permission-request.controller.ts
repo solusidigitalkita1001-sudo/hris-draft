@@ -70,6 +70,11 @@ export class PermissionRequestController {
 
   async approve(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const request = await permissionRequestRepository.findById(req.params.id as string);
+      if (!request) return res.status(404).json(Result.error('Request not found'));
+      if (req.user!.employeeId && req.user!.employeeId === request.employeeId) {
+        throw new ForbiddenError('Cannot approve your own permission request');
+      }
       const data = await permissionRequestRepository.approve(req.params.id as string, req.user!.id, req.body);
       res.json(Result.updated(data, 'Request approved'));
     } catch (error) { next(error); }
@@ -77,6 +82,11 @@ export class PermissionRequestController {
 
   async reject(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const request = await permissionRequestRepository.findById(req.params.id as string);
+      if (!request) return res.status(404).json(Result.error('Request not found'));
+      if (req.user!.employeeId && req.user!.employeeId === request.employeeId) {
+        throw new ForbiddenError('Cannot reject your own permission request');
+      }
       const data = await permissionRequestRepository.reject(req.params.id as string, req.user!.id, req.body);
       res.json(Result.updated(data, 'Request rejected'));
     } catch (error) { next(error); }

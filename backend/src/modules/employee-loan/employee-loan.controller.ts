@@ -45,8 +45,20 @@ export class EmployeeLoanController {
   async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { loanTypeId, amount, totalInstallments, installmentAmount, reason } = req.body;
-      const employeeId = req.body.employeeId;
-      const companyId = req.body.companyId || (req as any).user?.companyId;
+      const employeeId = req.user!.employeeId;
+      const companyId = req.user!.companyId;
+
+      if (!employeeId) throw new BadRequestError('User has no associated employee record');
+      if (!companyId) throw new BadRequestError('User has no associated company');
+
+      const loanType = await employeeLoanRepository.findLoanTypeById(loanTypeId);
+      if (!loanType) throw new NotFoundError('Loan type not found');
+      if (Number(amount) > Number(loanType.maxAmount)) {
+        throw new BadRequestError(`Amount exceeds loan type maximum of ${loanType.maxAmount}`);
+      }
+      if (Number(totalInstallments) > loanType.maxInstallments) {
+        throw new BadRequestError(`Installments exceed loan type maximum of ${loanType.maxInstallments}`);
+      }
 
       const loan = await employeeLoanRepository.create({
         loanTypeId,

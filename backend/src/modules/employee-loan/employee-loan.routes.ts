@@ -4,9 +4,11 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { employeeLoanController } from './employee-loan.controller';
 import { createLoanSchema, approveLoanSchema } from './employee-loan.dto';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 // Loan Types
 router.get('/types', employeeLoanController.findLoanTypes.bind(employeeLoanController));

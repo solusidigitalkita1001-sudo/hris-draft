@@ -4,9 +4,11 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { assetController } from './asset.controller';
 import { createAssetSchema, assignAssetSchema } from './asset.dto';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/', authorize({ resource: 'employee', action: 'read' }), assetController.findAll.bind(assetController));
 router.get('/:id', authorize({ resource: 'employee', action: 'read' }), assetController.findById.bind(assetController));

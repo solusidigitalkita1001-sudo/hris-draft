@@ -6,6 +6,7 @@ import {
   NotFoundError,
   ConflictError,
   ValidationError,
+  ForbiddenError,
 } from '@/shared/exceptions/AppError';
 import {
   CreateRoleDTO,
@@ -164,16 +165,35 @@ export class RoleService {
     return permissionRepository.getRolePermissions(roleId);
   }
 
-  async assignToUser(userId: string, dto: AssignUserRolesDTO) {
+  async assignToUser(userId: string, dto: AssignUserRolesDTO, requesterId: string) {
+    // Privilege escalation guard: GLOBAL-scope assignments require the requester
+    // to hold a GLOBAL-scoped role themselves. Without this, any rbac:update holder
+    // could promote any user to SUPER_ADMIN.
+    if (dto.scopeType === 'GLOBAL') {
+      const requesterRoles = await prisma.userRole.findFirst({
+        where: { userId: requesterId, role: { scope: 'GLOBAL', deletedAt: null } },
+        select: { id: true },
+      });
+      if (!requesterRoles) {
+        throw new ForbiddenError('Only users with a GLOBAL-scope role may assign GLOBAL-scope roles');
+      }
+    }
+
     // Verify roles exist in a single query (was N+1 over roleIds).
     const roles = await prisma.role.findMany({
       where: { id: { in: dto.roleIds }, deletedAt: null },
-      select: { id: true },
+      select: { id: true, scope: true },
     });
     if (roles.length !== new Set(dto.roleIds).size) {
       const found = new Set(roles.map((r) => r.id));
       const missing = dto.roleIds.find((id) => !found.has(id));
       throw new NotFoundError(`Role ${missing} not found`);
+    }
+
+    // Prevent assigning GLOBAL-scoped role objects unless requester has GLOBAL scope.
+    const hasGlobalRole = roles.some((r) => r.scope === 'GLOBAL');
+    if (hasGlobalRole && dto.scopeType !== 'GLOBAL') {
+      throw new ValidationError('Cannot assign a GLOBAL-scoped role with a non-GLOBAL scopeType');
     }
 
     // Remove existing roles

@@ -4,9 +4,11 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { recruitmentController } from './recruitment.controller';
 import { createJobPostingSchema, createCandidateSchema, createApplicationSchema, updateApplicationStatusSchema, createInterviewSchema, createInterviewFeedbackSchema } from './recruitment.dto';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/job-postings', authorize({ resource: 'recruitment', action: 'read' }), recruitmentController.findAllJobPostings.bind(recruitmentController));
 router.get('/job-postings/:id', authorize({ resource: 'recruitment', action: 'read' }), recruitmentController.findJobPostingById.bind(recruitmentController));

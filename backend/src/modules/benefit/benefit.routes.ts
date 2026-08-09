@@ -10,11 +10,13 @@ import {
   updateBenefitEnrollmentSchema,
 } from './benefit.dto';
 import { idParamSchema } from './benefit.validation';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 // ==================== Benefit Plans ====================
 router.get(

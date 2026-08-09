@@ -4,9 +4,11 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { trainingController } from './training.controller';
 import { createCategorySchema, createCourseSchema, updateCourseSchema, createSessionSchema, createEnrollmentSchema } from './training.dto';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/categories', authorize({ resource: 'training', action: 'read' }), trainingController.findAllCategories.bind(trainingController));
 router.post('/categories', authorize({ resource: 'training', action: 'create' }), validate(createCategorySchema), trainingController.createCategory.bind(trainingController));

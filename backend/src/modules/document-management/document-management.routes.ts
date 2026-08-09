@@ -7,6 +7,7 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import { documentManagementController } from './document-management.controller';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 
@@ -47,6 +48,7 @@ const upload = multer({
 router.get('/:id/file', documentManagementController.serveSignedFile.bind(documentManagementController));
 
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get(
   '/categories',

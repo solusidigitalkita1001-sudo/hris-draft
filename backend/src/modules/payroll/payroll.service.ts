@@ -486,6 +486,9 @@ export class PayrollService {
         let amount = Number(comp.amount);
         if (sc.calculationMethod === 'PERCENTAGE' && sc.ratePercent) {
           amount = wage * (Number(sc.ratePercent) / 100);
+        } else if (sc.calculationMethod === 'FORMULA') {
+          // ponytail: FORMULA is declared in schema but not yet implemented; throw so it doesn't silently return zero
+          throw new Error(`Salary component "${sc.name}" uses FORMULA calculationMethod which is not yet supported`);
         }
         return {
           code: sc.code as string,

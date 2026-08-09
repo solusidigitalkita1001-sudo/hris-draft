@@ -12,9 +12,11 @@ import {
   turnoverReportQuerySchema,
 } from './reports.dto';
 import { validate } from '@/shared/middleware/RequestValidator';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/summary', validate(dashboardSummaryQuerySchema, 'query'), reportsController.dashboardSummary.bind(reportsController));
 router.get('/headcount', authorize({ resource: 'report', action: 'read' }), validate(headcountReportQuerySchema, 'query'), reportsController.headcount.bind(reportsController));
