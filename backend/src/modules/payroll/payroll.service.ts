@@ -20,6 +20,7 @@ import { calculatePph21 } from '@/shared/payroll/pph21';
 import { calculateThr } from '@/shared/payroll/thr';
 import { prisma } from '@/shared/database/prisma';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
+import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 
 export class PayrollService {
   // ==================== Salary Components ====================
@@ -323,6 +324,47 @@ export class PayrollService {
       return acc;
     }, {});
 
+    const periodStart = new Date(run.period.startDate);
+    const periodEnd = new Date(run.period.endDate);
+
+    // Batch attendance summary per employee for the pay period
+    const attendanceGroups = await prisma.attendance.groupBy({
+      by: ['employeeId', 'status'],
+      where: { companyId: run.companyId, date: { gte: periodStart, lte: periodEnd }, deletedAt: null },
+      _count: { id: true },
+    });
+    const attendanceByEmployee: Record<string, { present: number; absent: number }> = {};
+    for (const row of attendanceGroups) {
+      if (!attendanceByEmployee[row.employeeId]) attendanceByEmployee[row.employeeId] = { present: 0, absent: 0 };
+      if (row.status === 'PRESENT' || row.status === 'LATE') attendanceByEmployee[row.employeeId].present += row._count.id;
+      else if (row.status === 'ABSENT') attendanceByEmployee[row.employeeId].absent += row._count.id;
+    }
+
+    // Batch approved leave days per employee overlapping the pay period
+    const approvedLeaves = await prisma.leaveRequest.findMany({
+      where: {
+        companyId: run.companyId,
+        status: 'APPROVED',
+        deletedAt: null,
+        OR: [
+          { startDate: { gte: periodStart, lte: periodEnd } },
+          { endDate: { gte: periodStart, lte: periodEnd } },
+          { startDate: { lte: periodStart }, endDate: { gte: periodEnd } },
+        ],
+      },
+      select: { employeeId: true, totalDays: true },
+    });
+    const leaveByEmployee = approvedLeaves.reduce<Record<string, number>>((acc, lr) => {
+      acc[lr.employeeId] = (acc[lr.employeeId] || 0) + lr.totalDays;
+      return acc;
+    }, {});
+
+    // Working days in period from company-level calendar (shared across all employees)
+    const companyCalendar = await workCalendarRepository.findCalendarByContext({ companyId: run.companyId });
+    const workDaysInPeriod = companyCalendar
+      ? await workCalendarRepository.countWorkingDays(companyCalendar.id, periodStart, periodEnd)
+      : 0;
+
     // Delete existing payslips for this run (recalculation)
     await payrollRepository.deletePayslipsByRunId(runId);
 
@@ -335,6 +377,9 @@ export class PayrollService {
 
       const loanDeductionAmount = loanDeductionByEmployee[salary.employeeId] || 0;
       const overtimeHoursForEmployee = overtimeHoursByEmployee[salary.employeeId] || 0;
+      const attd = attendanceByEmployee[salary.employeeId] ?? { present: 0, absent: 0 };
+      const leaveDaysForEmployee = leaveByEmployee[salary.employeeId] ?? 0;
+      const absentDays = Math.max(0, workDaysInPeriod - attd.present - leaveDaysForEmployee);
       const overtimePayAmount = overtimeHoursForEmployee > 0
         ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: overtimeHoursForEmployee, dayType: 'WORKDAY' }).amount
         : 0;
@@ -379,10 +424,10 @@ export class PayrollService {
         totalEarnings: earningsTotal,
         totalDeductions: deductionsTotal,
         netPay,
-        workDays: 0,
-        presentDays: 0,
-        leaveDays: 0,
-        absentDays: 0,
+        workDays: workDaysInPeriod,
+        presentDays: attd.present,
+        leaveDays: leaveDaysForEmployee,
+        absentDays,
         overtimeHours: overtimeHoursForEmployee,
         status: 'DRAFT',
       });
