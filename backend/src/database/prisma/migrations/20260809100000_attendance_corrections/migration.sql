@@ -1,0 +1,27 @@
+-- Attendance Correction/Regularization flow: karyawan ajukan koreksi absensi,
+-- supervisor approve → attendance record diperbarui.
+CREATE TABLE `attendance_corrections` (
+  `id` VARCHAR(36) NOT NULL,
+  `employee_id` VARCHAR(36) NOT NULL,
+  `company_id` VARCHAR(36) NOT NULL,
+  `attendance_id` VARCHAR(36) NULL,
+  `date` DATE NOT NULL,
+  `requested_check_in` DATETIME(3) NULL,
+  `requested_check_out` DATETIME(3) NULL,
+  `reason` TEXT NOT NULL,
+  `status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+  `approved_by` VARCHAR(36) NULL,
+  `approved_at` DATETIME(3) NULL,
+  `rejection_reason` TEXT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL,
+  `deleted_at` DATETIME(3) NULL,
+  PRIMARY KEY (`id`),
+  INDEX `attendance_corrections_company_id_idx` (`company_id`),
+  INDEX `attendance_corrections_employee_id_idx` (`employee_id`),
+  INDEX `attendance_corrections_status_idx` (`status`),
+  INDEX `attendance_corrections_date_idx` (`date`),
+  CONSTRAINT `attendance_corrections_employee_id_fkey` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `attendance_corrections_company_id_fkey` FOREIGN KEY (`company_id`) REFERENCES `companies` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `attendance_corrections_attendance_id_fkey` FOREIGN KEY (`attendance_id`) REFERENCES `attendances` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

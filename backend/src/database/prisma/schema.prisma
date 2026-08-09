@@ -111,6 +111,7 @@ model Company {
   jobApplications                       JobApplication[]
   interviews                            Interview[]
   attendances                           Attendance[]
+  attendanceCorrections                 AttendanceCorrection[]
   overtimeRequests                      OvertimeRequest[]
   leaveTypes                            LeaveType[]
   leaveBalances                         LeaveBalance[]
@@ -1949,6 +1950,7 @@ model Employee {
   trainingEnrollments                           TrainingEnrollment[]
   trainingAttendances                           TrainingAttendance[]
   attendances                                   Attendance[]
+  attendanceCorrections                         AttendanceCorrection[]
   overtimeRequests                              OvertimeRequest[]
   leaveBalances                                 LeaveBalance[]
   leaveRequests                                 LeaveRequest[]
@@ -2738,7 +2740,37 @@ model Attendance {
   @@index([status])
   @@index([method])
   @@index([requiresReview])
+  corrections AttendanceCorrection[]
+
   @@map("attendances")
+}
+
+model AttendanceCorrection {
+  id                String                     @id @default(uuid()) @db.VarChar(36)
+  employeeId        String                     @map("employee_id") @db.VarChar(36)
+  companyId         String                     @map("company_id") @db.VarChar(36)
+  attendanceId      String?                    @map("attendance_id") @db.VarChar(36)
+  date              DateTime                   @map("date") @db.Date
+  requestedCheckIn  DateTime?                  @map("requested_check_in")
+  requestedCheckOut DateTime?                  @map("requested_check_out")
+  reason            String                     @db.Text
+  status            AttendanceCorrectionStatus @default(PENDING)
+  approvedBy        String?                    @map("approved_by") @db.VarChar(36)
+  approvedAt        DateTime?                  @map("approved_at")
+  rejectionReason   String?                    @map("rejection_reason") @db.Text
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+  deletedAt         DateTime?                  @map("deleted_at")
+
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  attendance Attendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([status])
+  @@index([date])
+  @@map("attendance_corrections")
 }
 
 model BranchAttendancePolicy {
@@ -3900,4 +3932,10 @@ enum DocumentVisibility {
 enum DocumentAccessAction {
   VIEW
   DOWNLOAD
+}
+
+enum AttendanceCorrectionStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
