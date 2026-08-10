@@ -7,6 +7,7 @@ import { getRedisConnectionOptions } from '@/infrastructure/cache/redis-options'
 export const QueueNames = {
   DOMAIN_EVENTS: 'domain-events',
   PERFORMANCE_AUTOMATION: 'performance-automation',
+  LEAVE_AUTOMATION: 'leave-automation',
 } as const;
 
 export class QueueManager {
@@ -107,6 +108,10 @@ export class QueueManager {
 
     const queue = this.getQueue(queueName);
     return queue.add(jobName, data, options);
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
   }
 
   createWorker<T = unknown>(

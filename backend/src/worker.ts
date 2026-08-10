@@ -9,6 +9,7 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { prisma, disconnectDatabase, testDatabaseConnection } from '@/shared/database/prisma';
 import { authRepository } from '@/modules/auth/auth.repository';
 import { performanceService } from '@/modules/performance/performance.service';
+import { LEAVE_YEARLY_ACCRUAL_JOB, runYearlyLeaveAccrual, scheduleYearlyLeaveAccrual } from '@/modules/leave/leave.scheduler';
 
 async function maybeCreateNotification(event: DomainEvent): Promise<void> {
   if (![DomainEvents.USER_LOGGED_IN, DomainEvents.PASSWORD_CHANGED].includes(event.name as any)) {
@@ -93,6 +94,7 @@ async function bootstrapWorker(): Promise<void> {
   await rabbitMQBroker.connect();
   await queueManager.getQueueEvents(QueueNames.DOMAIN_EVENTS).waitUntilReady();
   await queueManager.getQueueEvents(QueueNames.PERFORMANCE_AUTOMATION).waitUntilReady();
+  await queueManager.getQueueEvents(QueueNames.LEAVE_AUTOMATION).waitUntilReady();
 
   queueManager.createWorker<DomainEvent>(
     QueueNames.DOMAIN_EVENTS,
@@ -112,6 +114,17 @@ async function bootstrapWorker(): Promise<void> {
     },
     { concurrency: 3 }
   );
+
+  queueManager.createWorker<{ year: number }>(
+    QueueNames.LEAVE_AUTOMATION,
+    async (job) => {
+      const year = job.data.year ?? new Date().getFullYear();
+      return runYearlyLeaveAccrual(year);
+    },
+    { concurrency: 1 }
+  );
+
+  await scheduleYearlyLeaveAccrual();
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,

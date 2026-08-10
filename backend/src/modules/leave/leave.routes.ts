@@ -24,5 +24,6 @@ router.patch('/:id/reject', authorize({ resource: 'leave', action: 'approve' }),
 // Leave Balances
 router.get('/balances/employee', authorize({ resource: 'leave', action: 'read' }), leaveController.getBalances.bind(leaveController));
 router.post('/balances', authorize({ resource: 'leave', action: 'create' }), validate(createLeaveBalanceSchema), leaveController.setBalance.bind(leaveController));
+router.post('/balances/accrue', authorize({ resource: 'leave', action: 'create' }), leaveController.triggerYearlyAccrual.bind(leaveController));
 
 export default router;

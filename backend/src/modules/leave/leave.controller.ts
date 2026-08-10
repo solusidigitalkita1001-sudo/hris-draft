@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { leaveService } from './leave.service';
 import { Result } from '@/shared/core/Result';
+import { runYearlyLeaveAccrual } from './leave.scheduler';
 
 export class LeaveController {
   async findAllLeaveTypes(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -56,6 +57,14 @@ export class LeaveController {
   async setBalance(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try { res.status(201).json(Result.created(await leaveService.setLeaveBalance(req.body))); }
     catch (error) { next(error); }
+  }
+
+  async triggerYearlyAccrual(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const year = req.body.year ?? new Date().getFullYear();
+      const result = await runYearlyLeaveAccrual(year);
+      res.json(Result.success(result));
+    } catch (error) { next(error); }
   }
 }
 
