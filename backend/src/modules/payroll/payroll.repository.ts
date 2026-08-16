@@ -292,7 +292,7 @@ export class PayrollRepository {
         payslips: {
           include: {
             employee: {
-              select: { id: true, fullName: true, employeeNumber: true },
+              select: { id: true, fullName: true, employeeNumber: true, bankName: true, bankCode: true, bankAccount: true, bankAccountHolder: true },
             },
             components: {
               include: { salaryComponent: true },
