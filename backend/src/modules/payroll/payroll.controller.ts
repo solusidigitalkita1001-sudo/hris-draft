@@ -223,6 +223,18 @@ export class PayrollController {
     }
   }
 
+  // ==================== B.6 Multibank Disbursements ====================
+  async getDisbursements(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const bankCode = typeof req.query.bankCode === 'string' ? (req.query.bankCode as string) : undefined;
+      const data = await payrollService.getPayrollRunDisbursements(id, bankCode);
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // ==================== Payslips ====================
 
   async findPayslipById(req: Request, res: Response, next: NextFunction) {
@@ -247,6 +259,36 @@ export class PayrollController {
     } catch (error) {
       next(error);
     }
+  }
+
+  // ==================== Standalone Calculation Endpoints (B.1, B.2, B.3) ====================
+
+  async calculatePph21(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = payrollService.calculatePph21Standalone(req.body);
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async calculateThrStandalone(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = payrollService.calculateThrStandalone(req.body);
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async calculateBpjs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = payrollService.calculateBpjsStandalone(req.body);
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async calculateJkn(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = payrollService.calculateJknStandalone(req.body);
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
   }
 }
 

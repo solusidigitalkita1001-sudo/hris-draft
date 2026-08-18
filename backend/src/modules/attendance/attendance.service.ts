@@ -5,17 +5,33 @@ import {
   CreateOvertimeDTO,
   CheckoutAttendanceDTO,
 } from './attendance.dto';
-import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { calculateOvertimePay, OvertimeDayType } from '@/shared/attendance/overtime';
+import { compareFaceVectors, DEFAULT_FACE_MATCH_THRESHOLD } from '@/shared/attendance/face-recognition';
+import { assessLiveness, LivenessVerdict } from '@/shared/attendance/liveness';
+import {
+  assessGpsCompliance,
+  checkRadius,
+  haversineMeters,
+  MockLocationVerdict,
+} from '@/shared/attendance/gps-mock';
 import {
   AttendanceCaptureMethod,
   AttendanceExceptionType,
   AttendanceStatus,
+  LivenessVerdict as PrismaLivenessVerdict,
+  MockLocationVerdict as PrismaMockVerdict,
   OutsideRadiusAction,
   Prisma,
 } from '@prisma/client';
 import { attendanceContextService } from './attendance-context.service';
+import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
+import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
+import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
+import prisma from '@/shared/database/prisma';
+
+type WorkflowSource = 'WORKFLOW' | 'LEGACY';
 
 function buildScheduledTime(baseDate: Date, time: string) {
   const [hours, minutes] = time.split(':').map(Number);
@@ -70,12 +86,16 @@ function resolveAllowedMethods(policyMethod: string): AttendanceCaptureMethod[] 
     case 'FINGERPRINT':
       return [AttendanceCaptureMethod.FINGERPRINT];
     case 'MOBILE_GPS':
-      return [AttendanceCaptureMethod.MOBILE_GPS];
+      return [AttendanceCaptureMethod.MOBILE_GPS, AttendanceCaptureMethod.FACE_RECOGNITION];
     case 'BOTH':
-      return [AttendanceCaptureMethod.FINGERPRINT, AttendanceCaptureMethod.MOBILE_GPS];
+      return [
+        AttendanceCaptureMethod.FINGERPRINT,
+        AttendanceCaptureMethod.MOBILE_GPS,
+        AttendanceCaptureMethod.FACE_RECOGNITION,
+      ];
     case 'MANUAL':
     default:
-      return [AttendanceCaptureMethod.MANUAL];
+      return [AttendanceCaptureMethod.MANUAL, AttendanceCaptureMethod.FACE_RECOGNITION];
   }
 }
 
@@ -112,7 +132,7 @@ function evaluateGpsAttendance(options: {
     phaseLabel = 'attendance',
   } = options;
 
-  const mustEvaluateLocation = method === AttendanceCaptureMethod.MOBILE_GPS || requiresLocation;
+  const mustEvaluateLocation = method === AttendanceCaptureMethod.MOBILE_GPS || method === AttendanceCaptureMethod.FACE_RECOGNITION || requiresLocation;
   if (!mustEvaluateLocation) {
     return {
       distanceMeters: null as number | null,
@@ -132,12 +152,15 @@ function evaluateGpsAttendance(options: {
     throw new BadRequestError('GPS policy is not configured for the resolved branch attendance policy');
   }
 
-  const distanceMeters = calculateDistanceMeters(
-    latitude,
-    longitude,
-    policyLatitude,
-    policyLongitude,
-  );
+  const distanceMeters =
+    typeof haversineMeters === 'function'
+      ? Math.round(
+          haversineMeters(
+            { latitude, longitude },
+            { latitude: policyLatitude, longitude: policyLongitude },
+          ),
+        )
+      : calculateDistanceMeters(latitude, longitude, policyLatitude, policyLongitude);
   const isWithinRadius = distanceMeters <= policyRadiusMeters;
 
   if (isWithinRadius) {
@@ -276,10 +299,98 @@ export class AttendanceService {
       phaseLabel: 'Check-in',
     });
 
+    /// B.7 Face Recognition Backend Ready: compute similarity + isMatch (jika method FACE_RECOGNITION ataupun data faceRecognition diisi)
+    const faceInput = data.faceRecognition;
+    const hasFacePayload = method === AttendanceCaptureMethod.FACE_RECOGNITION || !!faceInput;
+
+    const employeeForFace = hasFacePayload
+      ? await prisma.employee.findUnique({
+          where: { id: data.employeeId, companyId: context.companyId },
+          select: { id: true, companyId: true, referencePhotoUrl: true, referencePhotoUpdatedAt: true },
+        })
+      : null;
+
+    let similarity = 0;
+    let isFaceMatch = false;
+    if (hasFacePayload && faceInput) {
+      const refRaw = (faceInput.referencePhotoUrl ? [] : null) ?? null;
+      const refVec = Array.isArray((faceInput as any).referenceVector) ? (faceInput as any).referenceVector : refRaw;
+      const selfieVec = Array.isArray((faceInput as any).selfieVector) ? (faceInput as any).selfieVector : null;
+      if (refVec && selfieVec && refVec.length > 0 && selfieVec.length > 0) {
+        const cmp = compareFaceVectors(refVec, selfieVec, DEFAULT_FACE_MATCH_THRESHOLD);
+        similarity = cmp.score;
+        isFaceMatch = cmp.isMatch;
+      } else if (typeof faceInput.similarityScore === 'number' && Number.isFinite(faceInput.similarityScore)) {
+        similarity = faceInput.similarityScore;
+        isFaceMatch = faceInput.isFaceMatch ?? similarity >= DEFAULT_FACE_MATCH_THRESHOLD;
+      } else {
+        similarity = -1;
+        isFaceMatch = false;
+      }
+      if (method === AttendanceCaptureMethod.FACE_RECOGNITION && !isFaceMatch) {
+        throw new BadRequestError(`Wajah tidak cocok dengan foto referensi (skor=${similarity.toFixed(3)} < threshold ${DEFAULT_FACE_MATCH_THRESHOLD}). Silakan coba lagi dengan pencahayaan cukup.`);
+      }
+    }
+
+    /// B.8 Liveness verdict
+    const livenessInput = data.liveness ?? null;
+    const livenessAssess = hasFacePayload ? assessLiveness(livenessInput as any) : null;
+    const prismaLiveness: PrismaLivenessVerdict = (livenessAssess?.verdict ?? 'NO_DATA') as PrismaLivenessVerdict;
+    if (method === AttendanceCaptureMethod.FACE_RECOGNITION && livenessAssess) {
+      if (livenessAssess.verdict === LivenessVerdict.STATIC) {
+        throw new BadRequestError(`Liveness gagal: foto terdeteksi dari galeri / bukan kamera real-time.`);
+      }
+      if (livenessAssess.verdict === LivenessVerdict.MANIPULATED) {
+        throw new BadRequestError(`Liveness gagal: metadata menunjukan gambar sudah diedit.`);
+      }
+      if (livenessAssess.verdict === LivenessVerdict.BLUR) {
+        throw new BadRequestError(`Liveness gagal: gambar terlalu blur, harap foto ulang.`);
+      }
+    }
+
+    /// B.9 GPS fake detection enrich
+    const gpsCompliance = assessGpsCompliance(
+      { latitude: data.checkInLatitude, longitude: data.checkInLongitude },
+      {
+        latitude: context.policy.gpsLatitude,
+        longitude: context.policy.gpsLongitude,
+        radiusMeters: context.policy.gpsRadiusMeters,
+        name: context.branch?.name ?? null,
+      },
+      (data.deviceGps ?? null) as any,
+    );
+    const prismaMock: PrismaMockVerdict = (gpsCompliance.mockVerdict ?? 'LIKELY_REAL') as PrismaMockVerdict;
+    if (
+      method === AttendanceCaptureMethod.FACE_RECOGNITION &&
+      gpsCompliance.mockVerdict === MockLocationVerdict.CONFIRMED_FAKE
+    ) {
+      throw new BadRequestError(`Lokasi terdeteksi palsu (Mock Location). Matikan fake GPS app untuk clock-in.`);
+    }
+
     const mergedWarnings = [
       ...context.warnings,
       ...(gpsEvaluation.exceptionType ? [gpsEvaluation.exceptionType] : []),
+      ...gpsCompliance.warnings,
+      ...(livenessAssess && livenessAssess.verdict !== LivenessVerdict.PASS ? [`liveness:${livenessAssess.verdict}`] : []),
     ];
+
+    const snapshot = this.buildPolicySnapshot(context, allowedMethods, mergedWarnings) as unknown as Record<string, unknown>;
+    snapshot.faceRecognition = hasFacePayload
+      ? {
+          similarity,
+          isFaceMatch,
+          threshold: DEFAULT_FACE_MATCH_THRESHOLD,
+          hasReferencePhoto: !!employeeForFace?.referencePhotoUrl,
+        }
+      : null;
+    snapshot.liveness = livenessAssess
+      ? { verdict: livenessAssess.verdict, reasons: livenessAssess.reasons }
+      : null;
+    snapshot.gpsCompliance = {
+      distance: gpsCompliance.distance,
+      mockVerdict: gpsCompliance.mockVerdict,
+      warnings: gpsCompliance.warnings,
+    };
 
     const record = await attendanceRepository.create({
       employeeId: data.employeeId,
@@ -302,14 +413,47 @@ export class AttendanceService {
       lateMinutes,
       scheduledWorkStart: context.schedule.workStart,
       scheduledWorkEnd: context.schedule.workEnd,
-      isException: gpsEvaluation.isException || context.warnings.length > 0,
+      isException: gpsEvaluation.isException || context.warnings.length > 0 || gpsCompliance.warnings.length > 0,
       exceptionType: gpsEvaluation.exceptionType ?? (context.warnings[0] as AttendanceExceptionType | undefined),
-      exceptionReason: gpsEvaluation.exceptionReason ?? (context.warnings.length > 0 ? 'Attendance context requires branch review' : null),
-      requiresReview: gpsEvaluation.requiresReview || context.warnings.length > 0,
-      policySnapshot: this.buildPolicySnapshot(context, allowedMethods, mergedWarnings),
+      exceptionReason: gpsEvaluation.exceptionReason ?? (context.warnings.length > 0 ? 'Attendance context requires branch review' : gpsCompliance.warnings[0] ?? null),
+      requiresReview:
+        gpsEvaluation.requiresReview ||
+        context.warnings.length > 0 ||
+        (hasFacePayload && !isFaceMatch) ||
+        gpsCompliance.mockVerdict === MockLocationVerdict.SUSPICIOUS ||
+        gpsCompliance.mockVerdict === MockLocationVerdict.CONFIRMED_FAKE,
+      policySnapshot: snapshot as Prisma.InputJsonValue,
       notes: data.notes,
     });
-    logger.info('Attendance recorded', { employeeId: data.employeeId });
+
+    if (hasFacePayload) {
+      try {
+        await prisma.attendanceFaceLog.create({
+          data: {
+            attendanceId: record.id,
+            employeeId: data.employeeId,
+            companyId: context.companyId,
+            selfieUrl: (faceInput?.selfieUrl ?? null) as any,
+            similarityScore: similarity,
+            isFaceMatch,
+            livenessVerdict: prismaLiveness,
+            mockVerdict: prismaMock,
+            notes: livenessAssess?.reasons?.join('; ') ?? gpsCompliance.warnings.join('; ') ?? null,
+          },
+        });
+      } catch (e) {
+        logger.error('Failed create AttendanceFaceLog (ignored)', { err: e as Error });
+      }
+    }
+
+    logger.info('Attendance recorded', {
+      employeeId: data.employeeId,
+      method,
+      similarity,
+      isFaceMatch,
+      liveness: prismaLiveness,
+      mock: prismaMock,
+    });
     return record;
   }
 
@@ -441,19 +585,190 @@ export class AttendanceService {
     return attendanceRepository.findAllOvertime(companyId, filters);
   }
 
+  async findOvertimeById(id: string) {
+    const record = await attendanceRepository.findOvertimeById(id);
+    if (!record) throw new NotFoundError('Overtime request not found');
+
+    const currentCompanyId = getCurrentCompanyId();
+    const roles = getCurrentRoles();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+    if (!isAdmin && currentCompanyId && record.companyId !== currentCompanyId) {
+      throw new NotFoundError('Overtime request not found');
+    }
+
+    return record;
+  }
+
+  private async resolveDefaultOvertimeTemplate(companyId: string) {
+    return workflowEngineRepository.findDefaultTemplate(
+      companyId,
+      'OVERTIME_REQUEST',
+      'attendance',
+    );
+  }
+
+  private async findWorkflowInstanceByOvertimeId(id: string) {
+    return prisma.workflowInstance.findFirst({
+      where: {
+        referenceType: 'OVERTIME_REQUEST',
+        referenceId: id,
+      },
+      include: {
+        steps: { orderBy: { level: 'asc' } },
+        logs: { orderBy: { createdAt: 'desc' } },
+        template: { select: { id: true, name: true, approvalType: true } },
+      },
+    });
+  }
+
   async createOvertime(data: CreateOvertimeDTO) {
-    const overtime = await attendanceRepository.createOvertime(data);
-    logger.info('Overtime request created', { employeeId: data.employeeId });
-    return overtime;
+    const ctx = getRequestContext();
+    const currentUser = ctx?.user;
+    const roles = currentUser?.roles ?? [];
+    const hasElevatedRole = roles.some((r) =>
+      ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(r)
+    );
+
+    if (currentUser?.employeeId && roles.includes('EMPLOYEE') && !hasElevatedRole) {
+      if (data.employeeId !== currentUser.employeeId) {
+        throw new ForbiddenError('IDOR: Employee cannot create overtime request for other employees');
+      }
+    }
+
+    const requesterId = currentUser?.id ?? undefined;
+
+    return prisma.$transaction(async (tx) => {
+      const overtime = await attendanceRepository.createOvertime(data);
+
+      try {
+        const template = await this.resolveDefaultOvertimeTemplate(data.companyId);
+        if (template) {
+          await workflowEngineRepository.startInstance(requesterId ?? 'system', {
+            templateId: template.id,
+            companyId: data.companyId,
+            approvalType: 'OVERTIME_REQUEST',
+            referenceType: 'OVERTIME_REQUEST',
+            referenceId: overtime.id,
+            payload: {
+              date: data.date,
+              durationHours: data.durationHours,
+              reason: data.reason,
+              multiplier: data.multiplier,
+              employeeId: data.employeeId,
+              companyId: data.companyId,
+            },
+          });
+        } else {
+          logger.warn('No default overtime workflow template configured for company', {
+            companyId: data.companyId,
+          });
+        }
+      } catch (wfErr: any) {
+        logger.error('Failed to start workflow for overtime request', {
+          overtimeRequestId: overtime.id,
+          error: wfErr?.message,
+        });
+      }
+
+      logger.info('Overtime request created with workflow', {
+        employeeId: data.employeeId,
+        date: data.date,
+      });
+      return overtime;
+    });
+  }
+
+  async finalizeOvertimeApprovalEffects(id: string, approverUserId: string) {
+    return attendanceRepository.updateOvertimeStatus(id, 'APPROVED', approverUserId);
+  }
+
+  async finalizeOvertimeRejectEffects(id: string, approverUserId: string, reason?: string) {
+    return attendanceRepository.updateOvertimeStatus(id, 'REJECTED');
+  }
+
+  async applyOvertimeWorkflowAction(
+    id: string,
+    userId: string,
+    roles: string[],
+    action: WorkflowActionDTO & { source?: WorkflowSource },
+  ) {
+    const overtime = await this.findOvertimeById(id);
+
+    const instance = await this.findWorkflowInstanceByOvertimeId(id);
+
+    if (!instance) {
+      throw new NotFoundError('Workflow instance not found for this overtime request');
+    }
+
+    const currentCompanyId = getCurrentCompanyId();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+    if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+      throw new NotFoundError('Workflow instance not found');
+    }
+
+    const updatedInstance = await workflowEngineRepository.applyAction(
+      instance.id,
+      userId,
+      roles,
+      { action: action.action, comment: action.comment },
+    );
+
+    if (!updatedInstance) {
+      throw new NotFoundError('Failed to update workflow instance');
+    }
+
+    if (updatedInstance.status === 'APPROVED') {
+      await this.finalizeOvertimeApprovalEffects(id, userId);
+    }
+
+    if (action.action === 'REJECT') {
+      await this.finalizeOvertimeRejectEffects(id, userId, action.comment);
+    }
+
+    const finalOvertime = await attendanceRepository.findOvertimeById(id);
+    return { overtimeRequest: finalOvertime, workflowInstance: updatedInstance };
+  }
+
+  async getOvertimeWorkflow(overtimeId: string) {
+    await this.findOvertimeById(overtimeId);
+
+    const instance = await this.findWorkflowInstanceByOvertimeId(overtimeId);
+
+    if (!instance) {
+      throw new NotFoundError('Workflow instance not found for this overtime request');
+    }
+
+    const currentCompanyId = getCurrentCompanyId();
+    const roles = getCurrentRoles();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+    if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+      throw new NotFoundError('Workflow instance not found');
+    }
+
+    return instance;
   }
 
   async approveOvertime(id: string, userId: string) {
-    await this.findById(id);
-    return attendanceRepository.updateOvertimeStatus(id, 'APPROVED', userId);
+    await this.findOvertimeById(id);
+    const roles = getCurrentRoles();
+    return this.applyOvertimeWorkflowAction(id, userId, roles, {
+      action: 'APPROVE',
+      comment: 'Legacy approve endpoint',
+      source: 'LEGACY',
+    });
   }
 
-  async rejectOvertime(id: string) {
-    return attendanceRepository.updateOvertimeStatus(id, 'REJECTED');
+  async rejectOvertime(id: string, reason?: string) {
+    const ctx = getRequestContext();
+    const userId = ctx?.user?.id ?? 'legacy';
+    const roles = ctx?.user?.roles ?? [];
+
+    await this.findOvertimeById(id);
+    return this.applyOvertimeWorkflowAction(id, userId, roles, {
+      action: 'REJECT',
+      comment: reason ?? 'Legacy reject endpoint',
+      source: 'LEGACY',
+    });
   }
 
   /**

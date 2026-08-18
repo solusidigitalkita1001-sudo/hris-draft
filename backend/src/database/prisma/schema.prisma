@@ -112,6 +112,18 @@ model Company {
   interviews                            Interview[]
   attendances                           Attendance[]
   attendanceCorrections                 AttendanceCorrection[]
+  /// B.7 Face Rec audit trail
+  attendanceFaceLogs                    AttendanceFaceLog[]
+  /// C.1 Claim Category Limit
+  claimCategoryLimits                   ClaimCategoryLimit[]
+  /// C.4 Earned Wage Access
+  earnedWageAccesses                    EarnedWageAccess[]
+  /// C.5 Daily Activity
+  dailyActivities                       DailyActivity[]
+  /// C.6 Task Assignments (company-level)
+  taskAssignments                       TaskAssignment[]
+  /// C.7 Asset Patrol Logs
+  assetPatrolLogs                       AssetPatrolLog[]
   overtimeRequests                      OvertimeRequest[]
   leaveTypes                            LeaveType[]
   leaveBalances                         LeaveBalance[]
@@ -139,6 +151,11 @@ model Company {
   shiftFormulas                         ShiftFormula[]
   shiftSwapRequests                     ShiftSwapRequest[]
   shiftOverrides                        EmployeeShiftOverride[]
+  roleMenuAccesses                      RoleMenuAccess[]
+  roleDataScopes                        RoleDataScope[]
+  taxBrackets                           TaxBracket[]
+  ptkpTables                            PtkpTable[]
+  bpjsReferences                        BpjsReference[]
 
   @@index([groupId])
   @@index([code])
@@ -169,6 +186,9 @@ model Branch {
   attendancePolicies     BranchAttendancePolicy[]
   careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromBranch")
   careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToBranch")
+  /// C.5+C.6 Daily Activities + Tasks scoped per branch
+  dailyActivities        DailyActivity[]
+  taskAssignments        TaskAssignment[]
 
   @@index([companyId])
   @@index([code])
@@ -412,6 +432,8 @@ model PayrollRun {
   period   PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payslips Payslip[]
+  /// C.4 EWA: list employee tarik gaji awal yang di-deducted di run ini
+  earnedWageAccesses EarnedWageAccess[]
 
   @@index([periodId])
   @@index([companyId])
@@ -469,6 +491,116 @@ model PayslipComponent {
 
   @@index([payslipId])
   @@map("payslip_components")
+}
+
+// ============================================================
+// PAYROLL REFERENCE TABLES (B.1 PPh 21, B.2 THR, B.3 BPJS)
+// ============================================================
+
+/// PPh 21 progressive tax bracket (UU HPP 2022 or latest peraturan DJP).
+/// Global scope (companyId=null) or per-company custom override.
+model TaxBracket {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  companyId  String?  @map("company_id") @db.VarChar(36)
+  year       Int
+  level      Int      /// Tier sequential number (1 lowest → 5 highest)
+  upperBound  Decimal  @map("upper_bound") @db.Decimal(18, 2) /// Max PKP in this bracket; Infinity = 999e15 stored as sentinel
+  ratePercent Decimal @map("rate_percent") @db.Decimal(5, 4)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  company    Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, year, level])
+  @@index([year])
+  @@map("tax_brackets")
+}
+
+/// PTKP = Penghasilan Tidak Kena Pajak per status pernikahan & jumlah tanggungan.
+/// (TK/0 = single no dependents, K/1 = married +1 child, capped MAX 3 tanggungan).
+model PtkpTable {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  companyId      String?  @map("company_id") @db.VarChar(36)
+  year           Int
+  maritalStatus  String   @map("marital_status") @db.VarChar(10) /// TK/K
+  dependents     Int      /// 0..MAX_DEPENDENTS(3)
+  amount         Decimal  @db.Decimal(15, 2) /// Rupiah per tahun
+  description    String?  @db.VarChar(255)    /// e.g. "K/3 (Menikah 3 anak)"
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  company        Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, year, maritalStatus, dependents])
+  @@index([year])
+  @@map("ptkp_tables")
+}
+
+enum JKKRiskClass {
+  I      /// Resiko sangat rendah (perkantoran)   → JKK 0.24%
+  II     /// Resiko rendah (perdagangan)        → JKK 0.54%
+  III    /// Resiko sedang (manufaktur ringan)  → JKK 0.89%
+  IV     /// Resiko tinggi (manufaktur berat)   → JKK 1.27%
+  V      /// Resiko sangat tinggi (tambang/logistik) → JKK 1.74%
+}
+
+enum BankCode {
+  BCA      /// Bank Central Asia (BCA KlikBCA bulk)
+  MANDIRI  /// Bank Mandiri
+  BNI      /// Bank Negara Indonesia (BNI e-Collect)
+  OTHER    /// Bank custom lainnya (input manual bankName)
+}
+
+/// BPJS Ketenagakerjaan + Kesehatan config defaults per year, or custom per-company.
+model BpjsReference {
+  id                String      @id @default(uuid()) @db.VarChar(36)
+  companyId         String?     @map("company_id") @db.VarChar(36)
+  year              Int
+  jkkRiskClass      JKKRiskClass @default(I) @map("jkk_risk_class")
+  jkkRatePercent    Decimal     @map("jkk_rate_percent") @db.Decimal(5, 4)
+  jkmRatePercent    Decimal     @map("jkm_rate_percent") @db.Decimal(5, 4)
+  jhtEmployerPercent Decimal    @map("jht_employer_percent") @db.Decimal(5, 4)
+  jhtEmployeePercent Decimal    @map("jht_employee_percent") @db.Decimal(5, 4)
+  jpEmployerPercent  Decimal    @map("jp_employer_percent") @db.Decimal(5, 4)
+  jpEmployeePercent  Decimal    @map("jp_employee_percent") @db.Decimal(5, 4)
+  jpWageCap          Decimal    @map("jp_wage_cap") @db.Decimal(15, 2)  /// Upah batas atas Jaminan Pensiun
+  jknEmployerPercent Decimal    @map("jkn_employer_percent") @db.Decimal(5, 4)
+  jknEmployeePercent Decimal    @map("jkn_employee_percent") @db.Decimal(5, 4)
+  jknWageCap         Decimal    @map("jkn_wage_cap") @db.Decimal(15, 2)  /// Upah batas atas BPJS Kesehatan
+  isActive           Boolean    @default(true) @map("is_active")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  company            Company?   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, year, jkkRiskClass])
+  @@index([year])
+  @@map("bpjs_references")
+}
+
+/// Multiple bank accounts per employee (B.6 Multibank Disbursement).
+/// Satu karyawan bisa punya beberapa rekening (mis. BCA gaji pokok, BNI tunjangan proyek).
+/// Disbursement pilih yang `isPrimary=true`, atau fallback ke legacy fields Employee.bankName.
+model EmployeeBankAccount {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  employeeId      String    @map("employee_id") @db.VarChar(36)
+  bankCode        BankCode  @default(OTHER) @map("bank_code")
+  bankName        String?   @map("bank_name") @db.VarChar(255)  /// Free text bank custom jika code=OTHER
+  accountNumber   String    @map("account_number") @db.VarChar(50)
+  accountHolder   String    @map("account_holder") @db.VarChar(255)
+  isPrimary       Boolean   @default(false) @map("is_primary")   /// Cuma SATU per employee (validasi app level)
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, bankCode]) /// Satu karyawan cuma boleh 1 rekening per bank code
+  @@index([employeeId])
+  @@index([bankCode])
+  @@map("employee_bank_accounts")
 }
 
 // ============================================================
@@ -1892,6 +2024,9 @@ model Employee {
   nationality         String?          @default("Indonesia") @db.VarChar(50)
   address             String?          @db.Text
   avatar              String?          @db.VarChar(500)
+  /// B.7 Backend Ready Face Rec: Reference foto selfie untuk match saat clock in (onboarding saat upload 1 foto pertama). Bisa beda avatar (avatar foto formal, reference foto selfie natural).
+  referencePhotoUrl   String?          @map("reference_photo_url") @db.VarChar(500)
+  referencePhotoUpdatedAt DateTime?    @map("reference_photo_updated_at")
   joinDate            DateTime?        @map("join_date")
   employmentStatus    EmploymentStatus @default(ACTIVE) @map("employment_status")
   employmentType      EmploymentType   @default(PERMANENT) @map("employment_type")
@@ -1979,6 +2114,19 @@ model Employee {
   skills                                        EmployeeSkill[]
   experiences                                   EmployeeExperience[]
   attachments                                   EmployeeAttachment[]
+  bankAccounts                                  EmployeeBankAccount[]
+  /// B.7 Attendance Face Rec: audit logs setiap clock-in dengan selfie + similarity
+  faceLogs                                      AttendanceFaceLog[]
+  /// C.4 EWA MVP: list transaksi earned wage access karyawan
+  earnedWageAccesses                            EarnedWageAccess[]
+  /// C.5 Daily Activity
+  dailyActivities                               DailyActivity[]
+  /// C.6 Task Assignment (as assignee): list task manager assign ke karyawan ini
+  assignedTasks                                 TaskAssignment[]  @relation("TaskAssignee")
+  /// C.6 Task Assignment (as creator/manager): tasks yg dibuat oleh karyawan ini sebagai manager
+  createdTasks                                  TaskAssignment[]  @relation("TaskCreator")
+  /// C.7 Asset Patrol: daftar patrol log yang dilakukan karyawan ini
+  patrolsDone                                   AssetPatrolLog[]
 
   @@index([companyId])
   @@index([employeeNumber])
@@ -2660,6 +2808,8 @@ model Asset {
 
   company     Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
   assignments AssetAssignment[]
+  /// C.7 Patrol Logs for this asset
+  patrolLogs  AssetPatrolLog[]
 
   @@index([companyId])
   @@index([assetCode])
@@ -2732,6 +2882,7 @@ model Attendance {
   company          Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
   branch           Branch?                 @relation(fields: [branchId], references: [id], onDelete: SetNull)
   attendancePolicy BranchAttendancePolicy? @relation(fields: [attendancePolicyId], references: [id], onDelete: SetNull)
+  faceLogs         AttendanceFaceLog[]
 
   @@unique([employeeId, date])
   @@index([companyId])
@@ -2808,6 +2959,36 @@ model BranchAttendancePolicy {
   @@index([attendanceMethod])
   @@index([isActive])
   @@map("branch_attendance_policies")
+}
+
+/// Attendance face recognition audit log (B.7 Face Recognition Backend Ready).
+/// Setiap clock-in selfie -> 1 row AttendanceFaceLog: similarity score vs reference, liveness verdict, mock location verdict.
+/// Digunakan untuk audit "apakah karyawan ini benar-benar di kantor dengan wajahnya sendiri?".
+model AttendanceFaceLog {
+  id                  String               @id @default(uuid()) @db.VarChar(36)
+  attendanceId        String?              @map("attendance_id") @db.VarChar(36)
+  employeeId          String               @map("employee_id") @db.VarChar(36)
+  companyId           String               @map("company_id") @db.VarChar(36)
+  selfieUrl           String?              @map("selfie_url") @db.VarChar(500)
+  /// Hasil cosine similarity vs reference photo (nilai -1.0 → 1.0; semakin dekat 1.0 semakin mirip). Threshold default 0.60.
+  similarityScore     Decimal              @map("similarity_score") @db.Decimal(5, 4)
+  isFaceMatch         Boolean              @default(false) @map("is_face_match")
+  /// B.8 Liveness verdict dari heuristic EXIF + metadata (bukan ML deep-learning, tapi cukup deteksi foto galeri vs kamera langsung).
+  livenessVerdict     LivenessVerdict      @default(NO_DATA) @map("liveness_verdict")
+  /// B.9 GPS/Mock Location verdict.
+  mockVerdict         MockLocationVerdict  @default(LIKELY_REAL) @map("mock_verdict")
+  notes               String?              @db.Text
+  createdAt           DateTime             @default(now()) @map("created_at")
+
+  attendance Attendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company    Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([attendanceId])
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([isFaceMatch])
+  @@map("attendance_face_logs")
 }
 
 /// Overtime request
@@ -3339,12 +3520,28 @@ enum AttendanceCaptureMethod {
   FINGERPRINT
   MOBILE_GPS
   MANUAL
+  FACE_RECOGNITION
 }
 
 enum OutsideRadiusAction {
   REJECT
   FLAG
   REVIEW
+}
+
+enum MockLocationVerdict {
+  PASS             /// Bukan fake location (meta tidak ada tanda mock)
+  LIKELY_REAL      /// Meta device real, tapi ada device flag tidak dikirim (bisa gap aman)
+  SUSPICIOUS       /// Metadata mock enable / mock location enabled / GPS mock tidak konsisten (accuracy jelek, koordinat static >24jam)
+  CONFIRMED_FAKE   /// isMockLocation=true dari device flag (Android ALLOW_MOCK_LOCATION, iOS Simulator)
+}
+
+enum LivenessVerdict {
+  PASS           /// Real live camera detected (liveness heuristic pass)
+  STATIC         /// Foto dari galeri / tidak ada liveness signal / EXIF no-camera data
+  BLUR           /// Blur / variance hash sangat rendah (photo copy / scan print)
+  MANIPULATED    /// EXIF dimanipulasi / edited software (Adobe PhotoShop / Photopea metadata)
+  NO_DATA        /// Tidak ada data selfie / file upload kosong
 }
 
 enum AttendanceExceptionType {
@@ -3612,6 +3809,58 @@ model WorkflowInstanceLog {
   @@map("workflow_instance_logs")
 }
 
+// ============================================================
+// ADMINISTRATION: MENU ACCESS & DATA SCOPE (Fase A.7-A.8)
+// ============================================================
+
+model RoleMenuAccess {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  companyId String  @map("company_id") @db.VarChar(36)
+  roleCode  String  @map("role_code") @db.VarChar(50)
+  menuPath  String  @map("menu_path") @db.VarChar(255)
+  accessType MenuAccessType @default(ALLOW) @map("access_type")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, roleCode, menuPath])
+  @@index([companyId, roleCode])
+  @@map("role_menu_accesses")
+}
+
+enum MenuAccessType {
+  ALLOW
+  DENY
+}
+
+model RoleDataScope {
+  id         String       @id @default(uuid()) @db.VarChar(36)
+  companyId  String       @map("company_id") @db.VarChar(36)
+  roleCode   String       @map("role_code") @db.VarChar(50)
+  resource   String       @default("ALL") @db.VarChar(100)
+  scopeType  DataScopeType @map("scope_type")
+  scopeValue String?      @map("scope_value") @db.Text
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, roleCode, resource])
+  @@index([companyId, roleCode])
+  @@map("role_data_scopes")
+}
+
+enum DataScopeType {
+  ALL
+  COMPANY_ONLY
+  BRANCH_ONLY
+  DEPARTMENT_ONLY
+  SUB_DEPARTMENT_ONLY
+  EMPLOYEE_SELF
+  MANAGER_TEAM
+}
+
 enum WorkflowApproverType {
   ROLE
   USER
@@ -3790,6 +4039,180 @@ model TravelAdvance {
   @@map("travel_advances")
 }
 
+/// C.1 Claim Category Limit — Claim with Balance Limit Per Kategori & Periode (Week 10 task).
+/// Admin bisa setting untuk category TRANSPORTATION per company MONTHLY cap 1.500.000 action WARN / BLOCK.
+model ClaimCategoryLimit {
+  id             String               @id @default(uuid()) @db.VarChar(36)
+  companyId      String               @map("company_id") @db.VarChar(36)
+  category       ExpenseCategory
+  periodType     ClaimPeriodType      @default(MONTHLY) @map("period_type")
+  limitAmount    Decimal              @map("limit_amount") @db.Decimal(15, 2)
+  /// NULL / 0 = UNLIMITED (fallback no limit)
+  violationAction LimitViolationAction @default(WARN) @map("violation_action")
+  description    String?              @db.Text
+  isActive       Boolean              @default(true) @map("is_active")
+  validFrom      DateTime?            @map("valid_from")
+  validUntil     DateTime?            @map("valid_until")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, category, periodType])
+  @@index([companyId])
+  @@index([isActive])
+  @@map("claim_category_limits")
+}
+
+/// C.2 Amortization Method: FLAT (flat rate cicilan sama setiap bulan), EFEKTIF (sisa pokok * rate), ANUITAS (cicilan tetap gabungan principal+interest).
+enum AmortizationMethod {
+  FLAT
+  EFEKTIF
+  ANUITAS
+}
+
+/// C.4 Earned Wage Access transaction status
+enum EWATransactionStatus {
+  PENDING
+  APPROVED
+  PAID
+  DEDUCTED
+  REJECTED
+  CANCELLED
+}
+
+/// C.4 EWA MVP (Employer-Funded Float) — karyawan bisa TARIK di AWAL periode, max X% dari gaji earned gross terhitung,
+/// di-auto deduct sebagai component EWA-DEDUCT saat payroll run bulan bersangkutan.
+model EarnedWageAccess {
+  id                   String               @id @default(uuid()) @db.VarChar(36)
+  companyId            String               @map("company_id") @db.VarChar(36)
+  employeeId           String               @map("employee_id") @db.VarChar(36)
+  payrollRunId         String?              @map("payroll_run_id") @db.VarChar(36)
+  periodStart          DateTime             @map("period_start") @db.Date
+  periodEnd            DateTime             @map("period_end") @db.Date
+  earnedGrossReference Decimal              @map("earned_gross_reference") @db.Decimal(15, 2)   /// gross upah terhitung saat request (cuma reference untuk audit)
+  maxAllowedPercent    Int                  @default(50) @map("max_allowed_percent")             /// default 50% dari gaji (configurable)
+  amountRequested      Decimal              @map("amount_requested") @db.Decimal(15, 2)
+  amountPaidOut        Decimal?             @map("amount_paid_out") @db.Decimal(15, 2)
+  amountDeductedPayroll Decimal?            @map("amount_deducted_payroll") @db.Decimal(15, 2)
+  status               EWATransactionStatus @default(PENDING)
+  reason               String?              @db.Text
+  approverId           String?              @map("approver_id") @db.VarChar(36)
+  approvedAt           DateTime?            @map("approved_at")
+  paidOutAt            DateTime?            @map("paid_out_at")
+  deductedAt           DateTime?            @map("deducted_at")
+  notes                String?              @db.Text
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee    Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrollRun  PayrollRun?  @relation(fields: [payrollRunId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([employeeId, status])
+  @@index([payrollRunId])
+  @@index([periodStart, periodEnd])
+  @@map("earned_wage_accesses")
+}
+
+/// C.5 Daily Activity Module — field worker / remote employee activity log with photo + geotag + duration
+model DailyActivity {
+  id               String             @id @default(uuid()) @db.VarChar(36)
+  companyId        String             @map("company_id") @db.VarChar(36)
+  employeeId       String             @map("employee_id") @db.VarChar(36)
+  branchId         String?            @map("branch_id") @db.VarChar(36)
+  activityDate     DateTime           @map("activity_date") @db.Date
+  activityType     DailyActivityType  @default(WORK) @map("activity_type")
+  title            String             @db.VarChar(255)
+  description      String?            @db.Text
+  photoUrl         String?            @map("photo_url") @db.VarChar(500)
+  latitude         Decimal?           @map("latitude") @db.Decimal(10, 7)
+  longitude        Decimal?           @map("longitude") @db.Decimal(10, 7)
+  geoAccuracyMeters Decimal?          @map("geo_accuracy_meters") @db.Decimal(8, 2)
+  startTime        DateTime           @map("start_time")
+  endTime          DateTime           @map("end_time")
+  durationMinutes  Int                @map("duration_minutes")
+  isOutsideRadius  Boolean            @default(false) @map("is_outside_radius")
+  distanceFromBranchMeters Int?       @map("distance_from_branch_meters")
+  notes            String?            @db.Text
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  branch   Branch?   @relation(fields: [branchId],   references: [id], onDelete: SetNull)
+
+  @@index([companyId, activityDate])
+  @@index([employeeId, activityDate])
+  @@index([activityType])
+  @@index([branchId])
+  @@map("daily_activities")
+}
+
+/// C.6 Basic Operational Task Assignment — manager assign task ke karyawan (1-klik update status + feedback)
+model TaskAssignment {
+  id               String       @id @default(uuid()) @db.VarChar(36)
+  companyId        String       @map("company_id") @db.VarChar(36)
+  creatorId        String       @map("creator_id") @db.VarChar(36)       /// Manager yang buat task
+  assigneeId       String       @map("assignee_id") @db.VarChar(36)      /// Employee yang ditugaskan
+  branchId         String?      @map("branch_id") @db.VarChar(36)
+  title            String       @db.VarChar(255)
+  description      String?      @db.Text
+  priority         Priority     @default(MEDIUM)
+  status           TaskStatus   @default(TODO)
+  dueDate          DateTime?    @map("due_date") @db.Date
+  completedAt      DateTime?    @map("completed_at")
+  feedbackStar     Int?         @map("feedback_star")   /// 1-5 (manager review quality)
+  feedbackNote     String?      @map("feedback_note") @db.Text
+  progressPercent  Int          @default(0) @map("progress_percent") /// 0-100
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  company    Company   @relation(fields: [companyId],  references: [id], onDelete: Cascade)
+  creator    Employee  @relation("TaskCreator",  fields: [creatorId],  references: [id], onDelete: Restrict)
+  assignee   Employee  @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  branch     Branch?   @relation(fields: [branchId],   references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([assigneeId, status])
+  @@index([dueDate])
+  @@index([priority])
+  @@map("task_assignments")
+}
+
+/// C.7 Asset Patrol & Tracking (security/outsourcing) — petugas scan barcode asset & catat kondisi + lokasi + timestamp.
+model AssetPatrolLog {
+  id                 String               @id @default(uuid()) @db.VarChar(36)
+  companyId          String               @map("company_id") @db.VarChar(36)
+  assetId            String               @map("asset_id") @db.VarChar(36)
+  patrolById         String               @map("patrol_by_id") @db.VarChar(36)   /// Petugas security / lapangan
+  barcodeScanRaw     String?              @map("barcode_scan_raw") @db.VarChar(255)  /// hasil actual scan
+  expectedAssetCode  String?              @map("expected_asset_code") @db.VarChar(50)   /// kode asset yang diharapkan dari route
+  isBarcodeMatched   Boolean              @default(true) @map("is_barcode_matched")
+  photoConditionUrl  String?              @map("photo_condition_url") @db.VarChar(500)
+  conditionRating    AssetConditionRating @default(GOOD) @map("condition_rating")
+  note               String?              @db.Text
+  latitude           Decimal?             @map("latitude") @db.Decimal(10, 7)
+  longitude          Decimal?             @map("longitude") @db.Decimal(10, 7)
+  geoAccuracyMeters  Decimal?             @map("geo_accuracy_meters") @db.Decimal(8, 2)
+  patrolRouteId      String?              @map("patrol_route_id") @db.VarChar(36)
+  patrolSequenceNo   Int?                 @map("patrol_sequence_no")
+  occurredAt         DateTime             @map("occurred_at")   /// saat patrol (bukan createdAt)
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  asset    Asset     @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  patrolBy Employee  @relation(fields: [patrolById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, occurredAt])
+  @@index([assetId, occurredAt])
+  @@index([patrolById, occurredAt])
+  @@index([conditionRating])
+  @@map("asset_patrol_logs")
+}
+
 model ExpenseClaim {
   id                 String             @id @default(uuid()) @db.VarChar(36)
   companyId          String             @map("company_id") @db.VarChar(36)
@@ -3888,6 +4311,56 @@ enum ExpenseApprovalStatus {
 enum ReimbursementMethod {
   TRANSFER
   PAYROLL
+}
+
+/// C.1 Claim Category Limit Periode
+enum ClaimPeriodType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  ONCE
+}
+
+/// C.1 Claim Limit Violation Action
+enum LimitViolationAction {
+  WARN      /// Submit TETAP DITERIMA tapi requiresReview = true + flag warning untuk admin audit
+  BLOCK     /// Submit DIREJECT dengan error BadRequest (policy sangat ketat)
+}
+
+/// C.5 Daily Activity Module — karyawan remote/field worker submit aktivitas harian dengan foto + lokasi + durasi
+enum DailyActivityType {
+  WORK
+  SITE_VISIT
+  SITE_INSPECTION
+  MEETING
+  OTHER
+}
+
+/// C.6 Task Assignment — Manager assign task ke karyawan
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+  CANCELLED
+}
+
+/// C.7 Patrol Tracking Asset Rating
+enum AssetConditionRating {
+  EXCELLENT
+  GOOD
+  FAIR
+  DAMAGED
+  MISSING
 }
 
 // ============================================================

@@ -48,9 +48,16 @@ export const workflowActionSchema = z.object({
   comment: z.string().max(2000).optional(),
 });
 
+export const bulkApprovalSchema = z.object({
+  instanceIds: z.array(z.string().uuid()).min(1).max(100),
+  action: z.enum(['APPROVE', 'REJECT', 'ESCALATE']),
+  comment: z.string().max(2000).optional(),
+});
+
 export type WorkflowStageInput = z.infer<typeof workflowStageSchema>;
 export type WorkflowRuleInput = z.infer<typeof workflowRuleSchema>;
 export type CreateWorkflowTemplateDTO = z.infer<typeof createWorkflowTemplateSchema>;
 export type UpdateWorkflowTemplateDTO = z.infer<typeof updateWorkflowTemplateSchema>;
 export type StartWorkflowInstanceDTO = z.infer<typeof startWorkflowInstanceSchema>;
 export type WorkflowActionDTO = z.infer<typeof workflowActionSchema>;
+export type BulkApprovalDTO = z.infer<typeof bulkApprovalSchema>;

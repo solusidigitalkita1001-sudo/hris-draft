@@ -4,6 +4,11 @@ import { NotFoundError, BadRequestError, ForbiddenError } from '@/shared/excepti
 import { logger } from '@/shared/logger/WinstonLogger';
 import prisma from '@/shared/database/prisma';
 import { calculateOpeningBalance } from '@/shared/leave/accrual';
+import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
+import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
+import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
+
+type WorkflowSource = 'WORKFLOW' | 'LEGACY';
 
 export class LeaveService {
   async findAllLeaveTypes(companyId: string) {
@@ -23,26 +28,98 @@ export class LeaveService {
   async findLeaveRequestById(id: string) {
     const request = await leaveRepository.findLeaveRequestById(id);
     if (!request) throw new NotFoundError('Leave request not found');
+
+    const currentCompanyId = getCurrentCompanyId();
+    const roles = getCurrentRoles();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+    if (!isAdmin && currentCompanyId && request.companyId !== currentCompanyId) {
+      throw new NotFoundError('Leave request not found');
+    }
+
     return request;
   }
 
+  private async resolveDefaultWorkflowTemplateId(companyId: string): Promise<string> {
+    const template = await workflowEngineRepository.findDefaultTemplate(
+      companyId,
+      'LEAVE_REQUEST',
+      'leave'
+    );
+    if (!template) {
+      throw new BadRequestError(
+        'No default leave workflow template configured for company. Please run seed.'
+      );
+    }
+    return template.id;
+  }
+
   async createLeaveRequest(data: CreateLeaveRequestDTO) {
-    // Check balance
+    const ctx = getRequestContext();
+    const currentUser = ctx?.user;
+    const roles = currentUser?.roles ?? [];
+    const hasElevatedRole = roles.some((r) =>
+      ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(r)
+    );
+
+    if (currentUser?.employeeId && roles.includes('EMPLOYEE') && !hasElevatedRole) {
+      if (data.employeeId !== currentUser.employeeId) {
+        throw new ForbiddenError('IDOR: Employee cannot create leave request for other employees');
+      }
+    }
+
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    const computedTotalDays =
+      Math.max(
+        1,
+        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      );
+
     const balances = await leaveRepository.findLeaveBalances(data.employeeId);
     const balance = balances.find((b) => b.leaveTypeId === data.leaveTypeId);
     if (balance && balance.remainingDays <= 0) {
       throw new BadRequestError('Insufficient leave balance');
     }
 
-    const request = await leaveRepository.createLeaveRequest(data);
-    logger.info('Leave request created', { employeeId: data.employeeId, leaveTypeId: data.leaveTypeId });
-    return request;
+    const requesterId = currentUser?.id ?? undefined;
+
+    return prisma.$transaction(async (tx) => {
+      const request = await leaveRepository.createLeaveRequest(data);
+
+      try {
+        const templateId = await this.resolveDefaultWorkflowTemplateId(data.companyId);
+        await workflowEngineRepository.startInstance(requesterId ?? 'system', {
+          templateId,
+          companyId: data.companyId,
+          approvalType: 'LEAVE_REQUEST',
+          referenceType: 'LEAVE_REQUEST',
+          referenceId: request.id,
+          payload: {
+            leaveTypeId: data.leaveTypeId,
+            totalDays: computedTotalDays,
+            reason: data.reason,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            employeeId: data.employeeId,
+            companyId: data.companyId,
+          },
+        });
+      } catch (wfErr: any) {
+        logger.error('Failed to start workflow for leave request', {
+          leaveRequestId: request.id,
+          error: wfErr?.message,
+        });
+      }
+
+      logger.info('Leave request created with workflow', {
+        employeeId: data.employeeId,
+        leaveTypeId: data.leaveTypeId,
+      });
+      return request;
+    });
   }
 
-  // Task 1.15 (VAL-011): approve under row locks so concurrent approvals can't
-  // over-draw the balance. The FOR UPDATE locks serialize on the balance row;
-  // the PENDING guard prevents a request being approved (and deducted) twice.
-  async approveLeave(id: string, userId: string, approverEmployeeId?: string | null) {
+  async finalizeApprovalEffects(leaveRequestId: string) {
     return prisma.$transaction(async (tx) => {
       const [req] = await tx.$queryRaw<
         Array<{
@@ -54,14 +131,11 @@ export class LeaveService {
           start_date: Date;
         }>
       >`SELECT id, status, employee_id, leave_type_id, total_days, start_date
-        FROM leave_requests WHERE id = ${id} FOR UPDATE`;
+        FROM leave_requests WHERE id = ${leaveRequestId} FOR UPDATE`;
 
       if (!req) throw new NotFoundError('Leave request not found');
-      if (approverEmployeeId && approverEmployeeId === req.employee_id) {
-        throw new ForbiddenError('Cannot approve your own leave request');
-      }
-      if (req.status !== 'PENDING') {
-        throw new BadRequestError('Leave request sudah diproses');
+      if (req.status === 'APPROVED') {
+        return tx.leaveRequest.findUnique({ where: { id: leaveRequestId } });
       }
 
       const year = new Date(req.start_date).getFullYear();
@@ -83,21 +157,122 @@ export class LeaveService {
         },
       });
 
+      const ctx = getRequestContext();
+      const approvedBy = ctx?.user?.id ?? 'workflow';
+
       const approved = await tx.leaveRequest.update({
-        where: { id },
-        data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
+        where: { id: leaveRequestId },
+        data: { status: 'APPROVED', approvedBy, approvedAt: new Date() },
       });
-      logger.info('Leave approved', { id, employeeId: req.employee_id, days: req.total_days });
+      logger.info('Leave finalized approved via workflow', {
+        id: leaveRequestId,
+        employeeId: req.employee_id,
+        days: req.total_days,
+      });
       return approved;
     });
   }
 
+  async applyWorkflowAction(
+    leaveRequestId: string,
+    userId: string,
+    roles: string[],
+    action: WorkflowActionDTO & { source?: WorkflowSource }
+  ) {
+    const leaveRequest = await this.findLeaveRequestById(leaveRequestId);
+
+    const instance = await prisma.workflowInstance.findFirst({
+      where: {
+        referenceType: 'LEAVE_REQUEST',
+        referenceId: leaveRequestId,
+      },
+    });
+
+    if (!instance) {
+      throw new NotFoundError('Workflow instance not found for this leave request');
+    }
+
+    const currentCompanyId = getCurrentCompanyId();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+    if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+      throw new NotFoundError('Workflow instance not found');
+    }
+
+    const updatedInstance = await workflowEngineRepository.applyAction(
+      instance.id,
+      userId,
+      roles,
+      { action: action.action, comment: action.comment }
+    );
+
+    if (updatedInstance && updatedInstance.status === 'APPROVED') {
+      await this.finalizeApprovalEffects(leaveRequestId);
+    }
+
+    if (action.action === 'REJECT') {
+      await leaveRepository.updateLeaveStatus(
+        leaveRequestId,
+        'REJECTED',
+        undefined,
+        action.comment
+      );
+    }
+
+    const finalLeave = await leaveRepository.findLeaveRequestById(leaveRequestId);
+    return { leaveRequest: finalLeave, workflowInstance: updatedInstance };
+  }
+
+  async approveLeave(id: string, userId: string, approverEmployeeId?: string | null) {
+    const roles = getCurrentRoles();
+    return this.applyWorkflowAction(id, userId, roles, {
+      action: 'APPROVE',
+      comment: 'Legacy approve endpoint',
+      source: 'LEGACY',
+    });
+  }
+
   async rejectLeave(id: string, reason?: string, approverEmployeeId?: string | null) {
+    const ctx = getRequestContext();
+    const userId = ctx?.user?.id ?? 'legacy';
+    const roles = ctx?.user?.roles ?? [];
+
     const request = await this.findLeaveRequestById(id);
     if (approverEmployeeId && approverEmployeeId === request.employeeId) {
       throw new ForbiddenError('Cannot reject your own leave request');
     }
-    return leaveRepository.updateLeaveStatus(id, 'REJECTED', undefined, reason);
+
+    return this.applyWorkflowAction(id, userId, roles, {
+      action: 'REJECT',
+      comment: reason ?? 'Legacy reject endpoint',
+      source: 'LEGACY',
+    });
+  }
+
+  async getLeaveWorkflow(id: string) {
+    const instance = await prisma.workflowInstance.findFirst({
+      where: {
+        referenceType: 'LEAVE_REQUEST',
+        referenceId: id,
+      },
+      include: {
+        steps: { orderBy: { level: 'asc' } },
+        logs: { orderBy: { createdAt: 'desc' } },
+        template: { select: { id: true, name: true, approvalType: true } },
+      },
+    });
+
+    if (!instance) {
+      throw new NotFoundError('Workflow instance not found for this leave request');
+    }
+
+    const currentCompanyId = getCurrentCompanyId();
+    const roles = getCurrentRoles();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+    if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+      throw new NotFoundError('Workflow instance not found');
+    }
+
+    return instance;
   }
 
   async getLeaveBalances(employeeId: string) {
@@ -108,13 +283,6 @@ export class LeaveService {
     return leaveRepository.upsertLeaveBalance(data);
   }
 
-  /**
-   * Akrual hak cuti tahunan seorang karyawan (Business Rule Gap: pro-rate join date + carry-over).
-   *
-   * Menghitung total hak cuti awal tahun = pro-rata berdasarkan tanggal masuk (floor)
-   * + carry-over sisa cuti tahun sebelumnya (dibatasi maks, default 1 hari), lalu meng-upsert
-   * ke leave_balances tanpa menimpa hari yang sudah terpakai.
-   */
   async accrueAnnualBalance(params: {
     employeeId: string;
     leaveTypeId: string;

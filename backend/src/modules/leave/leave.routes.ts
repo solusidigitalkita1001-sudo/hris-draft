@@ -5,6 +5,7 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { leaveController } from './leave.controller';
 import { createLeaveTypeSchema, createLeaveRequestSchema, createLeaveBalanceSchema } from './leave.dto';
+import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 
 const router = Router();
 router.use(authenticate);
@@ -20,6 +21,10 @@ router.get('/:id', authorize({ resource: 'leave', action: 'read' }), leaveContro
 router.post('/', authorize({ resource: 'leave', action: 'create' }), validate(createLeaveRequestSchema), leaveController.create.bind(leaveController));
 router.patch('/:id/approve', authorize({ resource: 'leave', action: 'approve' }), leaveController.approve.bind(leaveController));
 router.patch('/:id/reject', authorize({ resource: 'leave', action: 'approve' }), leaveController.reject.bind(leaveController));
+
+// Workflow integration endpoints
+router.get('/:id/workflow', authorize({ resource: 'leave', action: 'read' }), leaveController.getWorkflow.bind(leaveController));
+router.patch('/:id/workflow-action', authorize({ resource: 'leave', action: 'approve' }), validate(workflowActionSchema), leaveController.applyWorkflowAction.bind(leaveController));
 
 // Leave Balances
 router.get('/balances/employee', authorize({ resource: 'leave', action: 'read' }), leaveController.getBalances.bind(leaveController));

@@ -2,6 +2,7 @@ import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import type { CreateLoanDTO, ApproveLoanDTO } from './employee-loan.dto';
 import { generateAmortizationSchedule, AmortizationMethod } from '@/shared/payroll/amortization';
+import { BadRequestError } from '@/shared/exceptions/AppError';
 
 export class EmployeeLoanRepository {
   // ─── Loan Types ───────────────────────────────────────
@@ -61,20 +62,35 @@ export class EmployeeLoanRepository {
     return prisma.loan.create({ data: data as any });
   }
 
-  async approve(
-    id: string,
-    approverId: string,
-    loan: { totalInstallments: number; installmentAmount: Prisma.Decimal | number },
-    data?: ApproveLoanDTO
-  ) {
+  async findWorkflowTemplateDefault(companyId: string) {
+    return prisma.workflowTemplate.findFirst({
+      where: { companyId, approvalType: 'LOAN_REQUEST', resource: 'employee-loan', isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findInstanceByLoanId(loanId: string) {
+    return prisma.workflowInstance.findFirst({
+      where: { referenceType: 'LOAN_REQUEST', referenceId: loanId },
+      include: {
+        steps: { orderBy: { level: 'asc' } },
+        logs: { orderBy: { createdAt: 'desc' } },
+        template: true,
+      },
+    });
+  }
+
+  async applyApprovalEffects(id: string, approverId: string) {
     return prisma.$transaction(async (tx) => {
+      const loan = await tx.loan.findUnique({ where: { id } });
+      if (!loan) return null;
+
       const updatedLoan = await tx.loan.update({
         where: { id },
         data: {
           status: 'ACTIVE',
           approverId,
           approvedAt: new Date(),
-          notes: data?.notes,
         },
       });
 
@@ -102,16 +118,29 @@ export class EmployeeLoanRepository {
     });
   }
 
-  async reject(id: string, approverId: string, data?: ApproveLoanDTO) {
+  async finalizeRejectEffects(id: string, approverId: string, rejectionReason?: string) {
     return prisma.loan.update({
       where: { id },
       data: {
         status: 'REJECTED',
         approverId,
         approvedAt: new Date(),
-        notes: data?.notes,
+        notes: rejectionReason,
       },
     });
+  }
+
+  async approve(
+    id: string,
+    approverId: string,
+    _loan: { totalInstallments: number; installmentAmount: Prisma.Decimal | number },
+    _data?: ApproveLoanDTO
+  ) {
+    throw new BadRequestError('Use workflow action endpoint instead of legacy approve');
+  }
+
+  async reject(id: string, approverId: string, data?: ApproveLoanDTO) {
+    throw new BadRequestError('Use workflow action endpoint instead of legacy reject');
   }
 
   async cancel(id: string, employeeId: string) {

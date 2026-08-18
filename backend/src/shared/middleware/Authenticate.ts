@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { jwtHandler } from '@/shared/security/JWTHandler';
 import { AuthError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { runInRequestContext } from '@/shared/context/RequestContext';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -18,6 +19,8 @@ export interface AuthenticatedRequest extends Request {
 /**
  * Authentication middleware - verifies JWT access token
  * Extracts and verifies Bearer token from Authorization header
+ * Mounts the authenticated user into AsyncLocalStorage via RequestContext
+ * so Prisma middleware / services can access company scope safely.
  */
 export function authenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
@@ -45,7 +48,9 @@ export function authenticate(req: AuthenticatedRequest, _res: Response, next: Ne
       permissions: decoded.permissions,
       roles: decoded.roles,
     };
-    next();
+    runInRequestContext({ user: req.user }, () => {
+      next();
+    });
   } catch (error) {
     if (error instanceof AuthError || error instanceof ForbiddenError) {
       throw error;
@@ -61,13 +66,17 @@ export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, 
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
-    next();
+    runInRequestContext({}, () => {
+      next();
+    });
     return;
   }
 
   const parts = authHeader.split(' ');
   if (parts.length !== 2 || parts[0] !== 'Bearer') {
-    next();
+    runInRequestContext({}, () => {
+      next();
+    });
     return;
   }
 
@@ -83,9 +92,12 @@ export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, 
       permissions: decoded.permissions,
       roles: decoded.roles,
     };
+    runInRequestContext({ user: req.user }, () => {
+      next();
+    });
   } catch {
-    // Silently fail for optional auth
+    runInRequestContext({}, () => {
+      next();
+    });
   }
-
-  next();
 }

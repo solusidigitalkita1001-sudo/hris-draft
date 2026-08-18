@@ -39,5 +39,44 @@ describe('THR calculator — Permenaker 6/2016 (hardening Business Rule Gap Payr
       expect(r.tenureMonths).toBe(1);
       expect(r.amount).toBe(Math.round((1 / 12) * wage)); // 500.000
     });
+
+    // ---------------- EXTEND BATCH B.2 ----------------
+    it('EDGE 1 — tepat 12 bulan boundary (3 Apr 2023 → 3 Apr 2024) → FULL THR, bukan prorata', () => {
+      const join = new Date(Date.UTC(2023, 3, 3));
+      const r = calculateThr({ monthlyWage: wage, joinDate: join, referenceDate: raya });
+      expect(r.tenureMonths).toBe(12);
+      expect(r.isProrated).toBe(false);
+      expect(r.amount).toBe(wage);
+    });
+    it('EDGE 2 — 11 bulan 29 hari (tepat sebelum genap 12 bln) → PRORATA 11/12', () => {
+      // join 4 Apr 2023 → reference 3 Apr 2024 = 11 bulan + 30 hari (belum 12 penuh)
+      const join = new Date(Date.UTC(2023, 3, 4));
+      const r = calculateThr({ monthlyWage: wage, joinDate: join, referenceDate: raya });
+      expect(r.tenureMonths).toBe(11);
+      expect(r.isProrated).toBe(true);
+      expect(r.amount).toBe(Math.round((11 / 12) * wage));
+      expect(r.amount).toBe(5_500_000);
+    });
+    it('EDGE 3 — joinDate = referenceDate, hari SAMA → tenure 0 bulan → TIDAK BERHAK', () => {
+      const r = calculateThr({ monthlyWage: wage, joinDate: raya, referenceDate: raya });
+      expect(r.tenureMonths).toBe(0);
+      expect(r.eligible).toBe(false);
+    });
+    it('EDGE 4 — wage NEGATIVE atau 0 → amount 0, eligible false (safe guard)', () => {
+      const rNeg = calculateThr({ monthlyWage: -500_000, joinDate: new Date(Date.UTC(2020, 0, 1)), referenceDate: raya });
+      const rZero = calculateThr({ monthlyWage: 0, joinDate: new Date(Date.UTC(2020, 0, 1)), referenceDate: raya });
+      expect(rNeg.amount).toBe(0); expect(rNeg.eligible).toBe(false);
+      expect(rZero.amount).toBe(0);
+    });
+    it('EDGE 5 — karyawan resign end year masa kerja 8 bln 15 hari → prorata 8/12 (acceptance B.2)', () => {
+      // Acceptance Criteria B.2: "Karyawan masa kerja 8 bulan → THR = 8/12 x gaji"
+      const resignRaya = new Date(Date.UTC(2024, 11, 15)); // THR Natal/akhir tahun
+      const join = new Date(Date.UTC(2024, 3, 1)); // join 1 Apr → 15 Des = 8 bln penuh (Apr→Des inclusive bulan count floor 15<1 bln → Des = 8)
+      const r = calculateThr({ monthlyWage: wage, joinDate: join, referenceDate: resignRaya });
+      expect(r.tenureMonths).toBe(8);
+      expect(r.isProrated).toBe(true);
+      expect(r.amount).toBe(Math.round((8 / 12) * wage)); // 4.000.000
+      expect(r.amount).toBe(4_000_000);
+    });
   });
 });

@@ -33,20 +33,41 @@ export class LeaveController {
 
   async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      // Employee-linked users can only request leave for themselves
       if (req.user?.employeeId) req.body.employeeId = req.user.employeeId;
       res.status(201).json(Result.created(await leaveService.createLeaveRequest(req.body)));
     } catch (error) { next(error); }
   }
 
   async approve(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-    try { res.json(Result.updated(await leaveService.approveLeave(req.params.id as string, req.user!.id, req.user!.employeeId))); }
-    catch (error) { next(error); }
+    try {
+      const result = await leaveService.approveLeave(req.params.id as string, req.user!.id, req.user!.employeeId);
+      res.json(Result.updated(result));
+    } catch (error) { next(error); }
   }
 
   async reject(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-    try { res.json(Result.updated(await leaveService.rejectLeave(req.params.id as string, req.body.reason, req.user!.employeeId))); }
-    catch (error) { next(error); }
+    try {
+      const result = await leaveService.rejectLeave(req.params.id as string, req.body.reason, req.user!.employeeId);
+      res.json(Result.updated(result));
+    } catch (error) { next(error); }
+  }
+
+  async getWorkflow(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await leaveService.getLeaveWorkflow(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async applyWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await leaveService.applyWorkflowAction(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.roles ?? [],
+        { ...req.body, source: 'WORKFLOW' }
+      );
+      res.json(Result.updated(result));
+    } catch (error) { next(error); }
   }
 
   async getBalances(req: AuthenticatedRequest, res: Response, next: NextFunction) {

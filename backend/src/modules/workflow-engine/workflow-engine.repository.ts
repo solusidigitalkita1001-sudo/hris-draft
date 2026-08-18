@@ -1,5 +1,6 @@
 import { prisma } from '@/shared/database/prisma';
 import { BadRequestError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
+import { getCurrentCompanyId, getCurrentRoles, isSuperAdmin, getRequestContext } from '@/shared/context/RequestContext';
 import type {
   CreateWorkflowTemplateDTO,
   StartWorkflowInstanceDTO,
@@ -79,6 +80,24 @@ export class WorkflowEngineRepository {
           include: { conditionRules: true },
         },
         _count: { select: { instances: true } },
+      },
+    });
+  }
+
+  async findDefaultTemplate(companyId: string, approvalType: string, resource: string) {
+    return prisma.workflowTemplate.findFirst({
+      where: {
+        companyId,
+        approvalType,
+        resource,
+        isActive: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        stages: {
+          orderBy: { level: 'asc' },
+          include: { conditionRules: true },
+        },
       },
     });
   }
@@ -202,7 +221,7 @@ export class WorkflowEngineRepository {
   }
 
   async findInstanceById(id: string) {
-    return prisma.workflowInstance.findUnique({
+    const instance = await prisma.workflowInstance.findUnique({
       where: { id },
       include: {
         template: {
@@ -217,6 +236,17 @@ export class WorkflowEngineRepository {
         logs: { orderBy: { createdAt: 'desc' } },
       },
     });
+
+    if (instance) {
+      const currentCompanyId = getCurrentCompanyId();
+      const roles = getCurrentRoles();
+      const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+      if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+        throw new NotFoundError('Workflow instance not found');
+      }
+    }
+
+    return instance;
   }
 
   async startInstance(requesterId: string, data: StartWorkflowInstanceDTO) {
@@ -239,6 +269,18 @@ export class WorkflowEngineRepository {
     }
 
     const payload = (data.payload || {}) as Payload;
+    const requesterRoles = getCurrentRoles();
+    const hasElevatedRole = requesterRoles.some((r) =>
+      ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(r)
+    );
+    const currentUser = getRequestContext()?.user;
+
+    if (payload.employeeId && !hasElevatedRole && requesterRoles.includes('EMPLOYEE')) {
+      if (currentUser?.employeeId && payload.employeeId !== currentUser.employeeId) {
+        throw new ForbiddenError('IDOR: Employee cannot start workflow for other employees');
+      }
+    }
+
     const applicableStages = template.stages.filter((stage: (typeof template.stages)[number]) =>
       isStageApplicable(
         {
@@ -323,6 +365,13 @@ export class WorkflowEngineRepository {
 
     if (!instance) {
       throw new NotFoundError('Workflow instance not found');
+    }
+
+    const isAdmin = roles.includes('SUPER_ADMIN');
+    if (action.action === 'APPROVE' || action.action === 'REJECT' || action.action === 'ESCALATE') {
+      if (instance.requesterId === userId && !isAdmin) {
+        throw new ForbiddenError('Cannot approve/reject your own request via workflow');
+      }
     }
 
     const currentStep = instance.steps.find(
@@ -496,6 +545,86 @@ export class WorkflowEngineRepository {
         },
       });
     });
+  }
+
+  async bulkApplyAction(
+    instanceIds: string[],
+    userId: string,
+    roles: string[],
+    action: WorkflowActionDTO
+  ): Promise<{
+    total: number;
+    successful: number;
+    failed: number;
+    results: Array<{
+      instanceId: string;
+      success: boolean;
+      status?: string;
+      error?: string;
+    }>;
+  }> {
+    const currentCompanyId = getCurrentCompanyId();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+
+    const results: Array<{
+      instanceId: string;
+      success: boolean;
+      status?: string;
+      error?: string;
+    }> = [];
+    let successful = 0;
+    let failed = 0;
+
+    for (const instanceId of instanceIds) {
+      try {
+        const instance = await prisma.workflowInstance.findUnique({
+          where: { id: instanceId },
+          select: { companyId: true, status: true },
+        });
+
+        if (!instance) {
+          results.push({
+            instanceId,
+            success: false,
+            error: 'Workflow instance not found',
+          });
+          failed++;
+          continue;
+        }
+
+        if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+          results.push({
+            instanceId,
+            success: false,
+            error: 'Company scope mismatch: instance does not belong to current company',
+          });
+          failed++;
+          continue;
+        }
+
+        const updated = await this.applyAction(instanceId, userId, roles, action);
+        results.push({
+          instanceId,
+          success: true,
+          status: updated?.status ?? undefined,
+        });
+        successful++;
+      } catch (err: any) {
+        results.push({
+          instanceId,
+          success: false,
+          error: err?.message || 'Unknown error',
+        });
+        failed++;
+      }
+    }
+
+    return {
+      total: instanceIds.length,
+      successful,
+      failed,
+      results,
+    };
   }
 }
 

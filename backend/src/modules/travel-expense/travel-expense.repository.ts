@@ -8,6 +8,7 @@ import type {
   CreateTravelAdvanceDTO,
   ReimburseExpenseClaimDTO,
 } from './travel-expense.dto';
+import { BadRequestError } from '@/shared/exceptions/AppError';
 
 const EXPENSE_CATEGORIES = [
   { value: 'TRANSPORTATION', label: 'Transportasi' },
@@ -20,6 +21,42 @@ const EXPENSE_CATEGORIES = [
 export class TravelExpenseRepository {
   getExpenseCategories() {
     return EXPENSE_CATEGORIES;
+  }
+
+  async findDefaultTemplateTrip(companyId: string) {
+    return prisma.workflowTemplate.findFirst({
+      where: { companyId, approvalType: 'BUSINESS_TRIP', resource: 'travel', isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findDefaultTemplateClaim(companyId: string) {
+    return prisma.workflowTemplate.findFirst({
+      where: { companyId, approvalType: 'EXPENSE_CLAIM', resource: 'travel', isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findInstanceByTripId(tripId: string) {
+    return prisma.workflowInstance.findFirst({
+      where: { referenceType: 'BUSINESS_TRIP', referenceId: tripId },
+      include: {
+        steps: { orderBy: { level: 'asc' } },
+        logs: { orderBy: { createdAt: 'desc' } },
+        template: true,
+      },
+    });
+  }
+
+  async findInstanceByClaimId(claimId: string) {
+    return prisma.workflowInstance.findFirst({
+      where: { referenceType: 'EXPENSE_CLAIM', referenceId: claimId },
+      include: {
+        steps: { orderBy: { level: 'asc' } },
+        logs: { orderBy: { createdAt: 'desc' } },
+        template: true,
+      },
+    });
   }
 
   async findTrips(companyId: string, status?: string) {
@@ -67,35 +104,113 @@ export class TravelExpenseRepository {
   }
 
   async findTripById(id: string) {
-    return prisma.businessTrip.findUnique({ where: { id }, select: { id: true, employeeId: true, status: true } });
+    return prisma.businessTrip.findUnique({
+      where: { id },
+      include: {
+        employee: { select: { fullName: true, employeeNumber: true } },
+        travelAdvances: { orderBy: { createdAt: 'desc' } },
+        expenseClaims: { orderBy: { createdAt: 'desc' } },
+      },
+    });
   }
 
   async findClaimById(id: string) {
-    return prisma.expenseClaim.findUnique({ where: { id }, select: { id: true, employeeId: true, status: true } });
+    return prisma.expenseClaim.findUnique({
+      where: { id },
+      include: {
+        employee: { select: { fullName: true, employeeNumber: true } },
+        trip: { select: { id: true, destination: true, startDate: true, endDate: true } },
+        approvals: { orderBy: { createdAt: 'desc' } },
+        reimbursements: { orderBy: { processedAt: 'desc' } },
+      },
+    });
   }
 
-  async approveTrip(id: string, approverId: string, data?: ApproveBusinessTripDTO) {
+  async applyApprovalTripEffects(tripId: string, approverId: string) {
     return prisma.businessTrip.update({
-      where: { id },
+      where: { id: tripId },
       data: {
         status: 'APPROVED',
         approvedBy: approverId,
         approvedAt: new Date(),
-        notes: data?.notes,
       },
     });
   }
 
-  async rejectTrip(id: string, approverId: string, data?: ApproveBusinessTripDTO) {
+  async finalizeRejectTripEffects(tripId: string, approverId: string, rejectionReason?: string) {
     return prisma.businessTrip.update({
-      where: { id },
+      where: { id: tripId },
       data: {
         status: 'REJECTED',
         approvedBy: approverId,
         approvedAt: new Date(),
-        notes: data?.notes,
+        notes: rejectionReason,
       },
     });
+  }
+
+  async applyApprovalClaimEffects(claimId: string, approverId: string) {
+    return prisma.$transaction(async (tx) => {
+      const claim = await tx.expenseClaim.update({
+        where: { id: claimId },
+        data: {
+          status: 'APPROVED',
+        },
+      });
+
+      await tx.expenseApproval.create({
+        data: {
+          claimId,
+          approverId,
+          level: 1,
+          status: 'APPROVED',
+          approvedAt: new Date(),
+        },
+      });
+
+      return claim;
+    });
+  }
+
+  async finalizeRejectClaimEffects(claimId: string, approverId: string, rejectionReason?: string) {
+    return prisma.$transaction(async (tx) => {
+      const claim = await tx.expenseClaim.update({
+        where: { id: claimId },
+        data: {
+          status: 'REJECTED',
+          notes: rejectionReason,
+        },
+      });
+
+      await tx.expenseApproval.create({
+        data: {
+          claimId,
+          approverId,
+          level: 1,
+          status: 'REJECTED',
+          notes: rejectionReason,
+          approvedAt: new Date(),
+        },
+      });
+
+      return claim;
+    });
+  }
+
+  async approveTrip(id: string, _approverId: string, _data?: ApproveBusinessTripDTO) {
+    throw new BadRequestError('Use workflow action endpoint instead of legacy approve');
+  }
+
+  async rejectTrip(id: string, _approverId: string, _data?: ApproveBusinessTripDTO) {
+    throw new BadRequestError('Use workflow action endpoint instead of legacy reject');
+  }
+
+  async approveClaim(id: string, _approverId: string, _data?: ApproveExpenseClaimDTO) {
+    throw new BadRequestError('Use workflow action endpoint instead of legacy approve');
+  }
+
+  async rejectClaim(id: string, _approverId: string, _data?: ApproveExpenseClaimDTO) {
+    throw new BadRequestError('Use workflow action endpoint instead of legacy reject');
   }
 
   async createAdvance(tripId: string, data: CreateTravelAdvanceDTO & { companyId: string }) {
@@ -155,56 +270,6 @@ export class TravelExpenseRepository {
         ocrExtractedAmount: data.ocrExtractedAmount as any,
         notes: data.notes,
       },
-    });
-  }
-
-  async approveClaim(id: string, approverId: string, data?: ApproveExpenseClaimDTO) {
-    return prisma.$transaction(async (tx) => {
-      const claim = await tx.expenseClaim.update({
-        where: { id },
-        data: {
-          status: 'APPROVED',
-          notes: data?.notes,
-        },
-      });
-
-      await tx.expenseApproval.create({
-        data: {
-          claimId: id,
-          approverId,
-          level: 1,
-          status: 'APPROVED',
-          notes: data?.notes,
-          approvedAt: new Date(),
-        },
-      });
-
-      return claim;
-    });
-  }
-
-  async rejectClaim(id: string, approverId: string, data?: ApproveExpenseClaimDTO) {
-    return prisma.$transaction(async (tx) => {
-      const claim = await tx.expenseClaim.update({
-        where: { id },
-        data: {
-          status: 'REJECTED',
-          notes: data?.notes,
-        },
-      });
-
-      await tx.expenseApproval.create({
-        data: {
-          claimId: id,
-          approverId,
-          level: 1,
-          status: 'REJECTED',
-          notes: data?.notes,
-          approvedAt: new Date(),
-        },
-      });
-
-      return claim;
     });
   }
 

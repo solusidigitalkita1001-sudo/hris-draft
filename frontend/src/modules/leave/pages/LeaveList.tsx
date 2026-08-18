@@ -24,48 +24,6 @@ const STATUS_STYLES: Record<string, string> = {
   WITHDRAWN: 'bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400',
 };
 
-// ─── Modal Wrapper ──────────────────────────────────────
-function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Confirm Dialog ─────────────────────────────────────
-function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmText, confirmClass }: {
-  open: boolean; onClose: () => void; onConfirm: () => void;
-  title: string; message: string;
-  confirmText?: string;
-  confirmClass?: string;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
-        <div className="p-5">
-          <h3 className="text-base font-semibold mb-2">{title}</h3>
-          <p className="text-sm text-muted-foreground">{message}</p>
-        </div>
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={onConfirm} className={confirmClass || ''}>{confirmText || 'Confirm'}</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function LeaveList() {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -73,10 +31,9 @@ export function LeaveList() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  // Approve / Reject state
-  const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
+  const [approvAction, setApprovAction] = useState<{ type: 'APPROVE' | 'REJECT'; id: string } | null>(null);
+  const [actionComment, setActionComment] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -97,34 +54,28 @@ export function LeaveList() {
     fetchData();
   }, [fetchData]);
 
-  const handleApprove = async () => {
-    if (!approvingId) return;
+  const executeAction = async () => {
+    if (!approvAction) return;
+    setActionLoading(true);
     try {
-      await leaveService.approveRequest(approvingId);
-      toast.success('Leave request approved');
-      setApprovingId(null);
+      await leaveService.submitWorkflowAction(
+        approvAction.id,
+        approvAction.type,
+        actionComment.trim() || undefined
+      );
+      toast.success(
+        approvAction.type === 'APPROVE'
+          ? 'Leave request approved via workflow'
+          : 'Leave request rejected via workflow'
+      );
+      setApprovAction(null);
+      setActionComment('');
       fetchData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to approve request');
+      toast.error(err?.response?.data?.message || `Failed to ${approvAction.type.toLowerCase()} request`);
+    } finally {
+      setActionLoading(false);
     }
-  };
-
-  const handleReject = async () => {
-    if (!rejectingId) return;
-    try {
-      await leaveService.rejectRequest(rejectingId, rejectReason || undefined);
-      toast.success('Leave request rejected');
-      setRejectingId(null);
-      setRejectReason('');
-      fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to reject request');
-    }
-  };
-
-  const openRejectModal = (id: string) => {
-    setRejectingId(id);
-    setRejectReason('');
   };
 
   const filtered = requests.filter(
@@ -153,7 +104,6 @@ export function LeaveList() {
         }
       />
 
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
@@ -169,7 +119,6 @@ export function LeaveList() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="relative flex-1 max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -231,7 +180,11 @@ export function LeaveList() {
                           size="sm"
                           variant="default"
                           className="h-7 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                          onClick={(e) => { e.stopPropagation(); setApprovingId(r.id); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setApprovAction({ type: 'APPROVE', id: r.id });
+                            setActionComment('');
+                          }}
                         >
                           <CheckCircle2 size={12} className="mr-1" />
                           Approve
@@ -240,7 +193,11 @@ export function LeaveList() {
                           size="sm"
                           variant="outline"
                           className="h-7 px-2.5 text-xs text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950"
-                          onClick={(e) => { e.stopPropagation(); openRejectModal(r.id); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setApprovAction({ type: 'REJECT', id: r.id });
+                            setActionComment('');
+                          }}
                         >
                           <XCircle size={12} className="mr-1" />
                           Reject
@@ -255,41 +212,57 @@ export function LeaveList() {
         </table>
       </div>
 
-      {/* Approve Confirm Dialog */}
-      <ConfirmDialog
-        open={!!approvingId}
-        onClose={() => setApprovingId(null)}
-        onConfirm={handleApprove}
-        title="Approve Leave Request"
-        message="Are you sure you want to approve this leave request?"
-        confirmText="Approve"
-        confirmClass="bg-emerald-600 hover:bg-emerald-700"
-      />
-
-      {/* Reject Modal */}
-      <Modal open={!!rejectingId} onClose={() => setRejectingId(null)} title="Reject Leave Request">
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Provide a reason for rejecting this leave request.
-          </p>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Rejection Reason</label>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Enter rejection reason..."
-              rows={3}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setRejectingId(null)}>Cancel</Button>
-            <Button size="sm" variant="destructive" onClick={handleReject}>
-              Reject
-            </Button>
+      {approvAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setApprovAction(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                {approvAction.type === 'APPROVE' ? (
+                  <><CheckCircle2 size={18} className="text-emerald-600" /> Approve Leave Request</>
+                ) : (
+                  <><XCircle size={18} className="text-red-600" /> Reject Leave Request</>
+                )}
+              </h2>
+              <button onClick={() => setApprovAction(null)} className="text-muted-foreground hover:text-foreground p-1">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {approvAction.type === 'APPROVE'
+                  ? 'Are you sure you want to approve this leave request? You may add an optional comment below.'
+                  : 'Provide a reason for rejecting this leave request.'}
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  {approvAction.type === 'APPROVE' ? 'Comment (optional)' : 'Rejection Reason'}
+                </label>
+                <textarea
+                  value={actionComment}
+                  onChange={(e) => setActionComment(e.target.value)}
+                  placeholder={approvAction.type === 'APPROVE' ? 'Enter approval comment...' : 'Enter rejection reason...'}
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
+              <Button variant="outline" size="sm" onClick={() => setApprovAction(null)} disabled={actionLoading}>
+                Cancel
+              </Button>
+              {approvAction.type === 'APPROVE' ? (
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={executeAction} disabled={actionLoading}>
+                  {actionLoading ? 'Approving...' : 'Confirm Approve'}
+                </Button>
+              ) : (
+                <Button size="sm" variant="destructive" onClick={executeAction} disabled={actionLoading || !actionComment.trim()}>
+                  {actionLoading ? 'Rejecting...' : 'Confirm Reject'}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
-      </Modal>
+      )}
     </div>
   );
 }

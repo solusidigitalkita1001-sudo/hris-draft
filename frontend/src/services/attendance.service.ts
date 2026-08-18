@@ -95,9 +95,34 @@ export interface OvertimeRequest {
   reason: string;
   multiplier: number;
   status: string;
+  approvedBy?: string;
+  approvedAt?: string;
   employee?: { id: string; fullName: string; employeeNumber: string };
   createdAt: string;
 }
+
+export interface WorkflowStep {
+  id: string;
+  level: number;
+  name: string;
+  status: string;
+  approverId?: string | null;
+  approverRoleCode?: string | null;
+  actedBy?: string | null;
+  actedAt?: string | null;
+  comment?: string | null;
+  isCurrent?: boolean;
+}
+
+export interface WorkflowInstance {
+  id: string;
+  status: string;
+  steps: WorkflowStep[];
+  logs: any[];
+  template?: { id: string; name: string; approvalType: string };
+}
+
+export type WorkflowAction = 'APPROVE' | 'REJECT' | 'ESCALATE';
 
 class AttendanceService {
   async getRecords(companyId: string, params?: Record<string, string>): Promise<AttendanceRecord[]> {
@@ -130,13 +155,27 @@ class AttendanceService {
     return r.data.data;
   }
 
-  async approveOvertime(id: string): Promise<OvertimeRequest> {
+  async approveOvertime(id: string): Promise<{ overtimeRequest: OvertimeRequest; workflowInstance: WorkflowInstance }> {
     const r = await api.patch(`/attendance/overtime/${id}/approve`);
     return r.data.data;
   }
 
-  async rejectOvertime(id: string): Promise<OvertimeRequest> {
-    const r = await api.patch(`/attendance/overtime/${id}/reject`);
+  async rejectOvertime(id: string, reason?: string): Promise<{ overtimeRequest: OvertimeRequest; workflowInstance: WorkflowInstance }> {
+    const r = await api.patch(`/attendance/overtime/${id}/reject`, { reason });
+    return r.data.data;
+  }
+
+  async getOvertimeWorkflow(id: string): Promise<WorkflowInstance> {
+    const r = await api.get(`/attendance/overtime/${id}/workflow`);
+    return r.data.data;
+  }
+
+  async submitOvertimeWorkflowAction(
+    id: string,
+    action: WorkflowAction,
+    comment?: string,
+  ): Promise<{ overtimeRequest: OvertimeRequest; workflowInstance: WorkflowInstance }> {
+    const r = await api.patch(`/attendance/overtime/${id}/workflow-action`, { action, comment });
     return r.data.data;
   }
 }

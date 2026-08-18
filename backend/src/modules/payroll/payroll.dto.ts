@@ -71,6 +71,48 @@ export const approvePayrollRunSchema = z.object({
   notes: z.string().optional(),
 });
 
+// ==================== Standalone Calculation Endpoints (B.1, B.2, B.3) ====================
+
+export const calculatePph21Schema = z.object({
+  monthlyGross: z.number().min(0).max(1_000_000_000_000),
+  married: z.boolean().default(false),
+  dependents: z.number().int().min(0).max(20).default(0),
+  monthlyPensionContribution: z.number().min(0).max(1_000_000_000_000).default(0),
+  hasNpwp: z.boolean().default(true),
+});
+
+export const calculateThrStandaloneSchema = z.object({
+  monthlyWage: z.number().min(0).max(1_000_000_000_000),
+  joinDate: z.string().datetime(),
+  referenceDate: z.string().datetime().optional(),
+});
+
+export const calculateBpjsSchema = z.object({
+  monthlyWage: z.number().min(0).max(1_000_000_000_000),
+  jkkRiskClass: z.enum(['I','II','III','IV','V']).default('I'),
+  customRates: z.object({
+    jkkRatePercent: z.number().min(0).max(100).optional(),
+    jkmRatePercent: z.number().min(0).max(100).optional(),
+    jhtEmployerPercent: z.number().min(0).max(100).optional(),
+    jhtEmployeePercent: z.number().min(0).max(100).optional(),
+    jpEmployerPercent: z.number().min(0).max(100).optional(),
+    jpEmployeePercent: z.number().min(0).max(100).optional(),
+    jpWageCap: z.number().min(0).max(1_000_000_000_000).optional(),
+    jknEmployerPercent: z.number().min(0).max(100).optional(),
+    jknEmployeePercent: z.number().min(0).max(100).optional(),
+    jknWageCap: z.number().min(0).max(1_000_000_000_000).optional(),
+  }).optional(),
+});
+
+export const calculateJknSchema = z.object({
+  monthlyWage: z.number().min(0).max(1_000_000_000_000),
+  customRates: z.object({
+    jknEmployerPercent: z.number().min(0).max(100).optional(),
+    jknEmployeePercent: z.number().min(0).max(100).optional(),
+    jknWageCap: z.number().min(0).max(1_000_000_000_000).optional(),
+  }).optional(),
+});
+
 // ==================== Type Inference ====================
 export type CreateSalaryComponentDTO = z.infer<typeof createSalaryComponentSchema>;
 export type UpdateSalaryComponentDTO = z.infer<typeof updateSalaryComponentSchema>;
@@ -81,3 +123,7 @@ export type CreatePayrollPeriodDTO = z.infer<typeof createPayrollPeriodSchema>;
 export type UpdatePayrollPeriodDTO = z.infer<typeof updatePayrollPeriodSchema>;
 export type CreatePayrollRunDTO = z.infer<typeof createPayrollRunSchema>;
 export type ApprovePayrollRunDTO = z.infer<typeof approvePayrollRunSchema>;
+export type CalculatePph21DTO = z.infer<typeof calculatePph21Schema>;
+export type CalculateThrStandaloneDTO = z.infer<typeof calculateThrStandaloneSchema>;
+export type CalculateBpjsDTO = z.infer<typeof calculateBpjsSchema>;
+export type CalculateJknDTO = z.infer<typeof calculateJknSchema>;

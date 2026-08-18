@@ -13,6 +13,10 @@ import {
   createPayrollPeriodSchema,
   updatePayrollPeriodSchema,
   createPayrollRunSchema,
+  calculatePph21Schema,
+  calculateThrStandaloneSchema,
+  calculateBpjsSchema,
+  calculateJknSchema,
 } from './payroll.dto';
 import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema } from './payroll.validation';
 import { auditLog } from '@/shared/middleware/AuditLog';
@@ -92,6 +96,32 @@ router.get(
   '/employees/:employeeId/thr',
   authorize({ resource: 'payroll', action: 'read' }),
   payrollController.calculateEmployeeThr.bind(payrollController)
+);
+
+// ==================== Standalone Calculation Endpoints (B.1, B.2, B.3) ====================
+router.post(
+  '/calculate-pph21',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(calculatePph21Schema, 'body'),
+  payrollController.calculatePph21.bind(payrollController)
+);
+router.post(
+  '/calculate-thr',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(calculateThrStandaloneSchema, 'body'),
+  payrollController.calculateThrStandalone.bind(payrollController)
+);
+router.post(
+  '/calculate-bpjs',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(calculateBpjsSchema, 'body'),
+  payrollController.calculateBpjs.bind(payrollController)
+);
+router.post(
+  '/calculate-jkn',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(calculateJknSchema, 'body'),
+  payrollController.calculateJkn.bind(payrollController)
 );
 
 // ==================== Payroll Periods ====================
@@ -176,6 +206,14 @@ router.patch(
   auditLog({ action: 'DISBURSE', entity: 'PayrollRun', model: 'payrollRun', getEntityId: (req) => req.params.id as string }),
   validate(payrollRunIdParamSchema, 'params'),
   payrollController.disbursePayrollRun.bind(payrollController)
+);
+
+// B.6 Multibank Disbursement CSV Export Endpoint
+router.get(
+  '/runs/:id/disbursements',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(payrollRunIdParamSchema, 'params'),
+  payrollController.getDisbursements.bind(payrollController)
 );
 
 // ==================== Payslips ====================

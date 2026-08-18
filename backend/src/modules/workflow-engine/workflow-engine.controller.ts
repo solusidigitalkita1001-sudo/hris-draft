@@ -128,6 +128,25 @@ export class WorkflowEngineController {
       next(error);
     }
   }
+
+  async bulkApproval(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { instanceIds, action, comment } = req.body as {
+        instanceIds: string[];
+        action: 'APPROVE' | 'REJECT' | 'ESCALATE';
+        comment?: string;
+      };
+      const userId = req.user!.id;
+      const roles = req.user!.roles ?? [];
+      const result = await workflowEngineRepository.bulkApplyAction(instanceIds, userId, roles, {
+        action,
+        comment,
+      });
+      res.json(Result.success(result));
+    } catch (e) {
+      next(e);
+    }
+  }
 }
 
 export const workflowEngineController = new WorkflowEngineController();

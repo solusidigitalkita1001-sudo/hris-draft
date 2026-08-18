@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { workCalendarRepository } from './work-calendar.repository';
+import { workCalendarService } from './work-calendar.service';
 import { Result } from '@/shared/core/Result';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { ValidationError } from '@/shared/exceptions/AppError';
@@ -221,7 +222,7 @@ export class WorkCalendarController {
 
   async createShiftSwapRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const data = await workCalendarRepository.createShiftSwapRequest(req.user!.id, req.body);
+      const data = await workCalendarService.createShiftSwapRequest(req.user!.id, req.body);
       res.status(201).json(Result.created(data));
     } catch (error) { next(error); }
   }
@@ -235,15 +236,43 @@ export class WorkCalendarController {
 
   async approveShiftSwapRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const data = await workCalendarRepository.approveShiftSwapRequest(req.user!.id, req.params.requestId as string, req.body);
-      res.json(Result.updated(data, 'Request tukar shift disetujui'));
+      const result = await workCalendarService.approveShiftSwap(
+        req.params.requestId as string,
+        req.user!.id,
+        req.user!.employeeId ?? null,
+      );
+      res.json(Result.updated(result, 'Request tukar shift disetujui'));
     } catch (error) { next(error); }
   }
 
   async rejectShiftSwapRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const data = await workCalendarRepository.rejectShiftSwapRequest(req.user!.id, req.params.requestId as string, req.body);
-      res.json(Result.updated(data, 'Request tukar shift ditolak'));
+      const result = await workCalendarService.rejectShiftSwap(
+        req.params.requestId as string,
+        req.user!.id,
+        req.body.approvalNotes,
+        req.user!.employeeId ?? null,
+      );
+      res.json(Result.updated(result, 'Request tukar shift ditolak'));
+    } catch (error) { next(error); }
+  }
+
+  async getShiftSwapWorkflow(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await workCalendarService.getShiftSwapWorkflow(req.params.requestId as string)));
+    } catch (error) { next(error); }
+  }
+
+  async applyShiftSwapWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await workCalendarService.applyShiftSwapWorkflowAction(
+        req.params.requestId as string,
+        req.user!.id,
+        req.user!.roles ?? [],
+        req.user!.employeeId ?? null,
+        { ...req.body, source: 'WORKFLOW' },
+      );
+      res.json(Result.updated(result));
     } catch (error) { next(error); }
   }
 

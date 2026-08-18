@@ -7,6 +7,10 @@ import {
   CreatePayrollPeriodDTO,
   UpdatePayrollPeriodDTO,
   CreatePayrollRunDTO,
+  CalculatePph21DTO,
+  CalculateThrStandaloneDTO,
+  CalculateBpjsDTO,
+  CalculateJknDTO,
 } from './payroll.dto';
 import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
@@ -18,9 +22,21 @@ import { generateSystemCode } from '@/shared/utils/system-code';
 import { calculateBpjs } from '@/shared/payroll/bpjs';
 import { calculatePph21 } from '@/shared/payroll/pph21';
 import { calculateThr } from '@/shared/payroll/thr';
+import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
+import { groupPayslipsByBank, generateBankCsv, resolveEmployeeBankInfo } from '@/shared/payroll/disbursement';
+import type { EmployeeForDisbursement } from '@/shared/payroll/disbursement';
 import { prisma } from '@/shared/database/prisma';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
+import { JKKRiskClass } from '@prisma/client';
+
+const JKK_RISK_TO_RATE: Record<JKKRiskClass, number> = {
+  [JKKRiskClass.I]: 0.24,
+  [JKKRiskClass.II]: 0.54,
+  [JKKRiskClass.III]: 0.89,
+  [JKKRiskClass.IV]: 1.27,
+  [JKKRiskClass.V]: 1.74,
+};
 
 export class PayrollService {
   // ==================== Salary Components ====================
@@ -332,12 +348,83 @@ export class PayrollService {
     return disbursed;
   }
 
+  // ==================== B.6 Multibank Disbursement (CSV Export ====================
+
+  /**
+   * Group payslips per bank + generate CSV bulk transfer untuk BCA/Mandiri/BNI.
+   * Prioritas bank: EmployeeBankAccount primary → first active → legacy bank fields.
+   */
+  async getPayrollRunDisbursements(runId: string, bankCodeFilter?: string) {
+    const run = await this.findPayrollRunById(runId);
+    const employeesMap: Record<string, EmployeeForDisbursement> = {};
+    for (const ps of (run.payslips ?? [])) {
+      const e = (ps as any).employee as any;
+      if (e) employeesMap[e.id] = e as EmployeeForDisbursement;
+    }
+    const groups = groupPayslipsByBank((run.payslips ?? []) as any, employeesMap);
+    let filtered = groups;
+    if (bankCodeFilter) {
+      const bc = bankCodeFilter.toUpperCase();
+      filtered = groups.filter((g: any) => g.bankCode === bc);
+    }
+    const groupsWithCsv = filtered.map((group: any) => {
+      const csv = generateBankCsv(group.bankCode, group.rows, group.bankName);
+      // attach bank group bankName override jika OTHER
+      return {
+        ...group,
+        csv: {
+          headers: csv.headers,
+          delimiter: csv.delimiter,
+          filename: csv.filename,
+          content: csv.content,
+          totalRows: csv.totalRows,
+        },
+      };
+    });
+    // Warn for each row employee data source (per group (for audit):
+    const warnings: string[] = [];
+    for (const g of groupsWithCsv) {
+      for (const row of g.rows) {
+        const emp = employeesMap[row.employeeId];
+        const info = resolveEmployeeBankInfo(emp ?? { id: row.employeeId, fullName: row.employeeName });
+        if (info.warning) warnings.push(`[${row.employeeName}] ${info.warning}`);
+      }
+    }
+    return {
+      runId: run.id,
+      runName: run.name,
+      periodStart: run.period.startDate,
+      periodEnd: run.period.endDate,
+      groups: groupsWithCsv,
+      totalGroups: groupsWithCsv.length,
+      totalEmployees: (run.payslips ?? []).length,
+      warnings,
+    };
+  }
+
   // ==================== Payslips ====================
 
   async findPayslipById(id: string) {
     const payslip = await payrollRepository.findPayslipById(id);
     if (!payslip) throw new NotFoundError('Payslip not found');
-    return payslip;
+    // B.5 Enrich: inject grouped breakdown (earnings/deductions + statutory summary)
+    const breakdown = buildPayslipBreakdown({
+      baseSalary: Number(payslip.baseSalary) || 0,
+      totalEarnings: Number(payslip.totalEarnings) || 0,
+      totalDeductions: Number(payslip.totalDeductions) || 0,
+      netPay: Number(payslip.netPay) || 0,
+      components: (payslip.components ?? []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        amount: Number(c.amount) || 0,
+        isTaxable: c.isTaxable,
+        salaryComponent: c.salaryComponent
+          ? { code: (c.salaryComponent as any)?.code ?? null }
+          : null,
+      })),
+    });
+    return { ...(payslip as any), breakdown };
   }
 
   async findPayslipsByEmployee(employeeId: string) {
@@ -639,6 +726,64 @@ export class PayrollService {
     }
 
     return { earningsTotal, deductionsTotal, components };
+  }
+
+  // ==================== Standalone Calculation Endpoints (B.1, B.2, B.3) ====================
+
+  calculatePph21Standalone(data: CalculatePph21DTO) {
+    return calculatePph21({
+      monthlyGross: data.monthlyGross,
+      married: data.married,
+      dependents: data.dependents,
+      monthlyPensionContribution: data.monthlyPensionContribution,
+      hasNpwp: data.hasNpwp,
+    });
+  }
+
+  calculateThrStandalone(data: CalculateThrStandaloneDTO) {
+    const result = calculateThr({
+      monthlyWage: data.monthlyWage,
+      joinDate: new Date(data.joinDate),
+      referenceDate: data.referenceDate ? new Date(data.referenceDate) : new Date(),
+    });
+    // BONUS: hitung also PPh 21 untuk THR (aturan khusus THR: PPh dihitung tersendiri nanti)
+    // Saat ini return amount THR saja sesuai acceptance B.2.
+    return {
+      ...result,
+      monthlyWage: data.monthlyWage,
+      joinDate: data.joinDate,
+    };
+  }
+
+  calculateBpjsStandalone(data: CalculateBpjsDTO) {
+    const baseRiskRate = JKK_RISK_TO_RATE[data.jkkRiskClass as JKKRiskClass];
+    const mergedConfig = {
+      jkkRatePercent: baseRiskRate,
+      ...(data.customRates ?? {}),
+    };
+    const breakdown = calculateBpjs(data.monthlyWage, mergedConfig);
+    return {
+      jkkRiskClass: data.jkkRiskClass,
+      configApplied: mergedConfig,
+      ...breakdown,
+    };
+  }
+
+  calculateJknStandalone(data: CalculateJknDTO) {
+    const breakdown = calculateBpjs(data.monthlyWage, data.customRates ?? {});
+    const base = Math.min(Math.max(0, data.monthlyWage), data.customRates?.jknWageCap ?? 12_000_000);
+    return {
+      monthlyWage: data.monthlyWage,
+      jknBaseWage: base,
+      configApplied: {
+        jknEmployerPercent: data.customRates?.jknEmployerPercent ?? 4,
+        jknEmployeePercent: data.customRates?.jknEmployeePercent ?? 1,
+        jknWageCap: data.customRates?.jknWageCap ?? 12_000_000,
+      },
+      employee: { jkn: breakdown.employee.jkn },
+      employer: { jkn: breakdown.employer.jkn },
+      totalPerPerson: breakdown.employee.jkn + breakdown.employer.jkn,
+    };
   }
 }
 

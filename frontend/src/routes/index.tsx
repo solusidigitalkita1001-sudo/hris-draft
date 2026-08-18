@@ -111,6 +111,9 @@ import { AdminUsersPage } from '@/modules/admin/pages/AdminUsersPage';
 import { AdminAuditLogPage } from '@/modules/admin/pages/AdminAuditLogPage';
 import { AdminAuditLogDetailPage } from '@/modules/admin/pages/AdminAuditLogDetailPage';
 import { AdminSettingsPage } from '@/modules/admin/pages/AdminSettingsPage';
+import { AdminMenuAccessPage } from '@/modules/admin/pages/AdminMenuAccessPage';
+import { AdminDataScopePage } from '@/modules/admin/pages/AdminDataScopePage';
+import { WorkflowAdminPage } from '@/modules/workflow-engine/pages/WorkflowAdminPage';
 import { EMPLOYEE_SELF_SERVICE_ROLES, OPERATIONAL_ROLES } from '@/lib/access-control';
 
 export const router = createBrowserRouter([
@@ -794,6 +797,30 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
             <AdminSettingsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/workflows',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'workflow', action: 'read' }]}>
+            <WorkflowAdminPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/menu-access',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
+            <AdminMenuAccessPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/data-scope',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
+            <AdminDataScopePage />
           </ProtectedRoute>
         ),
       },

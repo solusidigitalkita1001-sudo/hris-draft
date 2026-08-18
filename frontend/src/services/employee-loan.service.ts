@@ -46,6 +46,29 @@ export interface LoanInstallment {
 export type LoanStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACTIVE' | 'PAID' | 'CANCELLED';
 export type InstallmentStatus = 'PENDING' | 'PAID' | 'OVERDUE' | 'SKIPPED';
 
+export interface WorkflowStep {
+  id: string;
+  level: number;
+  name: string;
+  status: string;
+  approverId?: string | null;
+  approverRoleCode?: string | null;
+  actedBy?: string | null;
+  actedAt?: string | null;
+  comment?: string | null;
+  isCurrent?: boolean;
+}
+
+export interface WorkflowInstance {
+  id: string;
+  status: string;
+  steps: WorkflowStep[];
+  logs: any[];
+  template?: { id: string; name: string; approvalType: string };
+}
+
+export type WorkflowAction = 'APPROVE' | 'REJECT' | 'ESCALATE';
+
 export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
   PENDING: 'Pending',
   APPROVED: 'Disetujui',
@@ -99,6 +122,20 @@ class EmployeeLoanService {
 
   async reject(id: string, notes?: string) {
     const r = await api.patch(`/employee-loans/${id}/reject`, { notes });
+    return r.data.data;
+  }
+
+  async getWorkflow(id: string): Promise<WorkflowInstance> {
+    const r = await api.get(`/employee-loans/${id}/workflow`);
+    return r.data.data;
+  }
+
+  async submitWorkflowAction(
+    id: string,
+    action: WorkflowAction,
+    comment?: string
+  ): Promise<{ loan: Loan; workflowInstance: WorkflowInstance }> {
+    const r = await api.patch(`/employee-loans/${id}/workflow-action`, { action, comment });
     return r.data.data;
   }
 

@@ -438,11 +438,11 @@ export function TravelExpensePage() {
     if (action === 'reject' && !notes) return;
     try {
       if (action === 'approve') {
-        await travelExpenseService.approveTrip(id, notes || undefined);
-        toast.success('Travel request disetujui');
+        await travelExpenseService.submitTripWorkflowAction(id, 'APPROVE', notes || undefined);
+        toast.success('Travel request disetujui via workflow');
       } else {
-        await travelExpenseService.rejectTrip(id, notes || undefined);
-        toast.success('Travel request ditolak');
+        await travelExpenseService.submitTripWorkflowAction(id, 'REJECT', notes || undefined);
+        toast.success('Travel request ditolak via workflow');
       }
       await refresh();
     } catch (error: any) {
@@ -478,8 +478,8 @@ export function TravelExpensePage() {
           placeholder: 'Catatan approval (opsional)',
           confirmText: 'Approve',
         });
-        await travelExpenseService.approveClaim(id, notes || undefined);
-        toast.success('Expense claim disetujui');
+        await travelExpenseService.submitClaimWorkflowAction(id, 'APPROVE', notes || undefined);
+        toast.success('Expense claim disetujui via workflow');
       } else if (action === 'reject') {
         const notes = await popup.prompt({
           title: 'Reject Expense Claim',
@@ -490,8 +490,8 @@ export function TravelExpensePage() {
           intent: 'destructive',
         });
         if (!notes) return;
-        await travelExpenseService.rejectClaim(id, notes || undefined);
-        toast.success('Expense claim ditolak');
+        await travelExpenseService.submitClaimWorkflowAction(id, 'REJECT', notes || undefined);
+        toast.success('Expense claim ditolak via workflow');
       } else {
         const method = (await popup.select({
           title: 'Metode Reimbursement',

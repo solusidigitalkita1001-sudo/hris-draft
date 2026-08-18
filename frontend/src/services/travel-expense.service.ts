@@ -10,6 +10,29 @@ export type ExpenseCategory =
   | 'OPERATIONAL';
 export type ReimbursementMethod = 'TRANSFER' | 'PAYROLL';
 
+export interface WorkflowStep {
+  id: string;
+  level: number;
+  name: string;
+  status: string;
+  approverId?: string | null;
+  approverRoleCode?: string | null;
+  actedBy?: string | null;
+  actedAt?: string | null;
+  comment?: string | null;
+  isCurrent?: boolean;
+}
+
+export interface WorkflowInstance {
+  id: string;
+  status: string;
+  steps: WorkflowStep[];
+  logs: any[];
+  template?: { id: string; name: string; approvalType: string };
+}
+
+export type WorkflowAction = 'APPROVE' | 'REJECT' | 'ESCALATE';
+
 export interface TravelAdvance {
   id: string;
   tripId: string;
@@ -136,6 +159,11 @@ class TravelExpenseService {
     return response.data.data as BusinessTrip[];
   }
 
+  async findTripById(id: string) {
+    const response = await api.get(`/travel-expenses/trips/${id}`);
+    return response.data.data as BusinessTrip;
+  }
+
   async createTrip(data: Partial<BusinessTrip>) {
     const response = await api.post('/travel-expenses/trips', data);
     return response.data.data as BusinessTrip;
@@ -149,6 +177,20 @@ class TravelExpenseService {
   async rejectTrip(id: string, notes?: string) {
     const response = await api.patch(`/travel-expenses/trips/${id}/reject`, { notes });
     return response.data.data as BusinessTrip;
+  }
+
+  async getTripWorkflow(id: string): Promise<WorkflowInstance> {
+    const response = await api.get(`/travel-expenses/trips/${id}/workflow`);
+    return response.data.data;
+  }
+
+  async submitTripWorkflowAction(
+    id: string,
+    action: WorkflowAction,
+    comment?: string
+  ): Promise<{ trip: BusinessTrip; workflowInstance: WorkflowInstance }> {
+    const response = await api.patch(`/travel-expenses/trips/${id}/workflow-action`, { action, comment });
+    return response.data.data;
   }
 
   async createAdvance(id: string, payload: { companyId?: string; amount: number; disbursedAt?: string; notes?: string }) {
@@ -168,6 +210,11 @@ class TravelExpenseService {
     if (status) params.status = status;
     const response = await api.get('/travel-expenses/claims/my', { params });
     return response.data.data as ExpenseClaim[];
+  }
+
+  async findClaimById(id: string) {
+    const response = await api.get(`/travel-expenses/claims/${id}`);
+    return response.data.data as ExpenseClaim;
   }
 
   async createClaim(data: Partial<ExpenseClaim>) {
@@ -195,6 +242,20 @@ class TravelExpenseService {
   async rejectClaim(id: string, notes?: string) {
     const response = await api.patch(`/travel-expenses/claims/${id}/reject`, { notes });
     return response.data.data as ExpenseClaim;
+  }
+
+  async getClaimWorkflow(id: string): Promise<WorkflowInstance> {
+    const response = await api.get(`/travel-expenses/claims/${id}/workflow`);
+    return response.data.data;
+  }
+
+  async submitClaimWorkflowAction(
+    id: string,
+    action: WorkflowAction,
+    comment?: string
+  ): Promise<{ claim: ExpenseClaim; workflowInstance: WorkflowInstance }> {
+    const response = await api.patch(`/travel-expenses/claims/${id}/workflow-action`, { action, comment });
+    return response.data.data;
   }
 
   async reimburseClaim(

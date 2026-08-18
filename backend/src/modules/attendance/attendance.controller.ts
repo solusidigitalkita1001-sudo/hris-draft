@@ -87,7 +87,12 @@ export class AttendanceController {
   }
 
   async createOvertime(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-    try { res.status(201).json(Result.created(await attendanceService.createOvertime(req.body))); }
+    try {
+      if (req.user?.employeeId && !req.body.companyId) {
+        // will be resolved in service or leave as-is if companyId provided in body
+      }
+      res.status(201).json(Result.created(await attendanceService.createOvertime(req.body)));
+    }
     catch (error) { next(error); }
   }
 
@@ -97,8 +102,26 @@ export class AttendanceController {
   }
 
   async rejectOvertime(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-    try { res.json(Result.updated(await attendanceService.rejectOvertime(req.params.id as string))); }
+    try { res.json(Result.updated(await attendanceService.rejectOvertime(req.params.id as string, req.body.reason))); }
     catch (error) { next(error); }
+  }
+
+  async getOvertimeWorkflow(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await attendanceService.getOvertimeWorkflow(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async applyOvertimeWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await attendanceService.applyOvertimeWorkflowAction(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.roles ?? [],
+        { ...req.body, source: 'WORKFLOW' },
+      );
+      res.json(Result.updated(result));
+    } catch (error) { next(error); }
   }
 
   async calculateOvertimePay(req: AuthenticatedRequest, res: Response, next: NextFunction) {

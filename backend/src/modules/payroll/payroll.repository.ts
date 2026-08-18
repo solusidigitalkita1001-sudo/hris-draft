@@ -292,7 +292,11 @@ export class PayrollRepository {
         payslips: {
           include: {
             employee: {
-              select: { id: true, fullName: true, employeeNumber: true, bankName: true, bankCode: true, bankAccount: true, bankAccountHolder: true },
+              select: {
+                id: true, fullName: true, employeeNumber: true,
+                bankName: true, bankCode: true, bankAccount: true, bankAccountHolder: true,
+                bankAccounts: true, // B.6 MULTIBANK: include multiple bank accounts array untuk pilih primary
+              },
             },
             components: {
               include: { salaryComponent: true },

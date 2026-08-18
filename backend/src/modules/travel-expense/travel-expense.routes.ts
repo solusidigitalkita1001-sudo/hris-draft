@@ -16,6 +16,7 @@ import {
   createTravelAdvanceSchema,
   reimburseExpenseClaimSchema,
 } from './travel-expense.dto';
+import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
@@ -61,6 +62,7 @@ router.post(
   validate(createBusinessTripSchema),
   travelExpenseController.createTrip.bind(travelExpenseController)
 );
+router.get('/trips/:id', authorizeRole(...approverRoles), travelExpenseController.findTripById.bind(travelExpenseController));
 router.patch(
   '/trips/:id/approve',
   authorizeRole(...approverRoles),
@@ -72,6 +74,17 @@ router.patch(
   authorizeRole(...approverRoles),
   validate(approveBusinessTripSchema),
   travelExpenseController.rejectTrip.bind(travelExpenseController)
+);
+router.get(
+  '/trips/:id/workflow',
+  authorizeRole(...approverRoles),
+  travelExpenseController.getTripWorkflow.bind(travelExpenseController)
+);
+router.patch(
+  '/trips/:id/workflow-action',
+  authorizeRole(...approverRoles),
+  validate(workflowActionSchema),
+  travelExpenseController.applyTripWorkflowAction.bind(travelExpenseController)
 );
 router.post(
   '/trips/:id/advance',
@@ -94,6 +107,7 @@ router.post(
   validate(createExpenseClaimSchema),
   travelExpenseController.createClaim.bind(travelExpenseController)
 );
+router.get('/claims/:id', authorizeRole(...approverRoles), travelExpenseController.findClaimById.bind(travelExpenseController));
 router.patch(
   '/claims/:id/approve',
   authorizeRole(...approverRoles),
@@ -105,6 +119,17 @@ router.patch(
   authorizeRole(...approverRoles),
   validate(approveExpenseClaimSchema),
   travelExpenseController.rejectClaim.bind(travelExpenseController)
+);
+router.get(
+  '/claims/:id/workflow',
+  authorizeRole(...approverRoles),
+  travelExpenseController.getClaimWorkflow.bind(travelExpenseController)
+);
+router.patch(
+  '/claims/:id/workflow-action',
+  authorizeRole(...approverRoles),
+  validate(workflowActionSchema),
+  travelExpenseController.applyClaimWorkflowAction.bind(travelExpenseController)
 );
 router.post(
   '/claims/:id/reimburse',

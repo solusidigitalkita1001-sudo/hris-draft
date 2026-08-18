@@ -212,6 +212,29 @@ export interface ShiftSwapCandidateResponse {
   candidates: ShiftSwapEmployeeOption[];
 }
 
+export interface WorkflowStep {
+  id: string;
+  level: number;
+  name: string;
+  status: string;
+  approverId?: string | null;
+  approverRoleCode?: string | null;
+  actedBy?: string | null;
+  actedAt?: string | null;
+  comment?: string | null;
+  isCurrent?: boolean;
+}
+
+export interface WorkflowInstance {
+  id: string;
+  status: string;
+  steps: WorkflowStep[];
+  logs: any[];
+  template?: { id: string; name: string; approvalType: string };
+}
+
+export type WorkflowAction = 'APPROVE' | 'REJECT' | 'ESCALATE';
+
 const WORK_DAY_KEYS: WorkDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 function normalizeWorkDayRule(rule?: boolean | WorkDayRule): WorkDayRule {
@@ -421,12 +444,26 @@ class WorkCalendarService {
 
   async approveShiftSwapRequest(id: string, approvalNotes?: string) {
     const r = await api.patch(`/work-calendars/shift-swaps/${id}/approve`, { approvalNotes });
-    return r.data.data as ShiftSwapRequest;
+    return r.data.data as { shiftSwapRequest: ShiftSwapRequest; workflowInstance: WorkflowInstance };
   }
 
   async rejectShiftSwapRequest(id: string, approvalNotes?: string) {
     const r = await api.patch(`/work-calendars/shift-swaps/${id}/reject`, { approvalNotes });
-    return r.data.data as ShiftSwapRequest;
+    return r.data.data as { shiftSwapRequest: ShiftSwapRequest; workflowInstance: WorkflowInstance };
+  }
+
+  async getShiftSwapWorkflow(requestId: string): Promise<WorkflowInstance> {
+    const r = await api.get(`/work-calendars/shift-swaps/${requestId}/workflow`);
+    return r.data.data;
+  }
+
+  async submitShiftSwapWorkflowAction(
+    requestId: string,
+    action: WorkflowAction,
+    comment?: string,
+  ): Promise<{ shiftSwapRequest: ShiftSwapRequest; workflowInstance: WorkflowInstance }> {
+    const r = await api.patch(`/work-calendars/shift-swaps/${requestId}/workflow-action`, { action, comment });
+    return r.data.data;
   }
 }
 

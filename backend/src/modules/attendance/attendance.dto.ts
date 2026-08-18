@@ -6,7 +6,7 @@ export const createAttendanceSchema = z.object({
   date: z.string().datetime(),
   checkIn: z.string().datetime().optional(),
   checkOut: z.string().datetime().optional(),
-  method: z.enum(['FINGERPRINT', 'MOBILE_GPS', 'MANUAL']).default('MANUAL'),
+  method: z.enum(['FINGERPRINT', 'MOBILE_GPS', 'MANUAL', 'FACE_RECOGNITION']).default('MANUAL'),
   source: z.string().max(50).optional(),
   checkInLatitude: z.number().optional(),
   checkInLongitude: z.number().optional(),
@@ -14,11 +14,45 @@ export const createAttendanceSchema = z.object({
   checkOutLongitude: z.number().optional(),
   status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']).default('PRESENT'),
   notes: z.string().optional(),
+  /// B.7 Face Recognition Backend Ready
+  faceRecognition: z
+    .object({
+      selfieUrl: z.string().max(500).optional(),
+      referencePhotoUrl: z.string().max(500).optional(),
+      similarityScore: z.number().min(-1).max(1).optional(),
+      isFaceMatch: z.boolean().optional(),
+    })
+    .optional(),
+  /// B.8 Liveness
+  liveness: z
+    .object({
+      exifMake: z.string().max(100).optional().nullable(),
+      exifModel: z.string().max(100).optional().nullable(),
+      exifSoftware: z.string().max(200).optional().nullable(),
+      exifDateTimeOriginal: z.string().max(30).optional().nullable(),
+      pixelVariance: z.number().min(0).optional().nullable(),
+      fileSizeBytes: z.number().int().min(0).optional().nullable(),
+      mimeType: z.string().max(100).optional().nullable(),
+      clientSource: z.string().max(50).optional().nullable(),
+      isLiveCapture: z.boolean().optional().nullable(),
+    })
+    .optional(),
+  /// B.9 GPS / Mock Location
+  deviceGps: z
+    .object({
+      isMockLocation: z.boolean().optional().nullable(),
+      mockProviderApp: z.string().max(200).optional().nullable(),
+      accuracyMeters: z.number().min(0).optional().nullable(),
+      coordinateStaleHours: z.number().min(0).optional().nullable(),
+      altitudeMeters: z.number().optional().nullable(),
+      bearingDegrees: z.number().min(0).max(360).optional().nullable(),
+    })
+    .optional(),
 });
 
 export const checkoutAttendanceSchema = z.object({
   checkOut: z.string().datetime(),
-  method: z.enum(['FINGERPRINT', 'MOBILE_GPS', 'MANUAL']).optional(),
+  method: z.enum(['FINGERPRINT', 'MOBILE_GPS', 'MANUAL', 'FACE_RECOGNITION']).optional(),
   checkOutLatitude: z.number().optional(),
   checkOutLongitude: z.number().optional(),
   notes: z.string().optional(),
@@ -27,7 +61,7 @@ export const checkoutAttendanceSchema = z.object({
 export const updateAttendanceSchema = z.object({
   checkIn: z.string().datetime().optional(),
   checkOut: z.string().datetime().optional(),
-  method: z.enum(['FINGERPRINT', 'MOBILE_GPS', 'MANUAL']).optional(),
+  method: z.enum(['FINGERPRINT', 'MOBILE_GPS', 'MANUAL', 'FACE_RECOGNITION']).optional(),
   checkOutLatitude: z.number().optional(),
   checkOutLongitude: z.number().optional(),
   workDuration: z.number().int().nonnegative().optional(),

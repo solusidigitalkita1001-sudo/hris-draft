@@ -4,6 +4,8 @@ import { seedRoles } from './modules/02-roles.seed';
 import { seedRolePermissions } from './modules/03-role-permissions.seed';
 import { seedAdminUser } from './modules/04-admin-user.seed';
 import { seedTestData } from './modules/05-test-data.seed';
+import { seedWorkflowDefaults } from './modules/06-workflow-defaults.seed';
+import { seedPayrollReferences } from './modules/07-payroll-reference-tables.seed';
 
 const prisma = new PrismaClient();
 
@@ -22,6 +24,12 @@ async function main(): Promise<void> {
   if (!process.env.SKIP_TEST_DATA) {
     await seedTestData();
   }
+
+  // Seed default workflow templates for all companies
+  await seedWorkflowDefaults();
+
+  // Seed payroll reference tables (TaxBracket, PtkpTable, BpjsReference defaults 2024)
+  await seedPayrollReferences(prisma);
 
   console.log('\n========================================');
   console.log('  ✓ Database seeding completed!');

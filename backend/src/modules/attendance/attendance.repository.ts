@@ -102,6 +102,13 @@ export class AttendanceRepository {
     });
   }
 
+  async findOvertimeById(id: string) {
+    return prisma.overtimeRequest.findFirst({
+      where: { id, deletedAt: null },
+      include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
+    });
+  }
+
   async createOvertime(data: CreateOvertimeDTO) {
     return prisma.overtimeRequest.create({
       data: {

@@ -11,6 +11,7 @@ import {
   createAttendanceSchema,
   createOvertimeSchema,
 } from './attendance.dto';
+import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 
 const router = Router();
 router.use(authenticate);
@@ -33,5 +34,7 @@ router.post('/overtime', authorize({ resource: 'attendance', action: 'create' })
 router.get('/overtime/:id/pay', authorize({ resource: 'attendance', action: 'read' }), attendanceController.calculateOvertimePay.bind(attendanceController));
 router.patch('/overtime/:id/approve', authorize({ resource: 'attendance', action: 'approve' }), attendanceController.approveOvertime.bind(attendanceController));
 router.patch('/overtime/:id/reject', authorize({ resource: 'attendance', action: 'approve' }), attendanceController.rejectOvertime.bind(attendanceController));
+router.get('/overtime/:id/workflow', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getOvertimeWorkflow.bind(attendanceController));
+router.patch('/overtime/:id/workflow-action', authorize({ resource: 'attendance', action: 'approve' }), validate(workflowActionSchema), attendanceController.applyOvertimeWorkflowAction.bind(attendanceController));
 
 export default router;

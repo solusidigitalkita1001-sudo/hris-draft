@@ -1154,6 +1154,109 @@ export class WorkCalendarRepository {
         id: requestId,
         deletedAt: null,
       },
+      select: {
+        id: true,
+        status: true,
+        approverEmployeeId: true,
+      },
+    });
+
+    if (!request || request.approverEmployeeId !== approver.id) {
+      throw new NotFoundError('Request tukar shift tidak ditemukan untuk kepala regu ini');
+    }
+
+    if (request.status !== 'PENDING') {
+      throw new BadRequestError('Request tukar shift sudah diproses sebelumnya');
+    }
+
+    return this.finalizeShiftSwapApprovalEffects(requestId, userId, approver.id, data.approvalNotes);
+  }
+
+  async rejectShiftSwapRequest(userId: string, requestId: string, data: ReviewShiftSwapRequestDTO) {
+    const approver = await this.findEmployeeByUserId(userId);
+    const request = await prisma.shiftSwapRequest.findFirst({
+      where: {
+        id: requestId,
+        approverEmployeeId: approver.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundError('Request tukar shift tidak ditemukan untuk kepala regu ini');
+    }
+
+    if (request.status !== 'PENDING') {
+      throw new BadRequestError('Request tukar shift sudah diproses sebelumnya');
+    }
+
+    return this.finalizeShiftSwapRejectEffects(requestId, userId, data.approvalNotes);
+  }
+
+  async findShiftSwapRequestById(id: string) {
+    return prisma.shiftSwapRequest.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        requesterEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        targetEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+        approverEmployee: {
+          select: { id: true, fullName: true, employeeNumber: true },
+        },
+      },
+    });
+  }
+
+  async findDefaultShiftSwapTemplate(companyId: string) {
+    return prisma.workflowTemplate.findFirst({
+      where: {
+        companyId,
+        approvalType: 'SHIFT_SWAP',
+        resource: 'work-calendar',
+        isActive: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        stages: {
+          orderBy: { level: 'asc' },
+          include: { conditionRules: true },
+        },
+      },
+    });
+  }
+
+  async findWorkflowInstanceByShiftSwapId(requestId: string) {
+    return prisma.workflowInstance.findFirst({
+      where: {
+        referenceType: 'SHIFT_SWAP_REQUEST',
+        referenceId: requestId,
+      },
+      include: {
+        steps: { orderBy: { level: 'asc' } },
+        logs: { orderBy: { createdAt: 'desc' } },
+        template: { select: { id: true, name: true, approvalType: true } },
+      },
+    });
+  }
+
+  async finalizeShiftSwapApprovalEffects(
+    requestId: string,
+    approverUserId: string,
+    approverEmployeeId: string,
+    approvalNotes?: string,
+  ) {
+    const request = await prisma.shiftSwapRequest.findFirst({
+      where: {
+        id: requestId,
+        deletedAt: null,
+      },
       include: {
         requesterEmployee: {
           select: {
@@ -1180,12 +1283,12 @@ export class WorkCalendarRepository {
       },
     });
 
-    if (!request || request.approverEmployeeId !== approver.id) {
-      throw new NotFoundError('Request tukar shift tidak ditemukan untuk kepala regu ini');
+    if (!request) {
+      throw new NotFoundError('Request tukar shift tidak ditemukan');
     }
 
-    if (request.status !== 'PENDING') {
-      throw new BadRequestError('Request tukar shift sudah diproses sebelumnya');
+    if (request.status === 'APPROVED') {
+      return this.findShiftSwapRequestById(requestId);
     }
 
     const shiftDate = startOfDateOnly(request.shiftDate);
@@ -1212,7 +1315,7 @@ export class WorkCalendarRepository {
           source: 'SHIFT_SWAP',
           originalSchedule: toShiftOverridePayload(requesterSchedule) as unknown as Prisma.InputJsonValue,
           overrideSchedule: toShiftOverridePayload(targetSchedule) as unknown as Prisma.InputJsonValue,
-          notes: data.approvalNotes ?? null,
+          notes: approvalNotes ?? null,
           deletedAt: null,
         },
         create: {
@@ -1223,7 +1326,7 @@ export class WorkCalendarRepository {
           source: 'SHIFT_SWAP',
           originalSchedule: toShiftOverridePayload(requesterSchedule) as unknown as Prisma.InputJsonValue,
           overrideSchedule: toShiftOverridePayload(targetSchedule) as unknown as Prisma.InputJsonValue,
-          notes: data.approvalNotes ?? null,
+          notes: approvalNotes ?? null,
         },
       });
 
@@ -1240,7 +1343,7 @@ export class WorkCalendarRepository {
           source: 'SHIFT_SWAP',
           originalSchedule: toShiftOverridePayload(targetSchedule) as unknown as Prisma.InputJsonValue,
           overrideSchedule: toShiftOverridePayload(requesterSchedule) as unknown as Prisma.InputJsonValue,
-          notes: data.approvalNotes ?? null,
+          notes: approvalNotes ?? null,
           deletedAt: null,
         },
         create: {
@@ -1251,7 +1354,7 @@ export class WorkCalendarRepository {
           source: 'SHIFT_SWAP',
           originalSchedule: toShiftOverridePayload(targetSchedule) as unknown as Prisma.InputJsonValue,
           overrideSchedule: toShiftOverridePayload(requesterSchedule) as unknown as Prisma.InputJsonValue,
-          notes: data.approvalNotes ?? null,
+          notes: approvalNotes ?? null,
         },
       });
 
@@ -1259,7 +1362,7 @@ export class WorkCalendarRepository {
         where: { id: request.id },
         data: {
           status: 'APPROVED',
-          approvalNotes: data.approvalNotes,
+          approvalNotes,
           reviewedAt: new Date(),
         },
         include: {
@@ -1277,33 +1380,29 @@ export class WorkCalendarRepository {
     });
   }
 
-  async rejectShiftSwapRequest(userId: string, requestId: string, data: ReviewShiftSwapRequestDTO) {
-    const approver = await this.findEmployeeByUserId(userId);
+  async finalizeShiftSwapRejectEffects(
+    requestId: string,
+    approverUserId: string,
+    rejectionNotes?: string,
+  ) {
     const request = await prisma.shiftSwapRequest.findFirst({
-      where: {
-        id: requestId,
-        approverEmployeeId: approver.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        status: true,
-      },
+      where: { id: requestId, deletedAt: null },
+      select: { id: true, status: true },
     });
 
     if (!request) {
-      throw new NotFoundError('Request tukar shift tidak ditemukan untuk kepala regu ini');
+      throw new NotFoundError('Request tukar shift tidak ditemukan');
     }
 
-    if (request.status !== 'PENDING') {
-      throw new BadRequestError('Request tukar shift sudah diproses sebelumnya');
+    if (request.status === 'APPROVED' || request.status === 'CANCELLED') {
+      throw new BadRequestError('Request tukar shift sudah disetujui/dibatalkan, tidak bisa ditolak ulang');
     }
 
     return prisma.shiftSwapRequest.update({
       where: { id: request.id },
       data: {
         status: 'REJECTED',
-        approvalNotes: data.approvalNotes,
+        approvalNotes: rejectionNotes,
         reviewedAt: new Date(),
       },
       include: {

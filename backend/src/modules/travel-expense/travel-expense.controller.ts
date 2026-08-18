@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { Result } from '@/shared/core/Result';
-import { travelExpenseRepository } from './travel-expense.repository';
+import { travelExpenseService } from './travel-expense.service';
 import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
 import config from '@/config';
@@ -35,7 +35,7 @@ export class TravelExpenseController {
 
   async getExpenseCategories(_req: Request, res: Response, next: NextFunction) {
     try {
-      res.json(Result.success(travelExpenseRepository.getExpenseCategories()));
+      res.json(Result.success(travelExpenseService.getExpenseCategories()));
     } catch (error) {
       next(error);
     }
@@ -50,7 +50,7 @@ export class TravelExpenseController {
         return res.status(400).json(Result.error('companyId is required'));
       }
 
-      const data = await travelExpenseRepository.findTrips(companyId, status);
+      const data = await travelExpenseService.findTrips(companyId, status);
       res.json(Result.success(data));
     } catch (error) {
       next(error);
@@ -62,7 +62,16 @@ export class TravelExpenseController {
       const { employeeId } = await this.getEmployeeContext(req);
       const status = req.query.status as string | undefined;
 
-      const data = await travelExpenseRepository.findMyTrips(employeeId, status);
+      const data = await travelExpenseService.findMyTrips(employeeId, status);
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async findTripById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await travelExpenseService.findTripById(req.params.id as string);
       res.json(Result.success(data));
     } catch (error) {
       next(error);
@@ -73,7 +82,7 @@ export class TravelExpenseController {
     try {
       const { companyId, employeeId } = await this.getEmployeeContext(req);
 
-      const data = await travelExpenseRepository.createTrip({
+      const data = await travelExpenseService.createTrip({
         ...req.body,
         companyId,
         employeeId,
@@ -86,13 +95,16 @@ export class TravelExpenseController {
 
   async approveTrip(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const trip = await travelExpenseRepository.findTripById(req.params.id as string);
-      if (!trip) return res.status(404).json(Result.error('Travel request not found'));
+      const trip = await travelExpenseService.findTripById(req.params.id as string);
       if (req.user!.employeeId && req.user!.employeeId === trip.employeeId) {
         throw new ForbiddenError('Cannot approve your own travel request');
       }
-      const data = await travelExpenseRepository.approveTrip(req.params.id as string, req.user!.id, req.body);
-      res.json(Result.updated(data, 'Travel request approved'));
+      const data = await travelExpenseService.approveTrip(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.employeeId
+      );
+      res.json(Result.updated(data, 'Travel request approved via workflow'));
     } catch (error) {
       next(error);
     }
@@ -100,13 +112,39 @@ export class TravelExpenseController {
 
   async rejectTrip(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const trip = await travelExpenseRepository.findTripById(req.params.id as string);
-      if (!trip) return res.status(404).json(Result.error('Travel request not found'));
+      const trip = await travelExpenseService.findTripById(req.params.id as string);
       if (req.user!.employeeId && req.user!.employeeId === trip.employeeId) {
         throw new ForbiddenError('Cannot reject your own travel request');
       }
-      const data = await travelExpenseRepository.rejectTrip(req.params.id as string, req.user!.id, req.body);
-      res.json(Result.updated(data, 'Travel request rejected'));
+      const data = await travelExpenseService.rejectTrip(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.employeeId,
+        req.body?.reason ?? req.body?.notes
+      );
+      res.json(Result.updated(data, 'Travel request rejected via workflow'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getTripWorkflow(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await travelExpenseService.getTripWorkflow(req.params.id as string)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async applyTripWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await travelExpenseService.applyTripWorkflowAction(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.roles ?? [],
+        { ...req.body, source: 'WORKFLOW' }
+      );
+      res.json(Result.updated(result));
     } catch (error) {
       next(error);
     }
@@ -119,7 +157,7 @@ export class TravelExpenseController {
         return res.status(400).json(Result.error('companyId is required'));
       }
 
-      const data = await travelExpenseRepository.createAdvance(req.params.id as string, {
+      const data = await travelExpenseService.createAdvance(req.params.id as string, {
         ...req.body,
         companyId,
       });
@@ -138,7 +176,7 @@ export class TravelExpenseController {
         return res.status(400).json(Result.error('companyId is required'));
       }
 
-      const data = await travelExpenseRepository.findClaims(companyId, status);
+      const data = await travelExpenseService.findClaims(companyId, status);
       res.json(Result.success(data));
     } catch (error) {
       next(error);
@@ -150,7 +188,16 @@ export class TravelExpenseController {
       const { employeeId } = await this.getEmployeeContext(req);
       const status = req.query.status as string | undefined;
 
-      const data = await travelExpenseRepository.findMyClaims(employeeId, status);
+      const data = await travelExpenseService.findMyClaims(employeeId, status);
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async findClaimById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await travelExpenseService.findClaimById(req.params.id as string);
       res.json(Result.success(data));
     } catch (error) {
       next(error);
@@ -161,7 +208,7 @@ export class TravelExpenseController {
     try {
       const { companyId, employeeId } = await this.getEmployeeContext(req);
 
-      const data = await travelExpenseRepository.createClaim({
+      const data = await travelExpenseService.createClaim({
         ...req.body,
         companyId,
         employeeId,
@@ -200,13 +247,16 @@ export class TravelExpenseController {
 
   async approveClaim(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const claim = await travelExpenseRepository.findClaimById(req.params.id as string);
-      if (!claim) return res.status(404).json(Result.error('Expense claim not found'));
+      const claim = await travelExpenseService.findClaimById(req.params.id as string);
       if (req.user!.employeeId && req.user!.employeeId === claim.employeeId) {
         throw new ForbiddenError('Cannot approve your own expense claim');
       }
-      const data = await travelExpenseRepository.approveClaim(req.params.id as string, req.user!.id, req.body);
-      res.json(Result.updated(data, 'Expense claim approved'));
+      const data = await travelExpenseService.approveClaim(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.employeeId
+      );
+      res.json(Result.updated(data, 'Expense claim approved via workflow'));
     } catch (error) {
       next(error);
     }
@@ -214,13 +264,39 @@ export class TravelExpenseController {
 
   async rejectClaim(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const claim = await travelExpenseRepository.findClaimById(req.params.id as string);
-      if (!claim) return res.status(404).json(Result.error('Expense claim not found'));
+      const claim = await travelExpenseService.findClaimById(req.params.id as string);
       if (req.user!.employeeId && req.user!.employeeId === claim.employeeId) {
         throw new ForbiddenError('Cannot reject your own expense claim');
       }
-      const data = await travelExpenseRepository.rejectClaim(req.params.id as string, req.user!.id, req.body);
-      res.json(Result.updated(data, 'Expense claim rejected'));
+      const data = await travelExpenseService.rejectClaim(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.employeeId,
+        req.body?.reason ?? req.body?.notes
+      );
+      res.json(Result.updated(data, 'Expense claim rejected via workflow'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getClaimWorkflow(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await travelExpenseService.getClaimWorkflow(req.params.id as string)));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async applyClaimWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await travelExpenseService.applyClaimWorkflowAction(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.roles ?? [],
+        { ...req.body, source: 'WORKFLOW' }
+      );
+      res.json(Result.updated(result));
     } catch (error) {
       next(error);
     }
@@ -233,7 +309,7 @@ export class TravelExpenseController {
         return res.status(400).json(Result.error('companyId is required'));
       }
 
-      const data = await travelExpenseRepository.reimburseClaim(req.params.id as string, req.user!.id, {
+      const data = await travelExpenseService.reimburseClaim(req.params.id as string, req.user!.id, {
         ...req.body,
         companyId,
       });

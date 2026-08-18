@@ -4,6 +4,7 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { workflowEngineController } from './workflow-engine.controller';
 import {
+  bulkApprovalSchema,
   createWorkflowTemplateSchema,
   startWorkflowInstanceSchema,
   updateWorkflowTemplateSchema,
@@ -25,5 +26,6 @@ router.get('/instances/my-approvals', authorize({ resource: 'workflow', action: 
 router.get('/instances/:id', authorize({ resource: 'workflow', action: 'read' }), workflowEngineController.findInstanceById.bind(workflowEngineController));
 router.post('/instances/start', authorize({ resource: 'workflow', action: 'create' }), validate(startWorkflowInstanceSchema), workflowEngineController.startInstance.bind(workflowEngineController));
 router.post('/instances/:id/actions', authorize({ resource: 'workflow', action: 'approve' }), validate(workflowActionSchema), workflowEngineController.applyAction.bind(workflowEngineController));
+router.post('/instances/bulk-approve', authorize({ resource: 'workflow', action: 'approve' }), validate(bulkApprovalSchema), workflowEngineController.bulkApproval.bind(workflowEngineController));
 
 export default router;

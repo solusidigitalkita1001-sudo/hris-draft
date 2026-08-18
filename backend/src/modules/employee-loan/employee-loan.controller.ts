@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
-import { employeeLoanRepository } from './employee-loan.repository';
+import { employeeLoanService } from './employee-loan.service';
 import { Result } from '@/shared/core/Result';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
 
@@ -9,7 +9,7 @@ export class EmployeeLoanController {
     try {
       const companyId = req.query.companyId as string;
       if (!companyId) return res.status(400).json(Result.error('companyId is required'));
-      const data = await employeeLoanRepository.findLoanTypes(companyId);
+      const data = await employeeLoanService.findLoanTypes(companyId);
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
@@ -19,7 +19,7 @@ export class EmployeeLoanController {
       const companyId = req.query.companyId as string;
       const status = req.query.status as string | undefined;
       if (!companyId) return res.status(400).json(Result.error('companyId is required'));
-      const data = await employeeLoanRepository.findAll(companyId, status);
+      const data = await employeeLoanService.findAll(companyId, status);
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
@@ -29,14 +29,14 @@ export class EmployeeLoanController {
       const employeeId = req.query.employeeId as string;
       const status = req.query.status as string | undefined;
       if (!employeeId) return res.status(400).json(Result.error('employeeId is required'));
-      const data = await employeeLoanRepository.findMyLoans(employeeId, status);
+      const data = await employeeLoanService.findMyLoans(employeeId, status);
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
 
   async findById(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await employeeLoanRepository.findById(req.params.id as string);
+      const data = await employeeLoanService.findById(req.params.id as string);
       if (!data) return res.status(404).json(Result.error('Loan not found'));
       res.json(Result.success(data));
     } catch (error) { next(error); }
@@ -51,16 +51,7 @@ export class EmployeeLoanController {
       if (!employeeId) throw new BadRequestError('User has no associated employee record');
       if (!companyId) throw new BadRequestError('User has no associated company');
 
-      const loanType = await employeeLoanRepository.findLoanTypeById(loanTypeId);
-      if (!loanType) throw new NotFoundError('Loan type not found');
-      if (Number(amount) > Number(loanType.maxAmount)) {
-        throw new BadRequestError(`Amount exceeds loan type maximum of ${loanType.maxAmount}`);
-      }
-      if (Number(totalInstallments) > loanType.maxInstallments) {
-        throw new BadRequestError(`Installments exceed loan type maximum of ${loanType.maxInstallments}`);
-      }
-
-      const loan = await employeeLoanRepository.create({
+      const loan = await employeeLoanService.createLoan({
         loanTypeId,
         amount,
         totalInstallments,
@@ -77,38 +68,48 @@ export class EmployeeLoanController {
 
   async approve(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const existingLoan = await employeeLoanRepository.findById(req.params.id as string);
-      if (!existingLoan) {
-        throw new NotFoundError('Loan not found');
-      }
-
-      if (existingLoan.status !== 'PENDING') {
-        throw new BadRequestError('Only pending loans can be approved');
-      }
-
-      const data = await employeeLoanRepository.approve(
+      const result = await employeeLoanService.approveLoan(
         req.params.id as string,
         req.user!.id,
-        {
-          totalInstallments: existingLoan.totalInstallments,
-          installmentAmount: existingLoan.installmentAmount,
-        },
-        req.body
+        req.user!.employeeId
       );
-      res.json(Result.updated(data, 'Loan approved'));
+      res.json(Result.updated(result, 'Loan approved via workflow'));
     } catch (error) { next(error); }
   }
 
   async reject(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const data = await employeeLoanRepository.reject(req.params.id as string, req.user!.id, req.body);
-      res.json(Result.updated(data, 'Loan rejected'));
+      const result = await employeeLoanService.rejectLoan(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.employeeId,
+        req.body?.reason ?? req.body?.notes
+      );
+      res.json(Result.updated(result, 'Loan rejected via workflow'));
+    } catch (error) { next(error); }
+  }
+
+  async getWorkflow(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await employeeLoanService.getWorkflow(req.params.id as string)));
+    } catch (error) { next(error); }
+  }
+
+  async applyWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await employeeLoanService.applyWorkflowAction(
+        req.params.id as string,
+        req.user!.id,
+        req.user!.roles ?? [],
+        { ...req.body, source: 'WORKFLOW' }
+      );
+      res.json(Result.updated(result));
     } catch (error) { next(error); }
   }
 
   async getInstallments(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await employeeLoanRepository.getInstallments(req.params.id as string);
+      const data = await employeeLoanService.getInstallments(req.params.id as string);
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
@@ -116,7 +117,7 @@ export class EmployeeLoanController {
   async getAmortization(req: Request, res: Response, next: NextFunction) {
     try {
       const method = req.query.method === 'EFFECTIVE' ? 'EFFECTIVE' : 'FLAT';
-      const data = await employeeLoanRepository.buildAmortization(req.params.id as string, method);
+      const data = await employeeLoanService.buildAmortization(req.params.id as string, method);
       if (!data) throw new NotFoundError('Loan not found');
       res.json(Result.success(data));
     } catch (error) { next(error); }

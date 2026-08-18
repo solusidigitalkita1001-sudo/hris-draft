@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
+import { getCurrentCompanyId, isSuperAdmin, isGroupAdmin } from '@/shared/context/RequestContext';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -21,11 +22,100 @@ function buildDatabaseUrl(): string {
   }
 }
 
+const COMPANY_SCOPED_MODELS = new Set([
+  'WorkflowTemplate',
+  'WorkflowInstance',
+  'WorkflowInstanceStep',
+  'WorkflowInstanceLog',
+  'LeaveRequest',
+  'LeaveBalance',
+  'Loan',
+  'BusinessTrip',
+  'ExpenseClaim',
+  'ExpenseApproval',
+  'ShiftSwapRequest',
+  'OvertimeRequest',
+]);
+
+const WORKFLOW_MODELS = new Set([
+  'WorkflowTemplate',
+  'WorkflowInstance',
+  'WorkflowInstanceStep',
+  'WorkflowInstanceLog',
+]);
+
+function hasCompanyIdFilter(params: any): boolean {
+  const where = params.args?.where;
+  if (!where) return false;
+  if (typeof where.companyId === 'string') return true;
+  if (where.companyId && typeof where.companyId === 'object') {
+    if ('equals' in where.companyId) return true;
+    if ('in' in where.companyId) return true;
+  }
+  if (Array.isArray(where.AND)) {
+    return where.AND.some((clause: any) => clause && typeof clause.companyId !== 'undefined');
+  }
+  return false;
+}
+
+function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {
+  // Middleware company scope hanya untuk model A.1-A.3 (workflow + leave/loan/travel/expense/shift/overtime).
+  // Tidak semua model di-scoped karena modul employee/master organization punya access pattern berbeda
+  // (GROUP_ADMIN perlu akses cross-company untuk master data).
+  client.$use(async (params, next) => {
+    const model = params.model;
+    if (!model || !COMPANY_SCOPED_MODELS.has(model)) {
+      return next(params);
+    }
+
+    const currentCompanyId = getCurrentCompanyId();
+    if (!currentCompanyId) {
+      return next(params);
+    }
+
+    if (WORKFLOW_MODELS.has(model) && (isSuperAdmin() || isGroupAdmin())) {
+      return next(params);
+    }
+
+    if (params.action === 'create') {
+      if (!params.args?.data?.companyId) {
+        if (params.args?.data) {
+          params.args.data.companyId = currentCompanyId;
+        }
+      }
+      return next(params);
+    }
+
+    if (
+      params.action === 'findUnique' ||
+      params.action === 'findFirst' ||
+      params.action === 'findMany' ||
+      params.action === 'count' ||
+      params.action === 'aggregate' ||
+      params.action === 'groupBy' ||
+      params.action === 'update' ||
+      params.action === 'updateMany' ||
+      params.action === 'delete' ||
+      params.action === 'deleteMany' ||
+      params.action === 'upsert'
+    ) {
+      if (!params.args) params.args = {};
+      if (!params.args.where) params.args.where = {};
+      if (!hasCompanyIdFilter(params)) {
+        params.args.where.companyId = currentCompanyId;
+      }
+    }
+
+    return next(params);
+  });
+
+  return client;
+}
+
 function createPrismaClient(): PrismaClient {
   const isDev = config.app.env === 'development';
   const client = new PrismaClient({
     datasources: { db: { url: buildDatabaseUrl() } },
-    // Emit query events in every env so slow queries can be surfaced.
     log: [
       { level: 'query', emit: 'event' },
       { level: 'error', emit: 'stdout' },
@@ -41,6 +131,8 @@ function createPrismaClient(): PrismaClient {
       logger.debug(`Query: ${e.query}`, { params: e.params, duration: `${e.duration}ms` });
     }
   });
+
+  attachCompanyScopeMiddleware(client);
 
   return client;
 }
@@ -63,6 +155,7 @@ function createReadClient(): PrismaClient {
     datasources: { db: { url: config.database.readReplicaUrl } },
     log: [{ level: 'error', emit: 'stdout' }],
   });
+  attachCompanyScopeMiddleware(replica);
   logger.info('Read replica configured — routing reads to replica');
   return replica;
 }

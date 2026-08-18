@@ -11,6 +11,7 @@ import {
   workCalendarIdParamsSchema, countWorkingDaysQuerySchema,
 } from './work-calendar.dto';
 import { validateRequest } from '@/shared/middleware/RequestValidator';
+import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 
 const router = Router();
 router.use(authenticate);
@@ -58,6 +59,8 @@ router.post('/shift-swaps', validate(createShiftSwapRequestSchema), workCalendar
 router.patch('/shift-swaps/:requestId/cancel', workCalendarController.cancelShiftSwapRequest.bind(workCalendarController));
 router.patch('/shift-swaps/:requestId/approve', validate(reviewShiftSwapRequestSchema), workCalendarController.approveShiftSwapRequest.bind(workCalendarController));
 router.patch('/shift-swaps/:requestId/reject', validate(reviewShiftSwapRequestSchema), workCalendarController.rejectShiftSwapRequest.bind(workCalendarController));
+router.get('/shift-swaps/:requestId/workflow', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.getShiftSwapWorkflow.bind(workCalendarController));
+router.patch('/shift-swaps/:requestId/workflow-action', authorize({ resource: 'work-calendar', action: 'update' }), validate(workflowActionSchema), workCalendarController.applyShiftSwapWorkflowAction.bind(workCalendarController));
 
 // Employee & Team Calendar
 router.get('/employee/:employeeId', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.getEmployeeCalendar.bind(workCalendarController));

@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/stores/ui.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   ADMIN_ROLES,
   EMPLOYEE_SELF_SERVICE_ROLES,
@@ -44,8 +45,10 @@ import {
   Workflow,
   MapPin,
   Repeat,
+  Menu as MenuIcon,
+  ShieldCheck,
 } from 'lucide-react';
-import { useState } from 'react';
+import { administrationService } from '@/services/administration.service';
 
 interface NavItem {
   labelKey: TranslationKey;
@@ -255,6 +258,24 @@ const navItems: NavItem[] = [
         access: { requireAuth: true, requiredPermissions: [{ resource: 'audit-log', action: 'read' }] },
       },
       {
+        labelKey: 'sidebar.administration.workflows',
+        icon: <Workflow size={16} />,
+        path: '/admin/workflows',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'workflow', action: 'read' }] },
+      },
+      {
+        labelKey: 'sidebar.administration.menuAccess',
+        icon: <MenuIcon size={16} />,
+        path: '/admin/menu-access',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'settings', action: 'read' }] },
+      },
+      {
+        labelKey: 'sidebar.administration.dataScope',
+        icon: <ShieldCheck size={16} />,
+        path: '/admin/data-scope',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'settings', action: 'read' }] },
+      },
+      {
         labelKey: 'sidebar.administration.settings',
         icon: <Settings size={16} />,
         path: '/admin/settings',
@@ -264,13 +285,24 @@ const navItems: NavItem[] = [
   },
 ];
 
-function filterNavItems(items: NavItem[], user: ReturnType<typeof useAuthStore.getState>['user']) {
+function filterNavItems(
+  items: NavItem[],
+  user: ReturnType<typeof useAuthStore.getState>['user'],
+  deniedMenuPaths: Set<string>
+) {
   return items.reduce<NavItem[]>((visibleItems, item) => {
     const isVisible = item.access ? canAccess(user, item.access) : !!user;
     if (!isVisible) return visibleItems;
 
+    if (item.path) {
+      const isSuperAdmin = user?.roles?.includes('SUPER_ADMIN');
+      if (!isSuperAdmin && deniedMenuPaths.has(item.path)) {
+        return visibleItems;
+      }
+    }
+
     if (item.children) {
-      const filteredChildren = filterNavItems(item.children, user);
+      const filteredChildren = filterNavItems(item.children, user, deniedMenuPaths);
       if (filteredChildren.length > 0) {
         visibleItems.push({ ...item, children: filteredChildren });
       }
@@ -349,8 +381,47 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { sidebarCollapsed, toggleSidebar, sidebarMobileOpen, setSidebarMobileOpen } = useUIStore();
   const { logout, user } = useAuthStore();
+  const { activeCompany } = useCompanyStore();
   const { t } = useI18n();
-  const visibleNavItems = useMemo(() => filterNavItems(navItems, user), [user]);
+
+  const [deniedMenuPaths, setDeniedMenuPaths] = useState<Set<string>>(new Set());
+  const [denyLoading, setDenyLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDeniedPaths() {
+      if (!user || !activeCompany?.id) {
+        setDeniedMenuPaths(new Set());
+        return;
+      }
+      if (user.roles?.includes('SUPER_ADMIN')) {
+        setDeniedMenuPaths(new Set());
+        return;
+      }
+      setDenyLoading(true);
+      try {
+        const res = await administrationService.getMyMenuAccess(activeCompany.id);
+        if (!cancelled) {
+          setDeniedMenuPaths(new Set(res.deniedMenuPaths || []));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setDeniedMenuPaths(new Set());
+        }
+      } finally {
+        if (!cancelled) setDenyLoading(false);
+      }
+    }
+    loadDeniedPaths();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeCompany?.id]);
+
+  const visibleNavItems = useMemo(
+    () => filterNavItems(navItems, user, deniedMenuPaths),
+    [user, deniedMenuPaths]
+  );
 
   const handleLogout = useCallback(async () => {
     await logout();
@@ -359,7 +430,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile overlay */}
       {sidebarMobileOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -375,7 +445,6 @@ export function Sidebar() {
           'hidden lg:flex'
         )}
       >
-        {/* Logo */}
         <div
           className={cn(
             'flex items-center h-16 px-4 border-b border-sidebar-border',
@@ -397,14 +466,12 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin">
           {visibleNavItems.map((item, idx) => (
             <NavItemComponent key={idx} item={item} collapsed={sidebarCollapsed} />
           ))}
         </nav>
 
-        {/* Bottom section */}
         <div className="border-t border-sidebar-border p-3 space-y-1">
           <button
             className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground transition-colors"
@@ -422,7 +489,6 @@ export function Sidebar() {
             {!sidebarCollapsed && <span className="flex-1 text-left">{t('sidebar.signOut')}</span>}
           </button>
 
-          {/* Collapse toggle */}
           <button
             onClick={toggleSidebar}
             className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/50 hover:bg-sidebar-hover transition-colors"
@@ -433,7 +499,6 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* Mobile sidebar */}
       <aside
         className={cn(
           'fixed top-0 left-0 z-50 h-full bg-sidebar flex flex-col',
@@ -442,7 +507,6 @@ export function Sidebar() {
           'lg:hidden'
         )}
       >
-        {/* Same content as desktop but without collapse */}
         <div className="flex items-center h-16 px-4 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
