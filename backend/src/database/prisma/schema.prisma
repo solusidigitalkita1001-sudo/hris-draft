@@ -59,6 +59,7 @@ model Company {
   fiscalYearStart String    @default("01-01") @map("fiscal_year_start") @db.VarChar(5)
   currency        String    @default("IDR") @db.VarChar(10)
   status          Status    @default(ACTIVE)
+  operationalStatus CompanyOperationalStatus @default(ACTIVE) @map("operational_status")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
@@ -125,6 +126,12 @@ model Company {
   /// C.7 Asset Patrol Logs
   assetPatrolLogs                       AssetPatrolLog[]
   overtimeRequests                      OvertimeRequest[]
+  /// D.1 Engagement Announcements
+  announcements                         Announcement[]
+  /// D.2 Engagement Surveys
+  surveys                               Survey[]
+  /// D.3 E-Signature wrapper transactions
+  esignatureTransactions               ESignatureTransaction[]
   leaveTypes                            LeaveType[]
   leaveBalances                         LeaveBalance[]
   leaveRequests                         LeaveRequest[]
@@ -1993,6 +2000,16 @@ model User {
   createdCareerTransactions  EmployeeCareerTransaction[]
   companyAccesses            UserCompanyAccess[]
   approvedCompanyAssignments EmployeeCompanyAssignment[]
+  /// D.1 Announcements (pengumuman yang dibuat user sebagai HR/ADMIN)
+  announcementsCreated         Announcement[]
+  /// D.1 Read status pengumuman per user
+  announcementReads            AnnouncementRead[]
+  /// D.2 Surveys yang dibuat user (HR/ADMIN)
+  surveysCreated               Survey[]
+  /// D.2 Survey responses sebagai responden (bisa null jika anonymous)
+  surveyResponses              SurveyResponse[]
+  /// D.3 E-Signature: dokumen user sebagai signer (wrapper transaction)
+  esignatureAsSigner        ESignatureTransaction[]
 
   @@index([email])
   @@index([status])
@@ -2649,6 +2666,7 @@ model Document {
   uploader                    User                         @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: Restrict)
   signatures                  DocumentSignature[]
   accessLogs                  DocumentAccessLog[]
+  esignatureTransactions      ESignatureTransaction[]
   performanceResultAttachment PerformanceResultAttachment?
 
   @@index([companyId, status])
@@ -2669,6 +2687,8 @@ model DocumentSignature {
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   signer   User     @relation(fields: [signerId], references: [id], onDelete: Cascade)
+  /// D.3 ESignatureTransaction (provider wrapper per signature: INTERNAL / PRIVY / DIGISIGN)
+  esignatureTransactions ESignatureTransaction[]
 
   @@index([documentId])
   @@index([signerId])
@@ -4181,6 +4201,44 @@ model TaskAssignment {
   @@map("task_assignments")
 }
 
+/// D.3 E-Signature Transaction — wrapper extend existing DocumentSignature table (support external providers internal/external provider signed)
+model ESignatureTransaction {
+  id                         String                       @id @default(uuid()) @db.VarChar(36)
+  companyId                  String                     @map("company_id") @db.VarChar(36)
+  documentSignatureId          String                     @map("document_signature_id") @db.VarChar(36) /// extend DocumentSignature.id existing
+  documentId               String                     @map("document_id") @db.VarChar(36)
+  signerUserId             String                     @map("signer_user_id") @db.VarChar(36)
+  provider                   ESignatureProvider         @default(INTERNAL)
+  status                       ESignatureStatus             @default(DRAFT)
+  verificationLevel         ESignatureVerificationLevel @default(BASIC)
+  providerReference            String?                @map("provider_ref") @db.VarChar(100)     /// transaction id dari eksternal provider (Privy Doc ID, Digisign Sign ID)
+  signerNik                String?                @db.VarChar(32)                  /// NIK 16 digit jika perlu untuk certified provider
+  signerEmail             String?                @db.VarChar(255)                /// signer email
+  signerPhone           String?                @db.VarChar(20)                /// signer phone WA untuk OTP
+  requestSentAt              DateTime?           @map("request_sent_at")
+  signedAt                 DateTime?           @map("signed_at")
+  verifiedAt                DateTime?          @map("verified_at")
+  expiredAt               DateTime?         @map("expired_at")           /// default = requestedAt +30 hari
+  callbackPayloadJson        String?          @map("callback_payload_json") @db.Text /// raw callback dari provider (encrypted DB)
+  documentHashSha256       String?         @map("document_hash_sha256") @db.VarChar(64)     /// integrity hash check verify
+  signingUrl            String?               @db.VarChar(700)            /// sign URL provider / internal sign link
+  costAmountRupiah         Decimal?       @db.Decimal(15, 2)            /// provider cost/ biaya provider per dokumen
+  notes                    String?          @db.Text
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
+
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  documentSignature DocumentSignature  @relation(fields: [documentSignatureId], references: [id], onDelete: Cascade)
+  document         Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  signer             User                @relation(fields: [signerUserId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, status])
+  @@index([provider, status])
+  @@index([documentId])
+  @@unique([provider, providerReference])
+  @@map("esignature_transactions")
+}
+
 /// C.7 Asset Patrol & Tracking (security/outsourcing) — petugas scan barcode asset & catat kondisi + lokasi + timestamp.
 model AssetPatrolLog {
   id                 String               @id @default(uuid()) @db.VarChar(36)
@@ -4211,6 +4269,142 @@ model AssetPatrolLog {
   @@index([patrolById, occurredAt])
   @@index([conditionRating])
   @@map("asset_patrol_logs")
+}
+
+// ============================================================
+// D.1 ENGAGEMENT: ANNOUNCEMENT (Pengumuman HR)
+// ============================================================
+
+model Announcement {
+  id               String               @id @default(uuid()) @db.VarChar(36)
+  companyId        String?              @map("company_id") @db.VarChar(36) /// null = ALL platform SUPERADMIN (rare)
+  authorId         String               @map("author_id") @db.VarChar(36) /// User.id pembuat (HR / ADMIN)
+  audienceType     AnnouncementAudience @default(COMPANY_WIDE)
+  departmentIds    String?              @db.Text /// JSON array uuid department (audience DEPARTMENT_ONLY)
+  branchIds        String?              @db.Text /// JSON array uuid branch (BRANCH_ONLY)
+  positionIds      String?              @db.Text /// JSON array uuid position (POSITION_ONLY)
+  employeeIds      String?              @db.Text /// JSON array uuid employee (EMPLOYEE_SPECIFIC)
+  title            String               @db.VarChar(255)
+  content          String               @db.Text
+  coverImageUrl    String?              @map("cover_image_url") @db.VarChar(500)
+  priority         AnnouncementPriority @default(NORMAL)
+  status           AnnouncementStatus   @default(DRAFT)
+  publishFrom      DateTime?            @map("publish_from") /// null = langsung terbit jika status=PUBLISHED
+  publishUntil     DateTime?            @map("publish_until") /// null = tidak expired
+  pinnedUntil      DateTime?            @map("pinned_until") /// PINNED memiliki masa aktif
+  allowComment     Boolean              @default(false)
+  totalViews       Int                  @default(0)
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  company Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  reads   AnnouncementRead[]
+
+  @@index([companyId, status])
+  @@index([status, publishFrom])
+  @@index([priority])
+  @@map("announcements")
+}
+
+/// Track per user sudah baca pengumuman atau belum (dot merah/notification bell)
+model AnnouncementRead {
+  id             String       @id @default(uuid()) @db.VarChar(36)
+  announcementId String       @map("announcement_id") @db.VarChar(36)
+  userId         String       @map("user_id") @db.VarChar(36)
+  readAt         DateTime     @default(now()) @map("read_at")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId],         references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId, readAt])
+  @@map("announcement_reads")
+}
+
+// ============================================================
+// D.2 ENGAGEMENT: SURVEY / POLLING
+// ============================================================
+
+model Survey {
+  id                String         @id @default(uuid()) @db.VarChar(36)
+  companyId         String         @map("company_id") @db.VarChar(36)
+  createdById       String         @map("created_by_id") @db.VarChar(36)
+  type              SurveyType     @default(SURVEY)
+  title             String         @db.VarChar(255)
+  description       String?        @db.Text
+  status            SurveyStatus   @default(DRAFT)
+  anonymous         Boolean        @default(false)
+  allowMultipleSubmission Boolean  @default(false)
+  startDate         DateTime?      @map("start_date") @db.Date
+  endDate           DateTime?      @map("end_date")   @db.Date
+  targetAudienceIds String?        @db.Text /// JSON array employeeIds (optional)
+  maxResponses      Int?           @map("max_responses") /// null = unlimited
+  totalResponses    Int            @default(0)
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User              @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  questions SurveyQuestion[]
+  responses SurveyResponse[]
+
+  @@index([companyId, status])
+  @@index([status, startDate, endDate])
+  @@map("surveys")
+}
+
+/// 1 survey punya banyak pertanyaan (ordered position)
+model SurveyQuestion {
+  id           String              @id @default(uuid()) @db.VarChar(36)
+  surveyId     String              @map("survey_id") @db.VarChar(36)
+  position     Int                 @default(0)
+  questionText String              @map("question_text") @db.Text
+  type         SurveyQuestionType  @default(SINGLE_CHOICE)
+  optionsJson  String?             @map("options_json") @db.Text /// JSON array string [{label:"Sangat Puas",value:"A"}]
+  required     Boolean             @default(true)
+  minSelect    Int?                @map("min_select") /// MULTIPLE_CHOICE min jawaban (default 1)
+  maxSelect    Int?                @map("max_select") /// MULTIPLE max jawaban (default = options.len)
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  survey  Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers SurveyAnswer[]
+
+  @@index([surveyId, position])
+  @@map("survey_questions")
+}
+
+/// 1 user submit 1 response (non-anonymous punya userId, anonymous = null)
+model SurveyResponse {
+  id           String      @id @default(uuid()) @db.VarChar(36)
+  surveyId     String      @map("survey_id") @db.VarChar(36)
+  respondentId String?     @map("respondent_id") @db.VarChar(36) /// null = anonymous=true
+  submittedAt  DateTime    @default(now()) @map("submitted_at")
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  respondent User?  @relation(fields: [respondentId], references: [id], onDelete: SetNull)
+  answers    SurveyAnswer[]
+
+  @@index([surveyId])
+  @@index([respondentId, surveyId])
+  @@unique([respondentId, surveyId])
+  @@map("survey_responses")
+}
+
+/// Per question per response = jawaban (SINGLE/MULTIPLE pilih value option, TEXT = bebas, RATING = numeric)
+model SurveyAnswer {
+  id            String  @id @default(uuid()) @db.VarChar(36)
+  responseId    String  @map("response_id") @db.VarChar(36)
+  questionId    String  @map("question_id") @db.VarChar(36)
+  textValue     String? @db.Text                     /// TEXT type, atau concatenated MULTIPLE delimiter comma
+  numberValue   Decimal? @db.Decimal(10, 2)          /// RATING_1_5 type
+  selectedJson  String? @map("selected_json") @db.Text /// JSON array values MULTIPLE_CHOICE
+
+  response SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("survey_answers")
 }
 
 model ExpenseClaim {
@@ -4361,6 +4555,108 @@ enum AssetConditionRating {
   FAIR
   DAMAGED
   MISSING
+}
+
+/// D.1 Announcement audience target (siapa saja yang bisa lihat pengumuman)
+enum AnnouncementAudience {
+  ALL
+  COMPANY_WIDE
+  DEPARTMENT_ONLY
+  BRANCH_ONLY
+  POSITION_ONLY
+  EMPLOYEE_SPECIFIC
+}
+
+/// D.1 Announcement status lifecycle
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// D.1 Announcement priority (PINNED = selalu di atas, max 3/company)
+enum AnnouncementPriority {
+  PINNED
+  NORMAL
+  HIDDEN
+}
+
+/// D.2 Survey jenis (POLL = 1 pertanyaan singkat, SURVEY = multi pertanyaan)
+enum SurveyType {
+  POLL
+  SURVEY
+}
+
+/// D.2 Survey lifecycle status
+enum SurveyStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+/// D.2 Jenis pertanyaan survey
+enum SurveyQuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TEXT
+  RATING_1_5
+}
+
+// ============================================================
+// D.3 E-SIGNATURE PROVIDER WRAPPER ENUMS
+// ============================================================
+
+/// D.3 E-Signature provider list: internal built-in OR eksternal provider resmi Indonesia (Privy/Digisign sesuai UU ITE)
+enum ESignatureProvider {
+  INTERNAL        /// Sign built-in (non-legal audit trail fallback only, NOT recommended untuk kontrak kerja)
+  PRIVY_ID        /// PrivyID - provider resmi OJK/Kemenkominfo
+  DIGISIGN        /// Digisign - provider e-sign bersertifikat
+  PERURI          /// Peruri e-sign (instansi pemerintah)
+  OTHER
+}
+
+enum ESignatureStatus {
+  DRAFT           /// Dokumen draft, belum dikirim sign
+  REQUESTED       /// Sudah dikirim ke signer via provider (pending sign)
+  SIGNED          /// Signer sudah menandatangani
+  VERIFIED        /// Provider sudah verifikasi audit trail sah
+  REJECTED        /// Signer menolak menandatangani
+  EXPIRED         /// Link sign kadaluwarsa (default 30 hari)
+  FAILED          /// Error provider / sign error
+  CANCELLED       /// Pembatalan oleh pengirim sebelum sign
+}
+
+/// D.3 Level verifikasi e-signature (ketat -> longgar)
+enum ESignatureVerificationLevel {
+  CERTIFIED       /// Tertinggi: Kemenkominfo / OJK registered provider + e-KYC + audit trail (wajib kontrak kerja)
+  AUDIT_TRAIL     /// Menengah: Timestamp + hash chain + signer identity log (bukan certificate-based)
+  BASIC           /// Fallback internal: basic check email + no audit (not legal)
+}
+
+// ============================================================
+// D.4 COMPANY SWITCHER & USER ACCESS ENUM EXTEND
+// ============================================================
+
+/// D.4 Status perusahaan (aktif/disable/trial/suspended) — pure switcher INACTIVE forbid
+enum CompanyOperationalStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+  INACTIVE
+  PENDING_ONBOARDING
+}
+
+// ============================================================
+// D.5 PWA RELATED TINY ENUMS
+// ============================================================
+
+/// D.5 PWA Display mode sesuai W3C manifest spec
+enum PWADisplayMode {
+  STANDALONE
+  MINIMAL_UI
+  FULLSCREEN
+  BROWSER
 }
 
 // ============================================================
