@@ -2976,6 +2976,7 @@ model BranchAttendancePolicy {
 
   @@unique([companyId, branchId])
   @@index([companyId])
+  @@index([branchId])
   @@index([attendanceMethod])
   @@index([isActive])
   @@map("branch_attendance_policies")
