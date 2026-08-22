@@ -1,5 +1,6 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
+import { NotFoundError } from '@/shared/exceptions/AppError';
 import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO } from './asset.dto';
 import {
   generateDepreciationSchedule,
@@ -113,9 +114,11 @@ export class AssetRepository {
   }
 
   async assign(assetId: string, data: AssignAssetDTO, userId: string) {
+    const parentAsset = await prisma.asset.findFirst({ where: { id: assetId }, select: { companyId: true } });
+    if (!parentAsset) throw new NotFoundError('Asset not found');
     await prisma.asset.update({ where: { id: assetId }, data: { status: 'ASSIGNED' } });
     return prisma.assetAssignment.create({
-      data: { assetId, employeeId: data.employeeId, conditionAtAssign: data.conditionAtAssign, notes: data.notes, createdBy: userId },
+      data: { assetId, employeeId: data.employeeId, conditionAtAssign: data.conditionAtAssign, notes: data.notes, createdBy: userId, companyId: parentAsset.companyId },
       include: { employee: { select: { id: true, fullName: true } } },
     });
   }

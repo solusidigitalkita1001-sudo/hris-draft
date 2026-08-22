@@ -1,4 +1,5 @@
 import { prisma } from '@/shared/database/prisma';
+import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import { Prisma } from '@prisma/client';
 import {
   CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO,
@@ -258,10 +259,16 @@ export class EmployeeRepository {
   }
 
   async createFamily(employeeId: string, data: CreateEmployeeFamilyDTO) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null },
+      select: { companyId: true },
+    });
+    if (!employee) return null;
     return prisma.employeeFamily.create({
       data: {
         ...data,
         employeeId,
+        companyId: employee.companyId,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
       },
     });
@@ -296,10 +303,16 @@ export class EmployeeRepository {
   }
 
   async createEducation(employeeId: string, data: CreateEmployeeEducationDTO) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null },
+      select: { companyId: true },
+    });
+    if (!employee) return null;
     return prisma.employeeEducation.create({
       data: {
         ...data,
         employeeId,
+        companyId: employee.companyId,
         startDate: data.startDate ? new Date(data.startDate) : undefined,
         endDate: data.endDate ? new Date(data.endDate) : undefined,
       },
@@ -334,8 +347,13 @@ export class EmployeeRepository {
   }
 
   async createEmergencyContact(employeeId: string, data: CreateEmployeeEmergencyContactDTO) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null },
+      select: { companyId: true },
+    });
+    if (!employee) return null;
     return prisma.employeeEmergencyContact.create({
-      data: { ...data, employeeId },
+      data: { ...data, employeeId, companyId: employee.companyId },
     });
   }
 
@@ -365,10 +383,16 @@ export class EmployeeRepository {
   }
 
   async createTraining(employeeId: string, data: CreateEmployeeTrainingDTO) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null },
+      select: { companyId: true },
+    });
+    if (!employee) return null;
     return prisma.employeeTraining.create({
       data: {
         ...data,
         employeeId,
+        companyId: employee.companyId,
         startDate: data.startDate ? new Date(data.startDate) : undefined,
         endDate: data.endDate ? new Date(data.endDate) : undefined,
       },
@@ -403,10 +427,16 @@ export class EmployeeRepository {
   }
 
   async createSkill(employeeId: string, data: CreateEmployeeSkillDTO) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null },
+      select: { companyId: true },
+    });
+    if (!employee) return null;
     return prisma.employeeSkill.create({
       data: {
         ...data,
         employeeId,
+        companyId: employee.companyId,
         lastUsedDate: data.lastUsedDate ? new Date(data.lastUsedDate) : undefined,
       },
     });
@@ -439,10 +469,16 @@ export class EmployeeRepository {
   }
 
   async createExperience(employeeId: string, data: CreateEmployeeExperienceDTO) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null },
+      select: { companyId: true },
+    });
+    if (!employee) return null;
     return prisma.employeeExperience.create({
       data: {
         ...data,
         employeeId,
+        companyId: employee.companyId,
         startDate: new Date(data.startDate),
         endDate: data.endDate ? new Date(data.endDate) : undefined,
       },
@@ -480,8 +516,13 @@ export class EmployeeRepository {
   }
 
   async createAttachment(employeeId: string, data: CreateEmployeeAttachmentDTO) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null },
+      select: { companyId: true },
+    });
+    if (!employee) return null;
     return prisma.employeeAttachment.create({
-      data: { ...data, employeeId },
+      data: { ...data, employeeId, companyId: employee.companyId },
     });
   }
 

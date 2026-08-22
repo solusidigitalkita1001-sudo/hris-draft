@@ -8,8 +8,18 @@ import config from '@/config';
 
 const logger = new WinstonLogger('AuthController');
 
+const ACCESS_COOKIE = 'at';
 const REFRESH_COOKIE = 'rt';
-const COOKIE_OPTS = {
+
+const ACCESS_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: config.app.env === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: 15 * 60 * 1000,
+};
+
+const REFRESH_COOKIE_OPTS = {
   httpOnly: true,
   secure: config.app.env === 'production',
   sameSite: 'lax' as const,
@@ -17,16 +27,35 @@ const COOKIE_OPTS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
+function setAccessCookie(res: Response, token: string) {
+  res.cookie(ACCESS_COOKIE, token, ACCESS_COOKIE_OPTS);
+}
+
 function setRefreshCookie(res: Response, token: string) {
-  res.cookie(REFRESH_COOKIE, token, COOKIE_OPTS);
+  res.cookie(REFRESH_COOKIE, token, REFRESH_COOKIE_OPTS);
+}
+
+function clearAccessCookie(res: Response) {
+  res.clearCookie(ACCESS_COOKIE, { ...ACCESS_COOKIE_OPTS, maxAge: 0 });
 }
 
 function clearRefreshCookie(res: Response) {
-  res.clearCookie(REFRESH_COOKIE, { ...COOKIE_OPTS, maxAge: 0 });
+  res.clearCookie(REFRESH_COOKIE, { ...REFRESH_COOKIE_OPTS, maxAge: 0 });
 }
 
 function getRefreshToken(req: Request): string | undefined {
   return req.cookies?.[REFRESH_COOKIE] ?? req.body?.refreshToken;
+}
+
+function extractAccessToken(req: Request): string | undefined {
+  if (req.cookies?.[ACCESS_COOKIE]) {
+    return req.cookies[ACCESS_COOKIE];
+  }
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  return undefined;
 }
 
 /**
@@ -46,12 +75,17 @@ export class AuthController {
 
       const result = await authService.login(dto, ipAddress, userAgent);
 
-      // Move refresh token to httpOnly cookie so JS can't read it
+      setAccessCookie(res, result.tokens.accessToken);
       setRefreshCookie(res, result.tokens.refreshToken);
-      const { refreshToken: _rt, ...safeTokens } = result.tokens;
 
       res.status(200).json(
-        Result.success({ ...result, tokens: safeTokens }, 'Login successful')
+        Result.success(
+          {
+            user: result.user,
+            tokens: { expiresIn: result.tokens.expiresIn },
+          },
+          'Login successful'
+        )
       );
     } catch (error) {
       next(error);
@@ -66,6 +100,7 @@ export class AuthController {
     try {
       const refreshToken = getRefreshToken(req) ?? '';
       await authService.logout(refreshToken);
+      clearAccessCookie(res);
       clearRefreshCookie(res);
 
       res.status(200).json(Result.success(null, 'Logout successful'));
@@ -87,11 +122,17 @@ export class AuthController {
       if (!refreshToken) throw new Error('No refresh token');
       const result = await authService.refreshTokens(refreshToken, ipAddress, userAgent);
 
+      setAccessCookie(res, result.tokens.accessToken);
       setRefreshCookie(res, result.tokens.refreshToken);
-      const { refreshToken: _rt, ...safeTokens } = result.tokens;
 
       res.status(200).json(
-        Result.success({ ...result, tokens: safeTokens }, 'Token refreshed successfully')
+        Result.success(
+          {
+            user: result.user,
+            tokens: { expiresIn: result.tokens.expiresIn },
+          },
+          'Token refreshed successfully'
+        )
       );
     } catch (error) {
       next(error);

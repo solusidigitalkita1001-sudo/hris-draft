@@ -22,7 +22,9 @@ export class SubDepartmentService {
     });
     const existing = await subDepartmentRepository.findByCode(code);
     if (existing) throw new ConflictError(`Sub-department code "${code}" already exists`);
-    return subDepartmentRepository.create({ ...dto, code });
+    const created = await subDepartmentRepository.create({ ...dto, code });
+    if (!created) throw new NotFoundError('Parent department not found or out of scope');
+    return created;
   }
 
   async update(id: string, dto: UpdateSubDepartmentDTO) {

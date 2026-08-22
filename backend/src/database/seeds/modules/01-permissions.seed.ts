@@ -54,6 +54,7 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'payroll', action: 'read', name: 'Read Payroll', module: 'payroll', code: 'payroll:read' },
     { resource: 'payroll', action: 'update', name: 'Update Payroll', module: 'payroll', code: 'payroll:update' },
     { resource: 'payroll', action: 'approve', name: 'Approve Payroll', module: 'payroll', code: 'payroll:approve' },
+    { resource: 'payroll', action: 'disburse', name: 'Disburse Payroll', module: 'payroll', code: 'payroll:disburse' },
     { resource: 'payroll', action: 'export', name: 'Export Payroll', module: 'payroll', code: 'payroll:export' },
     { resource: 'payroll', action: 'process', name: 'Process Payroll', module: 'payroll', code: 'payroll:process' },
 

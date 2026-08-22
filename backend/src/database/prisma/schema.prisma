@@ -68,6 +68,7 @@ model Company {
   branches                              Branch[]
   divisions                             Division[]
   departments                           Department[]
+  subDepartments                        SubDepartment[]
   positions                             Position[]
   employees                             Employee[]
   roles                                 Role[]
@@ -163,6 +164,15 @@ model Company {
   taxBrackets                           TaxBracket[]
   ptkpTables                            PtkpTable[]
   bpjsReferences                        BpjsReference[]
+  employeeFamilies                      EmployeeFamily[]
+  employeeEducations                    EmployeeEducation[]
+  employeeEmergencyContacts             EmployeeEmergencyContact[]
+  employeeTrainings                     EmployeeTraining[]
+  employeeSkills                        EmployeeSkill[]
+  employeeExperiences                   EmployeeExperience[]
+  employeeAttachments                   EmployeeAttachment[]
+  employeeBankAccounts                  EmployeeBankAccount[]
+  assetAssignments                      AssetAssignment[]
 
   @@index([groupId])
   @@index([code])
@@ -263,6 +273,7 @@ model Department {
 model SubDepartment {
   id           String    @id @default(uuid()) @db.VarChar(36)
   departmentId String    @map("department_id") @db.VarChar(36)
+  companyId    String    @map("company_id") @db.VarChar(36)
   name         String    @db.VarChar(255)
   code         String    @unique @db.VarChar(50)
   headId       String?   @map("head_id") @db.VarChar(36)
@@ -273,10 +284,12 @@ model SubDepartment {
   deletedAt    DateTime? @map("deleted_at")
 
   department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   head       Employee?  @relation("SubDepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
   employees  Employee[]
 
   @@index([departmentId])
+  @@index([companyId])
   @@index([code])
   @@map("sub_departments")
 }
@@ -593,6 +606,7 @@ model BpjsReference {
 model EmployeeBankAccount {
   id              String    @id @default(uuid()) @db.VarChar(36)
   employeeId      String    @map("employee_id") @db.VarChar(36)
+  companyId       String    @map("company_id") @db.VarChar(36)
   bankCode        BankCode  @default(OTHER) @map("bank_code")
   bankName        String?   @map("bank_name") @db.VarChar(255)  /// Free text bank custom jika code=OTHER
   accountNumber   String    @map("account_number") @db.VarChar(50)
@@ -603,9 +617,11 @@ model EmployeeBankAccount {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, bankCode]) /// Satu karyawan cuma boleh 1 rekening per bank code
   @@index([employeeId])
+  @@index([companyId])
   @@index([bankCode])
   @@map("employee_bank_accounts")
 }
@@ -2248,6 +2264,7 @@ model EmployeeCareerTransaction {
 model EmployeeFamily {
   id                 String    @id @default(uuid()) @db.VarChar(36)
   employeeId         String    @map("employee_id") @db.VarChar(36)
+  companyId          String    @map("company_id") @db.VarChar(36)
   fullName           String    @map("full_name") @db.VarChar(255)
   relationship       String    @db.VarChar(50)
   idNumber           String?   @map("id_number") @db.VarChar(50)
@@ -2267,8 +2284,10 @@ model EmployeeFamily {
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
+  @@index([companyId])
   @@map("employee_families")
 }
 
@@ -2276,6 +2295,7 @@ model EmployeeFamily {
 model EmployeeEducation {
   id              String    @id @default(uuid()) @db.VarChar(36)
   employeeId      String    @map("employee_id") @db.VarChar(36)
+  companyId       String    @map("company_id") @db.VarChar(36)
   level           String    @db.VarChar(20)
   institutionName String    @map("institution_name") @db.VarChar(255)
   major           String?   @db.VarChar(255)
@@ -2290,8 +2310,10 @@ model EmployeeEducation {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
+  @@index([companyId])
   @@map("employee_educations")
 }
 
@@ -2299,6 +2321,7 @@ model EmployeeEducation {
 model EmployeeEmergencyContact {
   id               String   @id @default(uuid()) @db.VarChar(36)
   employeeId       String   @map("employee_id") @db.VarChar(36)
+  companyId        String   @map("company_id") @db.VarChar(36)
   fullName         String   @map("full_name") @db.VarChar(255)
   relationship     String   @db.VarChar(50)
   phone            String   @db.VarChar(50)
@@ -2310,8 +2333,10 @@ model EmployeeEmergencyContact {
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
+  @@index([companyId])
   @@map("employee_emergency_contacts")
 }
 
@@ -2319,6 +2344,7 @@ model EmployeeEmergencyContact {
 model EmployeeTraining {
   id             String    @id @default(uuid()) @db.VarChar(36)
   employeeId     String    @map("employee_id") @db.VarChar(36)
+  companyId      String    @map("company_id") @db.VarChar(36)
   trainingName   String    @map("training_name") @db.VarChar(255)
   organizer      String?   @db.VarChar(255)
   startDate      DateTime? @map("start_date")
@@ -2332,8 +2358,10 @@ model EmployeeTraining {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
+  @@index([companyId])
   @@map("employee_trainings")
 }
 
@@ -2341,6 +2369,7 @@ model EmployeeTraining {
 model EmployeeSkill {
   id                String    @id @default(uuid()) @db.VarChar(36)
   employeeId        String    @map("employee_id") @db.VarChar(36)
+  companyId         String    @map("company_id") @db.VarChar(36)
   skillName         String    @map("skill_name") @db.VarChar(255)
   category          String?   @db.VarChar(50)
   proficiencyLevel  String?   @map("proficiency_level") @db.VarChar(20)
@@ -2352,8 +2381,10 @@ model EmployeeSkill {
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
+  @@index([companyId])
   @@map("employee_skills")
 }
 
@@ -2361,6 +2392,7 @@ model EmployeeSkill {
 model EmployeeExperience {
   id                String    @id @default(uuid()) @db.VarChar(36)
   employeeId        String    @map("employee_id") @db.VarChar(36)
+  companyId         String    @map("company_id") @db.VarChar(36)
   companyName       String    @map("company_name") @db.VarChar(255)
   position          String    @db.VarChar(255)
   startDate         DateTime  @map("start_date")
@@ -2377,8 +2409,10 @@ model EmployeeExperience {
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
+  @@index([companyId])
   @@map("employee_experiences")
 }
 
@@ -2386,6 +2420,7 @@ model EmployeeExperience {
 model EmployeeAttachment {
   id           String   @id @default(uuid()) @db.VarChar(36)
   employeeId   String   @map("employee_id") @db.VarChar(36)
+  companyId    String   @map("company_id") @db.VarChar(36)
   category     String   @db.VarChar(50)
   fileName     String   @map("file_name") @db.VarChar(255)
   fileUrl      String   @map("file_url") @db.VarChar(500)
@@ -2398,8 +2433,10 @@ model EmployeeAttachment {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
+  @@index([companyId])
   @@index([category])
   @@map("employee_attachments")
 }
@@ -2842,6 +2879,7 @@ model AssetAssignment {
   id                String    @id @default(uuid()) @db.VarChar(36)
   assetId           String    @map("asset_id") @db.VarChar(36)
   employeeId        String    @map("employee_id") @db.VarChar(36)
+  companyId         String    @map("company_id") @db.VarChar(36)
   assignedAt        DateTime  @default(now()) @map("assigned_at")
   conditionAtAssign String    @default("GOOD") @map("condition_at_assign") @db.VarChar(20)
   returnedAt        DateTime? @map("returned_at")
@@ -2852,9 +2890,11 @@ model AssetAssignment {
 
   asset    Asset    @relation(fields: [assetId], references: [id], onDelete: Restrict)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([assetId])
   @@index([employeeId])
+  @@index([companyId])
   @@index([returnedAt])
   @@map("asset_assignments")
 }

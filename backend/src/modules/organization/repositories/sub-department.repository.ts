@@ -25,7 +25,14 @@ export class SubDepartmentRepository {
   }
 
   async create(data: CreateSubDepartmentDTO & { code: string }) {
-    return prisma.subDepartment.create({ data });
+    const department = await prisma.department.findFirst({
+      where: { id: data.departmentId, deletedAt: null },
+      select: { companyId: true },
+    });
+    if (!department) return null;
+    return prisma.subDepartment.create({
+      data: { ...data, companyId: department.companyId },
+    });
   }
 
   async update(id: string, data: UpdateSubDepartmentDTO) {

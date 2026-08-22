@@ -21,6 +21,16 @@ export const createAttendanceSchema = z.object({
       referencePhotoUrl: z.string().max(500).optional(),
       similarityScore: z.number().min(-1).max(1).optional(),
       isFaceMatch: z.boolean().optional(),
+      /// Task 3.3: Selfie photo base64 (data:image/jpeg;base64,...) — akan diextract vectornya otomatis oleh backend extractFaceVectorFromImage() jika client tidak mampu extract lokal (mobile/web PWA lawas).
+      selfieImage: z.string().max(20_000_000).optional(), // ~20MB JPEG base64 limit
+      /// Reference photo base64 (jika client mau server bandingkan foto referensi terbaru, bukan dari employee.referencePhotoUrl)
+      referencePhotoImage: z.string().max(20_000_000).optional(),
+      /// Preferred: client-side extract vector via face-api.js/Google ML Kit (FaceNet 512-dim normalized number[]). Jika diisi, selfieImage/referencePhotoImage tidak dipakai untuk vector.
+      selfieVector: z.array(z.number()).optional(),
+      referenceVector: z.array(z.number()).optional(),
+      /// Extra meta: file size bytes & mime type untuk liveness assess otomatis dari foto yang dikirim
+      selfieFileSizeBytes: z.number().int().min(0).optional(),
+      selfieMimeType: z.string().max(100).optional(),
     })
     .optional(),
   /// B.8 Liveness

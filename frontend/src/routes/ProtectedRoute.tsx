@@ -21,8 +21,15 @@ export function ProtectedRoute({
 
   useEffect(() => {
     const checkAuth = async () => {
-      if (!isAuthenticated && localStorage.getItem('hrms_access_token')) {
-        await loadProfile();
+      // Auth tokens live exclusively in httpOnly cookies now (not accessible from JS).
+      // If state says not authenticated, try loading the profile from /auth/me
+      // which automatically sends the access cookie via withCredentials.
+      if (!isAuthenticated) {
+        try {
+          await loadProfile();
+        } catch {
+          // Invalid or missing cookie - will redirect to login below.
+        }
       }
       setIsChecking(false);
     };

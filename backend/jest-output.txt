@@ -1,0 +1,114 @@
+FAIL src/tests/integration/company-scope-employee-cross-company.test.ts
+  ● Test suite failed to run
+
+    [96msrc/modules/employee/employee.repository.ts[0m:[93m262[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType '{ employeeId: string; dateOfBirth: Date | undefined; fullName: string; relationship: "OTHER" | "SPOUSE" | "CHILD" | "PARENT" | "SIBLING"; isEmergencyContact: boolean; isDependent: boolean; ... 9 more ...; educationLevel?: string | undefined; }' is not assignable to type '(Without<EmployeeFamilyCreateInput, EmployeeFamilyUncheckedCreateInput> & EmployeeFamilyUncheckedCreateInput) | (Without<...> & EmployeeFamilyCreateInput)'.
+      Type '{ employeeId: string; dateOfBirth: Date | undefined; fullName: string; relationship: "OTHER" | "SPOUSE" | "CHILD" | "PARENT" | "SIBLING"; isEmergencyContact: boolean; isDependent: boolean; ... 9 more ...; educationLevel?: string | undefined; }' is not assignable to type 'Without<EmployeeFamilyCreateInput, EmployeeFamilyUncheckedCreateInput> & EmployeeFamilyUncheckedCreateInput'.
+        Property 'companyId' is missing in type '{ employeeId: string; dateOfBirth: Date | undefined; fullName: string; relationship: "OTHER" | "SPOUSE" | "CHILD" | "PARENT" | "SIBLING"; isEmergencyContact: boolean; isDependent: boolean; ... 9 more ...; educationLevel?: string | undefined; }' but required in type 'EmployeeFamilyUncheckedCreateInput'.
+
+    [7m262[0m       data: {
+    [7m   [0m [91m      ~~~~[0m
+
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m192424[0m:[93m5[0m
+        [7m192424[0m     companyId: string
+        [7m      [0m [96m    ~~~~~~~~~[0m
+        'companyId' is declared here.
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m99353[0m:[93m5[0m
+        [7m99353[0m     data: XOR<EmployeeFamilyCreateInput, EmployeeFamilyUncheckedCreateInput>
+        [7m     [0m [96m    ~~~~[0m
+        The expected type comes from property 'data' which is declared here on type '{ select?: EmployeeFamilySelect<DefaultArgs> | null | undefined; include?: EmployeeFamilyInclude<DefaultArgs> | null | undefined; data: (Without<...> & EmployeeFamilyUncheckedCreateInput) | (Without<...> & EmployeeFamilyCreateInput); }'
+    [96msrc/modules/employee/employee.repository.ts[0m:[93m300[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType '{ employeeId: string; startDate: Date | undefined; endDate: Date | undefined; level: "SD" | "SMP" | "SMA" | "D1" | "D2" | "D3" | "S1" | "S2" | "S3"; institutionName: string; ... 5 more ...; city?: string | undefined; }' is not assignable to type '(Without<EmployeeEducationCreateInput, EmployeeEducationUncheckedCreateInput> & EmployeeEducationUncheckedCreateInput) | (Without<...> & EmployeeEducationCreateInput)'.
+      Type '{ employeeId: string; startDate: Date | undefined; endDate: Date | undefined; level: "SD" | "SMP" | "SMA" | "D1" | "D2" | "D3" | "S1" | "S2" | "S3"; institutionName: string; ... 5 more ...; city?: string | undefined; }' is not assignable to type 'Without<EmployeeEducationCreateInput, EmployeeEducationUncheckedCreateInput> & EmployeeEducationUncheckedCreateInput'.
+        Property 'companyId' is missing in type '{ employeeId: string; startDate: Date | undefined; endDate: Date | undefined; level: "SD" | "SMP" | "SMA" | "D1" | "D2" | "D3" | "S1" | "S2" | "S3"; institutionName: string; ... 5 more ...; city?: string | undefined; }' but required in type 'EmployeeEducationUncheckedCreateInput'.
+
+    [7m300[0m       data: {
+    [7m   [0m [91m      ~~~~[0m
+
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m192578[0m:[93m5[0m
+        [7m192578[0m     companyId: string
+        [7m      [0m [96m    ~~~~~~~~~[0m
+        'companyId' is declared here.
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m100380[0m:[93m5[0m
+        [7m100380[0m     data: XOR<EmployeeEducationCreateInput, EmployeeEducationUncheckedCreateInput>
+        [7m      [0m [96m    ~~~~[0m
+        The expected type comes from property 'data' which is declared here on type '{ select?: EmployeeEducationSelect<DefaultArgs> | null | undefined; include?: EmployeeEducationInclude<DefaultArgs> | null | undefined; data: (Without<...> & EmployeeEducationUncheckedCreateInput) | (Without<...> & EmployeeEducationCreateInput); }'
+    [96msrc/modules/employee/employee.repository.ts[0m:[93m338[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType '{ employeeId: string; fullName: string; phone: string; relationship: string; isPrimary: boolean; address?: string | undefined; notes?: string | undefined; alternativePhone?: string | undefined; }' is not assignable to type '(Without<EmployeeEmergencyContactCreateInput, EmployeeEmergencyContactUncheckedCreateInput> & EmployeeEmergencyContactUncheckedCreateInput) | (Without<...> & EmployeeEmergencyContactCreateInput)'.
+      Type '{ employeeId: string; fullName: string; phone: string; relationship: string; isPrimary: boolean; address?: string | undefined; notes?: string | undefined; alternativePhone?: string | undefined; }' is not assignable to type 'Without<EmployeeEmergencyContactCreateInput, EmployeeEmergencyContactUncheckedCreateInput> & EmployeeEmergencyContactUncheckedCreateInput'.
+        Property 'companyId' is missing in type '{ employeeId: string; fullName: string; phone: string; relationship: string; isPrimary: boolean; address?: string | undefined; notes?: string | undefined; alternativePhone?: string | undefined; }' but required in type 'EmployeeEmergencyContactUncheckedCreateInput'.
+
+    [7m338[0m       data: { ...data, employeeId },
+    [7m   [0m [91m      ~~~~[0m
+
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m192699[0m:[93m5[0m
+        [7m192699[0m     companyId: string
+        [7m      [0m [96m    ~~~~~~~~~[0m
+        'companyId' is declared here.
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m101340[0m:[93m5[0m
+        [7m101340[0m     data: XOR<EmployeeEmergencyContactCreateInput, EmployeeEmergencyContactUncheckedCreateInput>
+        [7m      [0m [96m    ~~~~[0m
+        The expected type comes from property 'data' which is declared here on type '{ select?: EmployeeEmergencyContactSelect<DefaultArgs> | null | undefined; include?: EmployeeEmergencyContactInclude<DefaultArgs> | null | undefined; data: (Without<...> & EmployeeEmergencyContactUncheckedCreateInput) | (Without<...> & EmployeeEmergencyContactCreateInput); }'
+    [96msrc/modules/employee/employee.repository.ts[0m:[93m369[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType '{ employeeId: string; startDate: Date | undefined; endDate: Date | undefined; trainingName: string; description?: string | undefined; notes?: string | undefined; duration?: string | undefined; organizer?: string | undefined; trainingType?: "INTERNAL" | ... 5 more ... | undefined; certificateUrl?: string | undefined; }' is not assignable to type '(Without<EmployeeTrainingCreateInput, EmployeeTrainingUncheckedCreateInput> & EmployeeTrainingUncheckedCreateInput) | (Without<...> & EmployeeTrainingCreateInput)'.
+      Type '{ employeeId: string; startDate: Date | undefined; endDate: Date | undefined; trainingName: string; description?: string | undefined; notes?: string | undefined; duration?: string | undefined; organizer?: string | undefined; trainingType?: "INTERNAL" | ... 5 more ... | undefined; certificateUrl?: string | undefined; }' is not assignable to type 'Without<EmployeeTrainingCreateInput, EmployeeTrainingUncheckedCreateInput> & EmployeeTrainingUncheckedCreateInput'.
+        Property 'companyId' is missing in type '{ employeeId: string; startDate: Date | undefined; endDate: Date | undefined; trainingName: string; description?: string | undefined; notes?: string | undefined; duration?: string | undefined; organizer?: string | undefined; trainingType?: "INTERNAL" | ... 5 more ... | undefined; certificateUrl?: string | undefined; }' but required in type 'EmployeeTrainingUncheckedCreateInput'.
+
+    [7m369[0m       data: {
+    [7m   [0m [91m      ~~~~[0m
+
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m192804[0m:[93m5[0m
+        [7m192804[0m     companyId: string
+        [7m      [0m [96m    ~~~~~~~~~[0m
+        'companyId' is declared here.
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m102322[0m:[93m5[0m
+        [7m102322[0m     data: XOR<EmployeeTrainingCreateInput, EmployeeTrainingUncheckedCreateInput>
+        [7m      [0m [96m    ~~~~[0m
+        The expected type comes from property 'data' which is declared here on type '{ select?: EmployeeTrainingSelect<DefaultArgs> | null | undefined; include?: EmployeeTrainingInclude<DefaultArgs> | null | undefined; data: (Without<...> & EmployeeTrainingUncheckedCreateInput) | (Without<...> & EmployeeTrainingCreateInput); }'
+    [96msrc/modules/employee/employee.repository.ts[0m:[93m407[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType '{ employeeId: string; lastUsedDate: Date | undefined; skillName: string; isCertified: boolean; notes?: string | undefined; category?: "OTHER" | "TECHNICAL" | "SOFT_SKILL" | "LANGUAGE" | "MANAGEMENT" | undefined; proficiencyLevel?: "BEGINNER" | ... 3 more ... | undefined; yearsOfExperience?: number | undefined; }' is not assignable to type '(Without<EmployeeSkillCreateInput, EmployeeSkillUncheckedCreateInput> & EmployeeSkillUncheckedCreateInput) | (Without<...> & EmployeeSkillCreateInput)'.
+      Type '{ employeeId: string; lastUsedDate: Date | undefined; skillName: string; isCertified: boolean; notes?: string | undefined; category?: "OTHER" | "TECHNICAL" | "SOFT_SKILL" | "LANGUAGE" | "MANAGEMENT" | undefined; proficiencyLevel?: "BEGINNER" | ... 3 more ... | undefined; yearsOfExperience?: number | undefined; }' is not assignable to type 'Without<EmployeeSkillCreateInput, EmployeeSkillUncheckedCreateInput> & EmployeeSkillUncheckedCreateInput'.
+        Property 'companyId' is missing in type '{ employeeId: string; lastUsedDate: Date | undefined; skillName: string; isCertified: boolean; notes?: string | undefined; category?: "OTHER" | "TECHNICAL" | "SOFT_SKILL" | "LANGUAGE" | "MANAGEMENT" | undefined; proficiencyLevel?: "BEGINNER" | ... 3 more ... | undefined; yearsOfExperience?: number | undefined; }' but required in type 'EmployeeSkillUncheckedCreateInput'.
+
+    [7m407[0m       data: {
+    [7m   [0m [91m      ~~~~[0m
+
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m192919[0m:[93m5[0m
+        [7m192919[0m     companyId: string
+        [7m      [0m [96m    ~~~~~~~~~[0m
+        'companyId' is declared here.
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m103316[0m:[93m5[0m
+        [7m103316[0m     data: XOR<EmployeeSkillCreateInput, EmployeeSkillUncheckedCreateInput>
+        [7m      [0m [96m    ~~~~[0m
+        The expected type comes from property 'data' which is declared here on type '{ select?: EmployeeSkillSelect<DefaultArgs> | null | undefined; include?: EmployeeSkillInclude<DefaultArgs> | null | undefined; data: (Without<...> & EmployeeSkillUncheckedCreateInput) | (Without<...> & EmployeeSkillCreateInput); }'
+    [96msrc/modules/employee/employee.repository.ts[0m:[93m443[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType '{ employeeId: string; startDate: Date; endDate: Date | undefined; position: string; companyName: string; isCurrentPosition: boolean; city?: string | undefined; jobDescription?: string | undefined; ... 4 more ...; referencePhone?: string | undefined; }' is not assignable to type '(Without<EmployeeExperienceCreateInput, EmployeeExperienceUncheckedCreateInput> & EmployeeExperienceUncheckedCreateInput) | (Without<...> & EmployeeExperienceCreateInput)'.
+      Type '{ employeeId: string; startDate: Date; endDate: Date | undefined; position: string; companyName: string; isCurrentPosition: boolean; city?: string | undefined; jobDescription?: string | undefined; ... 4 more ...; referencePhone?: string | undefined; }' is not assignable to type 'Without<EmployeeExperienceCreateInput, EmployeeExperienceUncheckedCreateInput> & EmployeeExperienceUncheckedCreateInput'.
+        Property 'companyId' is missing in type '{ employeeId: string; startDate: Date; endDate: Date | undefined; position: string; companyName: string; isCurrentPosition: boolean; city?: string | undefined; jobDescription?: string | undefined; ... 4 more ...; referencePhone?: string | undefined; }' but required in type 'EmployeeExperienceUncheckedCreateInput'.
+
+    [7m443[0m       data: {
+    [7m   [0m [91m      ~~~~[0m
+
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m193027[0m:[93m5[0m
+        [7m193027[0m     companyId: string
+        [7m      [0m [96m    ~~~~~~~~~[0m
+        'companyId' is declared here.
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m104331[0m:[93m5[0m
+        [7m104331[0m     data: XOR<EmployeeExperienceCreateInput, EmployeeExperienceUncheckedCreateInput>
+        [7m      [0m [96m    ~~~~[0m
+        The expected type comes from property 'data' which is declared here on type '{ select?: EmployeeExperienceSelect<DefaultArgs> | null | undefined; include?: EmployeeExperienceInclude<DefaultArgs> | null | undefined; data: (Without<...> & EmployeeExperienceUncheckedCreateInput) | (Without<...> & EmployeeExperienceCreateInput); }'
+    [96msrc/modules/employee/employee.repository.ts[0m:[93m484[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType '{ employeeId: string; fileName: string; category: "TRAINING" | "OTHER" | "FAMILY" | "EDUCATION" | "EMERGENCY_CONTACT" | "SKILL" | "EXPERIENCE"; fileUrl: string; description?: string | undefined; mimeType?: string | undefined; fileSize?: number | undefined; originalName?: string | undefined; }' is not assignable to type '(Without<EmployeeAttachmentCreateInput, EmployeeAttachmentUncheckedCreateInput> & EmployeeAttachmentUncheckedCreateInput) | (Without<...> & EmployeeAttachmentCreateInput)'.
+      Type '{ employeeId: string; fileName: string; category: "TRAINING" | "OTHER" | "FAMILY" | "EDUCATION" | "EMERGENCY_CONTACT" | "SKILL" | "EXPERIENCE"; fileUrl: string; description?: string | undefined; mimeType?: string | undefined; fileSize?: number | undefined; originalName?: string | undefined; }' is not assignable to type 'Without<EmployeeAttachmentCreateInput, EmployeeAttachmentUncheckedCreateInput> & EmployeeAttachmentUncheckedCreateInput'.
+        Property 'companyId' is missing in type '{ employeeId: string; fileName: string; category: "TRAINING" | "OTHER" | "FAMILY" | "EDUCATION" | "EMERGENCY_CONTACT" | "SKILL" | "EXPERIENCE"; fileUrl: string; description?: string | undefined; mimeType?: string | undefined; fileSize?: number | undefined; originalName?: string | undefined; }' but required in type 'EmployeeAttachmentUncheckedCreateInput'.
+
+    [7m484[0m       data: { ...data, employeeId },
+    [7m   [0m [91m      ~~~~[0m
+
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m193161[0m:[93m5[0m
+        [7m193161[0m     companyId: string
+        [7m      [0m [96m    ~~~~~~~~~[0m
+        'companyId' is declared here.
+      [96mnode_modules/.prisma/client/index.d.ts[0m:[93m105336[0m:[93m5[0m
+        [7m105336[0m     data: XOR<EmployeeAttachmentCreateInput, EmployeeAttachmentUncheckedCreateInput>
+        [7m      [0m [96m    ~~~~[0m
+        The expected type comes from property 'data' which is declared here on type '{ select?: EmployeeAttachmentSelect<DefaultArgs> | null | undefined; include?: EmployeeAttachmentInclude<DefaultArgs> | null | undefined; data: (Without<...> & EmployeeAttachmentUncheckedCreateInput) | (Without<...> & EmployeeAttachmentCreateInput); }'
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        3.878 s
+Ran all test suites matching /src\/tests\/integration\/company-scope-employee-cross-company.test.ts/i.

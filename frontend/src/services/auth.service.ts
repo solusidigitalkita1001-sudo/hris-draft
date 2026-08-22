@@ -7,8 +7,6 @@ export interface LoginRequest {
 }
 
 export interface TokenResponse {
-  accessToken: string;
-  refreshToken: string;
   expiresIn: number;
 }
 
@@ -43,28 +41,33 @@ class AuthService {
     const response = await api.post('/auth/login', data);
     const result = response.data.data;
 
-    // Refresh token is now in httpOnly cookie set by server — only store access token
-    localStorage.setItem(appConfig.authTokenKey, result.tokens.accessToken);
+    // Cleanup any legacy access token left in localStorage after migration.
+    // Access & refresh tokens live exclusively in httpOnly cookies now.
+    localStorage.removeItem(appConfig.authTokenKey);
+    localStorage.removeItem(appConfig.refreshTokenKey);
 
     return result;
   }
 
   async logout(): Promise<void> {
     try {
-      // Cookie is sent automatically; no need to send refreshToken in body
+      // HttpOnly auth cookies are sent automatically; backend revokes refresh token + clears cookies.
       await api.post('/auth/logout');
     } catch {
       // Ignore logout errors
     }
+    // Always clean up legacy localStorage items even if API call fails.
     localStorage.removeItem(appConfig.authTokenKey);
+    localStorage.removeItem(appConfig.refreshTokenKey);
   }
 
   async refreshToken(): Promise<AuthResponse> {
-    // Cookie is sent automatically; backend reads from httpOnly cookie
+    // HttpOnly cookies (at + rt) are sent automatically. Backend rotates cookies in response.
     const response = await api.post('/auth/refresh');
     const result = response.data.data;
 
-    localStorage.setItem(appConfig.authTokenKey, result.tokens.accessToken);
+    localStorage.removeItem(appConfig.authTokenKey);
+    localStorage.removeItem(appConfig.refreshTokenKey);
 
     return result;
   }
@@ -88,11 +91,15 @@ class AuthService {
   }
 
   getAccessToken(): string | null {
-    return localStorage.getItem(appConfig.authTokenKey);
+    // Access token lives in httpOnly cookie - not accessible from JS (XSS-safe).
+    // Return null - callers should rely on isAuthenticated via auth store / profile load.
+    return null;
   }
 
   isAuthenticated(): boolean {
-    return !!this.getAccessToken();
+    // Best-effort check. Caller should load profile via auth store for definitive result.
+    // Legacy localStorage token fallback removed entirely.
+    return false;
   }
 }
 

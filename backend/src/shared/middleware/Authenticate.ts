@@ -16,25 +16,32 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+function extractToken(req: Request): string | undefined {
+  if (req.cookies?.at) {
+    return req.cookies.at;
+  }
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return undefined;
+  const parts = authHeader.split(' ');
+  if (parts.length === 2 && parts[0] === 'Bearer') {
+    return parts[1];
+  }
+  return undefined;
+}
+
 /**
  * Authentication middleware - verifies JWT access token
- * Extracts and verifies Bearer token from Authorization header
+ * Extracts token from httpOnly cookie (at) first, then falls back to
+ * Authorization Bearer header for backward compatibility (mobile clients / dev tools).
  * Mounts the authenticated user into AsyncLocalStorage via RequestContext
  * so Prisma middleware / services can access company scope safely.
  */
 export function authenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization;
+  const token = extractToken(req);
 
-  if (!authHeader) {
+  if (!token) {
     throw new AuthError('No authorization token provided');
   }
-
-  const parts = authHeader.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') {
-    throw new AuthError('Invalid authorization header format. Use: Bearer <token>');
-  }
-
-  const token = parts[1];
 
   try {
     const decoded = jwtHandler.verifyAccessToken(token);
@@ -63,17 +70,9 @@ export function authenticate(req: AuthenticatedRequest, _res: Response, next: Ne
  * Optional authentication - doesn't fail if no token, but populates user if present
  */
 export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization;
+  const token = extractToken(req);
 
-  if (!authHeader) {
-    runInRequestContext({}, () => {
-      next();
-    });
-    return;
-  }
-
-  const parts = authHeader.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+  if (!token) {
     runInRequestContext({}, () => {
       next();
     });
@@ -81,7 +80,7 @@ export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, 
   }
 
   try {
-    const decoded = jwtHandler.verifyAccessToken(parts[1]);
+    const decoded = jwtHandler.verifyAccessToken(token);
     req.user = {
       id: decoded.sub,
       email: decoded.email,

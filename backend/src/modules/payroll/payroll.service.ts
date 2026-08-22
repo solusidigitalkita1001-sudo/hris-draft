@@ -28,6 +28,7 @@ import type { EmployeeForDisbursement } from '@/shared/payroll/disbursement';
 import { prisma } from '@/shared/database/prisma';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
+import { companySettingsService } from '@/modules/company-settings/company-settings.service';
 import { JKKRiskClass } from '@prisma/client';
 
 const JKK_RISK_TO_RATE: Record<JKKRiskClass, number> = {
@@ -441,6 +442,9 @@ export class PayrollService {
     const employeeSalaries = await payrollRepository.findAllEmployeeSalaries(run.companyId);
     const loanDeductionComponent = await this.ensureLoanDeductionComponent(run.companyId);
     const overtimeEarningComponent = await this.ensureOvertimeEarningComponent(run.companyId);
+    const lateDeductionComponent = await this.ensureLateDeductionComponent(run.companyId);
+    const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId);
+    const lateCfg = await companySettingsService.getLateDeductionConfig(run.companyId);
     const dueLoanInstallments = await employeeLoanRepository.findDueInstallmentsForPayroll(
       run.companyId,
       new Date(run.period.endDate)
@@ -507,6 +511,37 @@ export class PayrollService {
       ? await workCalendarRepository.countWorkingDays(companyCalendar.id, periodStart, periodEnd)
       : 0;
 
+    // Task 4.2 — Aggregate net LATE MINUTES per employee + per day key for daily cap deduction
+    // Late minutes reduced by BranchAttendancePolicy.lateToleranceMinutes per attendance row
+    const netLateMinutesByEmployee: Record<string, number> = {};
+    const perDayLateMinutesByEmployee: Record<string, Record<string, number>> = {};
+    if (lateCfg.enabled) {
+      const lateAttendanceRows = await prisma.attendance.findMany({
+        where: {
+          companyId: run.companyId,
+          date: { gte: periodStart, lte: periodEnd },
+          deletedAt: null,
+          lateMinutes: { gt: 0 },
+          OR: [{ status: 'LATE' }, { status: 'PRESENT' }],
+        },
+        select: {
+          employeeId: true,
+          date: true,
+          lateMinutes: true,
+          attendancePolicy: { select: { lateToleranceMinutes: true } },
+        },
+      });
+      for (const row of lateAttendanceRows) {
+        const tolerance = Number(row.attendancePolicy?.lateToleranceMinutes ?? 0);
+        const netMinutes = Math.max(0, Number(row.lateMinutes ?? 0) - tolerance);
+        if (netMinutes <= 0) continue;
+        netLateMinutesByEmployee[row.employeeId] = (netLateMinutesByEmployee[row.employeeId] || 0) + netMinutes;
+        const dayKey = new Date(row.date).toISOString().slice(0, 10);
+        if (!perDayLateMinutesByEmployee[row.employeeId]) perDayLateMinutesByEmployee[row.employeeId] = {};
+        perDayLateMinutesByEmployee[row.employeeId][dayKey] = (perDayLateMinutesByEmployee[row.employeeId][dayKey] || 0) + netMinutes;
+      }
+    }
+
     // Delete existing payslips for this run (recalculation)
     await payrollRepository.deletePayslipsByRunId(runId);
 
@@ -526,6 +561,26 @@ export class PayrollService {
         ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: overtimeHoursForEmployee, dayType: 'WORKDAY' }).amount
         : 0;
 
+      // Task 4.2 — Hitung nominal potongan keterlambatan (dengan daily cap persentase gaji pokok)
+      const baseMonthlyWage = Number(salary.baseSalary);
+      let lateDeductionAmount = 0;
+      if (lateCfg.enabled && perDayLateMinutesByEmployee[salary.employeeId]) {
+        const dailyCapIdr = baseMonthlyWage * (lateCfg.dailyCapPercentOfBasic / 100);
+        const dayMap = perDayLateMinutesByEmployee[salary.employeeId];
+        for (const dayKey in dayMap) {
+          const dayRawAmount = dayMap[dayKey] * lateCfg.ratePerMinuteIdr;
+          lateDeductionAmount += Math.min(dayRawAmount, dailyCapIdr);
+        }
+        lateDeductionAmount = Math.round(lateDeductionAmount);
+      }
+      // Task 4.2 — Hitung nominal potongan alpha tidak hadir (persen × gaji / hari kerja default)
+      let absenceDeductionAmount = 0;
+      if (absentDays > 0 && lateCfg.absenceDailyPercentOfBasic > 0 && lateCfg.defaultWorkingDaysPerMonth > 0) {
+        const perDayWageRate = baseMonthlyWage / lateCfg.defaultWorkingDaysPerMonth;
+        const perDayDeduction = perDayWageRate * (lateCfg.absenceDailyPercentOfBasic / 100);
+        absenceDeductionAmount = Math.round(perDayDeduction * absentDays);
+      }
+
       const extraComponents: Array<{ salaryComponentId: string; name: string; type: string; amount: number; isTaxable: boolean }> = [];
       if (loanDeductionAmount > 0) {
         extraComponents.push({
@@ -543,6 +598,24 @@ export class PayrollService {
           type: 'ALLOWANCE',
           amount: overtimePayAmount,
           isTaxable: true,
+        });
+      }
+      if (lateDeductionAmount > 0) {
+        extraComponents.push({
+          salaryComponentId: lateDeductionComponent.id,
+          name: 'Potongan Keterlambatan',
+          type: 'DEDUCTION',
+          amount: lateDeductionAmount,
+          isTaxable: false,
+        });
+      }
+      if (absenceDeductionAmount > 0) {
+        extraComponents.push({
+          salaryComponentId: absenceDeductionComponent.id,
+          name: 'Potongan Tidak Hadir (Alpha)',
+          type: 'DEDUCTION',
+          amount: absenceDeductionAmount,
+          isTaxable: false,
         });
       }
 
@@ -649,6 +722,42 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated deduction for employee loan installments',
       sortOrder: 999,
+    });
+  }
+
+  private async ensureLateDeductionComponent(companyId: string) {
+    const code = 'LATE_DEDUCTION_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Potongan Keterlambatan',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false,
+      description: 'System generated: automatic late attendance deduction per minutes after branch tolerance',
+      sortOrder: 997,
+    });
+  }
+
+  private async ensureAbsenceDeductionComponent(companyId: string) {
+    const code = 'ABSENCE_DEDUCTION_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Potongan Tidak Hadir (Alpha)',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false,
+      description: 'System generated: automatic absence per day deduction based on basic salary / working days',
+      sortOrder: 996,
     });
   }
 

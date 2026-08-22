@@ -7,12 +7,12 @@ let failedQueue: Array<{
   reject: (reason: unknown) => void;
 }> = [];
 
-const processQueue = (error: unknown, token: string | null = null) => {
+const processQueue = (error: unknown) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
     } else {
-      prom.resolve(token);
+      prom.resolve(null);
     }
   });
   failedQueue = [];
@@ -20,6 +20,7 @@ const processQueue = (error: unknown, token: string | null = null) => {
 
 const clearClientSession = () => {
   localStorage.removeItem(appConfig.authTokenKey);
+  localStorage.removeItem(appConfig.refreshTokenKey);
   localStorage.removeItem(appConfig.companyKey);
   localStorage.removeItem('companyId');
   localStorage.removeItem('employeeId');
@@ -37,13 +38,10 @@ const api = axios.create({
   },
 });
 
-// Request interceptor - attach auth token
+// Request interceptor - auth token is sent automatically via httpOnly cookies (withCredentials:true)
+// No manual Authorization header attachment from localStorage for security (XSS mitigation).
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem(appConfig.authTokenKey);
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -59,36 +57,25 @@ api.interceptors.response.use(
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-          }
-          return api(originalRequest);
-        });
+        }).then(() => api(originalRequest))
+          .catch((err) => Promise.reject(err));
       }
 
       originalRequest._retry = true;
       isRefreshing = true;
 
       try {
-        // Cookie is sent automatically; backend issues new cookie + access token
-        const { data } = await axios.post(`${appConfig.apiUrl}/auth/refresh`, null, {
+        // HttpOnly refresh cookie is sent automatically via withCredentials:true.
+        // Backend responds with new httpOnly cookies (at + rt) - no token handling in JS needed.
+        await axios.post(`${appConfig.apiUrl}/auth/refresh`, null, {
           withCredentials: true,
         });
 
-        const { accessToken } = data.data.tokens;
-
-        localStorage.setItem(appConfig.authTokenKey, accessToken);
-
-        processQueue(null, accessToken);
-
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        }
+        processQueue(null);
 
         return api(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError, null);
+        processQueue(refreshError);
         clearClientSession();
         window.location.href = '/login';
         return Promise.reject(refreshError);
