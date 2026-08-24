@@ -3,9 +3,10 @@ import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, ValidationError } from '@/shared/exceptions/AppError';
-import { CreateCompanyDTO, UpdateCompanyDTO } from '../organization.dto';
+import { CreateCompanyDTO, UpdateCompanyDTO, CreateBranchDTO } from '../organization.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { generateSystemCode } from '@/shared/utils/system-code';
+import { branchService } from './branch.service';
 
 const logger = new WinstonLogger('CompanyService');
 
@@ -36,6 +37,18 @@ export class CompanyService {
 
     const company = await companyRepository.create({ ...dto, code });
 
+    const defaultBranchDto: CreateBranchDTO = {
+      companyId: company.id,
+      name: 'Kantor Pusat',
+      address: dto.address,
+      phone: dto.phone,
+      email: dto.email,
+      timezone: dto.timezone,
+      latitude: undefined,
+      longitude: undefined,
+    };
+    await branchService.create(defaultBranchDto);
+
     await eventBus.publish({
       name: DomainEvents.COMPANY_CREATED,
       aggregateId: company.id,
@@ -44,7 +57,7 @@ export class CompanyService {
       metadata: { eventId: uuidv4(), occurredAt: new Date() },
     });
 
-    logger.info(`Company created: ${company.name} under group ${dto.groupId}`);
+    logger.info(`Company created: ${company.name} under group ${dto.groupId} with default HQ branch + attendance policy`);
     return company;
   }
 

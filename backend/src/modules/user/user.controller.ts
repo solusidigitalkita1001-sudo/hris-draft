@@ -57,7 +57,12 @@ export class UserController {
 
   async assignRoles(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await roleService.assignToUser(req.params.id as string, req.body, req.user!.id);
+      const result = await roleService.assignToUser(req.params.id as string, req.body, req.user!.id, {
+        companyScope: req.user!.companyScope ?? [],
+        groupId: req.user!.groupId ?? null,
+        maxRolePriority: req.user!.maxRolePriority ?? 0,
+        hasGlobalRole: !!req.user!.hasGlobalRole,
+      });
       res.status(200).json(Result.updated(result, 'Roles assigned successfully'));
     } catch (error) {
       next(error);

@@ -75,7 +75,9 @@ export class PermissionRequestController {
       if (req.user!.employeeId && req.user!.employeeId === request.employeeId) {
         throw new ForbiddenError('Cannot approve your own permission request');
       }
-      const data = await permissionRequestRepository.approve(req.params.id as string, req.user!.id, req.body);
+      // [Finding #11] Pass approverEmployeeId ke repository untuk defense layer kedua
+      const payload = { ...req.body, approverEmployeeId: req.user!.employeeId };
+      const data = await permissionRequestRepository.approve(req.params.id as string, req.user!.id, payload);
       res.json(Result.updated(data, 'Request approved'));
     } catch (error) { next(error); }
   }
@@ -87,7 +89,9 @@ export class PermissionRequestController {
       if (req.user!.employeeId && req.user!.employeeId === request.employeeId) {
         throw new ForbiddenError('Cannot reject your own permission request');
       }
-      const data = await permissionRequestRepository.reject(req.params.id as string, req.user!.id, req.body);
+      // [Finding #11] Pass approverEmployeeId ke repository untuk defense layer kedua
+      const payload = { ...req.body, approverEmployeeId: req.user!.employeeId };
+      const data = await permissionRequestRepository.reject(req.params.id as string, req.user!.id, payload);
       res.json(Result.updated(data, 'Request rejected'));
     } catch (error) { next(error); }
   }

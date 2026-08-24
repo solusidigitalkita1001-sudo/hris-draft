@@ -13,6 +13,8 @@ export interface AuthenticatedRequest extends Request {
     groupId?: string;
     permissions?: string[];
     roles?: string[];
+    hasGlobalRole?: boolean;
+    maxRolePriority?: number;
   };
 }
 
@@ -54,6 +56,8 @@ export function authenticate(req: AuthenticatedRequest, _res: Response, next: Ne
       groupId: decoded.groupId,
       permissions: decoded.permissions,
       roles: decoded.roles,
+      hasGlobalRole: decoded.hasGlobalRole,
+      maxRolePriority: decoded.maxRolePriority,
     };
     runInRequestContext({ user: req.user }, () => {
       next();
@@ -90,6 +94,8 @@ export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, 
       groupId: decoded.groupId,
       permissions: decoded.permissions,
       roles: decoded.roles,
+      hasGlobalRole: decoded.hasGlobalRole,
+      maxRolePriority: decoded.maxRolePriority,
     };
     runInRequestContext({ user: req.user }, () => {
       next();

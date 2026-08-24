@@ -1,3 +1,5 @@
+import { randomBytes } from 'crypto';
+
 type GenerateSystemCodeOptions = {
   prefix: string;
   label?: string;
@@ -17,7 +19,8 @@ function normalizeSegment(value: string, maxLength = 10) {
 
 function buildCandidate(prefix: string, label?: string, maxLength = 50) {
   const date = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-  const random = Math.random().toString(36).slice(2, 6).toUpperCase();
+  // [Finding #13] CSPRNG crypto.randomBytes menggantikan Math.random untuk security-sensitive suffix
+  const random = randomBytes(3).toString('hex').slice(0, 4).toUpperCase();
   const segments = [normalizeSegment(prefix, 12)];
 
   if (label?.trim()) {

@@ -44,6 +44,7 @@ router.get(
 router.post(
   '/salary-components',
   authorize({ resource: 'payroll', action: 'create' }),
+  auditLog({ action: 'CREATE', entity: 'SalaryComponent' }),
   validate(createSalaryComponentSchema, 'body'),
   payrollController.createSalaryComponent.bind(payrollController)
 );
@@ -51,6 +52,7 @@ router.post(
 router.patch(
   '/salary-components/:id',
   authorize({ resource: 'payroll', action: 'update' }),
+  auditLog({ action: 'UPDATE', entity: 'SalaryComponent', model: 'salaryComponent' }),
   validate(idParamSchema, 'params'),
   validate(updateSalaryComponentSchema, 'body'),
   payrollController.updateSalaryComponent.bind(payrollController)
@@ -59,6 +61,7 @@ router.patch(
 router.delete(
   '/salary-components/:id',
   authorize({ resource: 'payroll', action: 'delete' }),
+  auditLog({ action: 'DELETE', entity: 'SalaryComponent', model: 'salaryComponent' }),
   validate(idParamSchema, 'params'),
   payrollController.deleteSalaryComponent.bind(payrollController)
 );
@@ -80,6 +83,7 @@ router.get(
 router.post(
   '/employee-salaries',
   authorize({ resource: 'payroll', action: 'create' }),
+  auditLog({ action: 'CREATE', entity: 'EmployeeSalary' }),
   validate(createEmployeeSalarySchema, 'body'),
   payrollController.createEmployeeSalary.bind(payrollController)
 );
@@ -87,6 +91,7 @@ router.post(
 router.patch(
   '/employee-salaries/:id',
   authorize({ resource: 'payroll', action: 'update' }),
+  auditLog({ action: 'UPDATE', entity: 'EmployeeSalary', model: 'employeeSalary' }),
   validate(idParamSchema, 'params'),
   validate(updateEmployeeSalarySchema, 'body'),
   payrollController.updateEmployeeSalary.bind(payrollController)
@@ -141,6 +146,7 @@ router.get(
 router.post(
   '/periods',
   authorize({ resource: 'payroll', action: 'create' }),
+  auditLog({ action: 'CREATE', entity: 'PayrollPeriod' }),
   validate(createPayrollPeriodSchema, 'body'),
   payrollController.createPayrollPeriod.bind(payrollController)
 );
@@ -148,6 +154,7 @@ router.post(
 router.patch(
   '/periods/:id',
   authorize({ resource: 'payroll', action: 'update' }),
+  auditLog({ action: 'UPDATE', entity: 'PayrollPeriod', model: 'payrollPeriod' }),
   validate(idParamSchema, 'params'),
   validate(updatePayrollPeriodSchema, 'body'),
   payrollController.updatePayrollPeriod.bind(payrollController)
@@ -156,6 +163,7 @@ router.patch(
 router.patch(
   '/periods/:id/close',
   authorize({ resource: 'payroll', action: 'update' }),
+  auditLog({ action: 'CLOSE_PERIOD', entity: 'PayrollPeriod', model: 'payrollPeriod' }),
   validate(idParamSchema, 'params'),
   payrollController.closePayrollPeriod.bind(payrollController)
 );
@@ -167,6 +175,7 @@ router.get(
 router.put(
   '/periods/:id/confirm-attendance',
   authorize({ resource: 'payroll', action: 'update' }),
+  auditLog({ action: 'CONFIRM_ATTENDANCE', entity: 'PayrollPeriod', model: 'payrollPeriod' }),
   payrollController.confirmAttendanceReview.bind(payrollController)
 );
 
@@ -188,6 +197,7 @@ router.get(
 router.post(
   '/runs',
   authorize({ resource: 'payroll', action: 'process' }),
+  auditLog({ action: 'CREATE_RUN', entity: 'PayrollRun' }),
   validate(createPayrollRunSchema, 'body'),
   payrollController.createPayrollRun.bind(payrollController)
 );

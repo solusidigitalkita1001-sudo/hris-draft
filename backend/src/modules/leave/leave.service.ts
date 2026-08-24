@@ -177,7 +177,8 @@ export class LeaveService {
     leaveRequestId: string,
     userId: string,
     roles: string[],
-    action: WorkflowActionDTO & { source?: WorkflowSource }
+    action: WorkflowActionDTO & { source?: WorkflowSource },
+    approverEmployeeId?: string | null
   ) {
     const leaveRequest = await this.findLeaveRequestById(leaveRequestId);
 
@@ -196,6 +197,19 @@ export class LeaveService {
     const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
     if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
       throw new NotFoundError('Workflow instance not found');
+    }
+
+    // [Finding #11] Self-approval guard for all workflow action paths (APPROVE/REJECT)
+    // => Diletakkan SETELAH cross-company scope check agar NotFoundError scope menang duluan
+    //    (urutan defense-in-depth: identify object → scope ownership → rule check)
+    if ((action.action === 'APPROVE' || action.action === 'REJECT')) {
+      const ctx = getRequestContext();
+      const resolvedApproverEmployeeId = approverEmployeeId ?? ctx?.user?.employeeId;
+      if (resolvedApproverEmployeeId && resolvedApproverEmployeeId === leaveRequest.employeeId) {
+        throw new ForbiddenError(
+          `Self approval not allowed: you cannot ${action.action.toLowerCase()} your own leave request`
+        );
+      }
     }
 
     const updatedInstance = await workflowEngineRepository.applyAction(
@@ -224,11 +238,18 @@ export class LeaveService {
 
   async approveLeave(id: string, userId: string, approverEmployeeId?: string | null) {
     const roles = getCurrentRoles();
+    // [Finding #11] Self-approval guard: approver tidak boleh approve leave request milik sendiri
+    const request = await this.findLeaveRequestById(id);
+    const ctx = getRequestContext();
+    const resolvedApproverEmployeeId = approverEmployeeId ?? ctx?.user?.employeeId;
+    if (resolvedApproverEmployeeId && resolvedApproverEmployeeId === request.employeeId) {
+      throw new ForbiddenError('Cannot approve your own leave request');
+    }
     return this.applyWorkflowAction(id, userId, roles, {
       action: 'APPROVE',
       comment: 'Legacy approve endpoint',
       source: 'LEGACY',
-    });
+    }, resolvedApproverEmployeeId);
   }
 
   async rejectLeave(id: string, reason?: string, approverEmployeeId?: string | null) {
@@ -237,7 +258,8 @@ export class LeaveService {
     const roles = ctx?.user?.roles ?? [];
 
     const request = await this.findLeaveRequestById(id);
-    if (approverEmployeeId && approverEmployeeId === request.employeeId) {
+    const resolvedApproverEmployeeId = approverEmployeeId ?? ctx?.user?.employeeId;
+    if (resolvedApproverEmployeeId && resolvedApproverEmployeeId === request.employeeId) {
       throw new ForbiddenError('Cannot reject your own leave request');
     }
 
@@ -245,7 +267,7 @@ export class LeaveService {
       action: 'REJECT',
       comment: reason ?? 'Legacy reject endpoint',
       source: 'LEGACY',
-    });
+    }, resolvedApproverEmployeeId);
   }
 
   async getLeaveWorkflow(id: string) {

@@ -1529,6 +1529,11 @@ export class WorkCalendarRepository {
     return this.findCalendarByContext(employee);
   }
 
+  // [Finding #15] Fallback company default calendar: cari work calendar scope COMPANY (tanpa branchId/departmentId) + isActive + tahun terbaru.
+  async findCompanyDefaultCalendar(companyId: string) {
+    return this.findCalendarByContext({ companyId });
+  }
+
   async findDayScheduleForContext(
     context: WorkCalendarResolutionContext,
     date: Date

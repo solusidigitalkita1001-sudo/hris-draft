@@ -165,10 +165,27 @@ export class RoleService {
     return permissionRepository.getRolePermissions(roleId);
   }
 
-  async assignToUser(userId: string, dto: AssignUserRolesDTO, requesterId: string) {
-    // Privilege escalation guard: GLOBAL-scope assignments require the requester
-    // to hold a GLOBAL-scoped role themselves. Without this, any rbac:update holder
-    // could promote any user to SUPER_ADMIN.
+  async assignToUser(
+    userId: string,
+    dto: AssignUserRolesDTO,
+    requesterId: string,
+    requesterCtx?: {
+      companyScope: string[];
+      groupId?: string | null;
+      maxRolePriority: number;
+      hasGlobalRole: boolean;
+    },
+  ) {
+    // ======================================================
+    // Finding #1: RBAC Privilege Escalation FULL GUARD CHAIN
+    // (1) GLOBAL scope assign butuh requester GLOBAL role (existing guard, dipertahankan)
+    // (2) Target user harus berada dalam jangkauan scope manageability requester
+    // (3) COMPANY/GROUP scopeId tidak boleh client-controlled → WAJIB ada di requester scope list
+    // (4) Priority hierarki: max priority role yang di-assign ≤ max priority requester (tidak bisa promote lebih tinggi dari diri sendiri!)
+    // (5) DeleteMany existing userRole juga di-scoped (tidak hapus role beda scope yang tidak boleh dipegang requester)
+    // ======================================================
+
+    // (1) Existing guard GLOBAL-scope assignment.
     if (dto.scopeType === 'GLOBAL') {
       const requesterRoles = await prisma.userRole.findFirst({
         where: { userId: requesterId, role: { scope: 'GLOBAL', deletedAt: null } },
@@ -179,10 +196,13 @@ export class RoleService {
       }
     }
 
-    // Verify roles exist in a single query (was N+1 over roleIds).
+    // Pre-fetch requester hierarchy + scope if controller tidak kasih (defensive code path)
+    const reqCtx: NonNullable<typeof requesterCtx> = requesterCtx ?? (await this.buildRequesterCtx(requesterId));
+
+    // Pre-fetch roles dengan priority + scope untuk guard (3) dan (4)
     const roles = await prisma.role.findMany({
       where: { id: { in: dto.roleIds }, deletedAt: null },
-      select: { id: true, scope: true },
+      select: { id: true, scope: true, priority: true, code: true, companyId: true, groupId: true },
     });
     if (roles.length !== new Set(dto.roleIds).size) {
       const found = new Set(roles.map((r) => r.id));
@@ -196,16 +216,111 @@ export class RoleService {
       throw new ValidationError('Cannot assign a GLOBAL-scoped role with a non-GLOBAL scopeType');
     }
 
-    // Remove existing roles
-    await prisma.userRole.deleteMany({ where: { userId } });
+    // GUARD (4): Hierarchy priority. Requester tidak boleh assign role yang LEBIH TINGGI (lebih kecil priority number? atau lebih besar? Sesuai convention priority = semakin besar semakin tinggi privilege. Kita enforce: max(role.priority) ≤ reqCtx.maxRolePriority)
+    const maxAssignedPriority = Math.max(...roles.map((r) => Number(r.priority ?? 0)));
+    if (!reqCtx.hasGlobalRole && maxAssignedPriority > reqCtx.maxRolePriority) {
+      throw new ForbiddenError(
+        `Cannot assign roles with higher hierarchy (priority ${maxAssignedPriority}) than your own max priority ${reqCtx.maxRolePriority}`,
+      );
+    }
 
-    // Assign new roles
+    // GUARD (2): Target user harus dalam scope manageability requester.
+    // Cari data target user: employee.companyId, employee.company.groupId
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        employee: { select: { companyId: true, company: { select: { groupId: true } } } },
+      },
+    });
+    if (!targetUser) throw new NotFoundError('Target user not found');
+    const targetCompanyId = targetUser.employee?.companyId ?? null;
+    const targetGroupId = targetUser.employee?.company?.groupId ?? null;
+    if (!reqCtx.hasGlobalRole) {
+      // GROUP_ADMIN scope: target groupId harus cocok / companyId dalam daftar group perusahaan dia
+      if (reqCtx.groupId && targetGroupId && targetGroupId !== reqCtx.groupId) {
+        throw new ForbiddenError('Target user berada di luar company group akses Anda');
+      }
+      // COMPANY_ADMIN scope: targetCompanyId WAJIB ada di companyScope requester
+      if (dto.scopeType === 'COMPANY' && targetCompanyId && !reqCtx.companyScope.includes(targetCompanyId)) {
+        throw new ForbiddenError('Anda tidak memiliki wewenang untuk manage user di company tersebut');
+      }
+      // GROUP scope assign: targetGroupId harus == dto.groupId (sudah ada validasi dibawah) dan requester punya group scope
+      if (dto.scopeType === 'GROUP' && targetGroupId && dto.groupId && targetGroupId !== dto.groupId) {
+        throw new ForbiddenError('Target user berada di luar group yang dituju');
+      }
+    }
+
+    // GUARD (3): COMPANY_ID / GROUP_ID DI DTO TIDAK BOLEH CLIENT-CONTROLLED SEMBARANG!
+    // Wajib match dengan scope list yang dimiliki requester.
+    if (!reqCtx.hasGlobalRole) {
+      if (dto.scopeType === 'COMPANY') {
+        const resolvedCompanyId = dto.companyId ?? targetCompanyId;
+        if (!resolvedCompanyId) {
+          throw new ValidationError('Company-scoped role assignment requires companyId context');
+        }
+        if (!reqCtx.companyScope.includes(resolvedCompanyId)) {
+          throw new ForbiddenError('companyId pada role assignment berada di luar daftar akses perusahaan Anda');
+        }
+        dto.companyId = resolvedCompanyId; // Overwrite pasti (client kirim salah juga akan paksa ke yang valid)
+        // GUARD tambahan: Role object sendiri kalau COMPANY scoped harusnya milik company itu
+        for (const r of roles) {
+          if (r.scope === 'COMPANY' && r.companyId && r.companyId !== resolvedCompanyId) {
+            throw new ForbiddenError(`Role ${r.code} tidak tersedia untuk company ${resolvedCompanyId}`);
+          }
+          if (r.scope === 'GROUP' && r.groupId && reqCtx.groupId && r.groupId !== reqCtx.groupId) {
+            throw new ForbiddenError(`Role ${r.code} berada di group lain`);
+          }
+        }
+      } else if (dto.scopeType === 'GROUP') {
+        const resolvedGroupId = dto.groupId ?? reqCtx.groupId ?? targetGroupId;
+        if (!resolvedGroupId) {
+          throw new ValidationError('Group-scoped role assignment requires groupId context');
+        }
+        if (reqCtx.groupId && resolvedGroupId !== reqCtx.groupId) {
+          throw new ForbiddenError('groupId pada role assignment berada di luar group akses Anda');
+        }
+        dto.groupId = resolvedGroupId;
+      }
+    }
+
+    // GUARD tambahan: Company-scoped role objects wajib punya companyId bind yang konsisten
+    if (dto.scopeType === 'COMPANY' && !dto.companyId && !reqCtx.hasGlobalRole) {
+      throw new ValidationError('Company-scoped role assignment missing companyId binding');
+    }
+    if (dto.scopeType === 'GROUP' && !dto.groupId && !reqCtx.hasGlobalRole) {
+      throw new ValidationError('Group-scoped role assignment missing groupId binding');
+    }
+
+    // (5) Scoped remove existing roles — HANYA hapus role yang dalam scope yang di-manage requester.
+    // JANGAN sampai COMPANY_ADMIN A hapus GLOBAL role SUPER_ADMIN pada user secara tidak sengaja / serangan!
+    if (reqCtx.hasGlobalRole) {
+      // SUPER_ADMIN boleh hapus semua role pada target
+      await prisma.userRole.deleteMany({ where: { userId } });
+    } else {
+      // Hanya hapus role di scopeType yang sedang di-process / scope company/grup requester
+      await prisma.userRole.deleteMany({
+        where: {
+          userId,
+          OR: [
+            { scopeType: dto.scopeType as any, companyId: dto.companyId ?? undefined, groupId: dto.groupId ?? undefined },
+            ...(dto.scopeType === 'COMPANY'
+              ? [{ companyId: { in: reqCtx.companyScope } }]
+              : dto.scopeType === 'GROUP' && reqCtx.groupId
+                ? [{ groupId: reqCtx.groupId }]
+                : []),
+          ],
+        },
+      });
+    }
+
+    // Assign new roles (scoped company/group sesuai DTO yang sudah di-validasi & di-overwrite guard 3)
     const userRoles = await prisma.userRole.createMany({
       data: dto.roleIds.map((roleId) => ({
         userId,
         roleId,
-        companyId: dto.companyId,
-        groupId: dto.groupId,
+        companyId: dto.scopeType === 'COMPANY' ? dto.companyId ?? null : dto.scopeType === 'GLOBAL' ? null : undefined,
+        groupId: dto.scopeType === 'GROUP' ? dto.groupId ?? null : dto.scopeType === 'GLOBAL' ? null : undefined,
         scopeType: dto.scopeType as any,
       })),
     });
@@ -214,11 +329,41 @@ export class RoleService {
       name: DomainEvents.ROLE_ASSIGNED,
       aggregateId: userId,
       aggregateType: 'User',
-      data: { roleIds: dto.roleIds },
-      metadata: { eventId: uuidv4(), occurredAt: new Date() },
+      data: { roleIds: dto.roleIds, scopeType: dto.scopeType, companyId: dto.companyId, groupId: dto.groupId, requesterId },
+      metadata: { eventId: uuidv4(), occurredAt: new Date(), correlationId: requesterId },
     });
 
+    // Invalidate cache user tersebut (karena role diganti → token refresh)
+    invalidateKeys(cacheKey(userId, 'user-context'));
+
     return userRoles;
+  }
+
+  /**
+   * Finding #1 helper: Build requester RBAC hierarchy context (for controllers/service defensive code).
+   * Dipanggil otomatis oleh assignToUser jika controller tidak mengirim explicit ctx.
+   */
+  private async buildRequesterCtx(
+    requesterId: string,
+  ): Promise<{ companyScope: string[]; groupId?: string | null; maxRolePriority: number; hasGlobalRole: boolean }> {
+    const requesterUserRoles = await prisma.userRole.findMany({
+      where: { userId: requesterId, role: { deletedAt: null } },
+      include: { role: { select: { scope: true, priority: true, companyId: true, groupId: true } } },
+    });
+    const hasGlobalRole = requesterUserRoles.some((ur) => ur.role.scope === 'GLOBAL');
+    const maxRolePriority = Math.max(0, ...requesterUserRoles.map((ur) => Number(ur.role.priority ?? 0)));
+    const companyScope = Array.from(
+      new Set(
+        requesterUserRoles
+          .filter((ur) => ur.companyId || ur.role.companyId)
+          .map((ur) => (ur.companyId ?? ur.role.companyId) as string)
+          .filter(Boolean),
+      ),
+    );
+    const groupId = requesterUserRoles.find((ur) => ur.groupId || ur.role.groupId)?.groupId ??
+      requesterUserRoles.find((ur) => ur.groupId || ur.role.groupId)?.role?.groupId ??
+      null;
+    return { companyScope, groupId, maxRolePriority, hasGlobalRole };
   }
 
   async getUserRoles(userId: string) {

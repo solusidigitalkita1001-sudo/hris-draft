@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { attendanceService } from './attendance.service';
 import { Result } from '@/shared/core/Result';
+import { ForbiddenError } from '@/shared/exceptions/AppError';
 
 export class AttendanceController {
   async findAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -23,8 +24,19 @@ export class AttendanceController {
 
   async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      // Employee-linked users can only clock in for themselves
-      if (req.user?.employeeId) req.body.employeeId = req.user.employeeId;
+      // [Finding #10] Strict ownership guard: EMPLOYEE role self-service TIDAK BOLEH clock-in atas nama karyawan lain
+      const isPureEmployee = req.user?.roles?.includes('EMPLOYEE') &&
+        !req.user?.roles?.some((r: string) =>
+          ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'BRANCH_MANAGER', 'MANAGER'].includes(r)
+        );
+      if (isPureEmployee && req.body.employeeId && req.body.employeeId !== req.user?.employeeId) {
+        throw new ForbiddenError('Anda tidak boleh clock-in atas nama karyawan lain sebagai role EMPLOYEE');
+      }
+      // Elevated roles (HR/Admin/Manager) tetap bisa override employeeId untuk create attendance manual;
+      // Employee-linked user tanpa elevated role: silent override ke user sendiri (existing pattern)
+      if (req.user?.employeeId && isPureEmployee) {
+        req.body.employeeId = req.user.employeeId;
+      }
       res.status(201).json(Result.created(await attendanceService.create(req.body)));
     } catch (error) { next(error); }
   }

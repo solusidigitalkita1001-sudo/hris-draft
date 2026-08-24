@@ -32,6 +32,22 @@ export class BranchService {
 
     const branch = await branchRepository.create({ ...dto, code });
 
+    const defaultPolicy: UpsertBranchAttendancePolicyDTO = {
+      attendanceMethod: AttendancePolicyMethod.MANUAL,
+      lateToleranceMinutes: 15,
+      earlyCheckoutToleranceMinutes: 15,
+      allowOutsideRadius: false,
+      outsideRadiusAction: 'REVIEW',
+      allowHolidayAttendance: false,
+      allowWeekendAttendance: false,
+      autoAbsentEnabled: false,
+      autoCheckoutEnabled: false,
+      requiresSelfie: false,
+      requiresLocation: false,
+      isActive: true,
+    };
+    await branchRepository.upsertAttendancePolicy(branch.id, branch.companyId, defaultPolicy);
+
     await eventBus.publish({
       name: DomainEvents.BRANCH_CREATED,
       aggregateId: branch.id,
@@ -40,7 +56,7 @@ export class BranchService {
       metadata: { eventId: uuidv4(), occurredAt: new Date() },
     });
 
-    logger.info(`Branch created: ${branch.name}`);
+    logger.info(`Branch created: ${branch.name} with default attendance policy`);
     return branch;
   }
 

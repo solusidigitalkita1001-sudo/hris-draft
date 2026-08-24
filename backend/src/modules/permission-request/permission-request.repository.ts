@@ -1,6 +1,7 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import type { CreatePermissionDTO, ApprovePermissionDTO } from './permission-request.dto';
+import { ForbiddenError } from '@/shared/exceptions/AppError';
 
 export class PermissionRequestRepository {
   // Employee sees their own requests
@@ -57,7 +58,12 @@ export class PermissionRequestRepository {
     });
   }
 
-  async approve(id: string, approverId: string, data?: ApprovePermissionDTO) {
+  async approve(id: string, approverId: string, data?: ApprovePermissionDTO & { approverEmployeeId?: string | null }) {
+    // [Finding #11] Self-approval guard: approver tidak boleh approve request milik sendiri
+    const record = await this.findById(id);
+    if (record && data?.approverEmployeeId && record.employeeId === data.approverEmployeeId) {
+      throw new ForbiddenError('Self approval not allowed: you cannot approve your own permission request');
+    }
     return prisma.permissionRequest.update({
       where: { id },
       data: {
@@ -69,7 +75,12 @@ export class PermissionRequestRepository {
     });
   }
 
-  async reject(id: string, approverId: string, data?: ApprovePermissionDTO) {
+  async reject(id: string, approverId: string, data?: ApprovePermissionDTO & { approverEmployeeId?: string | null }) {
+    // [Finding #11] Self-approval guard: approver tidak boleh reject request milik sendiri
+    const record = await this.findById(id);
+    if (record && data?.approverEmployeeId && record.employeeId === data.approverEmployeeId) {
+      throw new ForbiddenError('Self approval not allowed: you cannot reject your own permission request');
+    }
     return prisma.permissionRequest.update({
       where: { id },
       data: {

@@ -42,6 +42,15 @@ export class AuthService {
       )
     );
 
+    // Finding #1: Role hierarchy priority untuk guard privilege escalation.
+    const hasGlobalRole: boolean = user.userRoles.some(
+      (ur: any) => ur.scopeType === 'GLOBAL' || ur.role?.scope === 'GLOBAL',
+    );
+    const maxRolePriority: number = Math.max(
+      0,
+      ...user.userRoles.map((ur: any) => Number(ur.role?.priority ?? 0)),
+    );
+
     const companyScope = new Set<string>();
     const primaryCompanyId =
       user.employee?.companyId || user.userRoles.find((ur: any) => ur.companyId)?.companyId;
@@ -96,6 +105,8 @@ export class AuthService {
       companyId: primaryCompanyId || undefined,
       companyScope: Array.from(companyScope),
       groupId: groupId || undefined,
+      hasGlobalRole,
+      maxRolePriority,
       mustChangePassword: user.mustChangePassword,
     };
   }
@@ -465,6 +476,8 @@ export class AuthService {
       groupId?: string;
       permissions: string[];
       roles: string[];
+      hasGlobalRole: boolean;
+      maxRolePriority: number;
     },
     ipAddress?: string,
     userAgent?: string,
@@ -480,6 +493,8 @@ export class AuthService {
       groupId: user.groupId,
       permissions: user.permissions,
       roles: user.roles,
+      hasGlobalRole: user.hasGlobalRole,
+      maxRolePriority: user.maxRolePriority,
     });
 
     const refreshToken = jwtHandler.generateRefreshToken({

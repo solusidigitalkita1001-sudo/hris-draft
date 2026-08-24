@@ -167,10 +167,12 @@ function SalaryComponentForm({
             options={[
               { value: 'FIXED', label: 'FIXED' },
               { value: 'PERCENTAGE', label: 'PERCENTAGE' },
-              { value: 'FORMULA', label: 'FORMULA' },
             ]}
             className="h-9"
           />
+          <p className="text-xs text-muted-foreground">
+            Formula method coming soon. Gunakan FIXED untuk nominal pasti atau PERCENTAGE untuk persentase gaji.
+          </p>
         </div>
       </div>
 

@@ -42,9 +42,18 @@ export class LeaveRepository {
   async createLeaveRequest(data: CreateLeaveRequestDTO) {
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
-    // Count working days per employee's work calendar (excludes weekends & holidays)
-    const calendar = await workCalendarRepository.findEmployeeCalendar(data.employeeId);
-    const workingDays = calendar ? await workCalendarRepository.countWorkingDays(calendar.id, start, end) : 0;
+    // [Finding #15] Hierarki: 1) Employee-specific calendar → 2) Company default calendar → 3) Raw days fallback
+    const employeeCalendar = await workCalendarRepository.findEmployeeCalendar(data.employeeId);
+    let workingDays = 0;
+    if (employeeCalendar) {
+      workingDays = await workCalendarRepository.countWorkingDays(employeeCalendar.id, start, end);
+    }
+    if (workingDays === 0) {
+      const companyCalendar = await workCalendarRepository.findCompanyDefaultCalendar(data.companyId);
+      if (companyCalendar) {
+        workingDays = await workCalendarRepository.countWorkingDays(companyCalendar.id, start, end);
+      }
+    }
     const totalDays = workingDays > 0
       ? workingDays
       : Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);

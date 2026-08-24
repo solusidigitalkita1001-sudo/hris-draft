@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorizeRole } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
+import { auditLog } from '@/shared/middleware/AuditLog';
 import { travelExpenseController } from './travel-expense.controller';
 import config from '@/config';
 import { BadRequestError } from '@/shared/exceptions/AppError';
@@ -66,12 +67,14 @@ router.get('/trips/:id', authorizeRole(...approverRoles), travelExpenseControlle
 router.patch(
   '/trips/:id/approve',
   authorizeRole(...approverRoles),
+  auditLog({ action: 'APPROVE', entity: 'BusinessTrip', model: 'businessTrip' }),
   validate(approveBusinessTripSchema),
   travelExpenseController.approveTrip.bind(travelExpenseController)
 );
 router.patch(
   '/trips/:id/reject',
   authorizeRole(...approverRoles),
+  auditLog({ action: 'REJECT', entity: 'BusinessTrip', model: 'businessTrip' }),
   validate(approveBusinessTripSchema),
   travelExpenseController.rejectTrip.bind(travelExpenseController)
 );
@@ -83,12 +86,14 @@ router.get(
 router.patch(
   '/trips/:id/workflow-action',
   authorizeRole(...approverRoles),
+  auditLog({ action: 'WORKFLOW_ACTION', entity: 'BusinessTrip', model: 'businessTrip' }),
   validate(workflowActionSchema),
   travelExpenseController.applyTripWorkflowAction.bind(travelExpenseController)
 );
 router.post(
   '/trips/:id/advance',
   authorizeRole(...approverRoles),
+  auditLog({ action: 'CREATE_ADVANCE', entity: 'BusinessTrip' }),
   validate(createTravelAdvanceSchema),
   travelExpenseController.createAdvance.bind(travelExpenseController)
 );
@@ -111,12 +116,14 @@ router.get('/claims/:id', authorizeRole(...approverRoles), travelExpenseControll
 router.patch(
   '/claims/:id/approve',
   authorizeRole(...approverRoles),
+  auditLog({ action: 'APPROVE', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   validate(approveExpenseClaimSchema),
   travelExpenseController.approveClaim.bind(travelExpenseController)
 );
 router.patch(
   '/claims/:id/reject',
   authorizeRole(...approverRoles),
+  auditLog({ action: 'REJECT', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   validate(approveExpenseClaimSchema),
   travelExpenseController.rejectClaim.bind(travelExpenseController)
 );
@@ -128,12 +135,14 @@ router.get(
 router.patch(
   '/claims/:id/workflow-action',
   authorizeRole(...approverRoles),
+  auditLog({ action: 'WORKFLOW_ACTION', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   validate(workflowActionSchema),
   travelExpenseController.applyClaimWorkflowAction.bind(travelExpenseController)
 );
 router.post(
   '/claims/:id/reimburse',
   authorizeRole(...approverRoles),
+  auditLog({ action: 'REIMBURSE', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   validate(reimburseExpenseClaimSchema),
   travelExpenseController.reimburseClaim.bind(travelExpenseController)
 );

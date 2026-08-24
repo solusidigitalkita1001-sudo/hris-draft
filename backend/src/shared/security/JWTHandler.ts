@@ -23,6 +23,8 @@ export interface AccessTokenPayload {
   groupId?: string;
   permissions?: string[];
   roles?: string[];
+  hasGlobalRole?: boolean;
+  maxRolePriority?: number;
 }
 
 export interface RefreshTokenPayload {
@@ -106,6 +108,8 @@ export class JWTHandler {
         groupId: decoded.groupId,
         permissions: decoded.permissions,
         roles: decoded.roles,
+        hasGlobalRole: decoded.hasGlobalRole,
+        maxRolePriority: decoded.maxRolePriority,
       };
     } catch (error) {
       if (error instanceof AuthError) throw error;

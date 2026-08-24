@@ -128,6 +128,18 @@ export class TravelExpenseService {
       throw new NotFoundError('Workflow instance not found');
     }
 
+    // [Finding #11] Self-approval guard for all trip workflow action paths (APPROVE/REJECT)
+    // => Diletakkan SETELAH cross-company scope check agar NotFoundError scope menang duluan
+    if (action.action === 'APPROVE' || action.action === 'REJECT') {
+      const ctx = getRequestContext();
+      const approverEmployeeId = ctx?.user?.employeeId;
+      if (approverEmployeeId && approverEmployeeId === trip.employeeId) {
+        throw new ForbiddenError(
+          `Self approval not allowed: you cannot ${action.action.toLowerCase()} your own travel request`
+        );
+      }
+    }
+
     const updatedInstance = await workflowEngineRepository.applyAction(
       instance.id,
       userId,
@@ -295,6 +307,18 @@ export class TravelExpenseService {
       throw new NotFoundError('Workflow instance not found');
     }
 
+    // [Finding #11] Self-approval guard for all claim workflow action paths (APPROVE/REJECT)
+    // => Diletakkan SETELAH cross-company scope check agar NotFoundError scope menang duluan
+    if (action.action === 'APPROVE' || action.action === 'REJECT') {
+      const ctx = getRequestContext();
+      const approverEmployeeId = ctx?.user?.employeeId;
+      if (approverEmployeeId && approverEmployeeId === claim.employeeId) {
+        throw new ForbiddenError(
+          `Self approval not allowed: you cannot ${action.action.toLowerCase()} your own expense claim`
+        );
+      }
+    }
+
     const updatedInstance = await workflowEngineRepository.applyAction(
       instance.id,
       userId,
@@ -351,6 +375,13 @@ export class TravelExpenseService {
   }
 
   async reimburseClaim(id: string, processedBy: string, data: ReimburseExpenseClaimDTO & { companyId: string }) {
+    // [Finding #11] Self-reimburse guard: employee tidak boleh reimburse claim dirinya sendiri
+    const claim = await this.findClaimById(id);
+    const ctx = getRequestContext();
+    const processorEmployeeId = ctx?.user?.employeeId;
+    if (processorEmployeeId && processorEmployeeId === claim.employeeId) {
+      throw new ForbiddenError('Self reimburse not allowed: you cannot reimburse your own expense claim');
+    }
     return travelExpenseRepository.reimburseClaim(id, processedBy, data);
   }
 }
