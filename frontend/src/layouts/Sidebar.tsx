@@ -47,6 +47,7 @@ import {
   Repeat,
   Menu as MenuIcon,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react';
 import { administrationService } from '@/services/administration.service';
 
@@ -92,6 +93,18 @@ const navItems: NavItem[] = [
     labelKey: 'sidebar.loan',
     icon: <Banknote size={18} />,
     path: '/employee-loans',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
+    labelKey: 'sidebar.ewa',
+    icon: <Wallet size={18} />,
+    path: '/ewa',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
+    labelKey: 'sidebar.dailyActivity',
+    icon: <MapPin size={18} />,
+    path: '/daily-activity',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
@@ -274,6 +287,18 @@ const navItems: NavItem[] = [
         icon: <ShieldCheck size={16} />,
         path: '/admin/data-scope',
         access: { requireAuth: true, requiredPermissions: [{ resource: 'settings', action: 'read' }] },
+      },
+      {
+        labelKey: 'sidebar.administration.ewaApproval',
+        icon: <Wallet size={16} />,
+        path: '/admin/ewa',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'ewa', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
+      },
+      {
+        labelKey: 'sidebar.administration.dailyActivities',
+        icon: <MapPin size={16} />,
+        path: '/admin/daily-activities',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'daily-activity', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
       },
       {
         labelKey: 'sidebar.administration.settings',

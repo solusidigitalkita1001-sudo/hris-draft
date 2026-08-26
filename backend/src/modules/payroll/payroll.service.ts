@@ -30,6 +30,8 @@ import { calculateOvertimePay } from '@/shared/attendance/overtime';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 import { companySettingsService } from '@/modules/company-settings/company-settings.service';
 import { JKKRiskClass } from '@prisma/client';
+import { ewaRepository } from '@/modules/ewa/ewa.repository';
+import { ewaService } from '@/modules/ewa/ewa.service';
 
 const JKK_RISK_TO_RATE: Record<JKKRiskClass, number> = {
   [JKKRiskClass.I]: 0.24,
@@ -454,6 +456,7 @@ export class PayrollService {
     const overtimeEarningComponent = await this.ensureOvertimeEarningComponent(run.companyId);
     const lateDeductionComponent = await this.ensureLateDeductionComponent(run.companyId);
     const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId);
+    const ewaDeductionComponent = await this.ensureEWADeductionComponent(run.companyId);
     const lateCfg = await companySettingsService.getLateDeductionConfig(run.companyId);
     const dueLoanInstallments = await employeeLoanRepository.findDueInstallmentsForPayroll(
       run.companyId,
@@ -482,6 +485,27 @@ export class PayrollService {
 
     const periodStart = new Date(run.period.startDate);
     const periodEnd = new Date(run.period.endDate);
+
+    // EWA: Fetch semua PAID status EWA yang belum di-deduct (payrollRunId null) untuk periode ini
+    const paidEWAsForPeriod = await ewaRepository.findPAIDByEmployeeAndPeriod(
+      run.companyId,
+      'all',
+      periodStart,
+      periodEnd,
+    ) as any[];
+    const ewaAggregated = ewaService.aggregateDeductionsForPayroll(paidEWAsForPeriod);
+    const ewaDeductionByEmployee: Record<string, { total: number; ewaIds: string[]; amountMap: Record<string, number> }> = {};
+    for (const row of ewaAggregated as any[]) {
+      if (!ewaDeductionByEmployee[row.employeeId]) {
+        ewaDeductionByEmployee[row.employeeId] = { total: 0, ewaIds: [], amountMap: {} };
+      }
+      const amount = Number(row.deductedAmount ?? row.amountPaidOut ?? row.amountRequested ?? 0);
+      ewaDeductionByEmployee[row.employeeId].total += amount;
+      if (row.id) {
+        ewaDeductionByEmployee[row.employeeId].ewaIds.push(row.id);
+        ewaDeductionByEmployee[row.employeeId].amountMap[row.id] = amount;
+      }
+    }
 
     // Batch attendance summary per employee for the pay period
     const attendanceGroups = await prisma.attendance.groupBy({
@@ -628,6 +652,17 @@ export class PayrollService {
           isTaxable: false,
         });
       }
+      const ewaDeductInfo = ewaDeductionByEmployee[salary.employeeId];
+      const ewaDeductionAmount = ewaDeductInfo?.total || 0;
+      if (ewaDeductionAmount > 0) {
+        extraComponents.push({
+          salaryComponentId: ewaDeductionComponent.id,
+          name: 'Potongan EWA (Tarik Gaji Awal)',
+          type: 'DEDUCTION',
+          amount: ewaDeductionAmount,
+          isTaxable: false,
+        });
+      }
 
       const emp = salary.employee as { maritalStatus?: string | null; taxId?: string | null; _count?: { families: number } };
       const taxContext = {
@@ -674,6 +709,17 @@ export class PayrollService {
       totalEarnings += earningsTotal;
       totalDeductions += deductionsTotal;
       employeeCount++;
+    }
+
+    // EWA: Bulk mark semua PAID EWA yang sudah di-deduct di payroll run ini menjadi DEDUCTED + attach payrollRunId supaya recalculate tidak double deduct
+    const allEwaIds: string[] = [];
+    const ewaAmountMapGlobal: Record<string, number> = {};
+    for (const emp of Object.values(ewaDeductionByEmployee)) {
+      allEwaIds.push(...emp.ewaIds);
+      Object.assign(ewaAmountMapGlobal, emp.amountMap);
+    }
+    if (allEwaIds.length > 0) {
+      await ewaRepository.bulkMarkDeducted(allEwaIds, runId, new Date(), ewaAmountMapGlobal);
     }
 
     // Update run totals
@@ -768,6 +814,24 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated: automatic absence per day deduction based on basic salary / working days',
       sortOrder: 996,
+    });
+  }
+
+  private async ensureEWADeductionComponent(companyId: string) {
+    const code = 'EWA-DEDUCT';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Potongan EWA (Tarik Gaji Awal)',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false,
+      description: 'System generated: automatic deduction for approved Earned Wage Access paid requests (employer-funded float model). Deducted bulan berjalan di payslip.',
+      sortOrder: 995,
     });
   }
 

@@ -421,6 +421,8 @@ model PayrollPeriod {
 
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payrollRuns PayrollRun[]
+  /// C.4 EWA: List request tarik gaji awal yang reference periode ini
+  earnedWageAccesses EarnedWageAccess[]
 
   @@index([companyId])
   @@index([code])
@@ -4144,35 +4146,50 @@ enum EWATransactionStatus {
 
 /// C.4 EWA MVP (Employer-Funded Float) — karyawan bisa TARIK di AWAL periode, max X% dari gaji earned gross terhitung,
 /// di-auto deduct sebagai component EWA-DEDUCT saat payroll run bulan bersangkutan.
+/// C.4 Earned Wage Access — request tarik gaji earned sebagian sebelum payday
 model EarnedWageAccess {
   id                   String               @id @default(uuid()) @db.VarChar(36)
   companyId            String               @map("company_id") @db.VarChar(36)
   employeeId           String               @map("employee_id") @db.VarChar(36)
+  requestCode          String               @unique @map("request_code") @db.VarChar(50) /// EWA-YYYYMMDD-XXXX auto system-code
+  payrollPeriodId      String?              @map("payroll_period_id") @db.VarChar(36) /// Payroll period reference cycle deduction
   payrollRunId         String?              @map("payroll_run_id") @db.VarChar(36)
   periodStart          DateTime             @map("period_start") @db.Date
   periodEnd            DateTime             @map("period_end") @db.Date
-  earnedGrossReference Decimal              @map("earned_gross_reference") @db.Decimal(15, 2)   /// gross upah terhitung saat request (cuma reference untuk audit)
+  earnedGrossReference Decimal              @map("earned_gross_reference") @db.Decimal(15, 2)   /// gross upah terhitung saat request (audit)
+  earnedGrossAtRequest Decimal              @map("earned_gross_at_request") @db.Decimal(15, 2)   /// Snapshot create time (sama reference tapi preserved immutable)
   maxAllowedPercent    Int                  @default(50) @map("max_allowed_percent")             /// default 50% dari gaji (configurable)
+  maxAllowedAtRequest  Decimal              @map("max_allowed_at_request") @db.Decimal(15, 2)   /// Snapshot nilai max rupiah saat create
+  totalApprovedSamePeriod Decimal           @default(0) @map("total_approved_same_period") @db.Decimal(15, 2)
   amountRequested      Decimal              @map("amount_requested") @db.Decimal(15, 2)
-  amountPaidOut        Decimal?             @map("amount_paid_out") @db.Decimal(15, 2)
+  adminFee             Decimal              @default(0) @map("admin_fee") @db.Decimal(15, 2)      /// Biaya admin (default 0 employer-funded)
+  amountPaidOut        Decimal?             @map("amount_paid_out") @db.Decimal(15, 2)             /// Actual transfer (bisa kurang amountRequested + fee)
   amountDeductedPayroll Decimal?            @map("amount_deducted_payroll") @db.Decimal(15, 2)
   status               EWATransactionStatus @default(PENDING)
   reason               String?              @db.Text
   approverId           String?              @map("approver_id") @db.VarChar(36)
   approvedAt           DateTime?            @map("approved_at")
+  approverNotes        String?              @map("approver_notes") @db.Text
+  financeDisburserId   String?              @map("finance_disburser_id") @db.VarChar(36)
   paidOutAt            DateTime?            @map("paid_out_at")
+  disbursementReference String?             @map("disbursement_reference") @db.VarChar(100) /// Bukti transfer / rekening ref
   deductedAt           DateTime?            @map("deducted_at")
+  rejectReason         String?              @map("reject_reason") @db.Text
+  cancelledBy          String?              @map("cancelled_by") @db.VarChar(36)
+  cancelledAt          DateTime?            @map("cancelled_at")
   notes                String?              @db.Text
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
 
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee    Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  payrollRun  PayrollRun?  @relation(fields: [payrollRunId], references: [id], onDelete: SetNull)
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee      Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrollPeriod PayrollPeriod? @relation(fields: [payrollPeriodId], references: [id], onDelete: SetNull)
+  payrollRun    PayrollRun?    @relation(fields: [payrollRunId], references: [id], onDelete: SetNull)
 
   @@index([companyId, status])
   @@index([employeeId, status])
   @@index([payrollRunId])
+  @@index([payrollPeriodId])
   @@index([periodStart, periodEnd])
   @@map("earned_wage_accesses")
 }

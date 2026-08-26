@@ -96,6 +96,12 @@ import { EmployeeLoanDetailPage } from '@/modules/employee-loan/pages/EmployeeLo
 import { TravelExpensePage } from '@/modules/travel-expense/pages/TravelExpensePage';
 import { WorkflowEnginePage } from '@/modules/workflow-engine/pages/WorkflowEnginePage';
 import { DocumentManagementPage } from '@/modules/document-management/pages/DocumentManagementPage';
+// EWA (Earned Wage Access) Pages
+import { EmployeeEWADashboardPage } from '@/modules/ewa/pages/EmployeeEWADashboardPage';
+import { AdminEWAApprovalPage } from '@/modules/ewa/pages/AdminEWAApprovalPage';
+// Daily Activity Pages
+import { EmployeeDailyActivityPage } from '@/modules/daily-activity/pages/EmployeeDailyActivityPage';
+import { AdminDailyActivityApprovalPage } from '@/modules/daily-activity/pages/AdminDailyActivityApprovalPage';
 
 // Work Calendar Pages
 import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
@@ -631,6 +637,24 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // EWA (Earned Wage Access) Routes
+      {
+        path: 'ewa',
+        element: (
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
+            <EmployeeEWADashboardPage />
+          </ProtectedRoute>
+        ),
+      },
+      // Daily Activity Routes
+      {
+        path: 'daily-activity',
+        element: (
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
+            <EmployeeDailyActivityPage />
+          </ProtectedRoute>
+        ),
+      },
       {
         path: 'travel-expenses',
         element: (
@@ -821,6 +845,28 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
             <AdminDataScopePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/ewa',
+        element: (
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'ewa', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
+            <AdminEWAApprovalPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/daily-activities',
+        element: (
+          <ProtectedRoute
+            requiredPermissions={[{ resource: 'daily-activity', action: 'read' }]}
+            requiredRoles={OPERATIONAL_ROLES}
+          >
+            <AdminDailyActivityApprovalPage />
           </ProtectedRoute>
         ),
       },

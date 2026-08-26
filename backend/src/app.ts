@@ -45,6 +45,8 @@ import workflowEngineRoutes from '@/modules/workflow-engine/workflow-engine.rout
 import documentManagementRoutes from '@/modules/document-management/document-management.routes';
 import administrationRoutes from '@/modules/administration/administration.routes';
 import companySettingsRoutes from '@/modules/company-settings/company-settings.routes';
+import ewaRoutes from '@/modules/ewa/ewa.routes';
+import dailyActivityRoutes from '@/modules/daily-activity/daily-activity.routes';
 
 const app = express();
 
@@ -200,6 +202,8 @@ app.use(`${apiPrefix}/workflow-engine`, workflowEngineRoutes);
 app.use(`${apiPrefix}/documents`, documentManagementRoutes);
 app.use(`${apiPrefix}/administration`, administrationRoutes);
 app.use(`${apiPrefix}/company-settings`, companySettingsRoutes);
+app.use(`${apiPrefix}/ewa`, ewaRoutes);
+app.use(`${apiPrefix}/daily-activities`, dailyActivityRoutes);
 
 // ==================== 404 Handler ====================
 app.use((_req, res) => {
