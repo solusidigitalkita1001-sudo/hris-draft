@@ -36,6 +36,16 @@ export function formatPercentage(value: number | null | undefined): string {
   return `${value.toFixed(1)}%`;
 }
 
+export function formatDuration(minutes: number | null | undefined): string {
+  if (minutes == null || Number.isNaN(minutes)) return '-';
+  const abs = Math.max(0, Math.floor(minutes));
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  if (h === 0) return `${m} menit`;
+  if (m === 0) return `${h} jam`;
+  return `${h} jam ${m} menit`;
+}
+
 export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.substring(0, length) + '...';

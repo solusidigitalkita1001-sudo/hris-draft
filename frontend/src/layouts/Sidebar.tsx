@@ -410,7 +410,7 @@ export function Sidebar() {
   const { t } = useI18n();
 
   const [deniedMenuPaths, setDeniedMenuPaths] = useState<Set<string>>(new Set());
-  const [denyLoading, setDenyLoading] = useState(false);
+  const [_denyLoading, setDenyLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;

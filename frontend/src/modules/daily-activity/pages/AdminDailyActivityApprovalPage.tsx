@@ -129,7 +129,7 @@ export function AdminDailyActivityApprovalPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <PageHeader
           title="Monitoring Aktivitas Harian Karyawan"
-          subtitle="Lihat, review, dan kelola laporan aktivitas semua karyawan"
+          description="Lihat, review, dan kelola laporan aktivitas semua karyawan"
         />
         <Button variant="ghost" size="sm" onClick={() => void fetch()} disabled={loading}>
           <RefreshCw size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />

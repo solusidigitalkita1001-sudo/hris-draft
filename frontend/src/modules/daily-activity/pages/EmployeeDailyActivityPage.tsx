@@ -291,11 +291,11 @@ export function EmployeeDailyActivityPage() {
   const [activities, setActivities] = useState<DailyActivity[]>([]);
   const [loading, setLoading] = useState(false);
   const [typeFilter, setTypeFilter] = useState<DailyActivityType | 'ALL'>('ALL');
-  const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-    return { start, end };
+    return { startDate: start, endDate: end };
   });
   const [formOpen, setFormOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -358,7 +358,7 @@ export function EmployeeDailyActivityPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <PageHeader
           title="Aktivitas Harian"
-          subtitle="Laporkan aktivitas kerja harian Anda, capture GPS untuk validasi lokasi site"
+          description="Laporkan aktivitas kerja harian Anda, capture GPS untuk validasi lokasi site"
         />
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => void fetch()} disabled={loading}>
@@ -399,11 +399,11 @@ export function EmployeeDailyActivityPage() {
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-muted-foreground">Tanggal Mulai</Label>
-          <Input type="date" value={dateRange.start} onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })} />
+          <Input type="date" value={dateRange.startDate} onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })} />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-muted-foreground">Tanggal Akhir</Label>
-          <Input type="date" value={dateRange.end} onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })} />
+          <Input type="date" value={dateRange.endDate} onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })} />
         </div>
       </div>
 

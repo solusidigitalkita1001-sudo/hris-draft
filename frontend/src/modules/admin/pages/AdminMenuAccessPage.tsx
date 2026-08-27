@@ -7,7 +7,6 @@ import { useCompanyStore } from '@/stores/company.store';
 import {
   administrationService,
   type MenuAccessType,
-  type RoleMenuAccess,
   ROLE_OPTIONS,
   MENU_ITEMS,
 } from '@/services/administration.service';
@@ -128,7 +127,7 @@ export function AdminMenuAccessPage() {
             <label className="block text-sm font-medium mb-1.5">Role</label>
             <Select2
               value={roleCode}
-              onChange={(val) => setRoleCode(val as string)}
+              onValueChange={(val) => setRoleCode(val)}
               options={ROLE_OPTIONS}
               placeholder="Select role"
             />
@@ -155,16 +154,16 @@ export function AdminMenuAccessPage() {
               variant="secondary"
               onClick={fetchAccess}
               disabled={loading}
-              icon={<RefreshCw size={16} className={cn(loading && 'animate-spin')} />}
             >
+              <RefreshCw size={16} className={cn('mr-2', loading && 'animate-spin')} />
               Refresh
             </Button>
             <Button
-              variant="primary"
+              variant="default"
               onClick={handleSave}
               disabled={saving || loading}
-              icon={<Save size={16} />}
             >
+              <Save size={16} className="mr-2" />
               {saving ? 'Saving...' : 'Save Bulk'}
             </Button>
           </div>

@@ -12,7 +12,6 @@ import {
   Plus,
   RefreshCw,
   Settings2,
-  ShieldCheck,
   Trash2,
   XCircle,
   X as CloseIcon,
@@ -392,17 +391,17 @@ function TemplateForm({
               { value: '__custom__', label: 'Other (custom)' },
             ])}
             placeholder="Pilih approval type"
-            render={
-              approvalType && !APPROVAL_TYPES.includes(approvalType) ? (
-                <input
-                  value={approvalType}
-                  onChange={(e) => setApprovalType(e.target.value.toUpperCase())}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                  placeholder="Ketik custom approval type"
-                />
-              ) : undefined
-            }
           />
+          {approvalType && !APPROVAL_TYPES.includes(approvalType) && (
+            <div className="mt-2">
+              <input
+                value={approvalType}
+                onChange={(e) => setApprovalType(e.target.value.toUpperCase())}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                placeholder="Ketik custom approval type"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -414,7 +413,6 @@ function TemplateForm({
             onValueChange={setResource}
             options={RESOURCES.map((v) => ({ value: v, label: v }))}
             placeholder="Pilih resource"
-            allowClear
           />
         </div>
         <div className="flex items-end">
@@ -518,7 +516,6 @@ function TemplateForm({
                   onValueChange={(v) => updateStage(sIdx, 'approverRoleCode', v)}
                   options={ROLE_OPTIONS.map((v) => ({ value: v, label: v }))}
                   placeholder="Pilih role"
-                  allowClear
                   disabled={stage.approverType === 'AUTO' || stage.approverType === 'USER'}
                 />
               </div>
@@ -545,7 +542,6 @@ function TemplateForm({
                   onValueChange={(v) => updateStage(sIdx, 'backupApproverRoleCode', v)}
                   options={ROLE_OPTIONS.map((v) => ({ value: v, label: v }))}
                   placeholder="Pilih backup role"
-                  allowClear
                   disabled={stage.approverType === 'AUTO'}
                 />
               </div>
@@ -906,7 +902,6 @@ export function WorkflowAdminPage() {
                     value={filterApprovalType}
                     onValueChange={setFilterApprovalType}
                     options={APPROVAL_TYPES.map((v) => ({ value: v, label: v }))}
-                    allowClear
                     placeholder="Semua type"
                   />
                 </div>
@@ -918,7 +913,6 @@ export function WorkflowAdminPage() {
                     value={filterResource}
                     onValueChange={setFilterResource}
                     options={RESOURCES.map((v) => ({ value: v, label: v }))}
-                    allowClear
                     placeholder="Semua resource"
                   />
                 </div>
@@ -1058,7 +1052,6 @@ export function WorkflowAdminPage() {
                     value={filterApprovalType2}
                     onValueChange={setFilterApprovalType2}
                     options={APPROVAL_TYPES.map((v) => ({ value: v, label: v }))}
-                    allowClear
                     placeholder="Semua type"
                   />
                 </div>

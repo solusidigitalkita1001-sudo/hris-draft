@@ -112,6 +112,23 @@ export async function seedPermissions(): Promise<void> {
     // Settings
     { resource: 'settings', action: 'read', name: 'Read Settings', module: 'settings', code: 'settings:read' },
     { resource: 'settings', action: 'update', name: 'Update Settings', module: 'settings', code: 'settings:update' },
+
+    // Earned Wage Access (EWA)
+    { resource: 'ewa', action: 'create', name: 'Create EWA Request', module: 'ewa', code: 'ewa:create' },
+    { resource: 'ewa', action: 'read', name: 'Read EWA Data', module: 'ewa', code: 'ewa:read' },
+    { resource: 'ewa', action: 'update', name: 'Update EWA (Cancel)', module: 'ewa', code: 'ewa:update' },
+    { resource: 'ewa', action: 'approve', name: 'Approve / Reject EWA', module: 'ewa', code: 'ewa:approve' },
+    { resource: 'ewa', action: 'disburse', name: 'Mark EWA Paid (Disburse)', module: 'ewa', code: 'ewa:disburse' },
+    { resource: 'ewa', action: 'export', name: 'Export EWA Report', module: 'ewa', code: 'ewa:export' },
+
+    // Daily Activity (Field Worker / Remote Log)
+    { resource: 'daily-activity', action: 'create', name: 'Create Daily Activity', module: 'daily-activity', code: 'da:create' },
+    { resource: 'daily-activity', action: 'read', name: 'Read Daily Activity', module: 'daily-activity', code: 'da:read' },
+    { resource: 'daily-activity', action: 'update', name: 'Update Daily Activity', module: 'daily-activity', code: 'da:update' },
+    { resource: 'daily-activity', action: 'delete', name: 'Delete Daily Activity', module: 'daily-activity', code: 'da:delete' },
+    { resource: 'daily-activity', action: 'approve', name: 'Approve / Review Daily Activity', module: 'daily-activity', code: 'da:approve' },
+    { resource: 'daily-activity', action: 'process', name: 'Process / Complete Daily Activity', module: 'daily-activity', code: 'da:process' },
+    { resource: 'daily-activity', action: 'export', name: 'Export Daily Activity Report', module: 'daily-activity', code: 'da:export' },
   ];
 
   for (const perm of permissions) {

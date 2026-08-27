@@ -192,7 +192,7 @@ export function AdminDataScopePage() {
                 <Label>Role</Label>
                 <Select2
                   value={roleCode}
-                  onChange={(v) => setRoleCode(v as string)}
+                  onValueChange={(v) => setRoleCode(v)}
                   options={ROLE_OPTIONS}
                   placeholder="Pilih role"
                   className="mt-1.5"
@@ -202,7 +202,7 @@ export function AdminDataScopePage() {
                 <Label>Resource</Label>
                 <Select2
                   value={resource}
-                  onChange={(v) => setResource(v as string)}
+                  onValueChange={(v) => setResource(v)}
                   options={RESOURCE_OPTIONS}
                   placeholder="Pilih resource"
                   className="mt-1.5"
@@ -284,21 +284,19 @@ export function AdminDataScopePage() {
                 variant="secondary"
                 onClick={fetchCurrentScope}
                 disabled={loading}
-                icon={
-                  <RefreshCw
-                    size={16}
-                    className={cn(loading && 'animate-spin')}
-                  />
-                }
               >
+                <RefreshCw
+                  size={16}
+                  className={cn('mr-2', loading && 'animate-spin')}
+                />
                 Refresh
               </Button>
               <Button
-                variant="primary"
+                variant="default"
                 onClick={handleSave}
                 disabled={saving || loading}
-                icon={<Save size={16} />}
               >
+                <Save size={16} className="mr-2" />
                 {saving ? 'Saving...' : 'Save Scope'}
               </Button>
             </div>
@@ -317,13 +315,11 @@ export function AdminDataScopePage() {
                 size="sm"
                 onClick={fetchMyScope}
                 disabled={myScopeLoading}
-                icon={
-                  <RefreshCw
-                    size={14}
-                    className={cn(myScopeLoading && 'animate-spin')}
-                  />
-                }
               >
+                <RefreshCw
+                  size={14}
+                  className={cn('mr-1.5', myScopeLoading && 'animate-spin')}
+                />
                 Reload
               </Button>
             </div>

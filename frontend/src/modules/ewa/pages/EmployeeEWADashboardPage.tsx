@@ -218,7 +218,7 @@ export function EmployeeEWADashboardPage() {
       <div className="flex items-center justify-between">
         <PageHeader
           title="Tarik Gaji Awal (EWA)"
-          subtitle="Cairkan sebagian gaji Anda sebelum tanggal gajian"
+          description="Cairkan sebagian gaji Anda sebelum tanggal gajian"
         />
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => void fetchRequests()} disabled={loading}>
@@ -328,7 +328,7 @@ export function EmployeeEWADashboardPage() {
                     {r.status === 'PENDING' ? (
                       <Button
                         variant="ghost"
-                        size="xs"
+                        size="sm"
                         className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                         onClick={() => void handleCancel(r.id)}
                         disabled={cancellingId === r.id}

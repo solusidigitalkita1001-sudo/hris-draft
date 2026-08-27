@@ -1884,6 +1884,7 @@ export async function seedTestData(): Promise<void> {
       update: {},
       create: {
         id: 'assign-asset-001',
+        companyId: company.id,
         assetId: macbook.id,
         employeeId: siti.id,
         assignedAt: new Date('2026-02-01'),
@@ -1898,6 +1899,7 @@ export async function seedTestData(): Promise<void> {
       update: {},
       create: {
         id: 'assign-asset-002',
+        companyId: company.id,
         assetId: iphone.id,
         employeeId: bambang.id,
         assignedAt: new Date('2026-02-10'),

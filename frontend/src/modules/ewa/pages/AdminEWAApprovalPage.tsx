@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { formatCurrency, formatDateTime } from '@/utils/format';
+import { formatCurrency, formatDateTime, formatDate } from '@/utils/format';
 import {
   ewaService,
   type EWARequest,
@@ -176,7 +176,7 @@ export function AdminEWAApprovalPage() {
       <div className="flex items-center justify-between">
         <PageHeader
           title="Persetujuan Tarik Gaji Awal (EWA)"
-          subtitle="Kelola approval EWA, pencairan, dan monitoring pengajuan"
+          description="Kelola approval EWA, pencairan, dan monitoring pengajuan"
         />
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => void fetchRequests()} disabled={loading}>
@@ -262,14 +262,14 @@ export function AdminEWAApprovalPage() {
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="inline-flex gap-1 justify-end">
-                      <Button variant="ghost" size="xs" onClick={() => void openDetail(r.id)}>
+                      <Button variant="ghost" size="sm" onClick={() => void openDetail(r.id)}>
                         <Eye size={14} className="mr-1" />Detail
                       </Button>
                       {r.status === 'PENDING' && (
                         <>
                           <Button
                             variant="ghost"
-                            size="xs"
+                            size="sm"
                             className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
                             onClick={() => setApproveModal({ id: r.id, open: true })}
                           >
@@ -277,7 +277,7 @@ export function AdminEWAApprovalPage() {
                           </Button>
                           <Button
                             variant="ghost"
-                            size="xs"
+                            size="sm"
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                             onClick={() => setRejectModal({ id: r.id, open: true })}
                           >
@@ -288,7 +288,7 @@ export function AdminEWAApprovalPage() {
                       {r.status === 'APPROVED' && (
                         <Button
                           variant="ghost"
-                          size="xs"
+                          size="sm"
                           className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20"
                           onClick={() => {
                             setPaidModal({ id: r.id, open: true });

@@ -45,6 +45,8 @@ export async function seedRolePermissions(): Promise<void> {
         'workflow:create', 'workflow:read', 'workflow:update', 'workflow:delete', 'workflow:approve',
         'document:create', 'document:read', 'document:update', 'document:delete',
         'settings:read', 'settings:update',
+        'ewa:create', 'ewa:read', 'ewa:update', 'ewa:approve', 'ewa:disburse', 'ewa:export',
+        'da:create', 'da:read', 'da:update', 'da:delete', 'da:approve', 'da:process', 'da:export',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -69,6 +71,8 @@ export async function seedRolePermissions(): Promise<void> {
         'travel:create', 'travel:read', 'travel:update', 'travel:approve', 'travel:process',
         'workflow:create', 'workflow:read', 'workflow:update', 'workflow:approve',
         'document:create', 'document:read', 'document:update',
+        'ewa:read', 'ewa:approve', 'ewa:export',
+        'da:read', 'da:approve', 'da:process', 'da:export',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -86,6 +90,8 @@ export async function seedRolePermissions(): Promise<void> {
         'travel:create', 'travel:read',
         'workflow:read',
         'document:create', 'document:read',
+        'ewa:read',
+        'da:read', 'da:process',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -104,6 +110,8 @@ export async function seedRolePermissions(): Promise<void> {
         'travel:create', 'travel:read', 'travel:approve', 'travel:process',
         'workflow:read', 'workflow:approve',
         'document:read',
+        'ewa:read',
+        'da:read', 'da:approve', 'da:process',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -121,6 +129,8 @@ export async function seedRolePermissions(): Promise<void> {
         'travel:create', 'travel:read',
         'workflow:read',
         'document:create', 'document:read',
+        'ewa:create', 'ewa:read', 'ewa:update',
+        'da:create', 'da:read', 'da:update',
       ].includes(p.code)
     )
     .map((p) => p.id);
