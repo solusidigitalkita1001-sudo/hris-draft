@@ -7,7 +7,6 @@ export const createEWARequestSchema = z.object({
   adminFee: z.coerce.number().min(0).default(0).optional(),
   reason: z.string().min(3, { message: 'Alasan minimal 3 karakter' }).optional(),
 });
-
 export const approveEWARequestSchema = z.object({
   approverNotes: z.string().optional(),
 });

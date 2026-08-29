@@ -42,13 +42,24 @@ export interface EWARequest {
 }
 
 export interface EWALimitResponse {
-  isAllowed: boolean;
-  earnedGross: number;
-  maxAllowedPercent: number;
-  maxAllowedAmount: number;
-  existingApproved: number;
-  remainingAllowed: number;
+  max: number;
+  remaining: number;
+  totalApproved: number;
+  earnedGrossToDate: number;
+  isAllowed?: boolean;
+  earnedGross?: number;
+  maxAllowedPercent?: number;
+  maxAllowedAmount?: number;
+  existingApproved?: number;
+  remainingAllowed?: number;
   reason?: string | null;
+  breakdown?: {
+    baseSalary: number;
+    presentDays: number;
+    workDaysInPeriod: number;
+    dailyRate: number;
+    overtimePay: number;
+  } | null;
 }
 
 export const EWA_STATUS_LABELS: Record<EWAStatus, string> = {
@@ -70,9 +81,9 @@ export const EWA_STATUS_CLASSNAMES: Record<EWAStatus, string> = {
 };
 
 class EWAService {
-  async getMyLimit(earnedGross: number, percent?: number): Promise<EWALimitResponse> {
-    const params: Record<string, string> = { earnedGross: String(earnedGross) };
-    if (percent) params.percent = String(percent);
+  async getMyLimit(percent?: number): Promise<EWALimitResponse> {
+    const params: Record<string, string> = {};
+    if (percent !== undefined) params.percent = String(percent);
     const r = await api.get('/ewa/my/limit', { params });
     return r.data.data as EWALimitResponse;
   }
@@ -101,9 +112,6 @@ class EWAService {
     amountRequested: number;
     adminFee?: number;
     reason?: string;
-    earnedGross: number;
-    periodStart: string;
-    periodEnd: string;
     payrollPeriodId?: string;
     employeeId?: string;
   }): Promise<EWARequest> {

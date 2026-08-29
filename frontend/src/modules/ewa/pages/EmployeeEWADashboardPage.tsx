@@ -45,46 +45,48 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 }
 
 function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitted: () => void }) {
-  const [earnedGrossInput, setEarnedGrossInput] = useState('');
   const [amountRequested, setAmountRequested] = useState('');
   const [adminFee, setAdminFee] = useState('0');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
-  const [limitInfo, setLimitInfo] = useState<{ maxAllowed: number; remaining: number } | null>(null);
-
-  const currentMonth = useMemo(() => {
-    const now = new Date();
-    return {
-      periodStart: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10),
-      periodEnd: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10),
-    };
-  }, []);
+  const [fetchingLimit, setFetchingLimit] = useState(false);
+  const [limitInfo, setLimitInfo] = useState<{
+    maxAllowed: number;
+    remaining: number;
+    earnedGrossToDate: number;
+    totalApproved: number;
+    breakdown: any;
+  } | null>(null);
+  const [limitError, setLimitError] = useState<string | null>(null);
 
   const computeLimit = async () => {
-    const val = Number(earnedGrossInput);
-    if (!Number.isFinite(val) || val <= 0) {
-      setLimitInfo(null);
-      return;
-    }
+    setFetchingLimit(true);
+    setLimitError(null);
     try {
-      const info = await ewaService.getMyLimit(val);
-      setLimitInfo({ maxAllowed: info.maxAllowedAmount, remaining: info.remainingAllowed });
-    } catch {
+      const info = await ewaService.getMyLimit();
+      const maxAllowed = typeof info.max === 'number' ? info.max : (info.maxAllowedAmount ?? 0);
+      const remaining = typeof info.remaining === 'number' ? info.remaining : (info.remainingAllowed ?? 0);
+      setLimitInfo({
+        maxAllowed,
+        remaining,
+        earnedGrossToDate: info.earnedGrossToDate ?? (info.earnedGross ?? 0),
+        totalApproved: typeof info.totalApproved === 'number' ? info.totalApproved : (info.existingApproved ?? 0),
+        breakdown: info.breakdown ?? null,
+      });
+    } catch (e: any) {
+      setLimitError(e?.response?.data?.message || 'Gagal memuat limit EWA dari server');
       setLimitInfo(null);
+    } finally {
+      setFetchingLimit(false);
     }
   };
 
-  useEffect(() => {
-    const t = setTimeout(computeLimit, 400);
-    return () => clearTimeout(t);
-  }, [earnedGrossInput]);
+  useEffect(() => { void computeLimit(); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const earned = Number(earnedGrossInput);
     const amt = Number(amountRequested);
     const fee = Number(adminFee) || 0;
-    if (!Number.isFinite(earned) || earned <= 0) return toast.error('Masukkan total earned gaji yang valid');
     if (!Number.isFinite(amt) || amt <= 0) return toast.error('Masukkan jumlah yang ingin ditarik');
     if (limitInfo && amt > limitInfo.remaining) {
       return toast.error(`Maksimal sisa pencairan: ${formatCurrency(limitInfo.remaining)}`);
@@ -93,12 +95,9 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
     setLoading(true);
     try {
       await ewaService.createRequest({
-        earnedGross: earned,
         amountRequested: amt,
         adminFee: fee,
         reason: reason.trim() || undefined,
-        periodStart: currentMonth.periodStart,
-        periodEnd: currentMonth.periodEnd,
       });
       toast.success('Pengajuan Tarik Gaji Awal berhasil dikirim');
       onSubmitted();
@@ -112,22 +111,50 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-          Total Gaji Earned Saat Ini (Rp) *
-        </Label>
-        <Input
-          type="number"
-          min={1}
-          placeholder="Contoh: 3500000"
-          value={earnedGrossInput}
-          onChange={(e) => setEarnedGrossInput(e.target.value)}
-          required
-        />
-        {limitInfo && (
-          <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
-            <div>Maksimal tarik (50%): <span className="font-semibold text-foreground">{formatCurrency(limitInfo.maxAllowed)}</span></div>
-            <div>Sisa bisa tarik: <span className="font-semibold text-emerald-600">{formatCurrency(limitInfo.remaining)}</span></div>
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 dark:bg-indigo-900/10 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+            <Wallet size={16} className="text-indigo-600" />
+            Limit EWA Bulan Ini (Server-Side Verified)
+          </h3>
+          <Button type="button" variant="ghost" size="sm" onClick={() => void computeLimit()} disabled={fetchingLimit}>
+            <RefreshCw size={14} className={`mr-1 ${fetchingLimit ? 'animate-spin' : ''}`} />
+            {fetchingLimit ? 'Memuat...' : 'Refresh'}
+          </Button>
+        </div>
+
+        {limitError && (
+          <div className="text-xs bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-md p-3 border border-red-100">
+            <strong>Perhatian:</strong> {limitError}
+            <div className="mt-1 text-[11px] text-red-600">
+              Jika masalah berlanjut, hubungi HR untuk memastikan Employee Salary dan data attendance periode ini sudah tercatat.
+            </div>
+          </div>
+        )}
+
+        {!limitError && limitInfo && (
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="bg-white dark:bg-gray-800 rounded-md p-3 border border-indigo-100">
+              <div className="text-muted-foreground mb-1">Pendapatan Aktual Sejauh Ini</div>
+              <div className="text-lg font-bold text-foreground">{formatCurrency(limitInfo.earnedGrossToDate)}</div>
+              {limitInfo.breakdown && (
+                <div className="mt-1 text-[11px] text-muted-foreground space-y-0.5">
+                  <div>Base Salary: {formatCurrency(limitInfo.breakdown.baseSalary)}</div>
+                  <div>Hari Hadir: {limitInfo.breakdown.presentDays} / {limitInfo.breakdown.workDaysInPeriod}</div>
+                  <div>Overtime Approved: {formatCurrency(limitInfo.breakdown.overtimePay)}</div>
+                </div>
+              )}
+            </div>
+            <div className="bg-emerald-50 dark:bg-emerald-900/15 rounded-md p-3 border border-emerald-100">
+              <div className="text-muted-foreground mb-1">Maksimal Tarik (50%)</div>
+              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(limitInfo.maxAllowed)}</div>
+              <div className="mt-2 pt-2 border-t border-emerald-100 space-y-0.5 text-[11px]">
+                <div className="text-muted-foreground">Sudah Di-Approve/Dibayar periode ini:</div>
+                <div className="font-semibold text-amber-700 dark:text-amber-400">{formatCurrency(limitInfo.totalApproved)}</div>
+                <div className="text-muted-foreground mt-1">Sisa Bisa Ditarik:</div>
+                <div className="text-base font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(limitInfo.remaining)}</div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -162,7 +189,7 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Batal</Button>
-        <Button type="submit" disabled={loading}>
+        <Button type="submit" disabled={loading || !limitInfo}>
           {loading ? 'Mengirim...' : (<><Send size={16} className="mr-2" />Ajukan Sekarang</>)}
         </Button>
       </div>

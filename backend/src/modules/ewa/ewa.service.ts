@@ -11,12 +11,110 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ForbiddenError, BadRequestError } from '@/shared/exceptions/AppError';
 import type { CreateEWARequestDTO, ApproveEWARequestDTO, RejectEWARequestDTO, MarkPaidEWARequestDTO } from './ewa.dto';
 import type { EWATransactionStatus } from '@prisma/client';
+import { prisma } from '@/shared/database/prisma';
+import { payrollRepository } from '@/modules/payroll/payroll.repository';
+import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
+import { calculateOvertimePay } from '@/shared/attendance/overtime';
 
 const EMPLOYEE_ELEVATED_HR_ROLES = ['HR_STAFF', 'HR_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
 const FINANCE_DISBURSE_ROLES = ['FINANCE_STAFF', 'FINANCE_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
 const DEFAULT_MAX_PERCENT = 50;
+const DEFAULT_WORKDAYS_FALLBACK = 22;
+
+function startOfMonth(d: Date): Date {
+  const x = new Date(d);
+  x.setDate(1);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function endOfMonth(d: Date): Date {
+  const x = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
 
 export class EWAService {
+  /**
+   * Resolve periode EWA:
+   * 1. Jika payrollPeriodId dikirim → lookup start/end dari DB (source of truth, client tidak bisa custom)
+   * 2. Jika tidak dikirim → auto-detect periode saat ini (awal-akhir bulan ini)
+   */
+  private async resolvePeriod(data: CreateEWARequestDTO, companyId: string): Promise<{ payrollPeriodId: string | null; periodStart: Date; periodEnd: Date }> {
+    if (data.payrollPeriodId) {
+      const period = await payrollRepository.findPayrollPeriodById(data.payrollPeriodId);
+      if (!period) throw new NotFoundError('Payroll period yang dipilih tidak ditemukan');
+      if (period.companyId !== companyId) throw new ForbiddenError('Payroll period tidak sesuai company Anda');
+      return {
+        payrollPeriodId: period.id,
+        periodStart: new Date(period.startDate),
+        periodEnd: new Date(period.endDate),
+      };
+    }
+    const today = new Date();
+    return { payrollPeriodId: null, periodStart: startOfMonth(today), periodEnd: endOfMonth(today) };
+  }
+
+  /**
+   * Server-side hitung earned gross to date (sampai sekarang) — TIDAK PERCAYA input client.
+   * Formula (mirip payroll calculatePayroll):
+   *   dailyRate = baseSalary / max(workDaysInPeriod, 1)
+   *   baseEarned  = dailyRate * presentDaysCount (PRESENT + LATE status)
+   *   overtimeBonus = approved overtime pay (calculateOvertimePay standard formula)
+   *   returned = baseEarned + overtimeBonus
+   *
+   * Fallback: jika salary tidak ditemukan → 0 (EWA tidak bisa diajukan sblm ada salary aktif).
+   */
+  async calculateEarnedGrossToDate(
+    companyId: string,
+    employeeId: string,
+    periodStart: Date,
+    periodEnd: Date,
+  ): Promise<{ earnedGrossToDate: number; baseSalary: number; presentDays: number; workDaysInPeriod: number; overtimePay: number; dailyRate: number }> {
+    const todayCutoff = new Date();
+    const effectiveEnd = periodEnd < todayCutoff ? periodEnd : todayCutoff;
+
+    const activeSalaries = await payrollRepository.findAllEmployeeSalaries(companyId, employeeId);
+    const activeSalary = activeSalaries.find((s) => s.isActive && s.deletedAt == null) ?? activeSalaries[0];
+    if (!activeSalary) {
+      logger.warn('EWA earnedGross calc: active salary tidak ditemukan employeeId=' + employeeId);
+      return { earnedGrossToDate: 0, baseSalary: 0, presentDays: 0, workDaysInPeriod: DEFAULT_WORKDAYS_FALLBACK, overtimePay: 0, dailyRate: 0 };
+    }
+    const baseSalary = Number(activeSalary.baseSalary) || 0;
+
+    const companyCalendar = await workCalendarRepository.findCalendarByContext({ companyId });
+    const workDaysInPeriodRaw = companyCalendar
+      ? await workCalendarRepository.countWorkingDays(companyCalendar.id, periodStart, periodEnd)
+      : DEFAULT_WORKDAYS_FALLBACK;
+    const workDaysInPeriod = Math.max(1, workDaysInPeriodRaw || DEFAULT_WORKDAYS_FALLBACK);
+
+    const attdRows = await prisma.attendance.groupBy({
+      by: ['status'],
+      where: { companyId, employeeId, date: { gte: periodStart, lte: effectiveEnd }, deletedAt: null },
+      _count: { id: true },
+    });
+    let presentDays = 0;
+    for (const r of attdRows) {
+      if (r.status === 'PRESENT' || r.status === 'LATE') presentDays += r._count.id;
+    }
+
+    const approvedOt = await prisma.overtimeRequest.findMany({
+      where: { companyId, employeeId, status: 'APPROVED', date: { gte: periodStart, lte: effectiveEnd }, deletedAt: null },
+      select: { durationHours: true, date: true },
+    });
+    let overtimePay = 0;
+    for (const ot of approvedOt) {
+      const h = Number(ot.durationHours) || 0;
+      if (h <= 0) continue;
+      const dow = new Date(ot.date).getDay();
+      const dayType: 'WORKDAY' | 'HOLIDAY' = dow === 0 || dow === 6 ? 'HOLIDAY' : 'WORKDAY';
+      overtimePay += calculateOvertimePay({ monthlyWage: baseSalary, hours: h, dayType }).amount;
+    }
+
+    const dailyRate = baseSalary / workDaysInPeriod;
+    const earnedGrossToDate = Math.max(0, dailyRate * presentDays + overtimePay);
+    return { earnedGrossToDate, baseSalary, presentDays, workDaysInPeriod, overtimePay, dailyRate };
+  }
+
   async findAll(companyId: string, filters: { status?: EWATransactionStatus; employeeId?: string }) {
     return ewaRepository.findAll(companyId, filters);
   }
@@ -40,12 +138,14 @@ export class EWAService {
     return ewa;
   }
 
-  async createRequest(data: CreateEWARequestDTO & { earnedGross: number; periodStart: Date; periodEnd: Date }) {
+  async createRequest(data: CreateEWARequestDTO) {
     const ctx = getRequestContext();
     const user = ctx?.user;
     const roles = user?.roles ?? [];
     const hasElevatedRole = roles.some((r) => EMPLOYEE_ELEVATED_HR_ROLES.includes(r));
-    const companyId = getCurrentCompanyId() ?? data.payrollPeriodId ? '' : '';
+
+    const currentCompany = getCurrentCompanyId() ?? user?.companyId ?? '';
+    if (!currentCompany) throw new BadRequestError('companyId tidak ditemukan dalam context');
 
     let employeeId = data.employeeId;
     if (user?.employeeId && roles.includes('EMPLOYEE') && !hasElevatedRole) {
@@ -56,50 +156,60 @@ export class EWAService {
     }
     if (!employeeId) throw new BadRequestError('employeeId wajib diisi');
 
-    const finalCompanyId = user?.companyId ?? companyId;
-    if (!finalCompanyId) throw new BadRequestError('companyId tidak ditemukan dalam context');
+    const finalCompanyId = currentCompany;
+
+    const { payrollPeriodId, periodStart, periodEnd } = await this.resolvePeriod(data, finalCompanyId);
+
+    const grossCalc = await this.calculateEarnedGrossToDate(finalCompanyId, employeeId, periodStart, periodEnd);
+    if (grossCalc.baseSalary <= 0) {
+      throw new BadRequestError('Karyawan belum memiliki data gaji aktif, silakan hubungi HR untuk mengatur Employee Salary sebelum mengajukan EWA');
+    }
+    const earnedGross = grossCalc.earnedGrossToDate;
 
     const existingApproved = await ewaRepository.findByEmployeePeriodStatus(
       finalCompanyId,
       employeeId,
-      data.periodStart,
-      data.periodEnd,
+      periodStart,
+      periodEnd,
       ['APPROVED', 'PAID'],
     );
     const totalExistingApproved = existingApproved.reduce((acc, r) => acc + Number(r.amountRequested), 0);
 
-    const assessment = assessEwaRequest(data.earnedGross, data.amountRequested, totalExistingApproved, DEFAULT_MAX_PERCENT);
+    const assessment = assessEwaRequest(earnedGross, data.amountRequested, totalExistingApproved, DEFAULT_MAX_PERCENT);
     if (!assessment.isAllowed) {
       throw new BadRequestError(
-        `EWA request tidak diizinkan: ${assessment.reason ?? `Maksimal ${assessment.maxAllowedPercent}% dari earned gross (Rp ${assessment.maxAllowedAmount.toLocaleString('id-ID')})`}`,
+        `EWA request tidak diizinkan: ${assessment.reason ?? `Maksimal ${assessment.maxAllowedPercent}% dari pendapatan periode ini (Rp ${assessment.maxAllowedAmount.toLocaleString('id-ID')}). Data aktual: ${grossCalc.presentDays}/${grossCalc.workDaysInPeriod} hari kerja, base salary Rp ${grossCalc.baseSalary.toLocaleString('id-ID')}`}`,
       );
     }
 
     const requestCode = await generateSystemCode({
       prefix: 'EWA',
-      label: `${employeeId}-${data.periodStart.toISOString().slice(0, 10)}`,
+      label: `${employeeId}-${periodStart.toISOString().slice(0, 10)}`,
       exists: async (candidate) => Boolean(await ewaRepository.findById(candidate) === null ? false : false),
     });
 
-    const created = await ewaRepository.create({
+    const createData = {
       ...data,
+      payrollPeriodId,
       companyId: finalCompanyId,
       employeeId,
       requestCode,
-      periodStart: data.periodStart,
-      periodEnd: data.periodEnd,
-      earnedGrossReference: data.earnedGross,
-      earnedGrossAtRequest: data.earnedGross,
+      periodStart,
+      periodEnd,
+      earnedGrossReference: earnedGross,
+      earnedGrossAtRequest: earnedGross,
       maxAllowedPercent: DEFAULT_MAX_PERCENT,
       maxAllowedAtRequest: assessment.maxAllowedAmount,
       totalApprovedSamePeriod: totalExistingApproved,
-    });
+    };
+    const created = await ewaRepository.create(createData as any);
 
-    logger.info('EWA request created', {
+    logger.info('EWA request created (server-side earnedGross enforced)', {
       ewaId: created.id,
       requestCode: created.requestCode,
       employeeId,
       amountRequested: data.amountRequested,
+      earnedGrossCalcBreakdown: grossCalc,
     });
     return created;
   }
@@ -191,6 +301,35 @@ export class EWAService {
     }>,
   ) {
     return aggregateEwaForPayroll(list);
+  }
+
+  /**
+   * getMyLimit: Juga server-side — JANGAN accept query string earnedGross dari client (celah lama).
+   * Auto detect periode bulan ini, hitung dari attendance + salary + approved overtime aktual.
+   */
+  async getMyLimitServer(
+    companyId: string,
+    employeeId: string,
+    overridePercent?: number,
+  ): Promise<{ max: number; remaining: number; totalApproved: number; earnedGrossToDate: number; breakdown: any }> {
+    const today = new Date();
+    const periodStart = startOfMonth(today);
+    const periodEnd = endOfMonth(today);
+    const gross = await this.calculateEarnedGrossToDate(companyId, employeeId, periodStart, periodEnd);
+    const existingApproved = await ewaRepository.findByEmployeePeriodStatus(companyId, employeeId, periodStart, periodEnd, ['APPROVED', 'PAID']);
+    const totalApproved = existingApproved.reduce((acc, r) => acc + Number(r.amountRequested), 0);
+    const result = calcMaxAllowedEwa(gross.earnedGrossToDate, overridePercent ?? DEFAULT_MAX_PERCENT, totalApproved);
+    return {
+      ...result,
+      earnedGrossToDate: gross.earnedGrossToDate,
+      breakdown: {
+        baseSalary: gross.baseSalary,
+        presentDays: gross.presentDays,
+        workDaysInPeriod: gross.workDaysInPeriod,
+        dailyRate: gross.dailyRate,
+        overtimePay: gross.overtimePay,
+      },
+    };
   }
 
   calcMaxAllowed(earnedGross: number, percentOverride?: number) {
