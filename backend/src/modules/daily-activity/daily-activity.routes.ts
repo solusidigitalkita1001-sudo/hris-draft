@@ -9,8 +9,15 @@ import { validate } from '@/shared/middleware/RequestValidator';
 import { authorize } from '@/shared/middleware/Authorize';
 import { dailyActivityController } from './daily-activity.controller';
 import { auditLog } from '@/shared/middleware/AuditLog';
+import { authenticate } from '@/shared/middleware/Authenticate';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
+
+// Authentication must run before authorization so req.user and the
+// AsyncLocalStorage tenant context are available to every downstream query.
+router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get(
   '/my',

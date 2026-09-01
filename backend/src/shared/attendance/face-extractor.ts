@@ -18,10 +18,9 @@ import { logger } from '@/shared/logger/WinstonLogger';
  *   5. Compatibility: format return TETAP SAMA (vector: number[512]) →
  *      compareFaceVectors existing TIDAK PERLU DIUBAH 1 baris code!
  *
- * FAILOVER STRATEGY: Jika model TFJS gagal load / native binding error /
- * server low memory → otomatis FALLBACK ke Grade 1 pure histogram 0-dep
- * (code di bawah tetap disimpan sebagai backup). Jadi selamanya service
- * TIDAK PERNAH CRASH walau environment tidak support TFJS native.
+ * SECURITY: biometric decisions fail closed. The histogram implementation is
+ * retained only for explicit non-authentication diagnostics and must never be
+ * accepted as a face-recognition credential.
  *
  * ═══════════════════════════════════════════════════════════════════════
  */
@@ -82,7 +81,7 @@ async function getHumanInstance(): Promise<any | null> {
         humanInstance = instance;
         return instance;
       } catch (err: any) {
-        logger.warn('[FaceExtractor] Failed to load @vladmandic/human TFJS, fallback ke Grade 1 histogram 0-dep', {
+        logger.warn('[FaceExtractor] Failed to load @vladmandic/human TFJS; biometric extraction will fail closed', {
           error: err?.message || String(err),
         });
         humanAvailableStatus = 'failed';
@@ -99,7 +98,8 @@ async function getHumanInstance(): Promise<any | null> {
  * Auto-failover ke fallback jika TFJS tidak tersedia.
  */
 export async function extractFaceVectorFromImage(
-  imageInput: string | Buffer
+  imageInput: string | Buffer,
+  options: { allowHeuristicFallback?: boolean } = {},
 ): Promise<FaceExtractionResult> {
   const buf =
     typeof imageInput === 'string'
@@ -125,10 +125,14 @@ export async function extractFaceVectorFromImage(
         };
       }
     } catch (err: any) {
-      logger.warn('[FaceExtractor] Human TFJS gagal extract, fallback ke histogram', {
+      logger.warn('[FaceExtractor] Human TFJS gagal extract; heuristic fallback hanya tersedia untuk diagnostic opt-in', {
         error: err?.message || String(err),
       });
     }
+  }
+
+  if (!options.allowHeuristicFallback) {
+    throw new Error('Face recognition model unavailable or no face detected; heuristic fallback is disabled');
   }
 
   const fallbackVec = generateFallbackHistogramVector(pixels, width, height);

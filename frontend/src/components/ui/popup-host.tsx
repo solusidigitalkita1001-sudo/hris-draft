@@ -89,8 +89,9 @@ export function PopupHost() {
             </div>
             <button
               type="button"
-              className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={handleCancel}
+              aria-label="Tutup dialog"
             >
               <X size={16} />
             </button>

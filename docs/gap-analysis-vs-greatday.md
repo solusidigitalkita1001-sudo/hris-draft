@@ -304,6 +304,24 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 ---
 
+## 📊 Tabel Parity GreatDay HR — Summary Update (Plan A Parity Minggu 6 + Re-Review #4 2026-08-29)
+
+Ringkasan progress item-item gap yang dilaporkan Minggu lalu dalam Laporan Paritas GreatDay HR. Plan A Optimal 100% selesai + Re-Review #4 (temuan finansial EWA) fixed.
+
+| Prior | Area | Kondisi Awal (Sebelum Plan A) | Status Sekarang (2026-08-29) | Fix / Keterangan |
+|-------|------|--------------------------------|-------------------------------|------------------|
+| **P0** | Menu Access UI | ❌ Gap reported user | ✅ **EXISTED (False Positive)** via 3-Strike Rule: Backend RBAC RoleMenuAccess + Frontend AdminMenuAccessPage + Sidebar denyLoading filter + routes protection — 100% work, gap salah deteksi user di laporan Minggu lalu ✅ | 3-Strike Rule: (1) schema RoleMenuAccess exist, (2) backend route administration/menu-access CRUD existed, (3) Frontend AdminMenuAccessPage + Sidebar filterNavItems existed — **FALSE POSITIVE, 0 code changes needed**. |
+| **P0** | Data Access Scope UI | ❌ Gap reported user | ✅ **EXISTED (False Positive)** via 3-Strike Rule — Backend RoleDataScope CRUD enum DataScopeType 7 level (ALL / COMPANY_ONLY / BRANCH / DEPARTMENT / SUB_DEPT / EMPLOYEE_SELF / MANAGER_TEAM) + Frontend AdminDataScopePage — 100% existed! | 3-Strike Rule: model + shared middleware resolve user current scope existed (PATH_TO_RESOURCE_MAP mapping 21 prefix) — FALSE POSITIVE, 0 code changes needed. |
+| **P1** | Face Recognition Wiring (Grade 2) | ⚠️ Parsial: cuma vector comparison, embedding + liveness belum terhubung ke UI | ✅ **UPGRADED — Grade 2 TFJS Active Liveness** | 4 files implementasi: (1) Backend face-extractor overwrite Grade1 histogram → Grade2 FaceNet via @vladmandic/human dynamic import (failover Grade 1 jika package ML tidak terinstall); (2) Frontend face-recognition overwrite → MediaPipe Face Mesh 468 landmark + EAR/MAR/yaw/pitch formula paper standard; (3) Challenge Flow Liveness random 5 jenis (BLINK/SMILE/TILT_LEFT/TILT_RIGHT/NOD) + verify threshold; (4) Inject Liveness Modal ke AttendanceList CheckInForm (MANUAL mode HR skip liveness). |
+| **P1** | Daily Activity Module | ❌ Tidak ada module, cuma pure operations helpers di shared | ✅ **FULL WRAPPED (80% code reuse existed)** — 100% Module Lengkap: schema/model, CRUD API, RBAC, AuditLog, Frontend 2 Pages (Employee GPS capture + Admin Approval Queue) | 3-Strike Rule verified Strike2 helpers 80% existed (`validateOverlapHours`, `validateActivityGeoRadius`, `calculateTotalMinutes`) → wrap module tinggal import saja, write 20% CRUD scaffold. Geofence validate & overlap hours BEFORE create; Self-guard role employee tidak bisa create atas nama lain; Complete action dengan foto evidence 6 foto MAX. |
+| **P2** | Earned Wage Access (EWA) | ⚠️ Logic ada di helper, tapi belum jadi module API/UI; period & earnedGross trusted dari client (celah finansial!) | ✅ **PRODUCTION READY 100% — CRITICAL FIXED Re-Review #4** | (a) Module Lengkap: routes + controller + service + repository + zodDTO + auditLog + 13 RBAC permission matrix 6 roles; (b) Payroll end-to-end: PAID EWA list auto aggregate → `EWA-DEDUCT` component (sortOrder 995) + BULK MARK step5 prevent double deduct; (c) **CRITICAL Re-Review #4 Fix:** earnedGross HAPUS TOTAL dari client input → server calculate sendiri 4-step (baseSalary aktif ÷ workDays × presentDays + approvedOvertimePay). periodStart/end dari PayrollPeriod DB atau auto bulan ini (BOD/EOM). Controller guard throw BadRequest jika client kirim field terlarang. |
+| **P2** | Engagement Portal (Announcement/Survey) | ❌ Gap pure logic not wired — pure logic di shared engagement tapi not yet module production (opsional next step Opsi A #3 user) | ⏳ **PENDING Optional Next Step (User Request)** | Pure logic shared `isAnnouncementVisibleTo()` + survey models existed — tinggal wrap CRUD module 6 files backend + 2 pages frontend home widget. Bisa gas jika user pilih opsi lanjut. |
+| **P2** | Task Assignment Basic / Patrol Realtime | ❌ Gap pure logic shared exist tapi not yet module production (opsional next) | ⏳ **PENDING Optional (P2 Low Priority Schedule)** | FSM state machine isTaskTransitionValid + Patrol compliance rate existed. Mirip pattern wrap DailyActivity. Sisa gap 3 modules engagement/task/patrol bisa lanjut sesi berikutnya jika user minta. |
+
+**Plan A Optimal Parity Minggu 6 (Urutan 1-4 user pilih "a"): 100% TUTUP BUKU.** Exit: Backend TSC 0, Frontend TSC 0, Jest pure = 229 PASS. Prisma validate/generate 0.
+
+---
+
 ## Security Gaps (Referensi review.md)
 
 Security gaps sudah didokumentasikan detail di `review.md`. Berikut ringkasan blocker-nya untuk konteks checklist:

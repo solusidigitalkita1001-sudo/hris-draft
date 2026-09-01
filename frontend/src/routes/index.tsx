@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
@@ -9,7 +10,7 @@ import { ForgotPasswordPage } from '@/modules/auth/ForgotPasswordPage';
 import { ProfilePage } from '@/modules/auth/ProfilePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
-import { DashboardPage } from '@/pages/DashboardPage';
+const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
 import { GroupListPage } from '@/modules/organization/pages/GroupListPage';
 import { CompanyListPage } from '@/modules/organization/pages/CompanyListPage';
 import { BranchListPage } from '@/modules/organization/pages/BranchListPage';
@@ -23,7 +24,7 @@ import { EmployeeDetailPage } from '@/modules/employee/pages/EmployeeDetailPage'
 import { EmployeeFormPage } from '@/modules/employee/pages/EmployeeFormPage';
 
 // Payroll Pages
-import { PayrollDashboard } from '@/modules/payroll/pages/PayrollDashboard';
+const PayrollDashboard = lazy(() => import('@/modules/payroll/pages/PayrollDashboard').then((m) => ({ default: m.PayrollDashboard })));
 import { SalaryComponentList } from '@/modules/payroll/pages/SalaryComponentList';
 import { PayrollPeriodList } from '@/modules/payroll/pages/PayrollPeriodList';
 import { PayrollRunList } from '@/modules/payroll/pages/PayrollRunList';
@@ -47,18 +48,18 @@ import { InterviewSchedule } from '@/modules/recruitment/pages/InterviewSchedule
 import { InterviewFormPage } from '@/modules/recruitment/pages/InterviewFormPage';
 
 // Performance Pages
-import { PerformanceDashboard } from '@/modules/performance/pages/PerformanceDashboard';
-import { PerformanceCyclesPage } from '@/modules/performance/pages/PerformanceCyclesPage';
-import { PerformanceLibrariesPage } from '@/modules/performance/pages/PerformanceLibrariesPage';
-import { PerformanceExecutionPage } from '@/modules/performance/pages/PerformanceExecutionPage';
-import { PerformanceSelfReviewPage } from '@/modules/performance/pages/PerformanceSelfReviewPage';
-import { PerformanceManagerReviewPage } from '@/modules/performance/pages/PerformanceManagerReviewPage';
-import { PerformanceMethodsPage } from '@/modules/performance/pages/PerformanceMethodsPage';
-import { PerformanceMyResultsPage } from '@/modules/performance/pages/PerformanceMyResultsPage';
-import { PerformancePlanningPage } from '@/modules/performance/pages/PerformancePlanningPage';
-import { PerformancePeriodsPage } from '@/modules/performance/pages/PerformancePeriodsPage';
-import { PerformanceResultsPage } from '@/modules/performance/pages/PerformanceResultsPage';
-import { PerformanceWorkflowsPage } from '@/modules/performance/pages/PerformanceWorkflowsPage';
+const PerformanceDashboard = lazy(() => import('@/modules/performance/pages/PerformanceDashboard').then((m) => ({ default: m.PerformanceDashboard })));
+const PerformanceCyclesPage = lazy(() => import('@/modules/performance/pages/PerformanceCyclesPage').then((m) => ({ default: m.PerformanceCyclesPage })));
+const PerformanceLibrariesPage = lazy(() => import('@/modules/performance/pages/PerformanceLibrariesPage').then((m) => ({ default: m.PerformanceLibrariesPage })));
+const PerformanceExecutionPage = lazy(() => import('@/modules/performance/pages/PerformanceExecutionPage').then((m) => ({ default: m.PerformanceExecutionPage })));
+const PerformanceSelfReviewPage = lazy(() => import('@/modules/performance/pages/PerformanceSelfReviewPage').then((m) => ({ default: m.PerformanceSelfReviewPage })));
+const PerformanceManagerReviewPage = lazy(() => import('@/modules/performance/pages/PerformanceManagerReviewPage').then((m) => ({ default: m.PerformanceManagerReviewPage })));
+const PerformanceMethodsPage = lazy(() => import('@/modules/performance/pages/PerformanceMethodsPage').then((m) => ({ default: m.PerformanceMethodsPage })));
+const PerformanceMyResultsPage = lazy(() => import('@/modules/performance/pages/PerformanceMyResultsPage').then((m) => ({ default: m.PerformanceMyResultsPage })));
+const PerformancePlanningPage = lazy(() => import('@/modules/performance/pages/PerformancePlanningPage').then((m) => ({ default: m.PerformancePlanningPage })));
+const PerformancePeriodsPage = lazy(() => import('@/modules/performance/pages/PerformancePeriodsPage').then((m) => ({ default: m.PerformancePeriodsPage })));
+const PerformanceResultsPage = lazy(() => import('@/modules/performance/pages/PerformanceResultsPage').then((m) => ({ default: m.PerformanceResultsPage })));
+const PerformanceWorkflowsPage = lazy(() => import('@/modules/performance/pages/PerformanceWorkflowsPage').then((m) => ({ default: m.PerformanceWorkflowsPage })));
 import { ReviewList } from '@/modules/performance/pages/ReviewList';
 import { GoalList } from '@/modules/performance/pages/GoalList';
 
@@ -68,7 +69,7 @@ import { CourseDetail } from '@/modules/training/pages/CourseDetail';
 import { CourseFormPage } from '@/modules/training/pages/CourseFormPage';
 
 // Attendance Pages
-import { AttendanceList } from '@/modules/attendance/pages/AttendanceList';
+const AttendanceList = lazy(() => import('@/modules/attendance/pages/AttendanceList').then((m) => ({ default: m.AttendanceList })));
 
 // Leave Pages
 import { LeaveList } from '@/modules/leave/pages/LeaveList';
@@ -82,19 +83,19 @@ import { OffboardingList } from '@/modules/onboarding/pages/OffboardingList';
 import { OffboardingDetail } from '@/modules/onboarding/pages/OffboardingDetail';
 
 // Reports Pages
-import { ReportsPage } from '@/modules/reports/pages/ReportsPage';
+const ReportsPage = lazy(() => import('@/modules/reports/pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 
 // RBAC / Roles Pages
 import { RoleListPage } from '@/modules/rbac/pages/RoleListPage';
 
 // Self Service Pages
-import { SelfServicePage } from '@/modules/self-service/pages/SelfServicePage';
+const SelfServicePage = lazy(() => import('@/modules/self-service/pages/SelfServicePage').then((m) => ({ default: m.SelfServicePage })));
 
 // Employee Loan Pages
 import { EmployeeLoanPage } from '@/modules/employee-loan/pages/EmployeeLoanPage';
 import { EmployeeLoanDetailPage } from '@/modules/employee-loan/pages/EmployeeLoanDetailPage';
 import { TravelExpensePage } from '@/modules/travel-expense/pages/TravelExpensePage';
-import { WorkflowEnginePage } from '@/modules/workflow-engine/pages/WorkflowEnginePage';
+const WorkflowEnginePage = lazy(() => import('@/modules/workflow-engine/pages/WorkflowEnginePage').then((m) => ({ default: m.WorkflowEnginePage })));
 import { DocumentManagementPage } from '@/modules/document-management/pages/DocumentManagementPage';
 // EWA (Earned Wage Access) Pages
 import { EmployeeEWADashboardPage } from '@/modules/ewa/pages/EmployeeEWADashboardPage';
@@ -105,7 +106,7 @@ import { AdminDailyActivityApprovalPage } from '@/modules/daily-activity/pages/A
 
 // Work Calendar Pages
 import { WorkCalendarListPage } from '@/modules/work-calendar/pages/WorkCalendarListPage';
-import { WorkCalendarDetailPage } from '@/modules/work-calendar/pages/WorkCalendarDetailPage';
+const WorkCalendarDetailPage = lazy(() => import('@/modules/work-calendar/pages/WorkCalendarDetailPage').then((m) => ({ default: m.WorkCalendarDetailPage })));
 import { WorkCalendarHolidaysPage } from '@/modules/work-calendar/pages/WorkCalendarHolidaysPage';
 import { ShiftFormulaPage } from '@/modules/work-calendar/pages/ShiftFormulaPage';
 
@@ -119,7 +120,7 @@ import { AdminAuditLogDetailPage } from '@/modules/admin/pages/AdminAuditLogDeta
 import { AdminSettingsPage } from '@/modules/admin/pages/AdminSettingsPage';
 import { AdminMenuAccessPage } from '@/modules/admin/pages/AdminMenuAccessPage';
 import { AdminDataScopePage } from '@/modules/admin/pages/AdminDataScopePage';
-import { WorkflowAdminPage } from '@/modules/workflow-engine/pages/WorkflowAdminPage';
+const WorkflowAdminPage = lazy(() => import('@/modules/workflow-engine/pages/WorkflowAdminPage').then((m) => ({ default: m.WorkflowAdminPage })));
 import { EMPLOYEE_SELF_SERVICE_ROLES, OPERATIONAL_ROLES } from '@/lib/access-control';
 
 export const router = createBrowserRouter([

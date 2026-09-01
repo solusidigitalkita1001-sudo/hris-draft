@@ -16,10 +16,8 @@
  *      hitung perubahan metric landmark → cek apakah tantangan
  *      benar-benar dilakukan. Anti: replay attack 2D screen + foto print.
  *
- * FAILOVER STRATEGY: SAMA SEPERTI BACKEND! Jika @vladmandic/human
- * tidak di-install / WebGL tidak support / lambat di browser lawas →
- * otomatis fallback ke Grade 1 pure Canvas histogram 0-dep. Service
- * TIDAK PERNAH crash, kompatibel 100% browser lama.
+ * SECURITY: jika model tidak tersedia atau WebGL gagal, ekstraksi gagal
+ * secara eksplisit. Histogram tidak boleh dipakai sebagai biometric proof.
  *
  * Compatibility: Semua signature function TETAP SAMA (nama, parameter,
  * return type) → call site di AttendanceList / CheckInForm TIDAK perlu
@@ -146,16 +144,7 @@ export async function extractFaceVectorFromImageFile(
     } catch (_e) { /* fallthrough ke fallback */ }
   }
 
-  const vec = generateFallback512(imgData);
-  return {
-    vector: vec,
-    pixelVariance,
-    width: imgData.width,
-    height: imgData.height,
-    isFallbackHeuristic: true,
-    warning:
-      'FALLBACK: pure canvas histogram vector. Install @vladmandic/human + WebGL enabled browser untuk FaceNet Grade 2 accuracy.',
-  };
+  throw new Error('Model face recognition tidak tersedia atau wajah tidak terdeteksi. Coba browser/perangkat lain.');
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -370,9 +359,9 @@ export function computeBlurVariance(imageData: ImageData): number {
   return computePixelVariance(imageDataToGrid(imageData).pixels, imageData.width, imageData.height);
 }
 
-/* ─── helpers pure (Canvas fallback tetap dipertahankan untuk failover) ─── */
+/* ─── diagnostic-only heuristic; never use as biometric proof ─── */
 
-function generateFallback512(imgData: { pixels: Uint8ClampedArray; width: number; height: number }): number[] {
+export function generateHeuristicVectorForDiagnosticsOnly(imgData: { pixels: Uint8ClampedArray; width: number; height: number }): number[] {
   const gridHist = gridColorHistogram(imgData.pixels, imgData.width, imgData.height, 8, 32);
   const edgeVec = laplacianEdgeVector(imgData.pixels, imgData.width, imgData.height, 4);
   const phashVec = perceptualHashVector(imgData.pixels, imgData.width, imgData.height, 128);

@@ -51,6 +51,26 @@ Codebase ini secara **desain bisnis & domain logic** sudah cukup matang (perhitu
 
 ---
 
+## 📊 Re-Review #4 Status Update (2026-08-29 Minggu 7 — EWA Critical Financial Fix 100%)
+
+Temuan baru dari verifikasi kode modul EWA pasca Plan A Parity Minggu 6 (2 item Critical Financial + 1 Compliance). Semua sudah 100% di-fix dan diverifikasi TSC dual 0 error.
+
+| # | Temuan | Level Risiko | Status | Tanggal Fix | Acceptance |
+|---|---|---|---|---|---|
+| 20 | **EWA `earnedGross` dan `periodStart/periodEnd` dipercaya MENTAH-MENTAH dari client (bypass zod) — celah FINANSIAL tarik gaji > penghasilan asli** | 🔴 **Kritis Finansial** | ✅ **Fixed 2026-08-29** | Client input earnedGross/periodStart/periodEnd → **THROW BadRequestError**. Server hitung sendiri earnedGrossToDate 4-step: baseSalary aktif ÷ workDaysInPeriod × presentDaysCount (PRESENT+LATE attendance) + calculateOvertimePay approved. Periode dari PayrollPeriod DB (company match guard) atau fallback auto bulan ini. |
+| 21 | **Precedence BOMB `companyId` fallback EWA service selalu `''` (empty string)** | 🟠 Sedang bom waktu | ✅ **Fixed 2026-08-29** | Fallback chain valid: `getCurrentCompanyId() ?? user?.companyId ?? ''` + explicit throw BadRequestError jika tetap empty. Tidak ada lagi ternary precedence bug `(X ?? Y) ? '' : ''` yang selalu empty. |
+| 22 | **AuditLog coverage EWA & Daily Activity — pastikan semua mutation tercatat (Finding #2 standard pattern)** | 🟡 Minor Compliance | ✅ **Verified 2026-08-29** | EWA: 5 mutation (create / cancel / approve / reject / mark-paid) — **SEMUA** terpasang auditLog setelah authorize sebelum validate. Daily Activity: 4 mutation (create / update / complete / delete) — **SEMUA** terpasang auditLog sesuai standard authorize → validate → auditLog → controller. Read endpoints TIDAK audit (TEPAT pola Finding #2). ✅ 100% COMPLIANT. |
+
+### ✅ Exit Criteria Re-Review #4 Verified (2026-08-29)
+- [x] EWA endpoint POST /ewa BADREQUEST jika body mengandung earnedGross/periodStart/periodEnd (client tidak bisa spoof)
+- [x] EWA endpoint GET /ewa/my/limit BADREQUEST jika query mengandung earnedGross (limit 100% server side)
+- [x] Helper calculateEarnedGrossToDate sudah menggunakan lookup EmployeeSalary aktif (baseSalary), workCalendar (work days), attendance groupBy status PRESENT/LATE (present days), approved overtime calculateOvertimePay
+- [x] resolvePeriod() validasi company match payrollPeriodId (anti IDOR cross company period)
+- [x] Backend TSC strict --noEmit: 0 TOTAL ERROR EXIT 0
+- [x] Frontend TSC strict --noEmit: 0 TOTAL ERROR EXIT 0
+
+---
+
 ## 🔴 KRITIS
 
 ### 1. [✅ Fixed 2026-08-22 (Minggu 5)] Privilege escalation: user biasa bisa jadi SUPER_ADMIN

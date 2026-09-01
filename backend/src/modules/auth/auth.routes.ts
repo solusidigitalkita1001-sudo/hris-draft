@@ -34,6 +34,7 @@ const generalLimiter = rateLimit({
 });
 
 // Public routes (no auth required)
+router.get('/csrf', generalLimiter, authController.csrfToken.bind(authController));
 router.post('/login', authLimiter, validate(validateLogin), authController.login.bind(authController));
 router.post('/refresh', authLimiter, validate(validateRefreshToken), authController.refresh.bind(authController));
 

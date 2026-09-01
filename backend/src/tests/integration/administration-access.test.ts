@@ -139,7 +139,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
     });
 
     it('update role ganti companyId dari A ke B → ValidationError (immutable)', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-A-1',
         companyId: COMPANY_A_ID,
         scope: 'COMPANY',
@@ -156,7 +156,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
     });
 
     it('update role ganti scope dari COMPANY ke GROUP → ValidationError (immutable)', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-A-2',
         companyId: COMPANY_A_ID,
         scope: 'COMPANY',
@@ -175,7 +175,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
 
   describe('assignPermissions (RoleMenuAccess-like cross-company)', () => {
     it('assignPermissions ke role company B oleh SUPER_ADMIN → allowed (bypass)', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-B-1',
         companyId: COMPANY_B_ID,
         scope: 'COMPANY',
@@ -200,7 +200,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
     });
 
     it('assignPermissions ke role SYSTEM → ValidationError (tidak bisa modify)', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-sys-1',
         companyId: COMPANY_A_ID,
         scope: 'COMPANY',
@@ -215,7 +215,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
     });
 
     it('assignPermissions dengan permission yang tidak ditemukan → NotFoundError', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-A-3',
         companyId: COMPANY_A_ID,
         scope: 'COMPANY',
@@ -256,6 +256,10 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
       jest.spyOn(prisma.role, 'findMany').mockResolvedValue([
         { id: 'role-global-1', scope: 'GLOBAL' },
       ] as any);
+      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
+        id: USER_B_ID,
+        employee: null,
+      } as any);
       jest.spyOn(prisma.userRole, 'deleteMany').mockResolvedValue({ count: 0 } as any);
       jest.spyOn(prisma.userRole, 'createMany').mockResolvedValue({ count: 1 } as any);
 
@@ -317,7 +321,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
 
   describe('System Role immutability', () => {
     it('delete SYSTEM role → ValidationError', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-sys-del',
         isSystem: true,
         companyId: COMPANY_A_ID,
@@ -329,7 +333,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
     });
 
     it('update SYSTEM role → ValidationError', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-sys-upd',
         isSystem: true,
         scope: 'COMPANY',
@@ -344,7 +348,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
     });
 
     it('delete non-SYSTEM role oleh SUPER_ADMIN → berhasil (soft delete)', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-nonsys-del',
         isSystem: false,
         companyId: COMPANY_A_ID,
@@ -386,7 +390,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
     });
 
     it('SUPER_ADMIN assignPermissions ke non-system role company B → sukses', async () => {
-      jest.spyOn(prisma.role, 'findUnique').mockResolvedValue({
+      jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-B-sa',
         companyId: COMPANY_B_ID,
         scope: 'COMPANY',

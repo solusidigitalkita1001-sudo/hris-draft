@@ -65,4 +65,5 @@ coverage/
 # Docker compose override files (local)
 docker-compose.override.yml
 docker-compose.prod.yml
+!docker-compose.prod.yml
 docker-compose.yml

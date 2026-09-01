@@ -3,6 +3,8 @@ import { AuthenticatedRequest } from './Authenticate';
 import prisma from '@/shared/database/prisma';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { computeAuditHash } from '@/shared/security/audit-hash';
+import { runInRequestContext } from '@/shared/context/RequestContext';
+import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
 
 interface AuditLogOptions {
   action: string;
@@ -67,6 +69,71 @@ export function diffAuditFields(
   return result;
 }
 
+interface AuditEntryInput {
+  companyId?: string;
+  userId: string;
+  action: string;
+  entity: string;
+  entityId?: string;
+  oldValue?: string;
+  newValue?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+/**
+ * Append exactly one hash-chain entry while holding a per-company DB lock.
+ * The previous-hash read and the insert share the same transaction, preventing
+ * concurrent requests from creating two children of the same hash.
+ */
+export async function appendAuditLogEntry(params: AuditEntryInput): Promise<void> {
+  const chainKey = params.companyId ?? 'global';
+  await withDatabaseAdvisoryLock('audit-chain', chainKey, async (tx) => {
+    const previous = await tx.auditLog.findFirst({
+      where: { companyId: params.companyId ?? null },
+      orderBy: { createdAt: 'desc' },
+      select: { hash: true, createdAt: true },
+    });
+    const prevHash = previous?.hash ?? '';
+    const now = new Date();
+    // createdAt is also the chain ordering key. Make it strictly monotonic even
+    // when two appends land within the same database timestamp precision.
+    const createdAt = previous && now.getTime() <= previous.createdAt.getTime()
+      ? new Date(previous.createdAt.getTime() + 1)
+      : now;
+    const hash = computeAuditHash(
+      {
+        companyId: params.companyId,
+        userId: params.userId,
+        action: params.action,
+        entity: params.entity,
+        entityId: params.entityId,
+        oldValue: params.oldValue ?? null,
+        newValue: params.newValue ?? null,
+        createdAt,
+      },
+      prevHash,
+    );
+
+    await tx.auditLog.create({
+      data: {
+        companyId: params.companyId,
+        userId: params.userId,
+        action: params.action,
+        entity: params.entity,
+        entityId: params.entityId,
+        oldValue: params.oldValue,
+        newValue: params.newValue,
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent?.substring(0, 500),
+        hash,
+        prevHash: prevHash || null,
+        createdAt,
+      },
+    });
+  });
+}
+
 /**
  * Audit logging middleware - logs CRUD operations with before/after diff.
  */
@@ -74,6 +141,7 @@ export function auditLog(options: AuditLogOptions) {
   const mutating = ['PUT', 'PATCH', 'DELETE'];
 
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    req.auditHandled = true;
     const entityId = options.getEntityId?.(req) || (req.params.id as string);
 
     // Snapshot the record BEFORE the handler mutates it.
@@ -101,43 +169,16 @@ export function auditLog(options: AuditLogOptions) {
           const { oldValue, newValue } =
             before || after ? diffAuditFields(before, after) : {};
 
-          const createdAt = new Date();
-          // Hash-chain: kaitkan dengan hash entry terakhir pada company yang sama.
-          const previous = await prisma.auditLog.findFirst({
-            where: { companyId: req.user.companyId ?? null },
-            orderBy: { createdAt: 'desc' },
-            select: { hash: true },
-          });
-          const prevHash = previous?.hash ?? '';
-          const hash = computeAuditHash(
-            {
-              companyId: req.user.companyId,
-              userId: req.user.id,
-              action: options.action,
-              entity: options.entity,
-              entityId,
-              oldValue: oldValue ?? null,
-              newValue: newValue ?? null,
-              createdAt,
-            },
-            prevHash
-          );
-
-          await prisma.auditLog.create({
-            data: {
-              companyId: req.user.companyId,
-              userId: req.user.id,
-              action: options.action,
-              entity: options.entity,
-              entityId,
-              oldValue,
-              newValue,
-              ipAddress: req.ip,
-              userAgent: req.headers['user-agent']?.substring(0, 500),
-              hash,
-              prevHash: prevHash || null,
-              createdAt,
-            },
+          await appendAuditLogEntry({
+            companyId: req.user.companyId ?? undefined,
+            userId: req.user.id,
+            action: options.action,
+            entity: options.entity,
+            entityId,
+            oldValue,
+            newValue,
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
           });
         } catch (error) {
           logger.error('Failed to create audit log', { error });
@@ -152,32 +193,57 @@ export function auditLog(options: AuditLogOptions) {
 /**
  * Create an audit log entry programmatically
  */
-export async function createAuditLog(params: {
-  companyId?: string;
-  userId: string;
-  action: string;
-  entity: string;
-  entityId?: string;
-  oldValue?: string;
-  newValue?: string;
-  ipAddress?: string;
-  userAgent?: string;
-}): Promise<void> {
+export async function createAuditLog(params: AuditEntryInput): Promise<void> {
   try {
-    await prisma.auditLog.create({
-      data: {
-        companyId: params.companyId,
-        userId: params.userId,
-        action: params.action,
-        entity: params.entity,
-        entityId: params.entityId,
-        oldValue: params.oldValue,
-        newValue: params.newValue,
-        ipAddress: params.ipAddress,
-        userAgent: params.userAgent?.substring(0, 500),
-      },
-    });
+    await appendAuditLogEntry(params);
   } catch (error) {
     logger.error('Failed to create audit log', { error });
+  }
+}
+
+const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * Safety net for successful authenticated mutations that do not declare a
+ * richer entity-specific auditLog() middleware. It records no request body so
+ * credentials, payroll values, and employee PII cannot leak into generic logs.
+ */
+export function auditMutationFallback(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  res.on('finish', () => {
+    if (
+      MUTATION_METHODS.has(req.method) &&
+      res.statusCode >= 200 &&
+      res.statusCode < 300 &&
+      req.user &&
+      !req.auditHandled
+    ) {
+      const pathSegments = req.path.split('/').filter(Boolean);
+      const entity = pathSegments[0] || 'api';
+      void runInRequestContext({ user: req.user }, () =>
+        createAuditLog({
+          companyId: req.user!.companyId ?? undefined,
+          userId: req.user!.id,
+          action: req.method,
+          entity: `API:${entity}`,
+          entityId: typeof req.params?.id === 'string' ? req.params.id : undefined,
+          newValue: JSON.stringify({ path: req.baseUrl + req.path, statusCode: res.statusCode }),
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        })
+      );
+    }
+  });
+  next();
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      auditHandled?: boolean;
+    }
   }
 }

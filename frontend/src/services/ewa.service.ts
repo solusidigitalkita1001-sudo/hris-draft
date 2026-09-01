@@ -45,6 +45,7 @@ export interface EWALimitResponse {
   max: number;
   remaining: number;
   totalApproved: number;
+  totalReserved?: number;
   earnedGrossToDate: number;
   isAllowed?: boolean;
   earnedGross?: number;

@@ -38,10 +38,33 @@ const api = axios.create({
   },
 });
 
+const UNSAFE_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+
+function readCookie(name: string): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const prefix = `${encodeURIComponent(name)}=`;
+  const item = document.cookie.split('; ').find((part) => part.startsWith(prefix));
+  return item ? decodeURIComponent(item.slice(prefix.length)) : undefined;
+}
+
+async function ensureCsrfToken(): Promise<string> {
+  let token = readCookie('csrf');
+  if (token) return token;
+
+  await axios.get(`${appConfig.apiUrl}/auth/csrf`, { withCredentials: true });
+  token = readCookie('csrf');
+  if (!token) throw new Error('CSRF bootstrap did not issue a readable token');
+  return token;
+}
+
 // Request interceptor - auth token is sent automatically via httpOnly cookies (withCredentials:true)
 // No manual Authorization header attachment from localStorage for security (XSS mitigation).
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    if (UNSAFE_METHODS.has((config.method || '').toLowerCase())) {
+      const csrfToken = readCookie('csrf');
+      if (csrfToken) config.headers.set('X-CSRF-Token', csrfToken);
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -67,8 +90,10 @@ api.interceptors.response.use(
       try {
         // HttpOnly refresh cookie is sent automatically via withCredentials:true.
         // Backend responds with new httpOnly cookies (at + rt) - no token handling in JS needed.
+        const csrfToken = await ensureCsrfToken();
         await axios.post(`${appConfig.apiUrl}/auth/refresh`, null, {
           withCredentials: true,
+          headers: { 'X-CSRF-Token': csrfToken },
         });
 
         processQueue(null);

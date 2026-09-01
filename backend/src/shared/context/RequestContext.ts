@@ -13,6 +13,9 @@ export interface RequestUserContext {
 
 export interface RequestContextData {
   user?: RequestUserContext;
+  system?: {
+    reason: string;
+  };
 }
 
 const asyncLocalStorage = new AsyncLocalStorage<RequestContextData>();
@@ -27,6 +30,16 @@ export function getRequestContext(): RequestContextData | undefined {
 
 export function getCurrentUser(): RequestUserContext | undefined {
   return asyncLocalStorage.getStore()?.user;
+}
+
+/** Explicit boundary for trusted cross-tenant seed, scheduler, and worker work. */
+export function runInSystemContext<T>(reason: string, fn: () => T): T {
+  if (!reason.trim()) throw new Error('System context requires an audit reason');
+  return asyncLocalStorage.run({ system: { reason } }, fn);
+}
+
+export function isSystemContext(): boolean {
+  return Boolean(asyncLocalStorage.getStore()?.system);
 }
 
 export function getCurrentCompanyId(): string | undefined {

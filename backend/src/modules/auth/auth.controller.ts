@@ -5,6 +5,7 @@ import { Result } from '@/shared/core/Result';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { LoginDTO, ChangePasswordDTO, MfaCodeDTO } from './auth.dto';
 import config from '@/config';
+import { clearCsrfToken, issueCsrfToken } from '@/shared/middleware/CsrfProtection';
 
 const logger = new WinstonLogger('AuthController');
 
@@ -63,6 +64,12 @@ function extractAccessToken(req: Request): string | undefined {
  * No business logic here - purely delegation to AuthService
  */
 export class AuthController {
+  /** GET /api/v1/auth/csrf — bootstrap signed double-submit cookie. */
+  csrfToken(_req: Request, res: Response): void {
+    issueCsrfToken(res);
+    res.status(200).json(Result.success(null, 'CSRF token issued'));
+  }
+
   /**
    * POST /api/v1/auth/login
    * Authenticate user with email and password
@@ -77,6 +84,7 @@ export class AuthController {
 
       setAccessCookie(res, result.tokens.accessToken);
       setRefreshCookie(res, result.tokens.refreshToken);
+      issueCsrfToken(res);
 
       res.status(200).json(
         Result.success(
@@ -102,6 +110,7 @@ export class AuthController {
       await authService.logout(refreshToken);
       clearAccessCookie(res);
       clearRefreshCookie(res);
+      clearCsrfToken(res);
 
       res.status(200).json(Result.success(null, 'Logout successful'));
     } catch (error) {
@@ -124,6 +133,7 @@ export class AuthController {
 
       setAccessCookie(res, result.tokens.accessToken);
       setRefreshCookie(res, result.tokens.refreshToken);
+      issueCsrfToken(res);
 
       res.status(200).json(
         Result.success(

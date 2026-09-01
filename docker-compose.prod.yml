@@ -1,0 +1,110 @@
+x-api-environment: &api-environment
+  NODE_ENV: production
+  APP_URL: ${APP_URL:?APP_URL is required}
+  CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  REDIS_URL: redis://redis:6379/0
+  RABBITMQ_ENABLED: "true"
+  RABBITMQ_URL: ${RABBITMQ_URL:?RABBITMQ_URL is required}
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  CSRF_SECRET: ${CSRF_SECRET:?CSRF_SECRET is required}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+
+x-api-service: &api-service
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment: *api-environment
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  volumes:
+    - upload_data:/app/uploads
+  networks: [internal]
+  security_opt: [no-new-privileges:true]
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hris_enterprise}
+      MYSQL_USER: ${MYSQL_USER:-hris_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks: [internal]
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, localhost]
+      timeout: 20s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes: [redis_data:/data]
+    networks: [internal]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER is required}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS is required}
+    volumes: [rabbitmq_data:/var/lib/rabbitmq]
+    networks: [internal]
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      timeout: 10s
+      retries: 5
+
+  api:
+    <<: *api-service
+
+  api-replica:
+    <<: *api-service
+
+  worker:
+    <<: *api-service
+    command: npm run worker
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/sites:/etc/nginx/sites-enabled:ro
+      - ./frontend/dist:/var/www/html:ro
+    depends_on:
+      api:
+        condition: service_started
+      api-replica:
+        condition: service_started
+    networks: [internal, edge]
+    security_opt: [no-new-privileges:true]
+
+networks:
+  internal:
+    internal: true
+  edge:
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
+  upload_data:

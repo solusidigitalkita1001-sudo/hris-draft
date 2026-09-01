@@ -18,9 +18,15 @@ export const mfaCodeSchema = z.object({
   code: z.string().trim().min(6).max(20),
 });
 
-export const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1, 'Refresh token is required'),
-});
+// Browser clients authenticate refresh through the httpOnly `rt` cookie, so
+// an empty body is valid. The legacy body field remains accepted for native
+// clients during migration; the controller enforces that one source exists.
+export const refreshTokenSchema = z.preprocess(
+  (value) => value == null ? {} : value,
+  z.object({
+    refreshToken: z.string().min(1, 'Refresh token is required').optional(),
+  }),
+);
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),

@@ -1,6 +1,6 @@
 import prisma from '@/shared/database/prisma';
 import type { CreateEWARequestDTO } from './ewa.dto';
-import type { EWATransactionStatus } from '@prisma/client';
+import type { EWATransactionStatus, Prisma } from '@prisma/client';
 
 type CreateWithMeta = CreateEWARequestDTO & {
   companyId: string;
@@ -16,8 +16,8 @@ type CreateWithMeta = CreateEWARequestDTO & {
 };
 
 export class EWARepository {
-  async create(data: CreateWithMeta) {
-    return prisma.earnedWageAccess.create({
+  async create(data: CreateWithMeta, client: Prisma.TransactionClient | typeof prisma = prisma) {
+    return client.earnedWageAccess.create({
       data: {
         companyId: data.companyId,
         employeeId: data.employeeId,
@@ -38,8 +38,15 @@ export class EWARepository {
     });
   }
 
-  async findByEmployeePeriodStatus(companyId: string, employeeId: string, periodStart: Date, periodEnd: Date, statuses: EWATransactionStatus[]) {
-    return prisma.earnedWageAccess.findMany({
+  async findByEmployeePeriodStatus(
+    companyId: string,
+    employeeId: string,
+    periodStart: Date,
+    periodEnd: Date,
+    statuses: EWATransactionStatus[],
+    client: Prisma.TransactionClient | typeof prisma = prisma,
+  ) {
+    return client.earnedWageAccess.findMany({
       where: {
         companyId,
         employeeId,
@@ -62,6 +69,13 @@ export class EWARepository {
           },
         },
       },
+    });
+  }
+
+  async findByRequestCode(requestCode: string, client: Prisma.TransactionClient | typeof prisma = prisma) {
+    return client.earnedWageAccess.findFirst({
+      where: { requestCode },
+      select: { id: true },
     });
   }
 

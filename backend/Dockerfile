@@ -20,6 +20,12 @@ RUN npx prisma generate
 # Build TypeScript
 RUN npm run build
 
+# Runtime must not execute application code as root. The upload volume should
+# be provisioned with matching ownership by the deployment platform.
+RUN mkdir -p /app/uploads && chown -R node:node /app
+
+USER node
+
 EXPOSE 3000
 
 CMD ["node", "dist/index.js"]

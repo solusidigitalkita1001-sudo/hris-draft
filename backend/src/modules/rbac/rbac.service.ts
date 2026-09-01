@@ -15,7 +15,7 @@ import {
   AssignUserRolesDTO,
 } from './rbac.dto';
 import prisma from '@/shared/database/prisma';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { cached, invalidateKeys, cacheKey, CACHE_TTL } from '@/shared/cache/cacheAside';
 

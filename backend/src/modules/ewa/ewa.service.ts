@@ -15,6 +15,7 @@ import { prisma } from '@/shared/database/prisma';
 import { payrollRepository } from '@/modules/payroll/payroll.repository';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
+import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
 
 const EMPLOYEE_ELEVATED_HR_ROLES = ['HR_STAFF', 'HR_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
 const FINANCE_DISBURSE_ROLES = ['FINANCE_STAFF', 'FINANCE_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
@@ -166,43 +167,53 @@ export class EWAService {
     }
     const earnedGross = grossCalc.earnedGrossToDate;
 
-    const existingApproved = await ewaRepository.findByEmployeePeriodStatus(
-      finalCompanyId,
-      employeeId,
-      periodStart,
-      periodEnd,
-      ['APPROVED', 'PAID'],
+    const created = await withDatabaseAdvisoryLock(
+      'ewa-limit',
+      // Lock per employee, not per exact date pair: overlapping payroll
+      // periods with different boundaries must still serialize.
+      `${finalCompanyId}:${employeeId}`,
+      async (tx) => {
+        // PENDING ikut dihitung sebagai reservasi. Tanpa ini, request paralel
+        // dapat sama-sama lolos sebelum salah satunya di-approve.
+        const existingReserved = await ewaRepository.findByEmployeePeriodStatus(
+          finalCompanyId,
+          employeeId,
+          periodStart,
+          periodEnd,
+          ['PENDING', 'APPROVED', 'PAID'],
+          tx,
+        );
+        const totalExistingReserved = existingReserved.reduce((acc, r) => acc + Number(r.amountRequested), 0);
+
+        const assessment = assessEwaRequest(earnedGross, data.amountRequested, totalExistingReserved, DEFAULT_MAX_PERCENT);
+        if (!assessment.isAllowed) {
+          throw new BadRequestError(
+            `EWA request tidak diizinkan: ${assessment.reason ?? `Maksimal ${assessment.maxAllowedPercent}% dari pendapatan periode ini (Rp ${assessment.maxAllowedAmount.toLocaleString('id-ID')}). Data aktual: ${grossCalc.presentDays}/${grossCalc.workDaysInPeriod} hari kerja, base salary Rp ${grossCalc.baseSalary.toLocaleString('id-ID')}`}`,
+          );
+        }
+
+        const requestCode = await generateSystemCode({
+          prefix: 'EWA',
+          label: `${employeeId}-${periodStart.toISOString().slice(0, 10)}`,
+          exists: async (candidate) => Boolean(await ewaRepository.findByRequestCode(candidate, tx)),
+        });
+
+        return ewaRepository.create({
+          ...data,
+          payrollPeriodId,
+          companyId: finalCompanyId,
+          employeeId,
+          requestCode,
+          periodStart,
+          periodEnd,
+          earnedGrossReference: earnedGross,
+          earnedGrossAtRequest: earnedGross,
+          maxAllowedPercent: DEFAULT_MAX_PERCENT,
+          maxAllowedAtRequest: assessment.maxAllowedAmount,
+          totalApprovedSamePeriod: totalExistingReserved,
+        } as any, tx);
+      },
     );
-    const totalExistingApproved = existingApproved.reduce((acc, r) => acc + Number(r.amountRequested), 0);
-
-    const assessment = assessEwaRequest(earnedGross, data.amountRequested, totalExistingApproved, DEFAULT_MAX_PERCENT);
-    if (!assessment.isAllowed) {
-      throw new BadRequestError(
-        `EWA request tidak diizinkan: ${assessment.reason ?? `Maksimal ${assessment.maxAllowedPercent}% dari pendapatan periode ini (Rp ${assessment.maxAllowedAmount.toLocaleString('id-ID')}). Data aktual: ${grossCalc.presentDays}/${grossCalc.workDaysInPeriod} hari kerja, base salary Rp ${grossCalc.baseSalary.toLocaleString('id-ID')}`}`,
-      );
-    }
-
-    const requestCode = await generateSystemCode({
-      prefix: 'EWA',
-      label: `${employeeId}-${periodStart.toISOString().slice(0, 10)}`,
-      exists: async (candidate) => Boolean(await ewaRepository.findById(candidate) === null ? false : false),
-    });
-
-    const createData = {
-      ...data,
-      payrollPeriodId,
-      companyId: finalCompanyId,
-      employeeId,
-      requestCode,
-      periodStart,
-      periodEnd,
-      earnedGrossReference: earnedGross,
-      earnedGrossAtRequest: earnedGross,
-      maxAllowedPercent: DEFAULT_MAX_PERCENT,
-      maxAllowedAtRequest: assessment.maxAllowedAmount,
-      totalApprovedSamePeriod: totalExistingApproved,
-    };
-    const created = await ewaRepository.create(createData as any);
 
     logger.info('EWA request created (server-side earnedGross enforced)', {
       ewaId: created.id,
@@ -311,16 +322,19 @@ export class EWAService {
     companyId: string,
     employeeId: string,
     overridePercent?: number,
-  ): Promise<{ max: number; remaining: number; totalApproved: number; earnedGrossToDate: number; breakdown: any }> {
+  ): Promise<{ max: number; remaining: number; totalApproved: number; totalReserved: number; earnedGrossToDate: number; breakdown: any }> {
     const today = new Date();
     const periodStart = startOfMonth(today);
     const periodEnd = endOfMonth(today);
     const gross = await this.calculateEarnedGrossToDate(companyId, employeeId, periodStart, periodEnd);
-    const existingApproved = await ewaRepository.findByEmployeePeriodStatus(companyId, employeeId, periodStart, periodEnd, ['APPROVED', 'PAID']);
-    const totalApproved = existingApproved.reduce((acc, r) => acc + Number(r.amountRequested), 0);
-    const result = calcMaxAllowedEwa(gross.earnedGrossToDate, overridePercent ?? DEFAULT_MAX_PERCENT, totalApproved);
+    const existingReserved = await ewaRepository.findByEmployeePeriodStatus(companyId, employeeId, periodStart, periodEnd, ['PENDING', 'APPROVED', 'PAID']);
+    const totalReserved = existingReserved.reduce((acc, r) => acc + Number(r.amountRequested), 0);
+    const result = calcMaxAllowedEwa(gross.earnedGrossToDate, overridePercent ?? DEFAULT_MAX_PERCENT, totalReserved);
     return {
       ...result,
+      // totalApproved is retained for API compatibility; totalReserved is the
+      // accurate name because PENDING requests now reserve available balance.
+      totalReserved,
       earnedGrossToDate: gross.earnedGrossToDate,
       breakdown: {
         baseSalary: gross.baseSalary,

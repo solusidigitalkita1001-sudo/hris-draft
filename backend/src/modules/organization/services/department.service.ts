@@ -4,7 +4,7 @@ import { DomainEvents } from '@/shared/events/events';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, ValidationError } from '@/shared/exceptions/AppError';
 import { CreateDepartmentDTO, UpdateDepartmentDTO } from '../organization.dto';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
 
 const logger = new WinstonLogger('DepartmentService');

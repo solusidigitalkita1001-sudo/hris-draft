@@ -10,6 +10,7 @@ import { prisma, disconnectDatabase, testDatabaseConnection } from '@/shared/dat
 import { authRepository } from '@/modules/auth/auth.repository';
 import { performanceService } from '@/modules/performance/performance.service';
 import { LEAVE_YEARLY_ACCRUAL_JOB, runYearlyLeaveAccrual, scheduleYearlyLeaveAccrual } from '@/modules/leave/leave.scheduler';
+import { runInSystemContext } from '@/shared/context/RequestContext';
 
 async function maybeCreateNotification(event: DomainEvent): Promise<void> {
   if (![DomainEvents.USER_LOGGED_IN, DomainEvents.PASSWORD_CHANGED].includes(event.name as any)) {
@@ -101,7 +102,7 @@ async function bootstrapWorker(): Promise<void> {
     async (job) => {
       const event = job.data;
       await recordProcessedEvent(event, 'bullmq');
-      await maybeCreateNotification(event);
+      await runInSystemContext('domain-event-notification', () => maybeCreateNotification(event));
       return { processed: true, eventName: event.name };
     },
     { concurrency: 10 }
@@ -110,7 +111,9 @@ async function bootstrapWorker(): Promise<void> {
   queueManager.createWorker<{ scheduleId: string }>(
     QueueNames.PERFORMANCE_AUTOMATION,
     async (job) => {
-      return performanceService.runPerformanceAutomationSchedule(job.data.scheduleId);
+      return runInSystemContext('performance-automation-worker', () =>
+        performanceService.runPerformanceAutomationSchedule(job.data.scheduleId)
+      );
     },
     { concurrency: 3 }
   );
@@ -119,12 +122,12 @@ async function bootstrapWorker(): Promise<void> {
     QueueNames.LEAVE_AUTOMATION,
     async (job) => {
       const year = job.data.year ?? new Date().getFullYear();
-      return runYearlyLeaveAccrual(year);
+      return runInSystemContext('leave-automation-worker', () => runYearlyLeaveAccrual(year));
     },
     { concurrency: 1 }
   );
 
-  await scheduleYearlyLeaveAccrual();
+  await runInSystemContext('leave-scheduler-bootstrap', () => scheduleYearlyLeaveAccrual());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,

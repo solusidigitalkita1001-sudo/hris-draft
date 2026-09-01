@@ -5,11 +5,9 @@ import {
   CreateOvertimeDTO,
   CheckoutAttendanceDTO,
 } from './attendance.dto';
-import { NotFoundError, BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError, ForbiddenError, ServiceUnavailableError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { calculateOvertimePay, OvertimeDayType } from '@/shared/attendance/overtime';
-import { compareFaceVectors, DEFAULT_FACE_MATCH_THRESHOLD } from '@/shared/attendance/face-recognition';
-import { extractFaceVectorFromImage } from '@/shared/attendance/face-extractor';
 import { assessLiveness, LivenessVerdict } from '@/shared/attendance/liveness';
 import {
   assessGpsCompliance,
@@ -31,6 +29,46 @@ import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-eng
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
 import prisma from '@/shared/database/prisma';
+
+export function enforceTrustedFaceRecognition(
+  method: AttendanceCaptureMethod,
+  faceInput: any,
+  hasServerReference: boolean,
+): void {
+  const hasClientDerivedBiometric = Boolean(faceInput) && (
+    faceInput.selfieUrl !== undefined ||
+    faceInput.selfieVector !== undefined ||
+    faceInput.referenceVector !== undefined ||
+    faceInput.referencePhotoImage !== undefined ||
+    faceInput.referencePhotoUrl !== undefined ||
+    faceInput.similarityScore !== undefined ||
+    faceInput.isFaceMatch !== undefined
+  );
+  if (hasClientDerivedBiometric) {
+    throw new BadRequestError(
+      'Vector, URL penyimpanan, data pembanding, dan hasil verifikasi wajah tidak boleh dikirim client; seluruh keputusan biometrik harus berasal dari server',
+    );
+  }
+
+  if (method !== AttendanceCaptureMethod.FACE_RECOGNITION) {
+    if (faceInput !== undefined) {
+      throw new BadRequestError('Payload faceRecognition hanya boleh dipakai dengan method FACE_RECOGNITION');
+    }
+    return;
+  }
+
+  if (!faceInput || typeof faceInput.selfieImage !== 'string' || faceInput.selfieImage.length <= 32) {
+    throw new BadRequestError('Face recognition membutuhkan selfieImage dan profil wajah yang terdaftar');
+  }
+  if (!hasServerReference) {
+    throw new BadRequestError('Profil wajah karyawan belum terdaftar. Hubungi HR sebelum memakai face recognition.');
+  }
+  // Trusted storage retrieval and server-side reference decoding are not wired
+  // yet. Never accept a client-computed similarity as proof.
+  throw new ServiceUnavailableError(
+    'Face recognition dinonaktifkan sementara sampai reference profile dapat diverifikasi penuh di server. Gunakan metode attendance lain.',
+  );
+}
 
 type WorkflowSource = 'WORKFLOW' | 'LEGACY';
 
@@ -300,7 +338,8 @@ export class AttendanceService {
       phaseLabel: 'Check-in',
     });
 
-    /// B.7 Face Recognition Backend Ready: compute similarity + isMatch (jika method FACE_RECOGNITION ataupun data faceRecognition diisi)
+    // Biometric requests are fail-closed until trusted enrollment, storage,
+    // image decoding, and server-side embedding extraction are wired end-to-end.
     const faceInput = data.faceRecognition as any;
     const hasFacePayload = method === AttendanceCaptureMethod.FACE_RECOGNITION || !!faceInput;
 
@@ -311,78 +350,11 @@ export class AttendanceService {
         })
       : null;
 
-    let similarity = 0;
-    let isFaceMatch = false;
-    let faceExtractedVariance: number | null = null;
-    let faceExtractedFileSize: number | null = null;
-    if (hasFacePayload && faceInput) {
-      // ══════════════════════════════════════════════════════════════════
-      // Task 3.3: AUTO-EXTRACT FACE VECTOR DARI BASE64 FOTO JIKA CLIENT
-      // TIDAK MENGIRIM selfVector/referenceVector (fallback path untuk
-      // Postman/manual test, atau client lawas yang belum support on-device
-      // face-api.js/Google ML Kit). Jika vector sudah di-supply client,
-      // skip extract → vector asli client yang dipakai (on-device extract
-      // = recommended path, privacy first).
-      // ══════════════════════════════════════════════════════════════════
-      let refVec: number[] | null = Array.isArray(faceInput.referenceVector) ? faceInput.referenceVector : null;
-      let selfieVec: number[] | null = Array.isArray(faceInput.selfieVector) ? faceInput.selfieVector : null;
+    enforceTrustedFaceRecognition(method, faceInput, Boolean(employeeForFace?.referencePhotoUrl));
 
-      if (typeof faceInput.referencePhotoImage === 'string' && faceInput.referencePhotoImage.length > 32 && !refVec) {
-        try {
-          const r = await extractFaceVectorFromImage(faceInput.referencePhotoImage);
-          refVec = r.vector;
-        } catch (e) { logger.warn('referencePhotoImage extract fail', { err: (e as any)?.message }); }
-      }
-      if (typeof faceInput.selfieImage === 'string' && faceInput.selfieImage.length > 32 && !selfieVec) {
-        try {
-          const s = await extractFaceVectorFromImage(faceInput.selfieImage);
-          selfieVec = s.vector;
-          faceExtractedVariance = s.pixelVariance;
-          faceExtractedFileSize = s.fileSizeBytes;
-        } catch (e) { logger.warn('selfieImage extract fail', { err: (e as any)?.message }); }
-      }
-      if (!refVec && faceInput.referencePhotoUrl) {
-        // Fallback: reference vector dari referencePhotoUrl file storage NOT IMPLEMENTED
-        // (butuh stream dari S3/GCS + fs, masuk backlog). Saat ini refVec null, akan
-        // di-handle di bawah ini — fallback similarityScore client jika di-supplied.
-      }
-
-      if (refVec && selfieVec && refVec.length > 0 && selfieVec.length > 0) {
-        const cmp = compareFaceVectors(refVec, selfieVec, DEFAULT_FACE_MATCH_THRESHOLD);
-        similarity = cmp.score;
-        isFaceMatch = cmp.isMatch;
-      } else if (typeof faceInput.similarityScore === 'number' && Number.isFinite(faceInput.similarityScore)) {
-        similarity = faceInput.similarityScore;
-        isFaceMatch = faceInput.isFaceMatch ?? similarity >= DEFAULT_FACE_MATCH_THRESHOLD;
-      } else {
-        similarity = -1;
-        isFaceMatch = false;
-      }
-      if (method === AttendanceCaptureMethod.FACE_RECOGNITION && !isFaceMatch) {
-        throw new BadRequestError(`Wajah tidak cocok dengan foto referensi (skor=${similarity.toFixed(3)} < threshold ${DEFAULT_FACE_MATCH_THRESHOLD}). Silakan coba lagi dengan pencahayaan cukup.`);
-      }
-    }
-
-    /// B.8 Liveness verdict
-    /// Task 3.3 enhancement: inject otomatis pixelVariance & fileSizeBytes dari
-    /// face extractor result jika user kirim selfieImage tapi liveness tidak
-    /// dilengkapi evidence.
-    let livenessInput = (data.liveness ?? null) as any;
-    if (hasFacePayload && faceInput) {
-      if (!livenessInput) livenessInput = {} as any;
-      if (typeof livenessInput.pixelVariance !== 'number' && faceExtractedVariance !== null) {
-        livenessInput.pixelVariance = faceExtractedVariance;
-      }
-      if (typeof livenessInput.fileSizeBytes !== 'number' && faceExtractedFileSize !== null) {
-        livenessInput.fileSizeBytes = faceExtractedFileSize;
-      }
-      if (typeof livenessInput.mimeType !== 'string' && typeof faceInput.selfieMimeType === 'string') {
-        livenessInput.mimeType = faceInput.selfieMimeType;
-      }
-      if (typeof livenessInput.fileSizeBytes !== 'number' && typeof faceInput.selfieFileSizeBytes === 'number') {
-        livenessInput.fileSizeBytes = Math.max(livenessInput.fileSizeBytes ?? 0, faceInput.selfieFileSizeBytes);
-      }
-    }
+    const similarity = 0;
+    const isFaceMatch = false;
+    const livenessInput = (data.liveness ?? null) as any;
     const livenessAssess = hasFacePayload ? assessLiveness(livenessInput as any) : null;
     const prismaLiveness: PrismaLivenessVerdict = (livenessAssess?.verdict ?? 'NO_DATA') as PrismaLivenessVerdict;
     if (method === AttendanceCaptureMethod.FACE_RECOGNITION && livenessAssess) {
@@ -424,14 +396,7 @@ export class AttendanceService {
     ];
 
     const snapshot = this.buildPolicySnapshot(context, allowedMethods, mergedWarnings) as unknown as Record<string, unknown>;
-    snapshot.faceRecognition = hasFacePayload
-      ? {
-          similarity,
-          isFaceMatch,
-          threshold: DEFAULT_FACE_MATCH_THRESHOLD,
-          hasReferencePhoto: !!employeeForFace?.referencePhotoUrl,
-        }
-      : null;
+    snapshot.faceRecognition = null;
     snapshot.liveness = livenessAssess
       ? { verdict: livenessAssess.verdict, reasons: livenessAssess.reasons }
       : null;
@@ -468,32 +433,11 @@ export class AttendanceService {
       requiresReview:
         gpsEvaluation.requiresReview ||
         context.warnings.length > 0 ||
-        (hasFacePayload && !isFaceMatch) ||
         gpsCompliance.mockVerdict === MockLocationVerdict.SUSPICIOUS ||
         gpsCompliance.mockVerdict === MockLocationVerdict.CONFIRMED_FAKE,
       policySnapshot: snapshot as Prisma.InputJsonValue,
       notes: data.notes,
     });
-
-    if (hasFacePayload) {
-      try {
-        await prisma.attendanceFaceLog.create({
-          data: {
-            attendanceId: record.id,
-            employeeId: data.employeeId,
-            companyId: context.companyId,
-            selfieUrl: (faceInput?.selfieUrl ?? null) as any,
-            similarityScore: similarity,
-            isFaceMatch,
-            livenessVerdict: prismaLiveness,
-            mockVerdict: prismaMock,
-            notes: livenessAssess?.reasons?.join('; ') ?? gpsCompliance.warnings.join('; ') ?? null,
-          },
-        });
-      } catch (e) {
-        logger.error('Failed create AttendanceFaceLog (ignored)', { err: e as Error });
-      }
-    }
 
     logger.info('Attendance recorded', {
       employeeId: data.employeeId,

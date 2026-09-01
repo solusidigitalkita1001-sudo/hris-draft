@@ -3,6 +3,8 @@ import { Sidebar } from './Sidebar';
 import { TopNavigation } from './TopNavigation';
 import { useUIStore } from '@/stores/ui.store';
 import { cn } from '@/utils/cn';
+import { Suspense } from 'react';
+import { Loader2 } from 'lucide-react';
 
 export function DashboardLayout() {
   const { sidebarCollapsed } = useUIStore();
@@ -17,8 +19,15 @@ export function DashboardLayout() {
         )}
       >
         <TopNavigation />
-        <main className="p-4 lg:p-6">
-          <Outlet />
+        <main className="min-w-0 p-4 lg:p-6">
+          <Suspense fallback={
+            <div className="flex min-h-[40vh] items-center justify-center gap-3" role="status" aria-live="polite">
+              <Loader2 className="animate-spin text-primary" size={20} aria-hidden="true" />
+              <span className="text-sm text-muted-foreground">Memuat halaman…</span>
+            </div>
+          }>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

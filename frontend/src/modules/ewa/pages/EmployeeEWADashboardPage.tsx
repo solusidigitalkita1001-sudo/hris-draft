@@ -54,7 +54,7 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
     maxAllowed: number;
     remaining: number;
     earnedGrossToDate: number;
-    totalApproved: number;
+    totalReserved: number;
     breakdown: any;
   } | null>(null);
   const [limitError, setLimitError] = useState<string | null>(null);
@@ -70,7 +70,9 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
         maxAllowed,
         remaining,
         earnedGrossToDate: info.earnedGrossToDate ?? (info.earnedGross ?? 0),
-        totalApproved: typeof info.totalApproved === 'number' ? info.totalApproved : (info.existingApproved ?? 0),
+        totalReserved: typeof info.totalReserved === 'number'
+          ? info.totalReserved
+          : (typeof info.totalApproved === 'number' ? info.totalApproved : (info.existingApproved ?? 0)),
         breakdown: info.breakdown ?? null,
       });
     } catch (e: any) {
@@ -149,8 +151,8 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
               <div className="text-muted-foreground mb-1">Maksimal Tarik (50%)</div>
               <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(limitInfo.maxAllowed)}</div>
               <div className="mt-2 pt-2 border-t border-emerald-100 space-y-0.5 text-[11px]">
-                <div className="text-muted-foreground">Sudah Di-Approve/Dibayar periode ini:</div>
-                <div className="font-semibold text-amber-700 dark:text-amber-400">{formatCurrency(limitInfo.totalApproved)}</div>
+                <div className="text-muted-foreground">Pending/Disetujui/Dibayar periode ini:</div>
+                <div className="font-semibold text-amber-700 dark:text-amber-400">{formatCurrency(limitInfo.totalReserved)}</div>
                 <div className="text-muted-foreground mt-1">Sisa Bisa Ditarik:</div>
                 <div className="text-base font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(limitInfo.remaining)}</div>
               </div>

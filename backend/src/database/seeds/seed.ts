@@ -6,10 +6,11 @@ import { seedAdminUser } from './modules/04-admin-user.seed';
 import { seedTestData } from './modules/05-test-data.seed';
 import { seedWorkflowDefaults } from './modules/06-workflow-defaults.seed';
 import { seedPayrollReferences } from './modules/07-payroll-reference-tables.seed';
+import { runInSystemContext } from '@/shared/context/RequestContext';
 
 const prisma = new PrismaClient();
 
-async function main(): Promise<void> {
+async function seedAll(): Promise<void> {
   console.log('\n========================================');
   console.log('  HRMS Enterprise - Database Seed');
   console.log('========================================\n');
@@ -34,6 +35,10 @@ async function main(): Promise<void> {
   console.log('\n========================================');
   console.log('  ✓ Database seeding completed!');
   console.log('========================================\n');
+}
+
+async function main(): Promise<void> {
+  return runInSystemContext('database-seed', seedAll);
 }
 
 main()

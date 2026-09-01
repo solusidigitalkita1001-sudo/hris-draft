@@ -17,6 +17,8 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
 import { rabbitMQBroker } from '@/infrastructure/messaging/RabbitMQBroker';
 import { queueManager } from '@/infrastructure/queue/QueueManager';
+import { csrfProtection } from '@/shared/middleware/CsrfProtection';
+import { auditMutationFallback } from '@/shared/middleware/AuditLog';
 
 // Route imports
 import authRoutes from '@/modules/auth/auth.routes';
@@ -121,6 +123,8 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser(config.session.secret));
+app.use(csrfProtection);
+app.use(auditMutationFallback);
 // Task 1.3 (SEC-010): documents must go through the signed-URL route, never raw static.
 app.use('/uploads/documents', (_req: Request, res: Response) => {
   res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Use a signed document URL' });

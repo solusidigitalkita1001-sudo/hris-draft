@@ -124,7 +124,7 @@ function buildConfig(env: Env) {
       slowQueryMs: env.DB_SLOW_QUERY_MS,
     },
     redis: {
-      enabled: env.REDIS_ENABLED,
+      enabled: env.NODE_ENV !== 'test' && env.REDIS_ENABLED,
       url: env.REDIS_URL,
       host: env.REDIS_HOST,
       port: env.REDIS_PORT,
@@ -137,10 +137,10 @@ function buildConfig(env: Env) {
       exchange: env.RABBITMQ_EXCHANGE,
       queuePrefix: env.RABBITMQ_QUEUE_PREFIX,
       prefetch: env.RABBITMQ_PREFETCH,
-      enabled: env.RABBITMQ_ENABLED,
+      enabled: env.NODE_ENV !== 'test' && env.RABBITMQ_ENABLED,
     },
     queue: {
-      enabled: env.QUEUE_ENABLED ?? env.REDIS_ENABLED,
+      enabled: env.NODE_ENV !== 'test' && (env.QUEUE_ENABLED ?? env.REDIS_ENABLED),
       defaultAttempts: env.QUEUE_DEFAULT_ATTEMPTS,
       defaultBackoffMs: env.QUEUE_DEFAULT_BACKOFF_MS,
     },

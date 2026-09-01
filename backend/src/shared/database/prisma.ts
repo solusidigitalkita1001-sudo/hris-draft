@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
-import { getCurrentCompanyId, isSuperAdmin, isGroupAdmin } from '@/shared/context/RequestContext';
+import { getCurrentCompanyId, isSuperAdmin, isGroupAdmin, isSystemContext } from '@/shared/context/RequestContext';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -154,7 +154,11 @@ function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {
 
     const currentCompanyId = getCurrentCompanyId();
     if (!currentCompanyId) {
-      return next(params);
+      if (isSystemContext()) return next(params);
+      throw new Error(
+        `Tenant context is required for ${model}.${params.action}. ` +
+        'Use authenticated request context or an explicit runInSystemContext() boundary.'
+      );
     }
 
     if (WORKFLOW_MODELS.has(model) && (isSuperAdmin() || isGroupAdmin())) {

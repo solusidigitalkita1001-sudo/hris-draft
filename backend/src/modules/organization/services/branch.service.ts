@@ -5,7 +5,7 @@ import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError } from '@/shared/exceptions/AppError';
 import { CreateBranchDTO, UpdateBranchDTO, UpsertBranchAttendancePolicyDTO } from '../organization.dto';
 import { AttendancePolicyMethod } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
 
 const logger = new WinstonLogger('BranchService');

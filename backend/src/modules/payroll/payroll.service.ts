@@ -16,7 +16,7 @@ import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError } from '@/shared/exceptions/AppError';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { calculateBpjs } from '@/shared/payroll/bpjs';
@@ -334,6 +334,11 @@ export class PayrollService {
     const run = await this.findPayrollRunById(id);
     if (run.status !== 'APPROVED') {
       throw new BadRequestError('Only approved payroll runs can be disbursed');
+    }
+    if (run.approvedBy === userId) {
+      throw new ConflictError(
+        'Payroll maker-checker violation: the approver cannot disburse the same payroll run'
+      );
     }
 
     const employeeIds = Array.from(new Set((run.payslips || []).map((payslip) => payslip.employeeId)));

@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import config from '@/config';
 import { AuthError, TokenExpiredError } from '@/shared/exceptions/AppError';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'node:crypto';
 import { randomBytes } from 'crypto';
 
 export interface TokenPayload {
