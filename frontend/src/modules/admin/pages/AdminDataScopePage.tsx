@@ -1,123 +1,283 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  Building2,
+  Check,
+  Globe2,
+  MapPin,
+  RefreshCw,
+  Save,
+  Search,
+  ShieldCheck,
+  UserCheck,
+  Users,
+} from 'lucide-react';
+import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Select2 } from '@/components/ui/select2';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useCompanyStore } from '@/stores/company.store';
+import { Select2 } from '@/components/ui/select2';
 import {
   administrationService,
-  type DataScopeType,
-  type MyDataScopeResponse,
-  ROLE_OPTIONS,
   RESOURCE_OPTIONS,
   SCOPE_TYPE_OPTIONS,
+  type DataScopeType,
+  type MyDataScopeResponse,
 } from '@/services/administration.service';
 import {
-  Save,
-  RefreshCw,
-  ShieldCheck,
-  Info,
-  Building2,
-  MapPin,
-  Users,
-  UserCheck,
-  Globe2,
-} from 'lucide-react';
+  organizationService,
+  type Branch,
+  type Department,
+} from '@/services/organization.service';
+import { rbacService, type Role } from '@/services/rbac.service';
+import { useCompanyStore } from '@/stores/company.store';
 import { cn } from '@/utils/cn';
-import toast from 'react-hot-toast';
+
+interface ScopeEntity {
+  id: string;
+  name: string;
+  code?: string;
+}
+
+function messageFromError(error: unknown, fallback: string) {
+  return (error as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
+}
+
+function scopeNeedsSelection(scopeType: DataScopeType) {
+  return ['BRANCH_ONLY', 'DEPARTMENT_ONLY', 'SUB_DEPARTMENT_ONLY'].includes(scopeType);
+}
+
+function ScopeIcon({ type, size = 16 }: { type: DataScopeType; size?: number }) {
+  switch (type) {
+    case 'ALL': return <Globe2 size={size} />;
+    case 'COMPANY_ONLY': return <Building2 size={size} />;
+    case 'BRANCH_ONLY': return <MapPin size={size} />;
+    case 'DEPARTMENT_ONLY':
+    case 'SUB_DEPARTMENT_ONLY': return <Users size={size} />;
+    case 'EMPLOYEE_SELF': return <UserCheck size={size} />;
+    case 'MANAGER_TEAM': return <ShieldCheck size={size} />;
+  }
+}
+
+function ScopeEntityPicker({
+  entities,
+  selectedIds,
+  onChange,
+  loading,
+}: {
+  entities: ScopeEntity[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  loading: boolean;
+}) {
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return entities;
+    return entities.filter((entity) => (
+      entity.name.toLocaleLowerCase().includes(query)
+      || entity.code?.toLocaleLowerCase().includes(query)
+    ));
+  }, [entities, search]);
+
+  const toggle = (id: string) => onChange(
+    selectedIds.includes(id)
+      ? selectedIds.filter((selectedId) => selectedId !== id)
+      : [...selectedIds, id],
+  );
+
+  return (
+    <div className="overflow-hidden rounded-xl bg-muted/35">
+      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative min-w-0 flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Cari nama atau kode"
+            className="bg-background pl-9"
+            aria-label="Cari unit organisasi"
+          />
+        </div>
+        <span className="text-sm text-muted-foreground" aria-live="polite">
+          {selectedIds.length} dipilih
+        </span>
+      </div>
+      <div className="max-h-72 overflow-y-auto border-t border-border">
+        {loading ? (
+          <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <RefreshCw size={16} className="animate-spin" /> Memuat unit organisasi…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            Tidak ada unit yang cocok atau tersedia pada company ini.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filtered.map((entity) => {
+              const selected = selectedIds.includes(entity.id);
+              return (
+                <button
+                  key={entity.id}
+                  type="button"
+                  onClick={() => toggle(entity.id)}
+                  className="flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
+                  aria-pressed={selected}
+                >
+                  <span className={cn(
+                    'inline-flex size-5 shrink-0 items-center justify-center rounded border',
+                    selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-background',
+                  )}>
+                    {selected && <Check size={14} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{entity.name}</span>
+                    {entity.code && <span className="block truncate text-xs text-muted-foreground">{entity.code}</span>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function AdminDataScopePage() {
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
-
-  const [roleCode, setRoleCode] = useState<string>('EMPLOYEE');
-  const [resource, setResource] = useState<string>('ALL');
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [roleCode, setRoleCode] = useState('');
+  const [resource, setResource] = useState('ALL');
   const [scopeType, setScopeType] = useState<DataScopeType>('ALL');
-  const [scopeValue, setScopeValue] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [savedSnapshot, setSavedSnapshot] = useState('ALL:');
+  const [loadingContext, setLoadingContext] = useState(true);
+  const [loadingScope, setLoadingScope] = useState(false);
   const [saving, setSaving] = useState(false);
-
+  const [loadError, setLoadError] = useState('');
   const [myScope, setMyScope] = useState<MyDataScopeResponse | null>(null);
-  const [myScopeLoading, setMyScopeLoading] = useState(false);
 
-  const fetchCurrentScope = useCallback(async () => {
-    if (!companyId || !roleCode) {
-      setScopeType('ALL');
-      setScopeValue('');
+  const roleOptions = useMemo(() => roles.map((role) => ({
+    value: role.code,
+    label: `${role.name} · ${role.scope}`,
+  })), [roles]);
+
+  const subDepartments = useMemo(() => {
+    const unique = new Map<string, Department>();
+    for (const department of departments) {
+      for (const subDepartment of department.subDepartments ?? []) {
+        unique.set(subDepartment.id, subDepartment);
+      }
+    }
+    return Array.from(unique.values());
+  }, [departments]);
+
+  const scopeEntities = useMemo<ScopeEntity[]>(() => {
+    if (scopeType === 'BRANCH_ONLY') return branches;
+    if (scopeType === 'DEPARTMENT_ONLY') return departments;
+    if (scopeType === 'SUB_DEPARTMENT_ONLY') return subDepartments;
+    return [];
+  }, [branches, departments, scopeType, subDepartments]);
+
+  const currentSnapshot = `${scopeType}:${[...selectedIds].sort().join(',')}`;
+  const isDirty = currentSnapshot !== savedSnapshot;
+
+  const fetchContext = useCallback(async () => {
+    if (!companyId) {
+      setRoles([]);
+      setBranches([]);
+      setDepartments([]);
+      setRoleCode('');
+      setLoadingContext(false);
       return;
     }
-    setLoading(true);
-    try {
-      const data = (await administrationService.listRoleDataScope(
-        companyId,
-        roleCode,
-        resource
-      )) as any;
-      if (Array.isArray(data)) {
-        const specific = data.find((d: any) => d.resource === resource);
-        if (specific) {
-          setScopeType(specific.scopeType as DataScopeType);
-          setScopeValue(specific.scopeValue || '');
-        } else {
-          setScopeType('ALL');
-          setScopeValue('');
-        }
-      } else if (data) {
-        setScopeType(data.scopeType as DataScopeType);
-        setScopeValue(data.scopeValue || '');
-      } else {
-        setScopeType('ALL');
-        setScopeValue('');
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error('Gagal memuat data scope');
-    } finally {
-      setLoading(false);
-    }
-  }, [companyId, roleCode, resource]);
 
-  useEffect(() => {
-    fetchCurrentScope();
-  }, [fetchCurrentScope]);
-
-  const fetchMyScope = useCallback(async () => {
-    if (!companyId) return;
-    setMyScopeLoading(true);
+    setLoadingContext(true);
+    setLoadError('');
     try {
-      const res = await administrationService.getMyDataScope({
-        companyId,
-        resource: 'employee',
-      });
-      setMyScope(res);
-    } catch (e) {
-      console.error(e);
+      const [roleData, branchData, departmentData] = await Promise.all([
+        rbacService.findAll(companyId),
+        organizationService.getBranches(companyId),
+        organizationService.getDepartments(companyId),
+      ]);
+      const activeRoles = roleData.filter((role) => role.status === 'ACTIVE');
+      setRoles(activeRoles);
+      setBranches(branchData.filter((branch) => branch.status === 'ACTIVE'));
+      setDepartments(departmentData.filter((department) => department.status === 'ACTIVE'));
+      setRoleCode((current) => (
+        activeRoles.some((role) => role.code === current)
+          ? current
+          : activeRoles[0]?.code || ''
+      ));
+    } catch (error) {
+      setLoadError(messageFromError(error, 'Konteks role dan organisasi tidak dapat dimuat.'));
     } finally {
-      setMyScopeLoading(false);
+      setLoadingContext(false);
     }
   }, [companyId]);
 
+  const fetchScope = useCallback(async () => {
+    if (!companyId || !roleCode) return;
+    setLoadingScope(true);
+    setLoadError('');
+    try {
+      const data = await administrationService.listRoleDataScope(companyId, roleCode, resource);
+      const record = Array.isArray(data)
+        ? data.find((item) => item.resource === resource) ?? null
+        : data;
+      const nextType = (record?.scopeType ?? 'ALL') as DataScopeType;
+      const nextIds = record?.scopeValue
+        ? record.scopeValue.split(',').map((id) => id.trim()).filter(Boolean)
+        : [];
+      setScopeType(nextType);
+      setSelectedIds(nextIds);
+      setSavedSnapshot(`${nextType}:${[...nextIds].sort().join(',')}`);
+
+      const effective = await administrationService.getMyDataScope({ companyId, resource });
+      setMyScope(effective);
+    } catch (error) {
+      setLoadError(messageFromError(error, 'Data access tidak dapat dimuat. Perubahan belum dilakukan.'));
+    } finally {
+      setLoadingScope(false);
+    }
+  }, [companyId, resource, roleCode]);
+
+  useEffect(() => { void fetchContext(); }, [fetchContext]);
+  useEffect(() => { void fetchScope(); }, [fetchScope]);
   useEffect(() => {
-    fetchMyScope();
-  }, [fetchMyScope]);
+    if (!isDirty) return undefined;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [isDirty]);
+
+  const confirmDiscard = () => !isDirty || window.confirm('Perubahan data access belum disimpan. Buang perubahan?');
+
+  const handleRoleChange = (nextRole: string) => {
+    if (confirmDiscard()) setRoleCode(nextRole);
+  };
+
+  const handleResourceChange = (nextResource: string) => {
+    if (confirmDiscard()) setResource(nextResource);
+  };
+
+  const handleScopeTypeChange = (nextType: DataScopeType) => {
+    if (nextType === scopeType) return;
+    setScopeType(nextType);
+    setSelectedIds([]);
+  };
 
   const handleSave = async () => {
-    if (!companyId || !roleCode) {
-      toast.error('Company / Role belum dipilih');
+    if (!companyId || !roleCode || !isDirty) return;
+    if (scopeNeedsSelection(scopeType) && selectedIds.length === 0) {
+      toast.error('Pilih minimal satu unit organisasi untuk scope ini.');
       return;
     }
-    const needValue = [
-      'BRANCH_ONLY',
-      'DEPARTMENT_ONLY',
-      'SUB_DEPARTMENT_ONLY',
-    ].includes(scopeType);
-    if (needValue && !scopeValue.trim()) {
-      toast.error(
-        'scopeValue (comma-separated UUIDs) wajib diisi untuk scope level BRANCH/DEPARTMENT/SUB_DEPARTMENT'
-      );
-      return;
-    }
+
     setSaving(true);
     try {
       await administrationService.upsertRoleDataScope({
@@ -125,279 +285,178 @@ export function AdminDataScopePage() {
         roleCode,
         resource,
         scopeType,
-        scopeValue: scopeValue.trim() || undefined,
+        scopeValue: scopeNeedsSelection(scopeType) ? selectedIds.join(',') : undefined,
       });
-      toast.success('Data scope berhasil disimpan');
-      fetchMyScope();
-    } catch (e: any) {
-      console.error(e);
-      toast.error(
-        e?.response?.data?.message || 'Gagal menyimpan data scope'
-      );
+      setSavedSnapshot(currentSnapshot);
+      toast.success('Data access berhasil disimpan');
+      setMyScope(await administrationService.getMyDataScope({ companyId, resource }));
+    } catch (error) {
+      toast.error(messageFromError(error, 'Data access gagal disimpan. Coba lagi.'));
     } finally {
       setSaving(false);
     }
   };
 
-  const needScopeValue = [
-    'BRANCH_ONLY',
-    'DEPARTMENT_ONLY',
-    'SUB_DEPARTMENT_ONLY',
-  ].includes(scopeType);
-
-  const scopeIcon = (type: DataScopeType) => {
-    switch (type) {
-      case 'ALL':
-        return <Globe2 size={14} />;
-      case 'COMPANY_ONLY':
-        return <Building2 size={14} />;
-      case 'BRANCH_ONLY':
-        return <MapPin size={14} />;
-      case 'DEPARTMENT_ONLY':
-      case 'SUB_DEPARTMENT_ONLY':
-        return <Users size={14} />;
-      case 'EMPLOYEE_SELF':
-        return <UserCheck size={14} />;
-      case 'MANAGER_TEAM':
-        return <ShieldCheck size={14} />;
-    }
-  };
-
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <PageHeader
-        title="Data Access Scope per Role"
-        description="Batasi cakupan data yang bisa diakses user per role. Berlaku untuk list API (middleware inject filter ke query)."
+        title="Data Access"
+        description="Batasi baris data yang boleh dilihat setiap role berdasarkan company dan unit organisasi."
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void fetchScope()} disabled={loadingScope || !roleCode}>
+              <RefreshCw size={16} className={cn('mr-2', loadingScope && 'animate-spin')} /> Muat ulang
+            </Button>
+            <Button size="sm" onClick={() => void handleSave()} disabled={saving || loadingScope || !isDirty}>
+              <Save size={16} className="mr-2" />
+              {saving ? 'Menyimpan…' : isDirty ? 'Simpan perubahan' : 'Tersimpan'}
+            </Button>
+          </div>
+        )}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white dark:bg-slate-900 border rounded-xl p-5 space-y-4 shadow-sm">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <ShieldCheck size={18} className="text-primary" />
-              Konfigurasi Scope
-            </h3>
+      {loadError && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl bg-destructive/10 p-4 text-destructive sm:flex-row sm:items-center sm:justify-between">
+          <span className="flex min-w-0 items-start gap-2 text-sm">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <span>{loadError}</span>
+          </span>
+          <Button variant="outline" size="sm" onClick={() => void fetchContext()}>Coba lagi</Button>
+        </div>
+      )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <section className="min-w-0 overflow-hidden rounded-2xl bg-card shadow-sm" aria-labelledby="data-access-config">
+          <div className="p-5 sm:p-6">
+            <div className="mb-5 flex items-start gap-3">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ShieldCheck size={20} />
+              </span>
               <div>
-                <Label>Company</Label>
-                <Input
-                  value={activeCompany?.name || '—'}
-                  disabled
-                  placeholder="No active company"
-                  className="mt-1.5"
-                />
+                <h2 id="data-access-config" className="text-lg font-semibold">Konfigurasi role</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Resource spesifik mengatur batas data untuk satu area aplikasi.</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Company</label>
+                <Input value={activeCompany?.name || 'Belum ada company aktif'} disabled />
               </div>
               <div>
-                <Label>Role</Label>
+                <label className="mb-1.5 block text-sm font-medium">Role</label>
                 <Select2
                   value={roleCode}
-                  onValueChange={(v) => setRoleCode(v)}
-                  options={ROLE_OPTIONS}
-                  placeholder="Pilih role"
-                  className="mt-1.5"
+                  onValueChange={handleRoleChange}
+                  options={roleOptions}
+                  placeholder={loadingContext ? 'Memuat role…' : 'Pilih role'}
+                  disabled={loadingContext || roleOptions.length === 0}
                 />
               </div>
               <div>
-                <Label>Resource</Label>
-                <Select2
-                  value={resource}
-                  onValueChange={(v) => setResource(v)}
-                  options={RESOURCE_OPTIONS}
-                  placeholder="Pilih resource"
-                  className="mt-1.5"
-                />
+                <label className="mb-1.5 block text-sm font-medium">Resource</label>
+                <Select2 value={resource} onValueChange={handleResourceChange} options={RESOURCE_OPTIONS} />
               </div>
             </div>
+          </div>
 
-            <div className="pt-2">
-              <Label className="mb-2 block">Scope Type</Label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {SCOPE_TYPE_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.value}
+          <div className="border-t border-border p-5 sm:p-6">
+            <h3 className="font-semibold">Cakupan data</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Pilih batas paling sesuai untuk role dan resource ini.</p>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {SCOPE_TYPE_OPTIONS.map((option) => {
+                const selected = scopeType === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleScopeTypeChange(option.value)}
+                    aria-pressed={selected}
                     className={cn(
-                      'relative flex flex-col gap-1 px-4 py-3 rounded-xl border cursor-pointer transition-all',
-                      scopeType === opt.value
-                        ? 'bg-primary/5 border-primary ring-2 ring-primary/20'
-                        : 'bg-transparent border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                      'min-h-24 rounded-xl p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40',
+                      selected ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-foreground hover:bg-muted',
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="scopeType"
-                        value={opt.value}
-                        checked={scopeType === opt.value}
-                        onChange={() =>
-                          setScopeType(opt.value as DataScopeType)
-                        }
-                        className="accent-primary"
-                      />
-                      <span
-                        className={cn(
-                          'flex items-center gap-1.5 text-sm font-medium',
-                          scopeType === opt.value
-                            ? 'text-primary'
-                            : 'text-slate-700 dark:text-slate-200'
-                        )}
-                      >
-                        {scopeIcon(opt.value)}
-                        {opt.label}
-                      </span>
-                    </div>
-                    {opt.description && (
-                      <span className="text-xs text-slate-500 dark:text-slate-400 pl-6">
-                        {opt.description}
+                    <span className="flex items-center gap-2 font-medium">
+                      <ScopeIcon type={option.value} /> {option.label}
+                    </span>
+                    {option.description && (
+                      <span className={cn('mt-1.5 block text-sm', selected ? 'text-primary/80' : 'text-muted-foreground')}>
+                        {option.description}
                       </span>
                     )}
-                  </label>
-                ))}
-              </div>
+                  </button>
+                );
+              })}
             </div>
 
-            {needScopeValue && (
-              <div className="pt-2">
-                <Label htmlFor="scopeValue">
-                  Scope Value (comma-separated UUIDs)
-                </Label>
-                <textarea
-                  id="scopeValue"
-                  value={scopeValue}
-                  onChange={(e) => setScopeValue(e.target.value)}
-                  rows={4}
-                  placeholder={
-                    'Contoh untuk DEPARTMENT_ONLY:\nuuid-dept-1,uuid-dept-2,uuid-dept-3'
-                  }
-                  className="mt-1.5 w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
+            {scopeNeedsSelection(scopeType) && (
+              <div className="mt-5">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-medium">Unit yang boleh diakses</h3>
+                    <p className="text-sm text-muted-foreground">Pilihan disimpan sebagai ID, tetapi admin bekerja dengan nama unit.</p>
+                  </div>
+                  {selectedIds.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>Hapus pilihan</Button>
+                  )}
+                </div>
+                <ScopeEntityPicker
+                  entities={scopeEntities}
+                  selectedIds={selectedIds}
+                  onChange={setSelectedIds}
+                  loading={loadingContext}
                 />
-                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
-                  <Info size={12} className="mt-0.5 shrink-0" />
-                  Pisahkan dengan koma. Untuk batch ini input manual UUID.
-                  Nanti bisa diganti multi-select picker.
-                </p>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 pt-2">
-              <Button
-                variant="secondary"
-                onClick={fetchCurrentScope}
-                disabled={loading}
-              >
-                <RefreshCw
-                  size={16}
-                  className={cn('mr-2', loading && 'animate-spin')}
-                />
-                Refresh
-              </Button>
-              <Button
-                variant="default"
-                onClick={handleSave}
-                disabled={saving || loading}
-              >
-                <Save size={16} className="mr-2" />
-                {saving ? 'Saving...' : 'Save Scope'}
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-slate-900 border rounded-xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <UserCheck size={18} className="text-emerald-600" />
-                My Data Scope (Current User)
-              </h3>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={fetchMyScope}
-                disabled={myScopeLoading}
-              >
-                <RefreshCw
-                  size={14}
-                  className={cn('mr-1.5', myScopeLoading && 'animate-spin')}
-                />
-                Reload
-              </Button>
-            </div>
-            {myScopeLoading && (
-              <div className="text-sm text-slate-400 py-4 text-center">
-                Loading current user scope...
-              </div>
-            )}
-            {!myScopeLoading && myScope && (
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between py-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    Role
-                  </span>
-                  <span className="font-medium">{myScope.roleCode ?? '—'}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    Resource
-                  </span>
-                  <span className="font-medium font-mono text-xs">
-                    {myScope.resource}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    Scope Type
-                  </span>
-                  <span
-                    className={cn(
-                      'inline-flex items-center gap-1.5 font-medium px-2 py-0.5 rounded',
-                      myScope.scopeType === 'ALL' &&
-                        'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-                      myScope.scopeType === 'EMPLOYEE_SELF' &&
-                        'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
-                      myScope.scopeType === 'DEPARTMENT_ONLY' &&
-                        'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                    )}
-                  >
-                    {scopeIcon(myScope.scopeType)}
-                    {myScope.scopeType}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    Scope Value
-                  </span>
-                  <span className="font-mono text-xs max-w-[160px] truncate text-right">
-                    {myScope.scopeValue ?? '—'}
-                  </span>
-                </div>
-                <div className="pt-2">
-                  <span className="text-slate-500 dark:text-slate-400 block mb-1.5">
-                    Applied Filter (parsed)
-                  </span>
-                  <pre className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono overflow-x-auto">
-{JSON.stringify(myScope.parsedFilter, null, 2)}
-                  </pre>
-                </div>
               </div>
             )}
           </div>
+        </section>
 
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-sm">
-            <div className="flex items-start gap-2">
-              <Info size={16} className="text-amber-600 mt-0.5 shrink-0" />
-              <div className="space-y-1.5 text-amber-800 dark:text-amber-200">
-                <p className="font-semibold">Catatan Scope Resolve</p>
-                <ul className="list-disc list-inside space-y-0.5 text-xs">
-                  <li>Resource ALL = fallback, resource spesifik override ALL</li>
-                  <li>Paling restrictive menang (SELF {'>'} DEPT {'>'} BRANCH {'>'} COMPANY {'>'} ALL)</li>
-                  <li>MANAGER_TEAM = placeholder (belum apply filter)</li>
-                  <li>Filter di-inject middleware ke req.query GET list endpoints</li>
-                </ul>
-              </div>
+        <aside className="h-fit rounded-2xl bg-card p-5 shadow-sm" aria-labelledby="effective-scope-title">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <UserCheck size={18} />
+            </span>
+            <div>
+              <h2 id="effective-scope-title" className="font-semibold">Akses efektif saya</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Preview hasil resolver untuk user yang sedang login.</p>
             </div>
           </div>
-        </div>
+
+          {loadingScope ? (
+            <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
+              <RefreshCw size={16} className="animate-spin" /> Menghitung scope…
+            </div>
+          ) : myScope ? (
+            <dl className="mt-5 space-y-4 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Role terpilih resolver</dt>
+                <dd className="mt-1 font-medium">{myScope.roleCode ?? 'Tidak ada konfigurasi khusus'}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Resource</dt>
+                <dd className="mt-1 font-medium">{myScope.resource}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Scope efektif</dt>
+                <dd className="mt-1 inline-flex items-center gap-2 rounded-lg bg-muted px-2.5 py-1.5 font-medium">
+                  <ScopeIcon type={myScope.scopeType} /> {myScope.scopeType}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Filter yang diterapkan</dt>
+                <dd className="mt-1 break-words rounded-lg bg-muted p-3 text-xs">
+                  {Object.keys(myScope.parsedFilter).length > 0
+                    ? JSON.stringify(myScope.parsedFilter, null, 2)
+                    : 'Tidak ada filter tambahan'}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="mt-5 text-sm text-muted-foreground">Preview belum tersedia.</p>
+          )}
+        </aside>
       </div>
     </div>
   );

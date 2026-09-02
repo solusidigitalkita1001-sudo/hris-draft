@@ -1,7 +1,12 @@
-import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, type ChangeEvent, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { employeeService, type Employee, type CareerTransaction } from '@/services/employee.service';
+import {
+  employeeService,
+  type Employee,
+  type CareerTransaction,
+  type FaceProfileStatus,
+} from '@/services/employee.service';
 import { organizationService, type Branch, type Department, type Position } from '@/services/organization.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -13,6 +18,7 @@ import {
   ArrowLeft, UserRound, Mail, Phone, Briefcase,
   CalendarDays, BadgeCheck, Sparkles, Plus, ArrowRightLeft, Loader2,
   Users, GraduationCap, PhoneCall, BookOpen, Award, Paperclip, type LucideIcon,
+  ScanFace, ShieldCheck, Upload, Trash2,
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/utils/format';
 import {
@@ -355,6 +361,10 @@ export function EmployeeDetailPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [faceProfile, setFaceProfile] = useState<FaceProfileStatus>({ enrolled: false });
+  const [faceProfileError, setFaceProfileError] = useState<string | null>(null);
+  const [savingFaceProfile, setSavingFaceProfile] = useState(false);
+  const facePhotoInputRef = useRef<HTMLInputElement | null>(null);
   const requestedEmployeeIdRef = useRef<string | null>(null);
   const requestedCompanyIdRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState('family');
@@ -427,6 +437,14 @@ export function EmployeeDetailPage() {
       ]);
       setEmployee(employeeData);
       setTransactions(careerData);
+      try {
+        const faceProfileData = await employeeService.getFaceProfile(id);
+        setFaceProfile(faceProfileData);
+        setFaceProfileError(null);
+      } catch (error) {
+        console.error('Failed to fetch face profile:', error);
+        setFaceProfileError('Status profil wajah belum dapat dimuat. Coba muat ulang halaman.');
+      }
     } catch (error) {
       console.error('Failed to fetch employee:', error);
       toast.error(t('employees.detail.toast.loadFailed'));
@@ -465,6 +483,47 @@ export function EmployeeDetailPage() {
 
     fetchRefs();
   }, [employee?.companyId]);
+
+  const handleFacePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const photo = event.target.files?.[0];
+    event.target.value = '';
+    if (!id || !photo) return;
+    if (!['image/jpeg', 'image/png'].includes(photo.type)) {
+      toast.error('Gunakan foto JPEG atau PNG.');
+      return;
+    }
+    if (photo.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran foto maksimal 5 MB.');
+      return;
+    }
+
+    try {
+      setSavingFaceProfile(true);
+      const status = await employeeService.enrollFaceProfile(id, photo);
+      setFaceProfile(status);
+      setFaceProfileError(null);
+      toast.success('Profil wajah berhasil didaftarkan.');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Registrasi wajah gagal.');
+    } finally {
+      setSavingFaceProfile(false);
+    }
+  };
+
+  const handleDeleteFaceProfile = async () => {
+    if (!id || !window.confirm('Hapus profil wajah karyawan ini? Face recognition tidak bisa dipakai sampai registrasi ulang.')) return;
+    try {
+      setSavingFaceProfile(true);
+      await employeeService.deleteFaceProfile(id);
+      setFaceProfile({ enrolled: false });
+      setFaceProfileError(null);
+      toast.success('Profil wajah dihapus.');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Gagal menghapus profil wajah.');
+    } finally {
+      setSavingFaceProfile(false);
+    }
+  };
 
   if (loading) {
     return <div className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>;
@@ -655,6 +714,73 @@ export function EmployeeDetailPage() {
                     >
                       <div className="grid gap-3">
                         <DetailItem label={t('employees.detail.fields.createdAt')} value={formatDateTime(employee.createdAt)} />
+                      </div>
+                    </DetailCard>
+
+                    <DetailCard
+                      title="Profil face recognition"
+                      subtitle="Template biometrik untuk verifikasi check-in. Foto sumber tidak disimpan."
+                    >
+                      <div className="space-y-4">
+                        <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/15 p-4">
+                          <div className={cn(
+                            'rounded-xl border p-2.5',
+                            faceProfile.enrolled
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              : 'border-border bg-background text-muted-foreground',
+                          )}>
+                            {faceProfile.enrolled && !faceProfileError ? <ShieldCheck size={18} /> : <ScanFace size={18} />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-foreground">
+                              {faceProfileError
+                                ? 'Status profil tidak tersedia'
+                                : faceProfile.enrolled
+                                  ? 'Wajah sudah terdaftar'
+                                  : 'Belum ada profil wajah'}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              {faceProfileError ?? (faceProfile.enrolled
+                                ? `Diperbarui ${faceProfile.updatedAt ? formatDateTime(faceProfile.updatedAt) : '-'}. Template disimpan terenkripsi.`
+                                : 'Unggah atau ambil satu foto frontal dengan pencahayaan yang jelas.')}
+                            </p>
+                          </div>
+                        </div>
+
+                        <input
+                          ref={facePhotoInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          capture="user"
+                          className="sr-only"
+                          aria-label="Pilih foto untuk registrasi wajah"
+                          onChange={handleFacePhoto}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={faceProfile.enrolled ? 'outline' : 'default'}
+                            disabled={savingFaceProfile || Boolean(faceProfileError)}
+                            onClick={() => facePhotoInputRef.current?.click()}
+                          >
+                            {savingFaceProfile ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Upload size={15} className="mr-2" />}
+                            {faceProfile.enrolled ? 'Daftarkan ulang' : 'Daftarkan wajah'}
+                          </Button>
+                          {faceProfile.enrolled ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={savingFaceProfile || Boolean(faceProfileError)}
+                              onClick={handleDeleteFaceProfile}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 size={15} className="mr-2" />
+                              Hapus profil
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
                     </DetailCard>
 

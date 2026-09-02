@@ -116,6 +116,7 @@ model Company {
   attendanceCorrections                 AttendanceCorrection[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
+  employeeFaceProfiles                  EmployeeFaceProfile[]
   /// C.1 Claim Category Limit
   claimCategoryLimits                   ClaimCategoryLimit[]
   /// C.4 Earned Wage Access
@@ -2150,8 +2151,9 @@ model Employee {
   experiences                                   EmployeeExperience[]
   attachments                                   EmployeeAttachment[]
   bankAccounts                                  EmployeeBankAccount[]
-  /// B.7 Attendance Face Rec: audit logs setiap clock-in dengan selfie + similarity
+  /// B.7 Attendance Face Rec: audit logs keputusan; foto selfie tidak disimpan
   faceLogs                                      AttendanceFaceLog[]
+  faceProfile                                   EmployeeFaceProfile?
   /// C.4 EWA MVP: list transaksi earned wage access karyawan
   earnedWageAccesses                            EarnedWageAccess[]
   /// C.5 Daily Activity
@@ -3052,6 +3054,26 @@ model AttendanceFaceLog {
   @@index([companyId])
   @@index([isFaceMatch])
   @@map("attendance_face_logs")
+}
+
+/// Server-owned biometric template. The encrypted embedding is never exposed
+/// through the normal Employee API and the source photo is not retained.
+model EmployeeFaceProfile {
+  id                   String   @id @default(uuid()) @db.VarChar(36)
+  employeeId           String   @unique @map("employee_id") @db.VarChar(36)
+  companyId            String   @map("company_id") @db.VarChar(36)
+  encryptedEmbedding   String   @map("encrypted_embedding") @db.LongText
+  modelVersion         String   @map("model_version") @db.VarChar(100)
+  embeddingDimensions  Int      @map("embedding_dimensions")
+  enrollmentConfidence Float    @map("enrollment_confidence")
+  enrolledAt           DateTime @default(now()) @map("enrolled_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@map("employee_face_profiles")
 }
 
 /// Overtime request

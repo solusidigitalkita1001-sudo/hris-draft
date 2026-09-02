@@ -4,6 +4,40 @@ import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 
 export class EmployeeController {
+  async getFaceProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const status = await employeeService.getFaceProfile(req.params.id as string);
+      res.json(Result.success(status));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async enrollFaceProfile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.file?.buffer) {
+        res.status(400).json({ success: false, message: 'Foto wajah wajib diunggah pada field photo' });
+        return;
+      }
+      const status = await employeeService.enrollFaceProfile(
+        req.params.id as string,
+        req.file.buffer,
+      );
+      res.json(Result.updated(status));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteFaceProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+      await employeeService.deleteFaceProfile(req.params.id as string);
+      res.json(Result.deleted());
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async findAll(req: Request, res: Response, next: NextFunction) {
     try {
       const cid = req.query.companyId as string;

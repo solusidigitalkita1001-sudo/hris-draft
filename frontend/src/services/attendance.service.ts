@@ -1,6 +1,8 @@
 import api from './api';
 import type { AttendancePolicyMethod, BranchAttendancePolicy } from './organization.service';
 
+export type AttendanceCaptureMethod = 'FINGERPRINT' | 'MOBILE_GPS' | 'MANUAL' | 'FACE_RECOGNITION';
+
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
@@ -10,7 +12,7 @@ export interface AttendanceRecord {
   checkIn?: string;
   checkOut?: string;
   status: string;
-  method?: 'FINGERPRINT' | 'MOBILE_GPS' | 'MANUAL';
+  method?: AttendanceCaptureMethod;
   checkInLatitude?: number | null;
   checkInLongitude?: number | null;
   checkOutLatitude?: number | null;
@@ -59,7 +61,7 @@ export interface AttendanceContext {
     crossesMidnight?: boolean;
   };
   policy: BranchAttendancePolicy;
-  allowedMethods: Array<'FINGERPRINT' | 'MOBILE_GPS' | 'MANUAL'>;
+  allowedMethods: AttendanceCaptureMethod[];
   warnings: string[];
   policySnapshot: Record<string, unknown>;
 }
@@ -69,16 +71,19 @@ export interface CreateAttendancePayload {
   companyId: string;
   date: string;
   checkIn: string;
-  method: 'FINGERPRINT' | 'MOBILE_GPS' | 'MANUAL';
+  method: AttendanceCaptureMethod;
   source?: string;
   checkInLatitude?: number;
   checkInLongitude?: number;
   notes?: string;
+  faceRecognition?: {
+    selfieImage: string;
+  };
 }
 
 export interface CheckoutAttendancePayload {
   checkOut: string;
-  method?: 'FINGERPRINT' | 'MOBILE_GPS' | 'MANUAL';
+  method?: AttendanceCaptureMethod;
   checkOutLatitude?: number;
   checkOutLongitude?: number;
   notes?: string;

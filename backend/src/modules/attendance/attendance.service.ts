@@ -29,6 +29,16 @@ import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-eng
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
 import prisma from '@/shared/database/prisma';
+import {
+  extractFaceVectorFromImage,
+  FaceExtractionError,
+  type FaceExtractionResult,
+} from '@/shared/attendance/face-extractor';
+import {
+  compareFaceVectors,
+  DEFAULT_FACE_MATCH_THRESHOLD,
+} from '@/shared/attendance/face-recognition';
+import { decryptFaceEmbedding } from '@/shared/security/biometric-crypto';
 
 export function enforceTrustedFaceRecognition(
   method: AttendanceCaptureMethod,
@@ -63,11 +73,16 @@ export function enforceTrustedFaceRecognition(
   if (!hasServerReference) {
     throw new BadRequestError('Profil wajah karyawan belum terdaftar. Hubungi HR sebelum memakai face recognition.');
   }
-  // Trusted storage retrieval and server-side reference decoding are not wired
-  // yet. Never accept a client-computed similarity as proof.
-  throw new ServiceUnavailableError(
-    'Face recognition dinonaktifkan sementara sampai reference profile dapat diverifikasi penuh di server. Gunakan metode attendance lain.',
-  );
+}
+
+function translateFaceExtractionError(error: unknown): never {
+  if (error instanceof FaceExtractionError) {
+    if (error.code === 'MODEL_UNAVAILABLE') {
+      throw new ServiceUnavailableError(error.message);
+    }
+    throw new BadRequestError(error.message);
+  }
+  throw error;
 }
 
 type WorkflowSource = 'WORKFLOW' | 'LEGACY';
@@ -338,22 +353,99 @@ export class AttendanceService {
       phaseLabel: 'Check-in',
     });
 
-    // Biometric requests are fail-closed until trusted enrollment, storage,
-    // image decoding, and server-side embedding extraction are wired end-to-end.
     const faceInput = data.faceRecognition as any;
     const hasFacePayload = method === AttendanceCaptureMethod.FACE_RECOGNITION || !!faceInput;
 
     const employeeForFace = hasFacePayload
-      ? await prisma.employee.findUnique({
-          where: { id: data.employeeId, companyId: context.companyId },
-          select: { id: true, companyId: true, referencePhotoUrl: true, referencePhotoUpdatedAt: true },
+      ? await prisma.employee.findFirst({
+          where: { id: data.employeeId, companyId: context.companyId, deletedAt: null },
+          select: {
+            id: true,
+            companyId: true,
+            faceProfile: {
+              select: {
+                encryptedEmbedding: true,
+                modelVersion: true,
+                embeddingDimensions: true,
+              },
+            },
+          },
         })
       : null;
 
-    enforceTrustedFaceRecognition(method, faceInput, Boolean(employeeForFace?.referencePhotoUrl));
+    enforceTrustedFaceRecognition(method, faceInput, Boolean(employeeForFace?.faceProfile));
 
-    const similarity = 0;
-    const isFaceMatch = false;
+    let similarity = 0;
+    let isFaceMatch = false;
+    let faceExtraction: FaceExtractionResult | null = null;
+
+    if (method === AttendanceCaptureMethod.FACE_RECOGNITION) {
+      const profile = employeeForFace?.faceProfile;
+      if (!employeeForFace || !profile) {
+        throw new BadRequestError('Profil wajah karyawan belum terdaftar.');
+      }
+
+      try {
+        faceExtraction = await extractFaceVectorFromImage(faceInput.selfieImage);
+      } catch (error) {
+        translateFaceExtractionError(error);
+      }
+
+      if (faceExtraction.modelVersion !== profile.modelVersion) {
+        throw new ServiceUnavailableError(
+          'Profil wajah dibuat dengan model berbeda. HR perlu melakukan registrasi wajah ulang.',
+        );
+      }
+
+      let referenceVector: number[];
+      try {
+        referenceVector = decryptFaceEmbedding(profile.encryptedEmbedding, {
+          companyId: employeeForFace.companyId,
+          employeeId: employeeForFace.id,
+          modelVersion: profile.modelVersion,
+        });
+      } catch (error) {
+        logger.error('Failed to decrypt employee face profile', {
+          employeeId: employeeForFace.id,
+          companyId: employeeForFace.companyId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw new ServiceUnavailableError(
+          'Profil wajah tidak dapat diverifikasi. HR perlu melakukan registrasi wajah ulang.',
+        );
+      }
+
+      if (
+        referenceVector.length !== profile.embeddingDimensions ||
+        faceExtraction.vector.length !== profile.embeddingDimensions
+      ) {
+        throw new ServiceUnavailableError(
+          'Dimensi profil wajah tidak kompatibel. HR perlu melakukan registrasi wajah ulang.',
+        );
+      }
+
+      const match = compareFaceVectors(
+        referenceVector,
+        faceExtraction.vector,
+        DEFAULT_FACE_MATCH_THRESHOLD,
+      );
+      similarity = match.score;
+      isFaceMatch = match.isMatch;
+      if (!isFaceMatch) {
+        await prisma.attendanceFaceLog.create({
+          data: {
+            employeeId: employeeForFace.id,
+            companyId: employeeForFace.companyId,
+            similarityScore: similarity,
+            isFaceMatch: false,
+            livenessVerdict: 'NO_DATA',
+            mockVerdict: 'LIKELY_REAL',
+            notes: `FACE_MISMATCH threshold=${match.threshold} model=${faceExtraction.modelVersion}`,
+          },
+        });
+        throw new BadRequestError('Wajah tidak cocok dengan profil karyawan yang terdaftar.');
+      }
+    }
     const livenessInput = (data.liveness ?? null) as any;
     const livenessAssess = hasFacePayload ? assessLiveness(livenessInput as any) : null;
     const prismaLiveness: PrismaLivenessVerdict = (livenessAssess?.verdict ?? 'NO_DATA') as PrismaLivenessVerdict;
@@ -396,7 +488,17 @@ export class AttendanceService {
     ];
 
     const snapshot = this.buildPolicySnapshot(context, allowedMethods, mergedWarnings) as unknown as Record<string, unknown>;
-    snapshot.faceRecognition = null;
+    snapshot.faceRecognition = faceExtraction
+      ? {
+          similarity,
+          threshold: DEFAULT_FACE_MATCH_THRESHOLD,
+          isFaceMatch,
+          modelVersion: faceExtraction.modelVersion,
+          detectionConfidence: faceExtraction.faceConfidence,
+          imageWidth: faceExtraction.estimatedWidth,
+          imageHeight: faceExtraction.estimatedHeight,
+        }
+      : null;
     snapshot.liveness = livenessAssess
       ? { verdict: livenessAssess.verdict, reasons: livenessAssess.reasons }
       : null;
@@ -406,7 +508,7 @@ export class AttendanceService {
       warnings: gpsCompliance.warnings,
     };
 
-    const record = await attendanceRepository.create({
+    const attendanceData: Prisma.AttendanceUncheckedCreateInput = {
       employeeId: data.employeeId,
       companyId: context.companyId,
       branchId: context.branchId,
@@ -437,7 +539,20 @@ export class AttendanceService {
         gpsCompliance.mockVerdict === MockLocationVerdict.CONFIRMED_FAKE,
       policySnapshot: snapshot as Prisma.InputJsonValue,
       notes: data.notes,
-    });
+    };
+
+    const record = faceExtraction
+      ? await attendanceRepository.createWithFaceLog(attendanceData, {
+          employeeId: data.employeeId,
+          companyId: context.companyId,
+          selfieUrl: null,
+          similarityScore: similarity,
+          isFaceMatch,
+          livenessVerdict: prismaLiveness,
+          mockVerdict: prismaMock,
+          notes: `FACE_MATCH threshold=${DEFAULT_FACE_MATCH_THRESHOLD} model=${faceExtraction.modelVersion}`,
+        })
+      : await attendanceRepository.create(attendanceData);
 
     logger.info('Attendance recorded', {
       employeeId: data.employeeId,

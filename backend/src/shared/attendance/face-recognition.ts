@@ -19,10 +19,11 @@ function vectorLength(v: FaceVector): number {
   return Math.sqrt(sum);
 }
 
-function safeVector(v: FaceVector, dims = 512): number[] {
-  if (!Array.isArray(v) || v.length === 0) return new Array(dims).fill(0);
-  const result = new Array(dims).fill(0);
-  const min = Math.min(dims, v.length);
+function safeVector(v: FaceVector, dims?: number): number[] {
+  if (!Array.isArray(v) || v.length === 0) return [];
+  const resolvedDimensions = dims ?? v.length;
+  const result = new Array(resolvedDimensions).fill(0);
+  const min = Math.min(resolvedDimensions, v.length);
   for (let i = 0; i < min; i++) {
     const n = Number(v[i]);
     result[i] = Number.isFinite(n) ? n : 0;
@@ -38,6 +39,9 @@ export function normalizeVector(v: FaceVector): number[] {
 }
 
 export function cosineSimilarity(a: FaceVector, b: FaceVector): number {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0 || a.length !== b.length) {
+    return -1;
+  }
   const av = normalizeVector(a);
   const bv = normalizeVector(b);
   let dot = 0;

@@ -836,7 +836,7 @@ export const router = createBrowserRouter([
       {
         path: 'admin/menu-access',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
+          <ProtectedRoute requiredPermissions={[{ resource: 'rbac', action: 'update' }]}>
             <AdminMenuAccessPage />
           </ProtectedRoute>
         ),
@@ -844,7 +844,7 @@ export const router = createBrowserRouter([
       {
         path: 'admin/data-scope',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
+          <ProtectedRoute requiredPermissions={[{ resource: 'rbac', action: 'update' }]}>
             <AdminDataScopePage />
           </ProtectedRoute>
         ),

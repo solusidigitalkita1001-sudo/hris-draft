@@ -280,13 +280,13 @@ const navItems: NavItem[] = [
         labelKey: 'sidebar.administration.menuAccess',
         icon: <MenuIcon size={16} />,
         path: '/admin/menu-access',
-        access: { requireAuth: true, requiredPermissions: [{ resource: 'settings', action: 'read' }] },
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'rbac', action: 'update' }] },
       },
       {
         labelKey: 'sidebar.administration.dataScope',
         icon: <ShieldCheck size={16} />,
         path: '/admin/data-scope',
-        access: { requireAuth: true, requiredPermissions: [{ resource: 'settings', action: 'read' }] },
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'rbac', action: 'update' }] },
       },
       {
         labelKey: 'sidebar.administration.ewaApproval',

@@ -39,9 +39,8 @@ export class AdministrationRepository {
     roleCode: string,
     items: Array<{ menuPath: string; accessType: 'ALLOW' | 'DENY' }>
   ) {
-    const results = [];
-    for (const item of items) {
-      const result = await prisma.roleMenuAccess.upsert({
+    return prisma.$transaction(
+      items.map((item) => prisma.roleMenuAccess.upsert({
         where: {
           companyId_roleCode_menuPath: {
             companyId,
@@ -56,10 +55,8 @@ export class AdministrationRepository {
           menuPath: item.menuPath,
           accessType: item.accessType,
         },
-      });
-      results.push(result);
-    }
-    return results;
+      })),
+    );
   }
 
   async findRoleDataScopeByRole(

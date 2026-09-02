@@ -57,6 +57,26 @@ export class AttendanceRepository {
     });
   }
 
+  async createWithFaceLog(
+    data: Prisma.AttendanceUncheckedCreateInput,
+    faceLog: Omit<Prisma.AttendanceFaceLogUncheckedCreateInput, 'attendanceId'>,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const attendance = await tx.attendance.create({ data });
+      await tx.attendanceFaceLog.create({
+        data: { ...faceLog, attendanceId: attendance.id },
+      });
+      return tx.attendance.findUniqueOrThrow({
+        where: { id: attendance.id },
+        include: {
+          employee: { select: { id: true, fullName: true, employeeNumber: true } },
+          branch: { select: { id: true, name: true, code: true } },
+          attendancePolicy: { select: { id: true, attendanceMethod: true } },
+        },
+      });
+    });
+  }
+
   async update(id: string, data: UpdateAttendanceDTO) {
     const updateData: Prisma.AttendanceUpdateInput = {};
     if (data.checkIn !== undefined) updateData.checkIn = new Date(data.checkIn);

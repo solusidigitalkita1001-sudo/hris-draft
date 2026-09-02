@@ -11,12 +11,135 @@ import {
   CreateEmployeeExperienceDTO, UpdateEmployeeExperienceDTO,
   CreateEmployeeAttachmentDTO, UpdateEmployeeAttachmentDTO,
 } from './employee.dto';
-import { NotFoundError, ConflictError, BadRequestError, ValidationError } from '@/shared/exceptions/AppError';
+import {
+  NotFoundError,
+  ConflictError,
+  BadRequestError,
+  ValidationError,
+  ServiceUnavailableError,
+} from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { prisma } from '@/shared/database/prisma';
 import { generateSystemCode } from '@/shared/utils/system-code';
+import { getCurrentCompanyId } from '@/shared/context/RequestContext';
+import {
+  extractFaceVectorFromImage,
+  FaceExtractionError,
+} from '@/shared/attendance/face-extractor';
+import { encryptFaceEmbedding } from '@/shared/security/biometric-crypto';
 
 export class EmployeeService {
+  private async findScopedEmployee(id: string) {
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new BadRequestError('Company context is required');
+    const employee = await prisma.employee.findFirst({
+      where: { id, companyId, deletedAt: null },
+      select: { id: true, companyId: true },
+    });
+    if (!employee) throw new NotFoundError('Employee not found');
+    return employee;
+  }
+
+  async getFaceProfile(id: string) {
+    const employee = await this.findScopedEmployee(id);
+    const profile = await prisma.employeeFaceProfile.findUnique({
+      where: { employeeId: employee.id },
+      select: {
+        modelVersion: true,
+        embeddingDimensions: true,
+        enrollmentConfidence: true,
+        enrolledAt: true,
+        updatedAt: true,
+      },
+    });
+    return {
+      enrolled: Boolean(profile),
+      ...(profile ?? {}),
+    };
+  }
+
+  async enrollFaceProfile(id: string, photo: Buffer) {
+    const employee = await this.findScopedEmployee(id);
+    let extraction;
+    try {
+      extraction = await extractFaceVectorFromImage(photo);
+    } catch (error) {
+      if (error instanceof FaceExtractionError) {
+        if (error.code === 'MODEL_UNAVAILABLE') {
+          throw new ServiceUnavailableError(error.message);
+        }
+        throw new BadRequestError(error.message);
+      }
+      throw error;
+    }
+
+    const encryptedEmbedding = encryptFaceEmbedding(extraction.vector, {
+      companyId: employee.companyId,
+      employeeId: employee.id,
+      modelVersion: extraction.modelVersion,
+    });
+    const enrolledAt = new Date();
+
+    const profile = await prisma.$transaction(async (tx) => {
+      const saved = await tx.employeeFaceProfile.upsert({
+        where: { employeeId: employee.id },
+        create: {
+          employeeId: employee.id,
+          companyId: employee.companyId,
+          encryptedEmbedding,
+          modelVersion: extraction.modelVersion,
+          embeddingDimensions: extraction.vector.length,
+          enrollmentConfidence: extraction.faceConfidence,
+          enrolledAt,
+        },
+        update: {
+          encryptedEmbedding,
+          modelVersion: extraction.modelVersion,
+          embeddingDimensions: extraction.vector.length,
+          enrollmentConfidence: extraction.faceConfidence,
+          enrolledAt,
+        },
+        select: {
+          modelVersion: true,
+          embeddingDimensions: true,
+          enrollmentConfidence: true,
+          enrolledAt: true,
+          updatedAt: true,
+        },
+      });
+      await tx.employee.update({
+        where: { id: employee.id },
+        data: { referencePhotoUrl: null, referencePhotoUpdatedAt: enrolledAt },
+      });
+      return saved;
+    });
+
+    logger.info('Employee face profile enrolled', {
+      employeeId: employee.id,
+      companyId: employee.companyId,
+      modelVersion: extraction.modelVersion,
+      confidence: extraction.faceConfidence,
+    });
+    return { enrolled: true, ...profile };
+  }
+
+  async deleteFaceProfile(id: string) {
+    const employee = await this.findScopedEmployee(id);
+    await prisma.$transaction([
+      prisma.employeeFaceProfile.deleteMany({
+        where: { employeeId: employee.id, companyId: employee.companyId },
+      }),
+      prisma.employee.update({
+        where: { id: employee.id },
+        data: { referencePhotoUrl: null, referencePhotoUpdatedAt: null },
+      }),
+    ]);
+    logger.info('Employee face profile deleted', {
+      employeeId: employee.id,
+      companyId: employee.companyId,
+    });
+  }
+
   async findAll(query: EmployeeQueryDTO) {
     return employeeRepository.findAll(query);
   }

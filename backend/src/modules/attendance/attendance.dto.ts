@@ -25,8 +25,8 @@ export const createAttendanceSchema = z.object({
       similarityScore: z.number().min(-1).max(1).optional(),
       isFaceMatch: z.boolean().optional(),
       /// Captured selfie (data:image/jpeg;base64,...); biometric extraction must happen on the server.
-      selfieImage: z.string().max(20_000_000).optional(), // ~20MB JPEG base64 limit
-      referencePhotoImage: z.string().max(20_000_000).optional(),
+      selfieImage: z.string().max(7_500_000).optional(), // 5 MB binary limit after base64 decode
+      referencePhotoImage: z.string().max(7_500_000).optional(),
       selfieVector: z.array(z.number()).optional(),
       referenceVector: z.array(z.number()).optional(),
       /// Transport metadata only; never authoritative for liveness or matching.

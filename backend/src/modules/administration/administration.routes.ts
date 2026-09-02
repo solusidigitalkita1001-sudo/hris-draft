@@ -17,14 +17,12 @@ router.use(authenticate);
 router.get(
   '/role-menu-access/my',
   requireCompanyAccess(),
-  authorize({ resource: 'settings', action: 'read' }),
   administrationController.getMyMenuAccess.bind(administrationController)
 );
 
 router.get(
   '/role-data-scope/my',
   requireCompanyAccess(),
-  authorize({ resource: 'settings', action: 'read' }),
   administrationController.getMyDataScope.bind(administrationController)
 );
 

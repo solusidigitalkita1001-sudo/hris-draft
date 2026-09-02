@@ -1,29 +1,35 @@
+import fs from 'fs/promises';
+import path from 'path';
+import jpeg from 'jpeg-js';
+import { PNG } from 'pngjs';
 import type { FaceVector } from './face-recognition';
 import { normalizeVector } from './face-recognition';
 import { logger } from '@/shared/logger/WinstonLogger';
 
-/**
- * ═══════════════════════════════════════════════════════════════════════
- * FACE RECOGNITION GRADE 2 TFJS UPGRADE (Step 4 Minggu 6)
- * ═══════════════════════════════════════════════════════════════════════
- *
- * Sebelumnya: Grade 1 FALLBACK HEURISTIC 0-dep (pure TS color histogram +
- * edge + pHash → vector 512-dim). Accuracy rendah, mudah di-spoof foto.
- *
- * Sekarang: Grade 2 REAL FaceNet EMBEDDING via @vladmandic/human (TFJS):
- *   1. Load model FaceNet MobileFaceNet 512-dim (default Human v3).
- *   2. Detect wajah dari image input (bounding box + 106 face landmarks).
- *   3. Auto-alignment via affine transform landmark eyes-nose-mouth.
- *   4. Extract embedding 512 normalized vector.
- *   5. Compatibility: format return TETAP SAMA (vector: number[512]) →
- *      compareFaceVectors existing TIDAK PERLU DIUBAH 1 baris code!
- *
- * SECURITY: biometric decisions fail closed. The histogram implementation is
- * retained only for explicit non-authentication diagnostics and must never be
- * accepted as a face-recognition credential.
- *
- * ═══════════════════════════════════════════════════════════════════════
- */
+export const FACE_MODEL_VERSION = 'human-3.3.6/faceres-feats-256';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_PIXELS = 16_000_000;
+const MIN_IMAGE_SIDE = 160;
+const MIN_FACE_CONFIDENCE = 0.75;
+
+export type FaceExtractionErrorCode =
+  | 'INVALID_IMAGE'
+  | 'IMAGE_TOO_LARGE'
+  | 'MODEL_UNAVAILABLE'
+  | 'FACE_NOT_FOUND'
+  | 'MULTIPLE_FACES'
+  | 'LOW_CONFIDENCE'
+  | 'EMBEDDING_UNAVAILABLE';
+
+export class FaceExtractionError extends Error {
+  constructor(
+    public readonly code: FaceExtractionErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'FaceExtractionError';
+  }
+}
 
 export interface FaceExtractionResult {
   vector: FaceVector;
@@ -31,343 +37,407 @@ export interface FaceExtractionResult {
   estimatedWidth: number;
   estimatedHeight: number;
   fileSizeBytes: number;
-  faceConfidence?: number;
-  isFallbackHeuristic: boolean;
-  warning?: string;
+  faceConfidence: number;
+  modelVersion: string;
+  isFallbackHeuristic: false;
 }
+
+type DecodedImage = {
+  pixels: Uint8Array;
+  width: number;
+  height: number;
+  mimeType: 'image/jpeg' | 'image/png';
+};
 
 let humanInstance: any = null;
 let humanLoadPromise: Promise<any> | null = null;
-let humanAvailableStatus: 'uninitialized' | 'loading' | 'ready' | 'failed' = 'uninitialized';
 
-const HUMAN_BACKEND_CONFIG: Record<string, any> = {
-  backend: 'tensorflow',
-  modelBasePath: 'https://vladmandic.github.io/human-models/models/',
-  debug: false,
-  async: true,
-  warmup: 'face',
-  face: {
-    enabled: true,
-    detector: { enabled: true, modelPath: 'blazeface.json', rotation: true, maxDetected: 1 },
-    mesh: { enabled: true, modelPath: 'facemesh.json' },
-    iris: { enabled: false },
-    description: { enabled: true, modelPath: 'faceres.json' }, // 512-dim FaceNet embedding
-    emotion: { enabled: false },
-    antispoof: { enabled: false },
-    liveness: { enabled: false },
-  },
-  body: { enabled: false },
-  hand: { enabled: false },
-  object: { enabled: false },
-  segmentation: { enabled: false },
-  gesture: { enabled: false },
-};
+function resolveHumanPackageRoot(): string {
+  return path.resolve(path.dirname(require.resolve('@vladmandic/human')), '..');
+}
 
-async function getHumanInstance(): Promise<any | null> {
-  if (humanAvailableStatus === 'ready') return humanInstance;
-  if (humanAvailableStatus === 'failed') return null;
+function registerLocalModelLoader(tf: any, modelsRoot: string): void {
+  const safeRoot = `${path.resolve(modelsRoot)}${path.sep}`;
+  tf.io.registerLoadRouter((url: string | string[]) => {
+    const rawUrl = Array.isArray(url) ? url[0] : url;
+    if (typeof rawUrl !== 'string' || !rawUrl.startsWith('file://')) return null;
 
-  if (humanAvailableStatus === 'uninitialized') {
-    humanAvailableStatus = 'loading';
-    humanLoadPromise = (async () => {
-      try {
-        // @ts-ignore — @vladmandic/human adalah optional heavy package (200MB+ native).
-        // @ts-expect-error Dynamic import may fail resolve type tanpa package installed.
-        const HumanDynamic = (await import('@vladmandic/human')).default;
-        const instance = new HumanDynamic(HUMAN_BACKEND_CONFIG);
-        await instance.load();
-        logger.info('[FaceExtractor] @vladmandic/human TFJS model loaded successfully (Grade 2 FaceNet 512-dim)');
-        humanAvailableStatus = 'ready';
-        humanInstance = instance;
-        return instance;
-      } catch (err: any) {
-        logger.warn('[FaceExtractor] Failed to load @vladmandic/human TFJS; biometric extraction will fail closed', {
-          error: err?.message || String(err),
-        });
-        humanAvailableStatus = 'failed';
-        humanInstance = null;
-        return null;
-      }
-    })();
-  }
+    return {
+      load: async () => {
+        const modelPath = path.resolve(decodeURIComponent(new URL(rawUrl).pathname));
+        if (!modelPath.startsWith(safeRoot)) {
+          throw new Error('Face model path is outside the trusted model directory');
+        }
+
+        const manifest = JSON.parse(await fs.readFile(modelPath, 'utf8')) as {
+          modelTopology: unknown;
+          format?: string;
+          generatedBy?: string;
+          convertedBy?: string;
+          weightsManifest?: Array<{ paths: string[]; weights: unknown[] }>;
+        };
+        const modelDirectory = path.dirname(modelPath);
+        const weightSpecs: unknown[] = [];
+        const weightBuffers: Buffer[] = [];
+
+        for (const group of manifest.weightsManifest ?? []) {
+          weightSpecs.push(...group.weights);
+          for (const relativeWeightPath of group.paths) {
+            const weightPath = path.resolve(modelDirectory, relativeWeightPath);
+            if (!weightPath.startsWith(safeRoot)) {
+              throw new Error('Face model weight path is outside the trusted model directory');
+            }
+            weightBuffers.push(await fs.readFile(weightPath));
+          }
+        }
+
+        const combined = Buffer.concat(weightBuffers);
+        return {
+          modelTopology: manifest.modelTopology,
+          format: manifest.format,
+          generatedBy: manifest.generatedBy,
+          convertedBy: manifest.convertedBy,
+          weightSpecs,
+          weightData: combined.buffer.slice(
+            combined.byteOffset,
+            combined.byteOffset + combined.byteLength,
+          ),
+        };
+      },
+    };
+  });
+}
+
+async function getHumanInstance(): Promise<any> {
+  if (humanInstance) return humanInstance;
+  if (humanLoadPromise) return humanLoadPromise;
+
+  humanLoadPromise = (async () => {
+    try {
+      const humanRoot = resolveHumanPackageRoot();
+      const HumanModule = require(path.join(humanRoot, 'dist', 'human.node-wasm.js'));
+      const Human = HumanModule.default ?? HumanModule.Human ?? HumanModule;
+      const wasmRoot = path.dirname(require.resolve('@tensorflow/tfjs-backend-wasm'));
+      const modelsRoot = path.join(humanRoot, 'models');
+      const instance = new Human({
+        backend: 'wasm',
+        wasmPath: `${wasmRoot}${path.sep}`,
+        modelBasePath: `file://${modelsRoot}${path.sep}`,
+        debug: false,
+        async: false,
+        warmup: 'none',
+        cacheModels: false,
+        face: {
+          enabled: true,
+          detector: {
+            enabled: true,
+            modelPath: 'blazeface.json',
+            rotation: true,
+            maxDetected: 2,
+            return: true,
+          },
+          mesh: { enabled: true, modelPath: 'facemesh.json' },
+          iris: { enabled: false },
+          description: { enabled: true, modelPath: 'faceres.json' },
+          emotion: { enabled: false },
+          antispoof: { enabled: false },
+          liveness: { enabled: false },
+        },
+        body: { enabled: false },
+        hand: { enabled: false },
+        object: { enabled: false },
+        segmentation: { enabled: false },
+        gesture: { enabled: false },
+      });
+
+      registerLocalModelLoader(instance.tf, modelsRoot);
+      await instance.load();
+      humanInstance = instance;
+      logger.info('[FaceExtractor] Human Node-WASM models loaded', {
+        backend: instance.tf.getBackend(),
+        modelVersion: FACE_MODEL_VERSION,
+      });
+      return instance;
+    } catch (error) {
+      humanLoadPromise = null;
+      logger.error('[FaceExtractor] Failed to initialize face recognition model', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new FaceExtractionError(
+        'MODEL_UNAVAILABLE',
+        'Model face recognition server tidak tersedia',
+      );
+    }
+  })();
+
   return humanLoadPromise;
 }
 
-/**
- * Entry Point UTAMA — selalu call ini untuk extract vector dari image.
- * Auto-failover ke fallback jika TFJS tidak tersedia.
- */
 export async function extractFaceVectorFromImage(
   imageInput: string | Buffer,
-  options: { allowHeuristicFallback?: boolean } = {},
 ): Promise<FaceExtractionResult> {
-  const buf =
-    typeof imageInput === 'string'
-      ? Buffer.from(stripDataUrlPrefix(imageInput), 'base64')
-      : imageInput;
-  const fileSizeBytes = buf.length;
+  const buffer = decodeImageInput(imageInput);
+  const decoded = decodeImage(buffer);
+  const pixelVariance = computePixelVariance(decoded.pixels);
+  const human = await getHumanInstance();
+  const tensor = human.tf.tensor3d(
+    decoded.pixels,
+    [decoded.height, decoded.width, 3],
+    'int32',
+  );
 
-  const { pixels, width, height, pixelVariance } = prepareImageMetrics(buf);
-
-  const human = await getHumanInstance().catch(() => null);
-  if (human && humanAvailableStatus === 'ready') {
+  try {
+    const result = await human.detect(tensor);
+    const faces = Array.isArray(result?.face) ? result.face : [];
     try {
-      const tfResult = await extractWithHuman(human, buf, pixels, width, height);
-      if (tfResult) {
-        return {
-          vector: tfResult.vector,
-          pixelVariance,
-          estimatedWidth: width,
-          estimatedHeight: height,
-          fileSizeBytes,
-          faceConfidence: tfResult.faceConfidence,
-          isFallbackHeuristic: false,
-        };
+      if (faces.length === 0) {
+        throw new FaceExtractionError(
+          'FACE_NOT_FOUND',
+          'Wajah tidak terdeteksi. Gunakan foto yang terang dan menghadap kamera.',
+        );
       }
-    } catch (err: any) {
-      logger.warn('[FaceExtractor] Human TFJS gagal extract; heuristic fallback hanya tersedia untuk diagnostic opt-in', {
-        error: err?.message || String(err),
-      });
+      if (faces.length !== 1) {
+        throw new FaceExtractionError(
+          'MULTIPLE_FACES',
+          'Foto harus berisi tepat satu wajah.',
+        );
+      }
+
+      const face = faces[0];
+      const confidence = Number(face.faceScore ?? face.boxScore ?? 0);
+      if (!Number.isFinite(confidence) || confidence < MIN_FACE_CONFIDENCE) {
+        throw new FaceExtractionError(
+          'LOW_CONFIDENCE',
+          'Wajah terdeteksi kurang jelas. Ambil ulang foto dengan pencahayaan yang lebih baik.',
+        );
+      }
+
+      const embedding = await extractDescriptor(human, face);
+      if (
+        embedding.length < 128 ||
+        embedding.length > 2048 ||
+        embedding.some((value: unknown) => !Number.isFinite(Number(value)))
+      ) {
+        throw new FaceExtractionError(
+          'EMBEDDING_UNAVAILABLE',
+          'Model tidak dapat mengekstrak ciri wajah dari foto.',
+        );
+      }
+
+      return {
+        vector: normalizeVector(embedding.map(Number)),
+        pixelVariance,
+        estimatedWidth: decoded.width,
+        estimatedHeight: decoded.height,
+        fileSizeBytes: buffer.length,
+        faceConfidence: confidence,
+        modelVersion: FACE_MODEL_VERSION,
+        isFallbackHeuristic: false,
+      };
+    } finally {
+      for (const face of faces) {
+        if (face?.tensor) human.tf.dispose(face.tensor);
+      }
     }
+  } finally {
+    tensor.dispose();
   }
-
-  if (!options.allowHeuristicFallback) {
-    throw new Error('Face recognition model unavailable or no face detected; heuristic fallback is disabled');
-  }
-
-  const fallbackVec = generateFallbackHistogramVector(pixels, width, height);
-  return {
-    vector: fallbackVec,
-    pixelVariance,
-    estimatedWidth: width,
-    estimatedHeight: height,
-    fileSizeBytes,
-    isFallbackHeuristic: true,
-    warning:
-      'FALLBACK HEURISTIC VECTOR: TFJS FaceNet model tidak tersedia. Install @tensorflow/tfjs-node + @vladmandic/human untuk Grade 2 accuracy tinggi anti spoof.',
-  };
 }
 
-async function extractWithHuman(
-  human: any,
-  buf: Buffer,
-  _pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-): Promise<{ vector: number[]; faceConfidence: number } | null> {
-  const imageObj = {
-    buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
-    width,
-    height,
-    channels: 3,
-  };
-  const result = await human.detect(imageObj);
-  const faces = result?.face || [];
-  if (!Array.isArray(faces) || faces.length === 0 || !faces[0]) {
-    return null;
+async function extractDescriptor(human: any, face: any): Promise<number[]> {
+  if (Array.isArray(face?.embedding) && face.embedding.length >= 128) {
+    return face.embedding.map(Number);
   }
-  const face = faces[0];
-  const embedding = face.embedding || face.descriptor || face.description;
-  if (!Array.isArray(embedding) || embedding.length < 128) {
-    return null;
+  if (!face?.tensor) return [];
+
+  const model = human.models?.models?.faceres;
+  const inputShape = model?.inputs?.[0]?.shape;
+  if (!model?.execute || !Array.isArray(inputShape) || !inputShape[1] || !inputShape[2]) {
+    return [];
   }
 
-  const normalized = normalizeVector(embedding);
-  const padded = new Array(512).fill(0);
-  const minLen = Math.min(512, normalized.length);
-  for (let i = 0; i < minLen; i++) padded[i] = normalized[i] ?? 0;
-
-  const faceConfidence = typeof face.score === 'number' ? face.score :
-    typeof face.confidence === 'number' ? face.confidence :
-    (Array.isArray(face.boxConfidence) ? face.boxConfidence[0] ?? 0.8 : 0.8);
-
-  return { vector: padded, faceConfidence: Number(faceConfidence) };
-}
-
-function stripDataUrlPrefix(s: string): string {
-  if (!s.startsWith('data:')) return s;
-  const idx = s.indexOf(',');
-  return idx >= 0 ? s.slice(idx + 1) : s;
-}
-
-/* ──────────────────────────────────────────────────────────────────────
-   FAILOVER GRADE 1: PURE TS 0-DEP (tidak pernah berubah, tetap aktif)
-   code disimpan untuk fallback environment tanpa TFJS native binding
-   ────────────────────────────────────────────────────────────────────── */
-
-function prepareImageMetrics(buf: Buffer): {
-  pixels: Uint8ClampedArray; width: number; height: number; pixelVariance: number;
-} {
-  const totalBytes = buf.length;
-  const dims = estimateImageDimensions(buf);
-  const totalPixels = dims.width * dims.height;
-  const pixels = new Uint8ClampedArray(totalPixels * 3);
-  const sampleStep = Math.max(1, Math.floor(totalBytes / (totalPixels * 3)));
-  let p = 0;
-  for (let i = 0; i < totalPixels; i++) {
-    const offset = (i * sampleStep) % totalBytes;
-    pixels[p++] = buf[offset] ?? 0;
-    pixels[p++] = buf[(offset + 13) % totalBytes] ?? 0;
-    pixels[p++] = buf[(offset + 29) % totalBytes] ?? 0;
+  const createdBatch = face.tensor.shape.length === 3;
+  const batch = createdBatch ? human.tf.expandDims(face.tensor, 0) : face.tensor;
+  const resized = human.tf.image.resizeBilinear(
+    batch,
+    [inputShape[1], inputShape[2]],
+    false,
+  );
+  const normalizedForModel = human.tf.mul(resized, 255);
+  let outputs: any[] = [];
+  try {
+    const rawOutput = model.execute(normalizedForModel, ['feats/Relu']);
+    outputs = Array.isArray(rawOutput) ? rawOutput : [rawOutput];
+    const descriptorTensor = outputs.find(
+      (output) => Array.isArray(output?.shape) && output.shape[1] >= 128,
+    );
+    if (!descriptorTensor) return [];
+    return Array.from(await descriptorTensor.data(), Number);
+  } finally {
+    human.tf.dispose([
+      ...(createdBatch ? [batch] : []),
+      resized,
+      normalizedForModel,
+      ...outputs,
+    ]);
   }
-  const pixelVariance = computePixelVariance(pixels, dims.width, dims.height);
-  return { pixels, width: dims.width, height: dims.height, pixelVariance };
 }
 
-function estimateImageDimensions(buf: Buffer): { width: number; height: number } {
-  let width = 64;
-  let height = 64;
-  if (buf.length > 500_000) { width = 256; height = 256; }
-  else if (buf.length > 200_000) { width = 192; height = 192; }
-  else if (buf.length > 50_000) { width = 128; height = 128; }
-  else if (buf.length > 10_000) { width = 96; height = 96; }
-  else { width = 64; height = 64; }
-  return { width, height };
+function decodeImageInput(input: string | Buffer): Buffer {
+  if (Buffer.isBuffer(input)) {
+    if (input.length === 0) {
+      throw new FaceExtractionError('INVALID_IMAGE', 'File foto kosong.');
+    }
+    if (input.length > MAX_IMAGE_BYTES) {
+      throw new FaceExtractionError('IMAGE_TOO_LARGE', 'Ukuran foto maksimal 5 MB.');
+    }
+    return input;
+  }
+
+  const match = /^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=\s]+)$/i.exec(input);
+  if (!match) {
+    throw new FaceExtractionError(
+      'INVALID_IMAGE',
+      'selfieImage harus berupa data URL JPEG atau PNG.',
+    );
+  }
+  const encoded = match[2].replace(/\s/g, '');
+  if (encoded.length === 0 || encoded.length % 4 !== 0) {
+    throw new FaceExtractionError('INVALID_IMAGE', 'Data foto base64 tidak valid.');
+  }
+  const buffer = Buffer.from(encoded, 'base64');
+  if (buffer.length === 0) {
+    throw new FaceExtractionError('INVALID_IMAGE', 'Data foto kosong.');
+  }
+  if (buffer.length > MAX_IMAGE_BYTES) {
+    throw new FaceExtractionError('IMAGE_TOO_LARGE', 'Ukuran foto maksimal 5 MB.');
+  }
+  if (
+    buffer.toString('base64').replace(/=+$/, '') !==
+    encoded.replace(/=+$/, '')
+  ) {
+    throw new FaceExtractionError('INVALID_IMAGE', 'Data foto base64 tidak valid.');
+  }
+  return buffer;
 }
 
-function computePixelVariance(pixels: Uint8ClampedArray, w: number, h: number): number {
+function decodeImage(buffer: Buffer): DecodedImage {
+  if (isJpeg(buffer)) return decodeJpeg(buffer);
+  if (isPng(buffer)) return decodePng(buffer);
+  throw new FaceExtractionError(
+    'INVALID_IMAGE',
+    'Format foto tidak valid. Gunakan file JPEG atau PNG asli.',
+  );
+}
+
+function isJpeg(buffer: Buffer): boolean {
+  return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+}
+
+function isPng(buffer: Buffer): boolean {
+  return buffer.length >= 24 && buffer.subarray(0, 8).equals(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  );
+}
+
+function assertSafeDimensions(width: number, height: number): void {
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width < MIN_IMAGE_SIDE ||
+    height < MIN_IMAGE_SIDE ||
+    width * height > MAX_IMAGE_PIXELS
+  ) {
+    throw new FaceExtractionError(
+      'INVALID_IMAGE',
+      `Resolusi foto minimal ${MIN_IMAGE_SIDE}x${MIN_IMAGE_SIDE} dan maksimal 16 megapixel.`,
+    );
+  }
+}
+
+function readJpegDimensions(buffer: Buffer): { width: number; height: number } {
+  let offset = 2;
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = buffer[offset + 1];
+    offset += 2;
+    if (marker === 0xd8 || marker === 0xd9) continue;
+    if (offset + 2 > buffer.length) break;
+    const segmentLength = buffer.readUInt16BE(offset);
+    if (segmentLength < 2 || offset + segmentLength > buffer.length) break;
+    if (marker >= 0xc0 && marker <= 0xc3 && segmentLength >= 7) {
+      return {
+        height: buffer.readUInt16BE(offset + 3),
+        width: buffer.readUInt16BE(offset + 5),
+      };
+    }
+    offset += segmentLength;
+  }
+  throw new FaceExtractionError('INVALID_IMAGE', 'Header JPEG tidak valid.');
+}
+
+function decodeJpeg(buffer: Buffer): DecodedImage {
+  const dimensions = readJpegDimensions(buffer);
+  assertSafeDimensions(dimensions.width, dimensions.height);
+  try {
+    const decoded = jpeg.decode(buffer, { useTArray: true, formatAsRGBA: false });
+    if (decoded.width !== dimensions.width || decoded.height !== dimensions.height) {
+      throw new Error('JPEG dimensions changed during decode');
+    }
+    return {
+      pixels: decoded.data,
+      width: decoded.width,
+      height: decoded.height,
+      mimeType: 'image/jpeg',
+    };
+  } catch (error) {
+    if (error instanceof FaceExtractionError) throw error;
+    throw new FaceExtractionError('INVALID_IMAGE', 'File JPEG rusak atau tidak dapat dibaca.');
+  }
+}
+
+function decodePng(buffer: Buffer): DecodedImage {
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
+  assertSafeDimensions(width, height);
+  try {
+    const decoded = PNG.sync.read(buffer, { skipRescale: false });
+    if (decoded.width !== width || decoded.height !== height) {
+      throw new Error('PNG dimensions changed during decode');
+    }
+    const rgb = new Uint8Array(decoded.width * decoded.height * 3);
+    for (let source = 0, target = 0; source < decoded.data.length; source += 4) {
+      rgb[target++] = decoded.data[source];
+      rgb[target++] = decoded.data[source + 1];
+      rgb[target++] = decoded.data[source + 2];
+    }
+    return { pixels: rgb, width, height, mimeType: 'image/png' };
+  } catch (error) {
+    if (error instanceof FaceExtractionError) throw error;
+    throw new FaceExtractionError('INVALID_IMAGE', 'File PNG rusak atau tidak dapat dibaca.');
+  }
+}
+
+function computePixelVariance(pixels: Uint8Array): number {
+  const totalPixels = Math.floor(pixels.length / 3);
+  const step = Math.max(1, Math.floor(totalPixels / 4096));
   let sum = 0;
-  let sumSq = 0;
+  let sumSquared = 0;
   let count = 0;
-  const total = w * h;
-  for (let i = 0; i < total; i += Math.max(1, Math.floor(total / 4096))) {
-    const r = pixels[i * 3];
-    const g = pixels[i * 3 + 1];
-    const b = pixels[i * 3 + 2];
-    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-    sum += lum;
-    sumSq += lum * lum;
-    count++;
+  for (let pixel = 0; pixel < totalPixels; pixel += step) {
+    const offset = pixel * 3;
+    const luminance =
+      0.299 * pixels[offset] +
+      0.587 * pixels[offset + 1] +
+      0.114 * pixels[offset + 2];
+    sum += luminance;
+    sumSquared += luminance * luminance;
+    count += 1;
   }
   if (count === 0) return 0;
   const mean = sum / count;
-  const variance = sumSq / count - mean * mean;
-  return Math.max(0, variance);
-}
-
-function generateFallbackHistogramVector(pixels: Uint8ClampedArray, w: number, h: number): number[] {
-  const gridHist = gridColorHistogram(pixels, w, h, 8, 32);
-  const edgeVec = laplacianEdgeVector(pixels, w, h, 4);
-  const phashVec = perceptualHashVector(pixels, w, h, 128);
-
-  const raw = new Array<number>(512).fill(0);
-  for (let i = 0; i < gridHist.length && i < 256; i++) raw[i] = gridHist[i];
-  for (let i = 0; i < edgeVec.length && i < 128; i++) raw[256 + i] = edgeVec[i];
-  for (let i = 0; i < phashVec.length && i < 128; i++) raw[384 + i] = phashVec[i];
-  return normalizeVector(raw);
-}
-
-function gridColorHistogram(
-  pixels: Uint8ClampedArray, w: number, h: number, gridSize: number, binsPerCell: number
-): number[] {
-  const totalCells = gridSize * gridSize;
-  const vectorLen = Math.min(256, totalCells * 32);
-  const vec = new Array<number>(vectorLen).fill(0);
-  const cellW = Math.max(1, Math.floor(w / gridSize));
-  const cellH = Math.max(1, Math.floor(h / gridSize));
-
-  for (let gy = 0; gy < gridSize; gy++) {
-    for (let gx = 0; gx < gridSize; gx++) {
-      const cellIdx = gy * gridSize + gx;
-      if (cellIdx * 32 >= vectorLen) break;
-      const x0 = gx * cellW;
-      const y0 = gy * cellH;
-      const x1 = Math.min(w, x0 + cellW);
-      const y1 = Math.min(h, y0 + cellH);
-      const bins = new Array(binsPerCell).fill(0);
-      for (let y = y0; y < y1; y += Math.max(1, Math.floor((y1 - y0) / 16))) {
-        for (let x = x0; x < x1; x += Math.max(1, Math.floor((x1 - x0) / 16))) {
-          const pixIdx = (y * w + x) * 3;
-          const r = pixels[pixIdx] ?? 0;
-          const g = pixels[pixIdx + 1] ?? 0;
-          const b = pixels[pixIdx + 2] ?? 0;
-          const lum = (0.299 * r + 0.587 * g + 0.114 * b);
-          const bin = Math.min(binsPerCell - 1, Math.floor((lum / 255) * binsPerCell));
-          bins[bin]++;
-        }
-      }
-      const maxB = Math.max(1, ...bins);
-      const perCell = Math.min(32, binsPerCell);
-      for (let b = 0; b < perCell; b++) {
-        vec[cellIdx * 32 + b] = (bins[b] ?? 0) / maxB;
-      }
-    }
-  }
-  return vec;
-}
-
-function laplacianEdgeVector(
-  pixels: Uint8ClampedArray, w: number, h: number, gridSize: number
-): number[] {
-  const cells = gridSize * gridSize;
-  const binsPerCell = 8;
-  const vec = new Array<number>(cells * binsPerCell).fill(0);
-  const cellW = Math.max(2, Math.floor(w / gridSize));
-  const cellH = Math.max(2, Math.floor(h / gridSize));
-
-  for (let gy = 0; gy < gridSize; gy++) {
-    for (let gx = 0; gx < gridSize; gx++) {
-      const x0 = gx * cellW;
-      const y0 = gy * cellH;
-      const x1 = Math.min(w, x0 + cellW);
-      const y1 = Math.min(h, y0 + cellH);
-      let sumEdge = 0;
-      let sumEdgeSq = 0;
-      let cnt = 0;
-      for (let y = y0 + 1; y < y1 - 1; y += Math.max(1, Math.floor((y1 - y0) / 12))) {
-        for (let x = x0 + 1; x < x1 - 1; x += Math.max(1, Math.floor((x1 - x0) / 12))) {
-          const c = lum(pixels, w, x, y);
-          const u = lum(pixels, w, x, y - 1);
-          const d = lum(pixels, w, x, y + 1);
-          const l = lum(pixels, w, x - 1, y);
-          const r = lum(pixels, w, x + 1, y);
-          const lap = Math.abs(-4 * c + u + d + l + r);
-          sumEdge += lap;
-          sumEdgeSq += lap * lap;
-          cnt++;
-        }
-      }
-      const mean = cnt > 0 ? sumEdge / cnt : 0;
-      const varc = cnt > 0 ? Math.max(0, sumEdgeSq / cnt - mean * mean) : 0;
-      const cell = gy * gridSize + gx;
-      vec[cell * binsPerCell + 0] = Math.min(1, mean / 255);
-      vec[cell * binsPerCell + 1] = Math.min(1, Math.sqrt(varc) / 255);
-      vec[cell * binsPerCell + 5] = Math.min(1, (gx + 1) / gridSize);
-      vec[cell * binsPerCell + 6] = Math.min(1, (gy + 1) / gridSize);
-      vec[cell * binsPerCell + 7] = Math.min(1, varc / 5000);
-    }
-  }
-  return vec;
-}
-
-function perceptualHashVector(
-  pixels: Uint8ClampedArray, w: number, h: number, targetDims: number
-): number[] {
-  const size = 16;
-  const small = new Array<number>(size * size).fill(0);
-  const stepW = Math.max(1, Math.floor(w / size));
-  const stepH = Math.max(1, Math.floor(h / size));
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const sx = Math.min(w - 1, x * stepW);
-      const sy = Math.min(h - 1, y * stepH);
-      small[y * size + x] = lum(pixels, w, sx, sy);
-    }
-  }
-  let sum = 0;
-  for (const v of small) sum += v;
-  const mean = sum / small.length;
-  const bits = new Array<number>(targetDims).fill(0);
-  for (let i = 0; i < Math.min(targetDims, small.length); i++) {
-    bits[i] = small[i] >= mean ? 1 : -1;
-  }
-  return bits;
-}
-
-function lum(pixels: Uint8ClampedArray, w: number, x: number, y: number): number {
-  const i = (y * w + x) * 3;
-  const r = pixels[i] ?? 0;
-  const g = pixels[i + 1] ?? 0;
-  const b = pixels[i + 2] ?? 0;
-  return 0.299 * r + 0.587 * g + 0.114 * b;
+  return Math.max(0, sumSquared / count - mean * mean);
 }

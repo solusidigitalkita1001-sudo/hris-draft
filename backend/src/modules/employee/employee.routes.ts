@@ -5,6 +5,7 @@ import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { auditLog } from '@/shared/middleware/AuditLog';
+import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import { employeeController } from './employee.controller';
 import {
   createEmployeeSchema, updateEmployeeSchema, createCareerTransactionSchema,
@@ -27,6 +28,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 router.get('/', authorize({ resource: 'employee', action: 'read' }), employeeController.findAll.bind(employeeController));
 router.get('/export', authorize({ resource: 'employee', action: 'read' }), employeeController.exportCsv.bind(employeeController));
 router.get('/:id', authorize({ resource: 'employee', action: 'read' }), employeeController.findById.bind(employeeController));
+router.get('/:id/face-profile', authorize({ resource: 'employee', action: 'read' }), employeeController.getFaceProfile.bind(employeeController));
 router.get('/:id/career-transactions', authorize({ resource: 'employee', action: 'read' }), employeeController.findCareerTransactions.bind(employeeController));
 router.get('/:id/company-assignments', authorize({ resource: 'employee', action: 'read' }), employeeController.findCompanyAssignments.bind(employeeController));
 router.post('/', authorize({ resource: 'employee', action: 'create' }), validate(createEmployeeSchema), employeeController.create.bind(employeeController));
@@ -43,6 +45,13 @@ router.post(
   employeeController.createCompanyAssignment.bind(employeeController)
 );
 router.post('/import', authorize({ resource: 'employee', action: 'create' }), upload.single('file'), employeeController.importCsv.bind(employeeController));
+router.post(
+  '/:id/face-profile',
+  authorize({ resource: 'employee', action: 'update' }),
+  upload.single('photo'),
+  validateFileMagicBytes(['image/jpeg', 'image/png']),
+  employeeController.enrollFaceProfile.bind(employeeController),
+);
 router.put('/:id', authorize({ resource: 'employee', action: 'update' }), auditLog({ action: 'UPDATE', entity: 'Employee', model: 'employee' }), validate(updateEmployeeSchema), employeeController.update.bind(employeeController));
 router.put(
   '/:id/company-assignments/:assignmentId',
@@ -51,6 +60,11 @@ router.put(
   employeeController.updateCompanyAssignment.bind(employeeController)
 );
 router.delete('/:id', authorize({ resource: 'employee', action: 'delete' }), auditLog({ action: 'DELETE', entity: 'Employee', model: 'employee' }), employeeController.delete.bind(employeeController));
+router.delete(
+  '/:id/face-profile',
+  authorize({ resource: 'employee', action: 'update' }),
+  employeeController.deleteFaceProfile.bind(employeeController),
+);
 router.delete(
   '/:id/company-assignments/:assignmentId',
   authorize({ resource: 'employee', action: 'update' }),

@@ -30,6 +30,20 @@ describe('validateFileMagicBytes', () => {
     expect(next).toHaveBeenCalledWith();
   });
 
+  it('validates memory-storage uploads by magic bytes', async () => {
+    const next = jest.fn() as jest.MockedFunction<NextFunction>;
+    await validateFileMagicBytes(['image/jpeg'])(
+      {
+        file: {
+          buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+        },
+      } as Request,
+      {} as Response,
+      next,
+    );
+    expect(next).toHaveBeenCalledWith();
+  });
+
   it('rejects and removes an executable renamed as an image', async () => {
     const filePath = path.join(tempDir, 'malware.png');
     await fs.writeFile(filePath, Buffer.from('MZ-not-an-image'));

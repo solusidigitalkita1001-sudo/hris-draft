@@ -203,6 +203,15 @@ export interface ImportCsvResult {
   errors: string[];
 }
 
+export interface FaceProfileStatus {
+  enrolled: boolean;
+  modelVersion?: string;
+  embeddingDimensions?: number;
+  enrollmentConfidence?: number;
+  enrolledAt?: string;
+  updatedAt?: string;
+}
+
 class EmployeeService {
   async getEmployees(params: {
     companyId: string;
@@ -245,6 +254,24 @@ class EmployeeService {
   async updateEmployeeStatus(id: string, status: string): Promise<Employee> {
     const response = await api.patch(`/employees/${id}/status`, { status });
     return response.data.data;
+  }
+
+  async getFaceProfile(id: string): Promise<FaceProfileStatus> {
+    const response = await api.get(`/employees/${id}/face-profile`);
+    return response.data.data;
+  }
+
+  async enrollFaceProfile(id: string, photo: File): Promise<FaceProfileStatus> {
+    const formData = new FormData();
+    formData.append('photo', photo);
+    const response = await api.post(`/employees/${id}/face-profile`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  }
+
+  async deleteFaceProfile(id: string): Promise<void> {
+    await api.delete(`/employees/${id}/face-profile`);
   }
 
   async getCareerTransactions(id: string): Promise<CareerTransaction[]> {

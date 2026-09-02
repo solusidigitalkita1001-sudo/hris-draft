@@ -1,294 +1,326 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Save,
+  Search,
+  ShieldCheck,
+} from 'lucide-react';
+import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Select2 } from '@/components/ui/select2';
 import { Input } from '@/components/ui/input';
-import { useCompanyStore } from '@/stores/company.store';
+import { Select2 } from '@/components/ui/select2';
 import {
   administrationService,
-  type MenuAccessType,
-  ROLE_OPTIONS,
   MENU_ITEMS,
+  type MenuAccessType,
+  type MenuCatalogItem,
 } from '@/services/administration.service';
-import { Save, RefreshCw, CheckCircle2, XCircle, Search } from 'lucide-react';
+import { rbacService, type Role } from '@/services/rbac.service';
+import { useCompanyStore } from '@/stores/company.store';
 import { cn } from '@/utils/cn';
-import toast from 'react-hot-toast';
 
 type MenuRowState = Record<string, MenuAccessType>;
+
+const defaultMenuState = (): MenuRowState => Object.fromEntries(
+  MENU_ITEMS.map((item) => [item.path, 'ALLOW' as const]),
+);
+
+function messageFromError(error: unknown, fallback: string) {
+  return (error as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
+}
 
 export function AdminMenuAccessPage() {
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
-
-  const [roleCode, setRoleCode] = useState<string>('EMPLOYEE');
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [roleCode, setRoleCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
-  const [rowState, setRowState] = useState<MenuRowState>({});
+  const [rowState, setRowState] = useState<MenuRowState>(defaultMenuState);
+  const [savedState, setSavedState] = useState<MenuRowState>(defaultMenuState);
 
-  const fetchAccess = useCallback(async () => {
-    if (!companyId || !roleCode) {
-      setRowState({});
+  const roleOptions = useMemo(() => roles.map((role) => ({
+    value: role.code,
+    label: `${role.name} · ${role.scope}`,
+  })), [roles]);
+
+  const selectedRole = useMemo(
+    () => roles.find((role) => role.code === roleCode) ?? null,
+    [roleCode, roles],
+  );
+
+  const isDirty = useMemo(
+    () => MENU_ITEMS.some((item) => rowState[item.path] !== savedState[item.path]),
+    [rowState, savedState],
+  );
+
+  const fetchRoles = useCallback(async () => {
+    if (!companyId) {
+      setRoles([]);
+      setRoleCode('');
       setLoading(false);
       return;
     }
+
     setLoading(true);
+    setLoadError('');
     try {
-      const list = await administrationService.listRoleMenuAccess(
-        companyId,
-        roleCode
-      );
-      const state: MenuRowState = {};
+      const data = await rbacService.findAll(companyId);
+      const activeRoles = data.filter((role) => role.status === 'ACTIVE');
+      setRoles(activeRoles);
+      setRoleCode((current) => (
+        activeRoles.some((role) => role.code === current)
+          ? current
+          : activeRoles[0]?.code || ''
+      ));
+    } catch (error) {
+      setRoles([]);
+      setRoleCode('');
+      setLoadError(messageFromError(error, 'Role tidak dapat dimuat. Periksa koneksi lalu coba lagi.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId]);
+
+  const fetchAccess = useCallback(async () => {
+    if (!companyId || !roleCode) return;
+    setLoading(true);
+    setLoadError('');
+    try {
+      const list = await administrationService.listRoleMenuAccess(companyId, roleCode);
+      const next = defaultMenuState();
       for (const item of list) {
-        state[item.menuPath] = item.accessType;
+        if (item.menuPath in next) next[item.menuPath] = item.accessType;
       }
-      for (const mi of MENU_ITEMS) {
-        if (!state[mi.path]) {
-          state[mi.path] = 'ALLOW';
-        }
-      }
-      setRowState(state);
-    } catch (e) {
-      console.error(e);
-      toast.error('Gagal memuat menu access');
+      setRowState(next);
+      setSavedState(next);
+    } catch (error) {
+      setLoadError(messageFromError(error, 'Menu access tidak dapat dimuat. Perubahan belum dilakukan.'));
     } finally {
       setLoading(false);
     }
   }, [companyId, roleCode]);
 
+  useEffect(() => { void fetchRoles(); }, [fetchRoles]);
+  useEffect(() => { void fetchAccess(); }, [fetchAccess]);
   useEffect(() => {
-    fetchAccess();
-  }, [fetchAccess]);
+    if (!isDirty) return undefined;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [isDirty]);
 
-  const handleChange = (path: string, value: MenuAccessType) => {
-    setRowState((prev) => ({ ...prev, [path]: value }));
+  const handleRoleChange = (nextRole: string) => {
+    if (isDirty && !window.confirm('Perubahan menu belum disimpan. Pindah role dan buang perubahan?')) return;
+    setRoleCode(nextRole);
   };
 
   const handleSave = async () => {
-    if (!companyId || !roleCode) {
-      toast.error('Company / Role belum dipilih');
-      return;
-    }
+    if (!companyId || !roleCode || !isDirty) return;
     setSaving(true);
     try {
-      const items = Object.entries(rowState).map(([menuPath, accessType]) => ({
-        menuPath,
-        accessType,
+      const items = MENU_ITEMS.map(({ path }) => ({
+        menuPath: path,
+        accessType: rowState[path] ?? 'ALLOW',
       }));
-      await administrationService.bulkUpsertRoleMenuAccess({
-        companyId,
-        roleCode,
-        items,
-      });
-      toast.success('Menu access berhasil disimpan');
-    } catch (e) {
-      console.error(e);
-      toast.error('Gagal menyimpan menu access');
+      await administrationService.bulkUpsertRoleMenuAccess({ companyId, roleCode, items });
+      setSavedState({ ...rowState });
+      toast.success(`Menu access ${selectedRole?.name ?? roleCode} berhasil disimpan`);
+    } catch (error) {
+      toast.error(messageFromError(error, 'Menu access gagal disimpan. Coba lagi.'));
     } finally {
       setSaving(false);
     }
   };
 
-  const filteredMenuItems = useMemo(() => {
-    if (!search.trim()) return MENU_ITEMS;
-    const q = search.toLowerCase();
-    return MENU_ITEMS.filter(
-      (mi) =>
-        mi.label.toLowerCase().includes(q) ||
-        mi.path.toLowerCase().includes(q)
-    );
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return MENU_ITEMS;
+    return MENU_ITEMS.filter((item) => (
+      item.label.toLocaleLowerCase().includes(query)
+      || item.path.toLocaleLowerCase().includes(query)
+      || item.group.toLocaleLowerCase().includes(query)
+    ));
   }, [search]);
 
+  const groupedItems = useMemo(() => filteredItems.reduce<Record<string, MenuCatalogItem[]>>(
+    (groups, item) => ({ ...groups, [item.group]: [...(groups[item.group] ?? []), item] }),
+    {},
+  ), [filteredItems]);
+
   const stats = useMemo(() => {
-    const rows = Object.values(rowState);
-    const allow = rows.filter((r) => r === 'ALLOW').length;
-    const deny = rows.filter((r) => r === 'DENY').length;
-    return { allow, deny, total: rows.length };
+    const access = MENU_ITEMS.map((item) => rowState[item.path] ?? 'ALLOW');
+    return {
+      visible: access.filter((value) => value === 'ALLOW').length,
+      hidden: access.filter((value) => value === 'DENY').length,
+    };
   }, [rowState]);
 
+  const setGroupAccess = (items: MenuCatalogItem[], accessType: MenuAccessType) => {
+    setRowState((current) => ({
+      ...current,
+      ...Object.fromEntries(items.map((item) => [item.path, accessType])),
+    }));
+  };
+
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <PageHeader
-        title="Role Menu Access Matrix"
-        description="Kelompok visibility menu per role. DENY = menu disembunyikan dari sidebar user."
+        title="Menu Access"
+        description="Atur menu yang terlihat untuk setiap role pada company aktif. Permission API tetap menjadi lapisan otorisasi utama."
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void fetchAccess()} disabled={loading || !roleCode}>
+              <RefreshCw size={16} className={cn('mr-2', loading && 'animate-spin')} />
+              Muat ulang
+            </Button>
+            <Button size="sm" onClick={() => void handleSave()} disabled={saving || loading || !isDirty}>
+              <Save size={16} className="mr-2" />
+              {saving ? 'Menyimpan…' : isDirty ? 'Simpan perubahan' : 'Tersimpan'}
+            </Button>
+          </div>
+        )}
       />
 
-      <div className="bg-white dark:bg-slate-900 border rounded-xl p-5 space-y-4 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Company</label>
-            <Input
-              value={activeCompany?.name || '—'}
-              disabled
-              placeholder="No active company"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Role</label>
+      <section className="rounded-2xl bg-card p-5 shadow-sm" aria-labelledby="menu-access-context">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+          <div className="min-w-0">
+            <label id="menu-access-context" className="mb-1.5 block text-sm font-medium">Role</label>
             <Select2
               value={roleCode}
-              onValueChange={(val) => setRoleCode(val)}
-              options={ROLE_OPTIONS}
-              placeholder="Select role"
+              onValueChange={handleRoleChange}
+              options={roleOptions}
+              placeholder={loading ? 'Memuat role…' : 'Pilih role'}
+              disabled={loading || roleOptions.length === 0}
             />
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {selectedRole?.description || 'Role aktif dari konfigurasi RBAC company ini.'}
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5">
-              Search Menu
-            </label>
+          <div className="min-w-0">
+            <label htmlFor="menu-access-search" className="mb-1.5 block text-sm font-medium">Cari menu</label>
             <div className="relative">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
+                id="menu-access-search"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari path / label..."
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Nama, kelompok, atau path"
                 className="pl-9"
               />
             </div>
           </div>
-          <div className="flex items-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={fetchAccess}
-              disabled={loading}
-            >
-              <RefreshCw size={16} className={cn('mr-2', loading && 'animate-spin')} />
-              Refresh
-            </Button>
-            <Button
-              variant="default"
-              onClick={handleSave}
-              disabled={saving || loading}
-            >
-              <Save size={16} className="mr-2" />
-              {saving ? 'Saving...' : 'Save Bulk'}
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-emerald-600" />
-            <span className="text-slate-600 dark:text-slate-300">
-              ALLOW: <strong className="text-emerald-600">{stats.allow}</strong>
+          <div className="flex min-h-10 items-center gap-4 text-sm" aria-live="polite">
+            <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+              <Eye size={16} /> {stats.visible} terlihat
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-rose-700 dark:text-rose-300">
+              <EyeOff size={16} /> {stats.hidden} disembunyikan
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <XCircle size={16} className="text-rose-600" />
-            <span className="text-slate-600 dark:text-slate-300">
-              DENY: <strong className="text-rose-600">{stats.deny}</strong>
-            </span>
-          </div>
-          <div className="text-slate-400">
-            Total: {stats.total} menu paths
-          </div>
         </div>
-      </div>
+      </section>
 
-      <div className="bg-white dark:bg-slate-900 border rounded-xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-800 border-b">
-              <tr>
-                <th className="text-left px-5 py-3 font-medium text-slate-600 dark:text-slate-300 w-16">
-                  #
-                </th>
-                <th className="text-left px-5 py-3 font-medium text-slate-600 dark:text-slate-300">
-                  Path
-                </th>
-                <th className="text-left px-5 py-3 font-medium text-slate-600 dark:text-slate-300">
-                  Label
-                </th>
-                <th className="text-center px-5 py-3 font-medium text-slate-600 dark:text-slate-300 w-80">
-                  Access Type
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {loading && (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-5 py-10 text-center text-slate-400"
-                  >
-                    Loading menu access...
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                filteredMenuItems.map((item, idx) => (
-                  <tr
-                    key={item.path}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                  >
-                    <td className="px-5 py-3 text-slate-400">{idx + 1}</td>
-                    <td className="px-5 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">
-                      {item.path}
-                    </td>
-                    <td className="px-5 py-3 text-slate-700 dark:text-slate-200">
-                      {item.label}
-                    </td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <label
-                          className={cn(
-                            'flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-all',
-                            rowState[item.path] === 'ALLOW'
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-300'
-                              : 'bg-transparent border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400'
-                          )}
-                        >
-                          <input
-                            type="radio"
-                            name={`access-${item.path}`}
-                            value="ALLOW"
-                            checked={rowState[item.path] === 'ALLOW'}
-                            onChange={() => handleChange(item.path, 'ALLOW')}
-                            className="accent-emerald-600"
-                          />
-                          <CheckCircle2 size={14} />
-                          <span className="text-xs font-medium">ALLOW</span>
-                        </label>
-                        <label
-                          className={cn(
-                            'flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-all',
-                            rowState[item.path] === 'DENY'
-                              ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-900/30 dark:border-rose-700 dark:text-rose-300'
-                              : 'bg-transparent border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400'
-                          )}
-                        >
-                          <input
-                            type="radio"
-                            name={`access-${item.path}`}
-                            value="DENY"
-                            checked={rowState[item.path] === 'DENY'}
-                            onChange={() => handleChange(item.path, 'DENY')}
-                            className="accent-rose-600"
-                          />
-                          <XCircle size={14} />
-                          <span className="text-xs font-medium">DENY</span>
-                        </label>
+      {loadError && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl bg-destructive/10 p-4 text-destructive sm:flex-row sm:items-center sm:justify-between">
+          <span className="flex min-w-0 items-start gap-2 text-sm">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <span>{loadError}</span>
+          </span>
+          <Button variant="outline" size="sm" onClick={() => void fetchRoles()}>Coba lagi</Button>
+        </div>
+      )}
+
+      {!loadError && !loading && roles.length === 0 && (
+        <div className="rounded-2xl bg-card px-6 py-12 text-center shadow-sm">
+          <ShieldCheck className="mx-auto mb-3 text-muted-foreground" size={28} />
+          <h2 className="text-lg font-semibold">Belum ada role aktif</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
+            Buat role pada halaman Roles & Permissions sebelum mengatur visibilitas menu.
+          </p>
+        </div>
+      )}
+
+      {!loadError && roles.length > 0 && (
+        <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
+          {loading ? (
+            <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <RefreshCw size={17} className="animate-spin" /> Memuat konfigurasi menu…
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              <Search className="mx-auto mb-3 text-muted-foreground" size={26} />
+              <h2 className="font-semibold">Menu tidak ditemukan</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Coba kata kunci lain atau hapus pencarian.</p>
+            </div>
+          ) : (
+            Object.entries(groupedItems).map(([group, items]) => (
+              <section key={group} aria-labelledby={`menu-group-${group}`} className="border-b border-border last:border-0">
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/45 px-4 py-3 sm:px-5">
+                  <div>
+                    <h2 id={`menu-group-${group}`} className="font-semibold">{group}</h2>
+                    <p className="text-sm text-muted-foreground">{items.length} menu pada kelompok ini</p>
+                  </div>
+                  <div className="flex items-center gap-1" aria-label={`Aksi massal ${group}`}>
+                    <Button variant="ghost" size="sm" onClick={() => setGroupAccess(items, 'ALLOW')}>Tampilkan semua</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setGroupAccess(items, 'DENY')}>Sembunyikan semua</Button>
+                  </div>
+                </div>
+                <div className="divide-y divide-border">
+                  {items.map((item) => {
+                    const access = rowState[item.path] ?? 'ALLOW';
+                    return (
+                      <div key={item.path} className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5">
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground">{item.label}</p>
+                          <code className="mt-1 block truncate text-xs text-muted-foreground">{item.path}</code>
+                        </div>
+                        <div role="radiogroup" aria-label={`Visibilitas ${item.label}`} className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={access === 'ALLOW'}
+                            onClick={() => setRowState((current) => ({ ...current, [item.path]: 'ALLOW' }))}
+                            className={cn(
+                              'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40',
+                              access === 'ALLOW'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/45 dark:text-emerald-200'
+                                : 'bg-muted text-muted-foreground hover:text-foreground',
+                            )}
+                          >
+                            <CheckCircle2 size={16} /> Terlihat
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={access === 'DENY'}
+                            onClick={() => setRowState((current) => ({ ...current, [item.path]: 'DENY' }))}
+                            className={cn(
+                              'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40',
+                              access === 'DENY'
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/45 dark:text-rose-200'
+                                : 'bg-muted text-muted-foreground hover:text-foreground',
+                            )}
+                          >
+                            <EyeOff size={16} /> Disembunyikan
+                          </button>
+                        </div>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              {!loading && filteredMenuItems.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-5 py-10 text-center text-slate-400"
-                  >
-                    Tidak ada menu yang cocok dengan pencarian.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    );
+                  })}
+                </div>
+              </section>
+            ))
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

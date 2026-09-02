@@ -3,7 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { BadRequestError } from '@/shared/exceptions/AppError';
 import config from '@/config';
 
-function detectAllowedFileMime(bytes: Buffer): string | null {
+export function detectAllowedFileMime(bytes: Buffer): string | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return 'image/jpeg';
   }
@@ -35,15 +35,18 @@ export function validateFileMagicBytes(allowedMimes: string[] = config.upload.al
 
     try {
       for (const file of files) {
-        if (!file?.path) continue;
-        const handle = await fs.open(file.path, 'r');
-        let detectedMime: string | null;
-        try {
-          const header = Buffer.alloc(16);
-          const { bytesRead } = await handle.read(header, 0, header.length, 0);
-          detectedMime = detectAllowedFileMime(header.subarray(0, bytesRead));
-        } finally {
-          await handle.close();
+        let detectedMime: string | null = null;
+        if (file?.buffer) {
+          detectedMime = detectAllowedFileMime(file.buffer.subarray(0, 16));
+        } else if (file?.path) {
+          const handle = await fs.open(file.path, 'r');
+          try {
+            const header = Buffer.alloc(16);
+            const { bytesRead } = await handle.read(header, 0, header.length, 0);
+            detectedMime = detectAllowedFileMime(header.subarray(0, bytesRead));
+          } finally {
+            await handle.close();
+          }
         }
         if (!detectedMime || !allowedMimes.includes(detectedMime)) {
           throw new BadRequestError(

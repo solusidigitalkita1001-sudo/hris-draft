@@ -5,6 +5,7 @@ import {
   type AttendanceContext,
   type AttendanceRecord,
   type CreateAttendancePayload,
+  type AttendanceCaptureMethod,
 } from '@/services/attendance.service';
 import { employeeService } from '@/services/employee.service';
 import {
@@ -93,7 +94,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
   const [date, setDate] = useState(today);
   const [time, setTime] = useState(now);
   const [context, setContext] = useState<AttendanceContext | null>(null);
-  const [method, setMethod] = useState<'FINGERPRINT' | 'MOBILE_GPS' | 'MANUAL'>('MANUAL');
+  const [method, setMethod] = useState<AttendanceCaptureMethod>('MANUAL');
   const [notes, setNotes] = useState('');
   const [loadingContext, setLoadingContext] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -167,6 +168,21 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
     setShowLiveness(false);
   }, [resetLivenessState]);
 
+  const captureSelfieImage = useCallback(() => {
+    const video = webcamVideoRef.current;
+    if (!video || video.videoWidth < 160 || video.videoHeight < 160) {
+      throw new Error('Frame kamera belum siap. Silakan ulangi pengambilan wajah.');
+    }
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context2d = canvas.getContext('2d');
+    if (!context2d) throw new Error('Browser tidak dapat menangkap frame kamera.');
+    context2d.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.9);
+  }, []);
+
   const startWebcamAndCapture = useCallback(async () => {
     setLivenessError(null);
     setCapturingProgress(0);
@@ -217,21 +233,19 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
           const result = verifyLivenessChallenge(baselineLocal, framesArr, challengeSession.challenge);
           await new Promise((r) => setTimeout(r, 400));
           if (result.passed) {
+            const selfieImage = captureSelfieImage();
             stopWebcamStream();
             pendingSubmitAfterLivenessRef.current = false;
-
-            const challengeEvidenceStr = JSON.stringify({
-              challenge: challengeSession.challenge,
-              passed: true,
-              score: Math.round((result.score ?? 0) * 100) / 100,
-              framesCaptured: framesArr.length,
-            });
 
             setShowLiveness(false);
             setSaving(true);
             try {
               let location: { latitude: number; longitude: number } | undefined;
-              if (method === 'MOBILE_GPS' || context?.policy.requiresLocation) {
+              if (
+                method === 'MOBILE_GPS' ||
+                method === 'FACE_RECOGNITION' ||
+                context?.policy.requiresLocation
+              ) {
                 location = await getCurrentLocation();
               }
               const combinedNotes = notes.trim()
@@ -246,10 +260,10 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
                 source: 'WEB_ATTENDANCE',
                 checkInLatitude: location?.latitude,
                 checkInLongitude: location?.longitude,
+                faceRecognition: { selfieImage },
                 notes: combinedNotes || undefined,
               });
               onClose();
-              void challengeEvidenceStr;
             } catch { /* handled by caller */ }
             finally { setSaving(false); }
           } else {
@@ -263,7 +277,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
       stopWebcamStream();
       setLivenessError(e?.message || 'Gagal mengakses kamera. Pastikan izin kamera diizinkan.');
     }
-  }, [challengeSession.challenge, companyId, context?.policy.requiresLocation, date, employeeId, method, notes, onClose, onSave, stopWebcamStream, time]);
+  }, [captureSelfieImage, challengeSession.challenge, companyId, context?.policy.requiresLocation, date, employeeId, method, notes, onClose, onSave, stopWebcamStream, time]);
 
   useEffect(() => {
     if (showLiveness) {
@@ -281,7 +295,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
 
     // Step 4e: PRE-CHECK LIVENESS CHALLENGE sebelum submit actual attendance
     // KECUALI method MANUAL (HR input data untuk karyawan lain → tidak perlu selfie/liveness)
-    if (method !== 'MANUAL') {
+    if (method === 'FACE_RECOGNITION') {
       setLivenessError(null);
       regenerateChallenge();
       pendingSubmitAfterLivenessRef.current = true;
@@ -338,19 +352,22 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">Method *</label>
           <Select2
             value={method}
-            onValueChange={(value) => setMethod(value as 'FINGERPRINT' | 'MOBILE_GPS' | 'MANUAL')}
+            onValueChange={(value) => setMethod(value as AttendanceCaptureMethod)}
             options={(context?.allowedMethods || ['MANUAL']).map((value) => ({ value, label: value }))}
             placeholder="Pilih method"
             disabled={loadingContext}
             className="h-9"
           />
-          {method !== 'MANUAL' && (
+          {method === 'FACE_RECOGNITION' && (
             <p className="mt-1.5 text-[11px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
-              <Camera size={12} /> Check-In ini akan memverifikasi Liveness Challenge (Active Anti-Spoofing).
+              <Camera size={12} /> Check-in ini memakai tantangan gerakan aktif lalu mencocokkan wajah di server.
             </p>
           )}
           {method === 'MANUAL' && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">Mode Manual (HR input) — Liveness Challenge dilewati.</p>
+          )}
+          {method !== 'MANUAL' && method !== 'FACE_RECOGNITION' && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">Metode ini tidak menggunakan verifikasi wajah.</p>
           )}
         </div>
         <div>
@@ -368,7 +385,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
               <p><span className="font-medium">Schedule:</span> {context.schedule.workStart || '-'} - {context.schedule.workEnd || '-'}</p>
               <p><span className="font-medium">Policy:</span> {context.policy.attendanceMethod}</p>
               <p><span className="font-medium">Radius:</span> {context.policy.gpsRadiusMeters ? `${context.policy.gpsRadiusMeters} m` : 'Tidak pakai geofence'}</p>
-              <p><span className="font-medium">Lokasi:</span> {context.policy.requiresLocation || method === 'MOBILE_GPS' ? 'Wajib ambil lokasi saat submit' : 'Opsional'}</p>
+              <p><span className="font-medium">Lokasi:</span> {context.policy.requiresLocation || method === 'MOBILE_GPS' || method === 'FACE_RECOGNITION' ? 'Wajib ambil lokasi saat submit' : 'Opsional'}</p>
               {context.warnings.length > 0 && (
                 <p className="text-amber-600 dark:text-amber-400">
                   Warning: {context.warnings.join(', ')}
@@ -387,7 +404,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
       {showLiveness && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" onClick={closeLivenessModal}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-border w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/40 dark:to-blue-950/40">
+            <div className="flex items-center justify-between border-b border-border bg-muted/30 px-5 py-3.5">
               <div className="flex items-center gap-2">
                 <span className="text-2xl" aria-hidden>{CHALLENGE_INSTRUCTIONS[challengeSession.challenge].icon}</span>
                 <div>

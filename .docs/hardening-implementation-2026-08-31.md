@@ -13,18 +13,19 @@ This document records the implementation performed after the full-system audit. 
 - Frontend access-control tests establish a working Vitest baseline.
 - Shared controls have larger touch targets, visible focus states, reduced-motion behavior, and accessible labels.
 - Heavy performance, workflow, attendance, self-service, and work-calendar pages use route-level lazy loading.
-- A production Compose configuration requires secrets, isolates stateful services, and avoids publishing database/cache/broker ports.
-- The backend container runs as the non-root `node` user.
 - EWA creation is serialized with a per-employee MySQL advisory lock. Pending,
   approved, and paid requests all reserve the employee's current-period limit.
 - Audit hash-chain appends are serialized per company and the previous-hash
   read plus insert now execute in one transaction.
 - A public safe-method CSRF bootstrap endpoint allows sessions created before
   the CSRF rollout to refresh without weakening mutation validation.
-- Face-recognition decisions fail closed: client-supplied reference vectors and
-  similarity verdicts are rejected, and heuristic histogram vectors are not
-  accepted as biometric proof. FACE_RECOGNITION currently returns 503 until a
-  trusted server-side reference-photo retrieval pipeline is implemented.
+- Face-recognition decisions fail closed: client-supplied reference vectors,
+  storage URLs, similarity scores, and verdicts are rejected. Enrollment and
+  attendance now decode JPEG/PNG pixels on the server, detect exactly one face,
+  and extract a learned 256-dimension descriptor from the bundled Human model.
+- Face templates are encrypted at rest with AES-256-GCM and bound to the
+  company, employee, and model version. Source enrollment/check-in photos are
+  not retained; attendance stores only a non-reversible decision snapshot.
 - Frontend face recognition, router, and transitive packages are lockfile-pinned.
   Unused vulnerable `jspdf` and `xlsx` dependencies were removed.
 - Backend dependency cleanup removed unused `nodemailer`, replaced `uuid` with
@@ -41,6 +42,12 @@ This document records the implementation performed after the full-system audit. 
   Client-generated selfie/reference vectors, storage URLs, reference images,
   similarity scores, and match verdicts are rejected before any attendance row
   or face log can be written; the old client-verdict fallback code was removed.
+- Employee detail now supports camera/file enrollment, re-enrollment, status,
+  and deletion. FACE_RECOGNITION check-in captures the post-challenge camera
+  frame and sends only that image to the trusted server pipeline.
+- Menu Access and Data Access admin screens now use live roles and organization
+  units, searchable grouped controls, bulk menu actions, dirty-state protection,
+  and explicit loading/error/empty states. Their routes require `rbac:update`.
 
 ## Verification
 
@@ -49,18 +56,19 @@ This document records the implementation performed after the full-system audit. 
 - Backend full Jest suite: 49/49 suites, 405/405 tests pass after test isolation
   and stale RBAC repository mocks were corrected.
 - Frontend tests: 3/3 pass.
-- Production Compose validation: pass.
 - Frontend production build: pass with esbuild minification. The previous Terser configuration transformed all modules but made minification impractically slow; the production default now uses esbuild and still drops console/debugger statements.
 - Frontend dependency audit, including dev toolchain: 0 vulnerabilities
   (`npm audit`). Vite/Vitest, the React plugin, and React Router were upgraded
   to patched major versions and verified by build/tests.
-- Backend dependency audit, including dev toolchain: 0 vulnerabilities.
+- Backend production-dependency audit: 0 vulnerabilities. A later full audit
+  reports one high-severity advisory in the development-only `browserslist`
+  tree; see the 2026-09-02 follow-up below.
 
 ### Follow-up batch environment status (2026-09-01)
 
-- The real-MySQL advisory-lock test is present but could not be executed in this
-  workspace because the OrbStack/Docker socket is unavailable and local MySQL
-  on port 3307 is not running.
+- The real-MySQL advisory-lock test is environment-agnostic and uses the
+  configured `DATABASE_URL`. It has not been run against the target database
+  environment in this session.
 - The new targeted Jest run and a fresh `tsc --noEmit` invocation could not
   complete because the current local Node toolchain stalls while cold-loading
   dependencies (the captured Jest stack was inside the CommonJS loader under
@@ -69,6 +77,26 @@ This document records the implementation performed after the full-system audit. 
   passed syntax transpilation.
 - `git diff --check` passes for all files changed in this follow-up batch.
 
+### Face and access follow-up verification (2026-09-02)
+
+- Prisma Client generation succeeded and the updated schema validates.
+- A runtime smoke test detected one face from a real image and extracted the
+  expected 256-dimension learned descriptor with the Node WASM backend.
+- Changed backend TypeScript entry points pass isolated esbuild transpilation.
+  A combined bundle hit the local process memory limit (`exit 137`), not a code
+  diagnostic. Fresh full TypeScript/Jest runs also stalled during dependency
+  cold-loading and were stopped without compiler or assertion failures.
+- Backend production-dependency audit reports 0 vulnerabilities. The full audit
+  reports one high-severity advisory in development-only `browserslist` 4.28.2.
+  `npm audit fix` stalled in the current local Node toolchain and was stopped
+  before changing the resolved version; update it to a patched release when the
+  package manager is responsive.
+- The existing active-liveness challenge is still a client-side heuristic. It
+  improves capture guidance, but is not equivalent to certified anti-spoof or
+  passive liveness and must not be represented as such.
+- Data-scope configuration UI is complete, but row-level enforcement still
+  needs module-by-module verification. `MANAGER_TEAM` remains a placeholder.
+
 ## Follow-up verification before go-live
 
 - Run the opt-in database-backed advisory-lock test against the same MySQL
@@ -76,7 +104,10 @@ This document records the implementation performed after the full-system audit. 
   `src/shared/database/advisory-lock.mysql.test.ts`).
 - Run browser E2E tests for login/refresh/logout CSRF behavior, company switching, payroll maker-checker, EWA, and Daily Activity.
 - Run a formal SAST/dependency scan and authenticated DAST against staging.
-- Exercise Docker image startup with production secrets and verify upload-volume ownership.
 - Perform real-device accessibility/responsive checks on iOS, Android, tablet, and keyboard-only desktop.
-- Implement trusted face-reference enrollment/storage retrieval and server-side
-  image decoding before re-enabling FACE_RECOGNITION attendance.
+- Run biometric false-accept/false-reject and spoof-resistance evaluation on a
+  representative staging dataset before enabling face attendance broadly.
+- Add server-verifiable liveness/anti-spoofing if face attendance is intended
+  for high-assurance or unsupervised use.
+- Harden and test row-level data-scope enforcement for every protected resource,
+  including the unresolved `MANAGER_TEAM` hierarchy.

@@ -14,7 +14,7 @@ export const bulkUpsertRoleMenuAccessSchema = z.object({
   roleCode: z.string().min(1, 'Role code is required'),
   items: z.array(
     upsertRoleMenuAccessSchema.omit({ companyId: true, roleCode: true })
-  ),
+  ).min(1, 'At least one menu item is required').max(250),
 });
 
 export const upsertRoleDataScopeSchema = z.object({

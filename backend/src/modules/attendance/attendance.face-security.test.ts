@@ -28,11 +28,19 @@ describe('trusted face-recognition request policy', () => {
     )).toThrow(/seluruh keputusan biometrik harus berasal dari server/i);
   });
 
-  it('fails closed when a trusted reference exists but the end-to-end server pipeline is not ready', () => {
+  it('accepts only the source selfie once a trusted server profile exists', () => {
     expect(() => enforceTrustedFaceRecognition(
       AttendanceCaptureMethod.FACE_RECOGNITION,
       { selfieImage },
       true,
-    )).toThrow(/dinonaktifkan sementara/i);
+    )).not.toThrow();
+  });
+
+  it('fails closed when the server profile is missing', () => {
+    expect(() => enforceTrustedFaceRecognition(
+      AttendanceCaptureMethod.FACE_RECOGNITION,
+      { selfieImage },
+      false,
+    )).toThrow(/profil wajah karyawan belum terdaftar/i);
   });
 });

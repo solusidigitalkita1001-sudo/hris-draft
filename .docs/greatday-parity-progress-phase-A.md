@@ -284,6 +284,11 @@ Controlled state `selectedIds: Set<string>`.
 
 ### 8.4 A.7 Role Menu Access Matrix (Admin UI + Model + Sidebar Guard)
 
+> Koreksi status 2026-09-02: fondasi backend/model memang sudah tersedia,
+> tetapi UI lama belum layak dianggap selesai. UI sekarang sudah memakai role
+> live, katalog menu berkelompok, pencarian, bulk allow/deny, dirty-state guard,
+> dan state loading/error/empty. Akses konfigurasi diseragamkan ke `rbac:update`.
+
 #### Model Prisma + Prisma Client Generate
 Tambah di schema.prisma (section ADMINISTRATION, sebelum enum list bawah):
 ```prisma
@@ -349,6 +354,11 @@ Folder **BARU**: `backend/src/modules/administration/` dengan 8 file:
 ---
 
 ### 8.5 A.8 Data Access Scope — CompanyScope Middleware Extended Async
+
+> Koreksi status 2026-09-02: UI konfigurasi kini memakai picker unit organisasi
+> bernama dari data live, bukan UUID textarea. Penyelesaian UI tidak berarti
+> enforcement data universal sudah terbukti; setiap resource masih perlu diuji
+> end-to-end dan `MANAGER_TEAM` masih merupakan placeholder.
 
 #### Model RoleDataScope:
 ```prisma
