@@ -281,10 +281,11 @@ log "STEP 5/8: Check special migration recovery"
 docker exec -i "$BACKEND_CONTAINER" \
     npx prisma db execute \
     --schema="$MIGRATION_SCHEMA" \
-    --stdin >/dev/null <<EOSQL
+    --stdin >/dev/null <<'EOSQL'
 
 DELETE FROM \`_prisma_migrations\`
-WHERE migration_name = '${SPECIAL_MIGRATION}'
+#WHERE migration_name = '${SPECIAL_MIGRATION}'
+WHERE migration_name = '20260809120000_attendance_policy_company_default'
 AND (
     rolled_back_at IS NOT NULL
     OR finished_at IS NULL
