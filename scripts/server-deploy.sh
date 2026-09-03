@@ -5,17 +5,18 @@ set -Eeuo pipefail
 # =====================================================================
 # SERVER AUTO-DEPLOY SCRIPT — HRIS
 #
-# Tanggung jawab script ini:
+# Tanggung jawab:
 #   - Validasi environment
 #   - Docker build/start
 #   - Container readiness
 #   - Database connectivity
-#   - Recovery migration khusus (sementara)
+#   - Recovery migration khusus sementara
 #   - Prisma migrate deploy
-#   - Application health check
+#   - Backend health check
 #   - Docker cleanup
 #
-# Git sync TIDAK dilakukan di sini.
+# CATATAN:
+# Git fetch/reset TIDAK dilakukan di script ini.
 # Git sync dilakukan dari GitHub Actions sebelum script ini dijalankan.
 # =====================================================================
 
@@ -68,8 +69,8 @@ on_error() {
 
     echo "Exit code : $EXIT_CODE"
     echo "Commit    : ${DEPLOY_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
-    echo ""
 
+    echo ""
     echo "🐳 Docker Compose status:"
     docker compose -f "$COMPOSE_FILE" ps 2>/dev/null || true
 
@@ -224,7 +225,7 @@ if [ -z "$DB_URL" ]; then
     exit 1
 fi
 
-# Jangan echo DB_URL karena berisi credential database.
+# Jangan echo DATABASE_URL karena mengandung credential database.
 
 ok "DATABASE_URL tersedia di container"
 
@@ -272,7 +273,7 @@ ok "MySQL reachable"
 # STEP 5 — SPECIAL MIGRATION RECOVERY
 #
 # TODO:
-# Hapus section ini setelah production database sudah stabil dan migration
+# Hapus section ini setelah production database stabil dan migration
 # 20260809120000_attendance_policy_company_default sudah confirmed applied.
 # =====================================================================
 
@@ -283,8 +284,7 @@ docker exec -i "$BACKEND_CONTAINER" \
     --schema="$MIGRATION_SCHEMA" \
     --stdin >/dev/null <<'EOSQL'
 
-DELETE FROM \`_prisma_migrations\`
-#WHERE migration_name = '${SPECIAL_MIGRATION}'
+DELETE FROM `_prisma_migrations`
 WHERE migration_name = '20260809120000_attendance_policy_company_default'
 AND (
     rolled_back_at IS NOT NULL
@@ -448,6 +448,7 @@ if docker exec -i "$BACKEND_CONTAINER" \
 then
 
     cat "$MIGRATE_LOG"
+
     ok "Prisma migrate deploy success"
 
 else
@@ -455,9 +456,6 @@ else
     cat "$MIGRATE_LOG"
 
     warn "Prisma migrate deploy gagal."
-
-    # Recovery khusus HANYA untuk migration lama yang memang sudah
-    # dimodifikasi secara manual oleh sanitizer di atas.
 
     if grep -q "$SPECIAL_MIGRATION" "$MIGRATE_LOG"; then
 
@@ -533,7 +531,12 @@ request.on('timeout', () => {
     process.exit(1);
 });
 
-request.on('error', () => {
+request.on('error', (error) => {
+    console.error(
+        '❌ Health request error:',
+        error.message
+    );
+
     process.exit(1);
 });
 NODEEOF
