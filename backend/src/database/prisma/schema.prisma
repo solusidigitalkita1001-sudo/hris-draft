@@ -3026,9 +3026,8 @@ model BranchAttendancePolicy {
   @@map("branch_attendance_policies")
 }
 
-/// Attendance face recognition audit log (B.7 Face Recognition Backend Ready).
-/// Setiap clock-in selfie -> 1 row AttendanceFaceLog: similarity score vs reference, liveness verdict, mock location verdict.
-/// Digunakan untuk audit "apakah karyawan ini benar-benar di kantor dengan wajahnya sendiri?".
+/// Attendance face-recognition decision log. Source selfies are not retained.
+/// Failed rows also provide the immutable source for per-employee rate limiting.
 model AttendanceFaceLog {
   id                  String               @id @default(uuid()) @db.VarChar(36)
   attendanceId        String?              @map("attendance_id") @db.VarChar(36)
@@ -3053,6 +3052,7 @@ model AttendanceFaceLog {
   @@index([employeeId])
   @@index([companyId])
   @@index([isFaceMatch])
+  @@index([companyId, employeeId, isFaceMatch, createdAt], map: "attendance_face_logs_rate_limit_idx")
   @@map("attendance_face_logs")
 }
 

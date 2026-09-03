@@ -39,6 +39,7 @@ import {
   DEFAULT_FACE_MATCH_THRESHOLD,
 } from '@/shared/attendance/face-recognition';
 import { decryptFaceEmbedding } from '@/shared/security/biometric-crypto';
+import { runRateLimitedFaceMatch } from '@/shared/attendance/face-match-rate-limit';
 
 export function enforceTrustedFaceRecognition(
   method: AttendanceCaptureMethod,
@@ -385,64 +386,80 @@ export class AttendanceService {
         throw new BadRequestError('Profil wajah karyawan belum terdaftar.');
       }
 
-      try {
-        faceExtraction = await extractFaceVectorFromImage(faceInput.selfieImage);
-      } catch (error) {
-        translateFaceExtractionError(error);
-      }
+      const decision = await runRateLimitedFaceMatch(
+        { companyId: employeeForFace.companyId, employeeId: employeeForFace.id },
+        async (tx) => {
+          let extractedFace: FaceExtractionResult;
+          try {
+            extractedFace = await extractFaceVectorFromImage(faceInput.selfieImage);
+          } catch (error) {
+            translateFaceExtractionError(error);
+          }
 
-      if (faceExtraction.modelVersion !== profile.modelVersion) {
-        throw new ServiceUnavailableError(
-          'Profil wajah dibuat dengan model berbeda. HR perlu melakukan registrasi wajah ulang.',
-        );
-      }
+          if (extractedFace.modelVersion !== profile.modelVersion) {
+            throw new ServiceUnavailableError(
+              'Profil wajah dibuat dengan model berbeda. HR perlu melakukan registrasi wajah ulang.',
+            );
+          }
 
-      let referenceVector: number[];
-      try {
-        referenceVector = decryptFaceEmbedding(profile.encryptedEmbedding, {
-          companyId: employeeForFace.companyId,
-          employeeId: employeeForFace.id,
-          modelVersion: profile.modelVersion,
-        });
-      } catch (error) {
-        logger.error('Failed to decrypt employee face profile', {
-          employeeId: employeeForFace.id,
-          companyId: employeeForFace.companyId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw new ServiceUnavailableError(
-          'Profil wajah tidak dapat diverifikasi. HR perlu melakukan registrasi wajah ulang.',
-        );
-      }
+          let referenceVector: number[];
+          try {
+            referenceVector = decryptFaceEmbedding(profile.encryptedEmbedding, {
+              companyId: employeeForFace.companyId,
+              employeeId: employeeForFace.id,
+              modelVersion: profile.modelVersion,
+            });
+          } catch (error) {
+            logger.error('Failed to decrypt employee face profile', {
+              employeeId: employeeForFace.id,
+              companyId: employeeForFace.companyId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            throw new ServiceUnavailableError(
+              'Profil wajah tidak dapat diverifikasi. HR perlu melakukan registrasi wajah ulang.',
+            );
+          }
 
-      if (
-        referenceVector.length !== profile.embeddingDimensions ||
-        faceExtraction.vector.length !== profile.embeddingDimensions
-      ) {
-        throw new ServiceUnavailableError(
-          'Dimensi profil wajah tidak kompatibel. HR perlu melakukan registrasi wajah ulang.',
-        );
-      }
+          if (
+            referenceVector.length !== profile.embeddingDimensions ||
+            extractedFace.vector.length !== profile.embeddingDimensions
+          ) {
+            throw new ServiceUnavailableError(
+              'Dimensi profil wajah tidak kompatibel. HR perlu melakukan registrasi wajah ulang.',
+            );
+          }
 
-      const match = compareFaceVectors(
-        referenceVector,
-        faceExtraction.vector,
-        DEFAULT_FACE_MATCH_THRESHOLD,
+          const match = compareFaceVectors(
+            referenceVector,
+            extractedFace.vector,
+            DEFAULT_FACE_MATCH_THRESHOLD,
+          );
+          if (!match.isMatch) {
+            await tx.attendanceFaceLog.create({
+              data: {
+                employeeId: employeeForFace.id,
+                companyId: employeeForFace.companyId,
+                similarityScore: match.score,
+                isFaceMatch: false,
+                livenessVerdict: 'NO_DATA',
+                mockVerdict: 'LIKELY_REAL',
+                notes: `FACE_MISMATCH threshold=${match.threshold} model=${extractedFace.modelVersion}`,
+              },
+            });
+          }
+
+          return {
+            extraction: extractedFace,
+            similarity: match.score,
+            isMatch: match.isMatch,
+          };
+        },
       );
-      similarity = match.score;
-      isFaceMatch = match.isMatch;
+
+      faceExtraction = decision.extraction;
+      similarity = decision.similarity;
+      isFaceMatch = decision.isMatch;
       if (!isFaceMatch) {
-        await prisma.attendanceFaceLog.create({
-          data: {
-            employeeId: employeeForFace.id,
-            companyId: employeeForFace.companyId,
-            similarityScore: similarity,
-            isFaceMatch: false,
-            livenessVerdict: 'NO_DATA',
-            mockVerdict: 'LIKELY_REAL',
-            notes: `FACE_MISMATCH threshold=${match.threshold} model=${faceExtraction.modelVersion}`,
-          },
-        });
         throw new BadRequestError('Wajah tidak cocok dengan profil karyawan yang terdaftar.');
       }
     }
