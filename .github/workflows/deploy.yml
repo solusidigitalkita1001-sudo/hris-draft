@@ -2,34 +2,96 @@ name: 🚀 Deploy HRIS
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
+
+concurrency:
+  group: hris-production-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    name: Deploy Production
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+
     steps:
-      - name: Deploy via SSH (server-deploy.sh version-controlled)
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.2
+
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          timeout: 600s
-          # All logic lives in repo scripts/server-deploy.sh (version-controlled).
-          # Github Actions hanya: (1) ssh masuk; (2) git pull/reset sudah diurus server
-          # (3) chmod +x script deploy; (4) exec script deploy.
-          # Maintainability: gak perlu edit workflow YAML kalo mau ubah flow deploy.
+
+          timeout: 60s
+          command_timeout: 20m
+
           script: |
             set -euo pipefail
-            cd /root/projects/dev/hris-draft
-            echo "🚀 [GHA] SSH connected to ${SSH_USER}@${SSH_HOST}"
-            echo "🚩 Commit will be synced from origin/main inside script"
-            chmod +x ./scripts/server-deploy.sh || true
-            # Override env sesuai server production disini jika perlu (opsional):
-            # export COMPOSE_FILE=docker-compose.prod.yml
-            # export BACKEND_CONTAINER=hris_backend
-            # export DEPLOY_DIR="$PWD"
+
+            DEPLOY_DIR="/root/projects/dev/hris-draft"
+            ENV_FILE="$DEPLOY_DIR/backend/.env"
+
+            echo "=========================================="
+            echo "🚀 HRIS Production Deployment"
+            echo "=========================================="
+            echo "👤 User : $(whoami)"
+            echo "🖥️ Host : $(hostname)"
+            echo "📂 Path : $DEPLOY_DIR"
+            echo "=========================================="
+
+            cd "$DEPLOY_DIR"
+
+            if [ ! -d ".git" ]; then
+              echo "❌ .git directory not found"
+              exit 1
+            fi
+
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "❌ backend/.env not found"
+              exit 1
+            fi
+
+            PREVIOUS_COMMIT="$(git rev-parse HEAD)"
+
+            ENV_BACKUP="$(mktemp /tmp/hris-env.XXXXXX)"
+
+            cleanup() {
+              rm -f "$ENV_BACKUP"
+            }
+
+            trap cleanup EXIT
+
+            cp -p "$ENV_FILE" "$ENV_BACKUP"
+            echo "✅ Production .env backed up"
+
+            echo "🔄 Fetching origin/main..."
+            git fetch --prune origin main
+
+            echo "🔄 Resetting repository..."
+            git reset --hard origin/main
+
+            CURRENT_COMMIT="$(git rev-parse HEAD)"
+
+            echo "📌 Deploy commit:"
+            echo "$CURRENT_COMMIT"
+
+            cp -p "$ENV_BACKUP" "$ENV_FILE"
+            echo "✅ Production .env restored"
+
+            if [ ! -f "./scripts/server-deploy.sh" ]; then
+              echo "❌ scripts/server-deploy.sh not found"
+              exit 1
+            fi
+
+            chmod +x ./scripts/server-deploy.sh
+
+            export DEPLOY_COMMIT="$CURRENT_COMMIT"
+            export PREVIOUS_COMMIT="$PREVIOUS_COMMIT"
+
+            echo "🚀 Starting deployment..."
+
             ./scripts/server-deploy.sh
