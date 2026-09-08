@@ -1,7 +1,8 @@
+import { enforceTenantScope } from './tenant-scope';
 import { PrismaClient } from '@prisma/client';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
-import { getCurrentCompanyId, isSuperAdmin, isGroupAdmin, isSystemContext } from '@/shared/context/RequestContext';
+import { getCurrentCompanyId, isSystemContext } from '@/shared/context/RequestContext';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -53,6 +54,14 @@ const COMPANY_SCOPED_MODELS = new Set([
   'EmployeeSalary',
   'PayrollPeriod',
   'PayrollRun',
+  'PayrollFormulaVersion',
+  'PayrollFormulaAudit',
+  'PayrollFormulaCalculation',
+  'PayrollPaymentBatch',
+  'PayrollPaymentTransaction',
+  'PayrollPaymentLog',
+  'PayrollPaymentOperation',
+  'PayrollLoanDeductionSnapshot',
   'Payslip',
   'BenefitPlan',
   'BenefitEnrollment',
@@ -121,82 +130,17 @@ const COMPANY_SCOPED_MODELS = new Set([
   'CompanySetting',
 ]);
 
-const WORKFLOW_MODELS = new Set([
-  'WorkflowTemplate',
-  'WorkflowInstance',
-  'WorkflowInstanceStep',
-  'WorkflowInstanceLog',
-]);
-
-function hasCompanyIdFilter(params: any): boolean {
-  const where = params.args?.where;
-  if (!where) return false;
-  if (typeof where.companyId === 'string') return true;
-  if (where.companyId && typeof where.companyId === 'object') {
-    if ('equals' in where.companyId) return true;
-    if ('in' in where.companyId) return true;
-  }
-  if (Array.isArray(where.AND)) {
-    return where.AND.some((clause: any) => clause && typeof clause.companyId !== 'undefined');
-  }
-  return false;
-}
-
 function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {
-  // Middleware company scope hanya untuk model A.1-A.3 (workflow + leave/loan/travel/expense/shift/overtime).
-  // Tidak semua model di-scoped karena modul employee/master organization punya access pattern berbeda
-  // (GROUP_ADMIN perlu akses cross-company untuk master data).
   client.$use(async (params, next) => {
-    const model = params.model;
-    if (!model || !COMPANY_SCOPED_MODELS.has(model)) {
-      return next(params);
-    }
-
-    const currentCompanyId = getCurrentCompanyId();
-    if (!currentCompanyId) {
+    if (!params.model || !COMPANY_SCOPED_MODELS.has(params.model)) return next(params);
+    const companyId = getCurrentCompanyId();
+    if (!companyId) {
       if (isSystemContext()) return next(params);
-      throw new Error(
-        `Tenant context is required for ${model}.${params.action}. ` +
-        'Use authenticated request context or an explicit runInSystemContext() boundary.'
-      );
+      throw new Error(`Tenant context is required for ${params.model}.${params.action}`);
     }
-
-    if (WORKFLOW_MODELS.has(model) && (isSuperAdmin() || isGroupAdmin())) {
-      return next(params);
-    }
-
-    if (params.action === 'create') {
-      if (!params.args?.data?.companyId) {
-        if (params.args?.data) {
-          params.args.data.companyId = currentCompanyId;
-        }
-      }
-      return next(params);
-    }
-
-    if (
-      params.action === 'findUnique' ||
-      params.action === 'findFirst' ||
-      params.action === 'findMany' ||
-      params.action === 'count' ||
-      params.action === 'aggregate' ||
-      params.action === 'groupBy' ||
-      params.action === 'update' ||
-      params.action === 'updateMany' ||
-      params.action === 'delete' ||
-      params.action === 'deleteMany' ||
-      params.action === 'upsert'
-    ) {
-      if (!params.args) params.args = {};
-      if (!params.args.where) params.args.where = {};
-      if (!hasCompanyIdFilter(params)) {
-        params.args.where.companyId = currentCompanyId;
-      }
-    }
-
+    await enforceTenantScope(params, companyId);
     return next(params);
   });
-
   return client;
 }
 
@@ -214,9 +158,10 @@ function createPrismaClient(): PrismaClient {
   const slowMs = config.database.slowQueryMs;
   client.$on('query' as never, (e: any) => {
     if (e.duration >= slowMs) {
-      logger.warn(`Slow query ${e.duration}ms`, { query: e.query, duration: `${e.duration}ms` });
+      logger.warn('Slow database query', { duration: `${e.duration}ms` });
     } else if (isDev) {
-      logger.debug(`Query: ${e.query}`, { params: e.params, duration: `${e.duration}ms` });
+      // Bound parameters can contain bank routing, salaries, tokens, and employee PII.
+      logger.debug('Database query completed', { duration: `${e.duration}ms` });
     }
   });
 

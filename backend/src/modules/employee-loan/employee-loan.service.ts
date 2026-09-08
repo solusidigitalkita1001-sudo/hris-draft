@@ -157,12 +157,12 @@ export class EmployeeLoanService {
     return { loan: finalLoan, workflowInstance: updatedInstance };
   }
 
-  async approveLoan(id: string, userId: string, approverEmployeeId?: string | null) {
+  async approveLoan(id: string, userId: string, approverEmployeeId?: string | null, notes?: string) {
     const ctx = getRequestContext();
     const roles = ctx?.user?.roles ?? getCurrentRoles();
     return this.applyWorkflowAction(id, userId, roles, {
       action: 'APPROVE',
-      comment: 'Legacy approve endpoint',
+      comment: notes ?? 'Legacy approve endpoint',
       source: 'LEGACY',
     });
   }

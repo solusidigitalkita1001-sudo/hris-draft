@@ -65,6 +65,7 @@ export interface PayrollRun {
   totalDeductions: number;
   totalNetPay: number;
   status: string;
+  createdBy?: string | null;
   approvedBy?: string;
   approvedAt?: string;
   disbursedBy?: string;

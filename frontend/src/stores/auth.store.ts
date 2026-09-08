@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import type { AuthUser } from '@/services/auth.service';
 import { authService } from '@/services/auth.service';
 import { appConfig } from '@/config/app';
@@ -8,6 +7,7 @@ interface AuthState {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isBootstrapped: boolean;
 
   setUser: (user: AuthUser | null) => void;
   login: (email: string, password: string) => Promise<void>;
@@ -50,26 +50,35 @@ function syncUserContext(user: AuthUser | null) {
   }
 }
 
+let profileRequest: Promise<void> | null = null;
+let sessionVersion = 0;
+
+if (typeof window !== 'undefined') localStorage.removeItem('hrms-auth-store');
+
 export const useAuthStore = create<AuthState>()(
-  persist(
     (set, get) => ({
       user: null,
       isAuthenticated: false,
       isLoading: false,
+      isBootstrapped: false,
 
       setUser: (user) => {
+        sessionVersion++;
         syncUserContext(user);
-        set({ user, isAuthenticated: !!user });
+        set({ user, isAuthenticated: !!user, isBootstrapped: true });
       },
 
       login: async (email, password) => {
+        const version = ++sessionVersion;
         set({ isLoading: true });
         try {
           const response = await authService.login({ email, password });
+          if (version !== sessionVersion) return;
           syncUserContext(response.user);
           set({
             user: response.user,
             isAuthenticated: true,
+            isBootstrapped: true,
             isLoading: false,
           });
         } catch (error) {
@@ -79,23 +88,31 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
+        get().reset();
+        localStorage.setItem('hrms-logout', String(Date.now()));
         await authService.logout();
-        syncUserContext(null);
-        set({
-          user: null,
-          isAuthenticated: false,
-        });
       },
 
-      loadProfile: async () => {
-        try {
-          const profile = await authService.getProfile();
-          syncUserContext(profile);
-          set({ user: profile, isAuthenticated: true });
-        } catch {
-          syncUserContext(null);
-          set({ user: null, isAuthenticated: false });
-        }
+      loadProfile: () => {
+        if (profileRequest) return profileRequest;
+        const version = sessionVersion;
+        set({ isLoading: true });
+        profileRequest = (async () => {
+          try {
+            const profile = await authService.getProfile();
+            if (version !== sessionVersion) return;
+            syncUserContext(profile);
+            set({ user: profile, isAuthenticated: true });
+          } catch {
+            if (version !== sessionVersion) return;
+            syncUserContext(null);
+            set({ user: null, isAuthenticated: false });
+          } finally {
+            if (version === sessionVersion) set({ isLoading: false, isBootstrapped: true });
+            profileRequest = null;
+          }
+        })();
+        return profileRequest;
       },
 
       hasPermission: (resource: string, action: string) => {
@@ -114,19 +131,18 @@ export const useAuthStore = create<AuthState>()(
       },
 
       reset: () => {
+        sessionVersion++;
         syncUserContext(null);
-        set({ user: null, isAuthenticated: false });
+        set({ user: null, isAuthenticated: false, isLoading: false, isBootstrapped: true });
       },
-    }),
-    {
-      name: 'hrms-auth-store',
-      partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
-      }),
-      onRehydrateStorage: () => (state) => {
-        syncUserContext(state?.user || null);
-      },
-    }
-  )
+    })
 );
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'hrms-logout' && event.newValue) useAuthStore.getState().reset();
+  });
+  window.addEventListener('focus', () => {
+    if (useAuthStore.getState().isAuthenticated) void useAuthStore.getState().loadProfile();
+  });
+}

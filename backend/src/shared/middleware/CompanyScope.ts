@@ -1,4 +1,6 @@
+import { getRequestContext, runInRequestContext } from '@/shared/context/RequestContext';
 import { Response, NextFunction } from 'express';
+import config from '@/config';
 import { AuthenticatedRequest } from './Authenticate';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
@@ -28,8 +30,12 @@ const PATH_TO_RESOURCE_MAP: Array<{ prefix: string; resource: string }> = [
 
 function guessResourceFromPath(url: string): string {
   try {
+    url = url.split('?')[0];
+    if (url.startsWith(`${config.app.apiPrefix}/`)) {
+      url = `/api${url.slice(config.app.apiPrefix.length)}`;
+    }
     for (const { prefix, resource } of PATH_TO_RESOURCE_MAP) {
-      if (url.startsWith(prefix)) {
+      if (url === prefix || url.startsWith(`${prefix}/`)) {
         return resource;
       }
     }
@@ -171,13 +177,16 @@ export function requireCompanyAccess() {
           }
         } catch (scopeErr) {
           logger.warn(
-            `Data scope resolve failed for resource=${targetResource}, skipping filter injection`,
+            `Data scope resolve failed for resource=${targetResource}, denying access`,
             { error: (scopeErr as Error).message }
           );
+          throw new ForbiddenError('Unable to resolve data access scope');
         }
       }
 
-      next();
+      // Carry the validated active company into all downstream database operations.
+      req.user = { ...req.user, companyId: effectiveCompanyId };
+      runInRequestContext({ ...getRequestContext(), user: req.user }, () => next());
     } catch (error) {
       next(error);
     }
@@ -220,6 +229,7 @@ export function requireGroupAccess() {
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- Express extends its global Request interface through namespace declaration merging.
   namespace Express {
     interface Request {
       company?: {

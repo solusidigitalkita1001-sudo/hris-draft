@@ -91,8 +91,7 @@ function stripIDRCurrency(raw: string): number {
     if (/,\d{1,2}$/.test(s)) s = s.replace(',', '.');
     else s = s.replace(/,/g, '');
   } else if (hasDot && !hasComma) {
-    if (/\.\d{1,2}$/.test(s)) s = s;
-    else s = s.replace(/\./g, '');
+    if (!/\.\d{1,2}$/.test(s)) s = s.replace(/\./g, '');
   }
   const match = s.match(/\d+(\.\d+)?/);
   if (!match) return 0;
@@ -105,7 +104,7 @@ function parseDateID(raw: string): string | null {
   if (!raw) return null;
   const s = String(raw).trim();
   if (!s) return null;
-  const m = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  const m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
   if (m) {
     const day = m[1].padStart(2, '0');
     const month = m[2].padStart(2, '0');

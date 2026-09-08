@@ -1,3 +1,7 @@
+import { receiptOwnerDirectory } from '@/shared/storage/receipt-reference';
+import type { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
+import crypto from 'crypto';
+import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
@@ -26,12 +30,15 @@ const uploadDirectory = path.resolve(process.cwd(), 'uploads/travel-expenses/rec
 fs.mkdirSync(uploadDirectory, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDirectory);
+  destination: (req: AuthenticatedRequest, _file, cb) => {
+    try {
+      const directory = path.join(uploadDirectory, receiptOwnerDirectory(req.user?.companyId, req.user?.employeeId));
+      fs.mkdirSync(directory, { recursive: true });
+      cb(null, directory);
+    } catch (error) { cb(error as Error, ''); }
   },
   filename: (_req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${Date.now()}-${safeName}`);
+    cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`);
   },
 });
 
@@ -104,6 +111,7 @@ router.post(
   '/claims/receipt-upload',
   authorizeRole(...employeeRoles),
   upload.single('receipt'),
+  validateFileMagicBytes(),
   travelExpenseController.uploadReceipt.bind(travelExpenseController)
 );
 router.post(

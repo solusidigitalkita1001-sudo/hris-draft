@@ -241,6 +241,7 @@ export function auditMutationFallback(
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- Express extends its global Request interface through namespace declaration merging.
   namespace Express {
     interface Request {
       auditHandled?: boolean;

@@ -1,3 +1,4 @@
+import { appConfig } from '@/config/app';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
@@ -120,8 +121,6 @@ function TripForm({
     setSaving(true);
     try {
       await travelExpenseService.createTrip({
-        companyId,
-        employeeId,
         destination: destination.trim(),
         purpose: purpose.trim(),
         startDate: dayjs(startDate).toISOString(),
@@ -252,8 +251,6 @@ function ClaimForm({
       }
 
       await travelExpenseService.createClaim({
-        companyId,
-        employeeId,
         tripId: tripId || undefined,
         category,
         amount: parsedAmount,
@@ -393,10 +390,9 @@ export function TravelExpensePage() {
       return;
     }
 
-    if (!employeeId) return;
-    const data = await travelExpenseService.findMyTrips(employeeId, tripStatus || undefined);
+    const data = await travelExpenseService.findMyTrips(tripStatus || undefined);
     setTrips(data);
-  }, [companyId, employeeId, isApprover, tripStatus]);
+  }, [companyId, isApprover, tripStatus]);
 
   const loadClaims = useCallback(async () => {
     if (isApprover) {
@@ -406,10 +402,9 @@ export function TravelExpensePage() {
       return;
     }
 
-    if (!employeeId) return;
-    const data = await travelExpenseService.findMyClaims(employeeId, claimStatus || undefined);
+    const data = await travelExpenseService.findMyClaims(claimStatus || undefined);
     setClaims(data);
-  }, [claimStatus, companyId, employeeId, isApprover]);
+  }, [claimStatus, companyId, isApprover]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -673,7 +668,7 @@ export function TravelExpensePage() {
                   </div>
                   {claim.description && <p className="mt-2 text-sm text-muted-foreground">{claim.description}</p>}
                   {claim.receiptFilePath && (
-                    <a href={claim.receiptFilePath} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-primary hover:underline">
+                    <a href={`${appConfig.apiUrl}/private-files/receipts/${claim.id}`} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-primary hover:underline">
                       Lihat receipt
                     </a>
                   )}

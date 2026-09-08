@@ -44,6 +44,9 @@ model CompanyGroup {
 
 /// Company entity under a group
 model Company {
+  payrollFormulaVersions PayrollFormulaVersion[]
+  payrollFormulaAudits PayrollFormulaAudit[]
+  payrollFormulaCalculations PayrollFormulaCalculation[]
   id              String    @id @default(uuid()) @db.VarChar(36)
   groupId         String    @map("group_id") @db.VarChar(36)
   name            String    @db.VarChar(255)
@@ -79,6 +82,11 @@ model Company {
   employeeSalaries                      EmployeeSalary[]
   payrollPeriods                        PayrollPeriod[]
   payrollRuns                           PayrollRun[]
+  payrollPaymentBatches                 PayrollPaymentBatch[]
+  payrollPaymentTransactions            PayrollPaymentTransaction[]
+  payrollPaymentLogs                    PayrollPaymentLog[]
+  payrollPaymentOperations              PayrollPaymentOperation[]
+  payrollLoanDeductionSnapshots         PayrollLoanDeductionSnapshot[]
   payslips                              Payslip[]
   benefitPlans                          BenefitPlan[]
   benefitEnrollments                    BenefitEnrollment[]
@@ -334,10 +342,12 @@ model Position {
 
 /// Master data for salary components (Gaji Pokok, Tunjangan Makan, BPJS, etc)
 model SalaryComponent {
+  formulaVersions PayrollFormulaVersion[]
+  formulaCalculations PayrollFormulaCalculation[]
   id                String     @id @default(uuid()) @db.VarChar(36)
   companyId         String     @map("company_id") @db.VarChar(36)
   name              String     @db.VarChar(255)
-  code              String     @unique @db.VarChar(50)
+  code              String     @db.VarChar(50)
   type              SalaryType @default(ALLOWANCE)
   calculationMethod String     @default("FIXED") @map("calculation_method") @db.VarChar(50)
   amount            Decimal?   @db.Decimal(15, 2)
@@ -355,6 +365,7 @@ model SalaryComponent {
   employeeSalaries  EmployeeSalaryComponent[]
   payslipComponents PayslipComponent[]
 
+  @@unique([companyId, code])
   @@index([companyId])
   @@index([code])
   @@index([type])
@@ -433,6 +444,7 @@ model PayrollPeriod {
 
 /// Payroll run — generated from a period
 model PayrollRun {
+  formulaCalculations PayrollFormulaCalculation[]
   id              String           @id @default(uuid()) @db.VarChar(36)
   periodId        String           @map("period_id") @db.VarChar(36)
   companyId       String           @map("company_id") @db.VarChar(36)
@@ -443,6 +455,7 @@ model PayrollRun {
   totalDeductions Decimal          @default(0) @map("total_deductions") @db.Decimal(15, 2)
   totalNetPay     Decimal          @default(0) @map("total_net_pay") @db.Decimal(15, 2)
   status          PayrollRunStatus @default(DRAFT)
+  createdBy       String?          @map("created_by") @db.VarChar(36)
   approvedBy      String?          @map("approved_by") @db.VarChar(36)
   approvedAt      DateTime?        @map("approved_at")
   disbursedBy     String?          @map("disbursed_by") @db.VarChar(36)
@@ -455,6 +468,8 @@ model PayrollRun {
   period   PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payslips Payslip[]
+  paymentBatch PayrollPaymentBatch?
+  loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
   /// C.4 EWA: list employee tarik gaji awal yang di-deducted di run ini
   earnedWageAccesses EarnedWageAccess[]
 
@@ -466,6 +481,7 @@ model PayrollRun {
 
 /// Payslip — one per employee per payroll run
 model Payslip {
+  formulaCalculations PayrollFormulaCalculation[]
   id               String        @id @default(uuid()) @db.VarChar(36)
   payrollRunId     String        @map("payroll_run_id") @db.VarChar(36)
   employeeId       String        @map("employee_id") @db.VarChar(36)
@@ -491,11 +507,146 @@ model Payslip {
   employeeSalary    EmployeeSalary?    @relation(fields: [employeeSalaryId], references: [id], onDelete: SetNull)
   components        PayslipComponent[]
   benefitDeductions BenefitDeduction[]
+  paymentTransactions PayrollPaymentTransaction[]
+  loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
 
   @@index([payrollRunId])
   @@index([employeeId])
   @@index([companyId])
   @@map("payslips")
+}
+
+/// Immutable bank and amount snapshots for manual bank-file exports and reconciliation.
+model PayrollPaymentBatch {
+  id               String                    @id @default(uuid()) @db.VarChar(36)
+  companyId        String                    @map("company_id") @db.VarChar(36)
+  payrollRunId     String                    @unique @map("payroll_run_id") @db.VarChar(36)
+  runName          String                    @map("run_name") @db.VarChar(255)
+  runCreatedBy     String                    @map("run_created_by") @db.VarChar(36)
+  runApprovedBy    String                    @map("run_approved_by") @db.VarChar(36)
+  status           PayrollPaymentBatchStatus @default(DRAFT)
+  version          Int                       @default(0)
+  totalAmount      Decimal                   @map("total_amount") @db.Decimal(15, 2)
+  transactionCount Int                       @map("transaction_count")
+  createdBy        String                    @map("created_by") @db.VarChar(36)
+  exportedAt       DateTime?                 @map("exported_at")
+  reconciledAt     DateTime?                 @map("reconciled_at")
+  cancelledAt      DateTime?                 @map("cancelled_at")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
+
+  company      Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  run          PayrollRun                  @relation(fields: [payrollRunId], references: [id], onDelete: Restrict)
+  transactions PayrollPaymentTransaction[]
+  logs         PayrollPaymentLog[]
+
+  @@index([companyId, status])
+  @@map("payroll_payment_batches")
+}
+
+model PayrollPaymentTransaction {
+  id                  String                          @id @default(uuid()) @db.VarChar(36)
+  companyId           String                          @map("company_id") @db.VarChar(36)
+  batchId             String                          @map("batch_id") @db.VarChar(36)
+  payslipId           String                          @map("payslip_id") @db.VarChar(36)
+  employeeId          String                          @map("employee_id") @db.VarChar(36)
+  employeeName        String                          @map("employee_name") @db.VarChar(510)
+  bankCode            String                          @map("bank_code") @db.VarChar(20)
+  bankName            String                          @map("bank_name") @db.VarChar(255)
+  accountNumber       String                          @map("account_number") @db.VarChar(100)
+  accountHolder       String                          @map("account_holder") @db.VarChar(255)
+  referenceNo         String                          @map("reference_no") @db.VarChar(100)
+  expectedAmount      Decimal                         @map("expected_amount") @db.Decimal(15, 2)
+  paidAmount          Decimal?                        @map("paid_amount") @db.Decimal(15, 2)
+  status              PayrollPaymentTransactionStatus @default(PENDING)
+  bankReference       String?                         @map("bank_reference") @db.VarChar(100)
+  failureReason       String?                         @map("failure_reason") @db.VarChar(500)
+  recordedBy          String?                         @map("recorded_by") @db.VarChar(36)
+  recordedAt          DateTime?                       @map("recorded_at")
+  createdAt           DateTime                        @default(now()) @map("created_at")
+  updatedAt           DateTime                        @updatedAt @map("updated_at")
+
+  company Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  batch   PayrollPaymentBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  payslip Payslip             @relation(fields: [payslipId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, payslipId])
+  @@unique([companyId, bankReference])
+  @@index([companyId, status])
+  @@map("payroll_payment_transactions")
+}
+
+/// Logs contain actor/state metadata only; bank routing never belongs in the audit payload.
+model PayrollPaymentLog {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  companyId     String   @map("company_id") @db.VarChar(36)
+  batchId       String   @map("batch_id") @db.VarChar(36)
+  transactionId String?  @map("transaction_id") @db.VarChar(36)
+  actorId       String   @map("actor_id") @db.VarChar(36)
+  action        String   @db.VarChar(50)
+  fromStatus    String?  @map("from_status") @db.VarChar(30)
+  toStatus      String   @map("to_status") @db.VarChar(30)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  company Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  batch   PayrollPaymentBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, batchId])
+  @@map("payroll_payment_logs")
+}
+
+/// Transactionally committed replay results; response contains masked metadata only.
+model PayrollPaymentOperation {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  companyId   String   @map("company_id") @db.VarChar(36)
+  key         String   @db.VarChar(128)
+  fingerprint String   @db.Char(64)
+  result      Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, key])
+  @@map("payroll_payment_operations")
+}
+
+/// Loan installments actually deducted in the calculated payslip, frozen before approval.
+model PayrollLoanDeductionSnapshot {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  companyId     String   @map("company_id") @db.VarChar(36)
+  runId         String   @map("run_id") @db.VarChar(36)
+  payslipId     String   @map("payslip_id") @db.VarChar(36)
+  loanId        String   @map("loan_id") @db.VarChar(36)
+  installmentId String   @map("installment_id") @db.VarChar(36)
+  amount        Decimal  @db.Decimal(15, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  run         PayrollRun      @relation(fields: [runId], references: [id], onDelete: Restrict)
+  payslip     Payslip         @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  installment LoanInstallment @relation(fields: [installmentId], references: [id], onDelete: Restrict)
+
+  @@unique([payslipId, installmentId])
+  @@index([runId])
+  @@index([companyId])
+  @@map("payroll_loan_deduction_snapshots")
+}
+
+enum PayrollPaymentBatchStatus {
+  DRAFT
+  EXPORTED
+  PROCESSING
+  PAID
+  PARTIALLY_FAILED
+  FAILED
+  RECONCILED
+  CANCELLED
+}
+
+enum PayrollPaymentTransactionStatus {
+  PENDING
+  PAID
+  FAILED
 }
 
 /// Breakdown of each salary component on a payslip
@@ -4053,6 +4204,7 @@ model LoanInstallment {
   updatedAt DateTime          @updatedAt @map("updated_at")
 
   loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
 
   @@index([loanId])
   @@index([status])
@@ -4791,4 +4943,77 @@ enum AttendanceCorrectionStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+
+/// Immutable formula revisions. Publishing schedules the override at period start.
+model PayrollFormulaVersion {
+  id String @id @default(uuid()) @db.VarChar(36)
+  companyId String @map("company_id") @db.VarChar(36)
+  componentId String @map("component_id") @db.VarChar(36)
+  version Int
+  expression String @db.Text
+  expressionHash String @map("expression_hash") @db.Char(64)
+  engineVersion Int @default(1) @map("engine_version")
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  status PayrollFormulaStatus @default(DRAFT)
+  createdBy String @map("created_by") @db.VarChar(36)
+  previewedAt DateTime? @map("previewed_at")
+  publishedBy String? @map("published_by") @db.VarChar(36)
+  publishedAt DateTime? @map("published_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  component SalaryComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  audits PayrollFormulaAudit[]
+  calculations PayrollFormulaCalculation[]
+  @@unique([componentId, version])
+  @@index([companyId, status, effectiveFrom])
+  @@map("payroll_formula_versions")
+}
+
+enum PayrollFormulaStatus {
+  DRAFT
+  PUBLISHED
+}
+
+/// Audit stores identity and revision hashes, never payroll simulation inputs.
+model PayrollFormulaAudit {
+  id String @id @default(uuid()) @db.VarChar(36)
+  companyId String @map("company_id") @db.VarChar(36)
+  versionId String @map("version_id") @db.VarChar(36)
+  actorId String @map("actor_id") @db.VarChar(36)
+  action String @db.VarChar(30)
+  expressionHash String @map("expression_hash") @db.Char(64)
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+  requestId String? @map("request_id") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  version PayrollFormulaVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  @@index([companyId, versionId])
+  @@map("payroll_formula_audits")
+}
+
+/// Frozen execution evidence attached to the actual payslip.
+model PayrollFormulaCalculation {
+  id String @id @default(uuid()) @db.VarChar(36)
+  companyId String @map("company_id") @db.VarChar(36)
+  runId String @map("run_id") @db.VarChar(36)
+  payslipId String @map("payslip_id") @db.VarChar(36)
+  componentId String @map("component_id") @db.VarChar(36)
+  versionId String @map("version_id") @db.VarChar(36)
+  expression String @db.Text
+  amount Decimal @db.Decimal(15, 2)
+  inputs Json
+  dependencies Json
+  engineVersion Int @map("engine_version")
+  createdAt DateTime @default(now()) @map("created_at")
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  run PayrollRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  component SalaryComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  version PayrollFormulaVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  @@unique([payslipId, componentId])
+  @@index([companyId, runId])
+  @@map("payroll_formula_calculations")
 }

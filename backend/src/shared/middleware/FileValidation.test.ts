@@ -59,3 +59,16 @@ describe('validateFileMagicBytes', () => {
     await expect(fs.access(filePath)).rejects.toBeDefined();
   });
 });
+
+describe('file metadata spoofing', () => {
+  it.each([
+    { originalname: 'payload.html', mimetype: 'image/png' },
+    { originalname: 'photo.png', mimetype: 'text/html' },
+  ])('rejects mismatched filename or MIME: %j', async (metadata) => {
+    const next = jest.fn();
+    await validateFileMagicBytes(['image/png'])({ file: {
+      ...metadata, buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    } } as Request, {} as Response, next);
+    expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
+  });
+});

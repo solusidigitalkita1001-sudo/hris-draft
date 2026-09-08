@@ -1,5 +1,6 @@
 import { prisma } from '@/shared/database/prisma';
-import { BadRequestError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
+import type { Prisma } from '@prisma/client';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId, getCurrentRoles, isSuperAdmin, getRequestContext } from '@/shared/context/RequestContext';
 import type {
   CreateWorkflowTemplateDTO,
@@ -367,9 +368,14 @@ export class WorkflowEngineRepository {
       throw new NotFoundError('Workflow instance not found');
     }
 
-    const isAdmin = roles.includes('SUPER_ADMIN');
+    if (!['PENDING', 'ESCALATED'].includes(instance.status)) {
+      throw new ConflictError('Workflow is no longer pending');
+    }
+    if (action.action === 'REJECT' && !action.comment?.trim()) {
+      throw new BadRequestError('A rejection reason is required');
+    }
     if (action.action === 'APPROVE' || action.action === 'REJECT' || action.action === 'ESCALATE') {
-      if (instance.requesterId === userId && !isAdmin) {
+      if (instance.requesterId === userId) {
         throw new ForbiddenError('Cannot approve/reject your own request via workflow');
       }
     }
@@ -391,21 +397,37 @@ export class WorkflowEngineRepository {
     }
 
     return prisma.$transaction(async (tx) => {
+      // Lock and compare the instance snapshot before changing steps or logs.
+      const claimed = await tx.workflowInstance.updateMany({
+        where: { id: instanceId, status: instance.status, currentLevel: currentStep.level, updatedAt: instance.updatedAt },
+        data: { updatedAt: new Date() },
+      });
+      if (claimed.count !== 1) throw new ConflictError('Workflow changed; reload before taking action');
+
+      const transitionCurrentStep = async (data: Prisma.WorkflowInstanceStepUpdateManyMutationInput) => {
+        const result = await tx.workflowInstanceStep.updateMany({
+          where: {
+            id: currentStep.id, instanceId, status: 'PENDING', isCurrent: true,
+            approverId: currentStep.approverId, approverRoleCode: currentStep.approverRoleCode,
+            updatedAt: currentStep.updatedAt,
+          },
+          data,
+        });
+        if (result.count !== 1) throw new ConflictError('Approval step changed; reload before taking action');
+      };
+
       if (action.action === 'APPROVE') {
         const nextStep = instance.steps.find(
           (step: (typeof instance.steps)[number]) => step.level > currentStep.level
         );
 
-        await tx.workflowInstanceStep.update({
-          where: { id: currentStep.id },
-          data: {
+        await transitionCurrentStep({
             status: 'APPROVED',
             isCurrent: false,
             actedBy: userId,
             actedAt: new Date(),
             comment: action.comment,
-          },
-        });
+          });
 
         if (nextStep) {
           await tx.workflowInstanceStep.update({
@@ -442,16 +464,13 @@ export class WorkflowEngineRepository {
       }
 
       if (action.action === 'REJECT') {
-        await tx.workflowInstanceStep.update({
-          where: { id: currentStep.id },
-          data: {
+        await transitionCurrentStep({
             status: 'REJECTED',
             isCurrent: false,
             actedBy: userId,
             actedAt: new Date(),
             comment: action.comment,
-          },
-        });
+          });
 
         await tx.workflowInstance.update({
           where: { id: instanceId },
@@ -482,16 +501,13 @@ export class WorkflowEngineRepository {
             throw new BadRequestError('No backup approver or next step available for escalation');
           }
 
-          await tx.workflowInstanceStep.update({
-            where: { id: currentStep.id },
-            data: {
+          await transitionCurrentStep({
               status: 'ESCALATED',
               isCurrent: false,
               actedBy: userId,
               actedAt: new Date(),
               comment: action.comment,
-            },
-          });
+            });
 
           await tx.workflowInstanceStep.update({
             where: { id: nextStep.id },
@@ -506,15 +522,15 @@ export class WorkflowEngineRepository {
             },
           });
         } else {
-          await tx.workflowInstanceStep.update({
-            where: { id: currentStep.id },
-            data: {
+          if (currentStep.approverId === currentStep.backupApproverId && currentStep.approverRoleCode === currentStep.backupApproverRoleCode) {
+            throw new BadRequestError('Workflow is already assigned to its backup approver');
+          }
+          await transitionCurrentStep({
               status: 'PENDING',
               approverId: currentStep.backupApproverId,
               approverRoleCode: currentStep.backupApproverRoleCode,
               comment: action.comment,
-            },
-          });
+            });
 
           await tx.workflowInstance.update({
             where: { id: instanceId },

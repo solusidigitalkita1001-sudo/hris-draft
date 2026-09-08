@@ -23,13 +23,11 @@ import { calculateBpjs } from '@/shared/payroll/bpjs';
 import { calculatePph21 } from '@/shared/payroll/pph21';
 import { calculateThr } from '@/shared/payroll/thr';
 import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
-import { groupPayslipsByBank, generateBankCsv, resolveEmployeeBankInfo } from '@/shared/payroll/disbursement';
-import type { EmployeeForDisbursement } from '@/shared/payroll/disbursement';
 import { prisma } from '@/shared/database/prisma';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 import { companySettingsService } from '@/modules/company-settings/company-settings.service';
-import { JKKRiskClass } from '@prisma/client';
+import { JKKRiskClass, Prisma } from '@prisma/client';
 import { ewaRepository } from '@/modules/ewa/ewa.repository';
 import { ewaService } from '@/modules/ewa/ewa.service';
 
@@ -217,7 +215,10 @@ export class PayrollService {
   async findPayrollRunById(id: string) {
     const run = await payrollRepository.findPayrollRunById(id);
     if (!run) throw new NotFoundError('Payroll run not found');
-    return run;
+    return { ...run, payslips: run.payslips.map(payslip => ({ ...payslip,
+      employee: { id: payslip.employee.id, fullName: payslip.employee.fullName,
+        employeeNumber: payslip.employee.employeeNumber },
+    })) };
   }
 
   async getAttendanceSummaryForPeriod(periodId: string) {
@@ -273,6 +274,7 @@ export class PayrollService {
   }
 
   async createPayrollRun(data: CreatePayrollRunDTO, userId?: string) {
+    if (!userId) throw new BadRequestError('Authenticated payroll creator is required');
     // Validate period exists and is not closed
     const period = await this.findPayrollPeriodById(data.periodId);
     if (period.status === 'CLOSED') {
@@ -287,7 +289,7 @@ export class PayrollService {
     const runNumber = lastRunNumber + 1;
 
     // Create run
-    const run = await payrollRepository.createPayrollRun(data, runNumber);
+    const run = await payrollRepository.createPayrollRun(data, runNumber, userId);
 
     // Run payroll calculation
     await this.calculatePayroll(run.id);
@@ -314,7 +316,9 @@ export class PayrollService {
       throw new BadRequestError('Only completed payroll runs can be approved');
     }
 
-    const approved = await payrollRepository.updatePayrollRunStatus(id, 'APPROVED', userId);
+    if (!run.createdBy) throw new ConflictError('Payroll creator is unknown; legacy payroll requires review before approval');
+    if (run.createdBy === userId) throw new ConflictError('Payroll creator cannot approve their own run');
+    const approved = await payrollRepository.approvePayrollRun(id, userId);
 
     await eventBus.publish({
       name: DomainEvents.PAYROLL_RUN_APPROVED,
@@ -330,40 +334,9 @@ export class PayrollService {
     return approved;
   }
 
-  async disbursePayrollRun(id: string, userId: string) {
-    const run = await this.findPayrollRunById(id);
-    if (run.status !== 'APPROVED') {
-      throw new BadRequestError('Only approved payroll runs can be disbursed');
-    }
-    if (run.approvedBy === userId) {
-      throw new ConflictError(
-        'Payroll maker-checker violation: the approver cannot disburse the same payroll run'
-      );
-    }
-
-    const employeeIds = Array.from(new Set((run.payslips || []).map((payslip) => payslip.employeeId)));
-    await employeeLoanRepository.applyPayrollDeductions(
-      run.companyId,
-      employeeIds,
-      new Date(run.period.endDate),
-      new Date(),
-      run.runNumber
-    );
-
-    const disbursed = await payrollRepository.updatePayrollRunStatus(id, 'DISBURSED', userId);
-
-    await eventBus.publish({
-      name: DomainEvents.PAYROLL_RUN_DISBURSED,
-      aggregateId: id,
-      aggregateType: 'PayrollRun',
-      data: { disbursedBy: userId },
-      metadata: {
-        eventId: uuidv4(),
-        occurredAt: new Date(),
-      },
-    });
-
-    return disbursed;
+  async disbursePayrollRun(id: string, _userId: string): Promise<never> {
+    await this.findPayrollRunById(id);
+    throw new ConflictError('Direct disbursement is disabled. Create a payment batch, record payment results, then reconcile it.');
   }
 
   // ==================== B.6 Multibank Disbursement (CSV Export ====================
@@ -372,52 +345,9 @@ export class PayrollService {
    * Group payslips per bank + generate CSV bulk transfer untuk BCA/Mandiri/BNI.
    * Prioritas bank: EmployeeBankAccount primary → first active → legacy bank fields.
    */
-  async getPayrollRunDisbursements(runId: string, bankCodeFilter?: string) {
-    const run = await this.findPayrollRunById(runId);
-    const employeesMap: Record<string, EmployeeForDisbursement> = {};
-    for (const ps of (run.payslips ?? [])) {
-      const e = (ps as any).employee as any;
-      if (e) employeesMap[e.id] = e as EmployeeForDisbursement;
-    }
-    const groups = groupPayslipsByBank((run.payslips ?? []) as any, employeesMap);
-    let filtered = groups;
-    if (bankCodeFilter) {
-      const bc = bankCodeFilter.toUpperCase();
-      filtered = groups.filter((g: any) => g.bankCode === bc);
-    }
-    const groupsWithCsv = filtered.map((group: any) => {
-      const csv = generateBankCsv(group.bankCode, group.rows, group.bankName);
-      // attach bank group bankName override jika OTHER
-      return {
-        ...group,
-        csv: {
-          headers: csv.headers,
-          delimiter: csv.delimiter,
-          filename: csv.filename,
-          content: csv.content,
-          totalRows: csv.totalRows,
-        },
-      };
-    });
-    // Warn for each row employee data source (per group (for audit):
-    const warnings: string[] = [];
-    for (const g of groupsWithCsv) {
-      for (const row of g.rows) {
-        const emp = employeesMap[row.employeeId];
-        const info = resolveEmployeeBankInfo(emp ?? { id: row.employeeId, fullName: row.employeeName });
-        if (info.warning) warnings.push(`[${row.employeeName}] ${info.warning}`);
-      }
-    }
-    return {
-      runId: run.id,
-      runName: run.name,
-      periodStart: run.period.startDate,
-      periodEnd: run.period.endDate,
-      groups: groupsWithCsv,
-      totalGroups: groupsWithCsv.length,
-      totalEmployees: (run.payslips ?? []).length,
-      warnings,
-    };
+  async getPayrollRunDisbursements(runId: string, _bankCodeFilter?: string): Promise<never> {
+    await this.findPayrollRunById(runId);
+    throw new ConflictError('Create a payment batch and export its immutable bank file from /payroll/payment-batches/:id/export.');
   }
 
   // ==================== Payslips ====================
@@ -467,9 +397,9 @@ export class PayrollService {
       run.companyId,
       new Date(run.period.endDate)
     );
-    const loanDeductionByEmployee = dueLoanInstallments.reduce<Record<string, number>>((acc, installment) => {
+    const loanDeductionByEmployee = dueLoanInstallments.reduce<Record<string, Prisma.Decimal>>((acc, installment) => {
       const employeeId = installment.loan.employeeId;
-      acc[employeeId] = (acc[employeeId] || 0) + Number(installment.amount);
+      acc[employeeId] = (acc[employeeId] ?? new Prisma.Decimal(0)).plus(installment.amount);
       return acc;
     }, {});
 
@@ -591,7 +521,7 @@ export class PayrollService {
     for (const salary of employeeSalaries) {
       if (!salary.isActive) continue;
 
-      const loanDeductionAmount = loanDeductionByEmployee[salary.employeeId] || 0;
+      const loanDeductionAmount = loanDeductionByEmployee[salary.employeeId]?.toNumber() ?? 0;
       const overtimeHoursForEmployee = overtimeHoursByEmployee[salary.employeeId] || 0;
       const attd = attendanceByEmployee[salary.employeeId] ?? { present: 0, absent: 0 };
       const leaveDaysForEmployee = leaveByEmployee[salary.employeeId] ?? 0;
@@ -695,6 +625,12 @@ export class PayrollService {
         absentDays,
         overtimeHours: overtimeHoursForEmployee,
         status: 'DRAFT',
+        loanDeductionSnapshots: {
+          create: dueLoanInstallments
+            .filter(installment => installment.loan.employeeId === salary.employeeId)
+            .map(installment => ({ companyId: run.companyId, runId,
+              loanId: installment.loanId, installmentId: installment.id, amount: installment.amount })),
+        },
       });
 
       // Create payslip components

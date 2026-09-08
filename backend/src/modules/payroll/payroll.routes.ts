@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import payrollPaymentRoutes from './payroll-payment.routes';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
@@ -22,6 +23,8 @@ import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema } from './
 import { auditLog } from '@/shared/middleware/AuditLog';
 
 const router = Router();
+
+router.use('/payment-batches', payrollPaymentRoutes);
 
 // All routes require authentication
 router.use(authenticate);

@@ -82,8 +82,8 @@ export function listSwitchableCompanies(
     const pa = Number(a.rankPriority) || 999;
     const pb = Number(b.rankPriority) || 999;
     if (pa !== pb) return pa - pb;
-    const ia = !!a.isPrimary ? 1 : 0;
-    const ib = !!b.isPrimary ? 1 : 0;
+    const ia = a.isPrimary ? 1 : 0;
+    const ib = b.isPrimary ? 1 : 0;
     if (ia !== ib) return ib - ia;
     return (a.companyName ?? '').localeCompare(b.companyName ?? '');
   });

@@ -58,3 +58,24 @@ describe('csrfProtection', () => {
     expect(() => csrfProtection(request('POST', { at: 'cookie-auth', csrf: 'forged.token' }, 'forged.token'), {} as Response, jest.fn())).toThrow(/CSRF/);
   });
 });
+
+describe('CSRF lifetime and origin', () => {
+  afterEach(() => jest.restoreAllMocks());
+  it('rejects an expired signed token', () => {
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+    const capture = createResponseCapture();
+    issueCsrfToken(capture.response);
+    const token = capture.getToken();
+    clock.mockReturnValue(now + 2 * 60 * 60 * 1000 + 1);
+    expect(() => csrfProtection(request('POST', { at: 'session', csrf: token }, token), {} as Response, jest.fn())).toThrow();
+  });
+  it('rejects an unauthorized origin even with a matching token', () => {
+    const capture = createResponseCapture();
+    issueCsrfToken(capture.response);
+    const token = capture.getToken();
+    const req = request('POST', { at: 'session', csrf: token }, token);
+    req.get = ((name: string) => name === 'origin' ? 'https://attacker.invalid' : token) as Request['get'];
+    expect(() => csrfProtection(req, {} as Response, jest.fn())).toThrow('origin');
+  });
+});

@@ -1,3 +1,4 @@
+import { validateReceiptReference } from '@/shared/storage/receipt-reference';
 import { travelExpenseRepository } from './travel-expense.repository';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import { getRequestContext, getCurrentCompanyId, getCurrentRoles } from '@/shared/context/RequestContext';
@@ -239,6 +240,10 @@ export class TravelExpenseService {
 
     if (currentUser?.employeeId && roles.includes('EMPLOYEE') && !hasElevatedRole) {
       data.employeeId = currentUser.employeeId;
+    }
+
+    if (data.receiptFilePath) {
+      validateReceiptReference(data.receiptFilePath, data.companyId, data.employeeId);
     }
 
     const requesterId = currentUser?.id ?? undefined;

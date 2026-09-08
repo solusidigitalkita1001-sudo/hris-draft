@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { dailyActivityService } from './daily-activity.service';
 import { getRequestContext } from '@/shared/context/RequestContext';
+import { ForbiddenError } from '@/shared/exceptions/AppError';
 import type {
   CreateDailyActivityDTO,
   UpdateDailyActivityDTO,
@@ -18,7 +19,8 @@ interface UserContextLite {
 export class DailyActivityController {
   async listRequests(req: Request<any, any, any, ListDailyActivitiesDTO>, res: Response, next: NextFunction) {
     try {
-      const companyId = getRequestContext()?.user?.companyId!;
+      const companyId = getRequestContext()?.user?.companyId;
+      if (!companyId) throw new ForbiddenError('Active company context is required');
       const result = await dailyActivityService.findAll(companyId, req.query);
       res.json({ success: true, data: result });
     } catch (e) {

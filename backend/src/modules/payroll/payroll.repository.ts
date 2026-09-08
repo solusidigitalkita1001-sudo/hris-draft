@@ -1,3 +1,4 @@
+import { ConflictError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import {
@@ -316,14 +317,26 @@ export class PayrollRepository {
     return lastRun?.runNumber ?? 0;
   }
 
-  async createPayrollRun(data: CreatePayrollRunDTO, runNumber: number) {
+  async createPayrollRun(data: CreatePayrollRunDTO, runNumber: number, createdBy: string) {
     return prisma.payrollRun.create({
       data: {
         periodId: data.periodId,
         companyId: data.companyId,
         name: data.name,
         runNumber,
+        createdBy,
       },
+    });
+  }
+
+  async approvePayrollRun(id: string, userId: string) {
+    return prisma.$transaction(async tx => {
+      const result = await tx.payrollRun.updateMany({
+        where: { id, status: 'COMPLETED', createdBy: { not: null }, AND: [{ createdBy: { not: userId } }], deletedAt: null },
+        data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
+      });
+      if (result.count !== 1) throw new ConflictError('Payroll changed or maker-checker validation failed');
+      return tx.payrollRun.findUniqueOrThrow({ where: { id } });
     });
   }
 

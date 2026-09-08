@@ -5,7 +5,7 @@
 Dokumen ini adalah handoff praktis untuk tim mobile.
 Fokusnya bukan daftar semua route, tapi mapping per screen: data apa yang dibutuhkan, endpoint apa yang dipanggil, parameter apa yang wajib dikirim, dan state apa yang harus disimpan di client.
 
-Dokumen API lengkap tetap ada di [mobile-api-documentation.md](file:///Users/f/Documents/sdk-project/hrms/hris-draft/docs/mobile-api-documentation.md).
+Dokumen API lengkap tetap ada di [mobile-api-documentation.md](mobile-api-documentation.md).
 
 ## Shared Client State
 
@@ -25,7 +25,7 @@ State minimum yang perlu disimpan setelah login:
 Aturan client:
 
 1. Selalu kirim `Authorization: Bearer <accessToken>` untuk protected endpoint.
-2. Selalu kirim `companyId` eksplisit untuk request yang company-aware.
+2. Kirim `companyId` eksplisit sesuai kontrak endpoint. Untuk self-service loan, identitas employee dan company berasal dari session terautentikasi.
 3. Untuk fitur self-service tertentu, simpan juga `employeeId` karena beberapa endpoint masih meminta `employeeId` explicit.
 4. Saat `401`, coba refresh token satu kali lewat `/auth/refresh`.
 5. Jika refresh gagal, hapus seluruh session lokal lalu arahkan ke login.
@@ -145,9 +145,9 @@ Recommended requests:
 - `GET /api/v1/notifications/unread-count`
 - `GET /api/v1/attendance/summary?companyId={companyId}&month={month}&year={year}`
 - `GET /api/v1/leave/balances/employee?employeeId={employeeId}`
-- `GET /api/v1/employee-loans/my?employeeId={employeeId}`
-- `GET /api/v1/travel-expenses/trips/my?employeeId={employeeId}`
-- `GET /api/v1/travel-expenses/claims/my?employeeId={employeeId}`
+- `GET /api/v1/employee-loans/my`
+- `GET /api/v1/travel-expenses/trips/my`
+- `GET /api/v1/travel-expenses/claims/my`
 
 Minimum local dependencies:
 
@@ -249,29 +249,46 @@ Body minimum:
 
 Primary requests:
 
-- `GET /api/v1/employee-loans/my?employeeId={employeeId}`
+- `GET /api/v1/employee-loans/my` (query `status` opsional)
 - `GET /api/v1/employee-loans/:id`
 - `GET /api/v1/employee-loans/:id/installments`
+- `GET /api/v1/employee-loans/:id/amortization?method={FLAT|EFFECTIVE}`
+- `GET /api/v1/employee-loans/:id/workflow`
 - `GET /api/v1/employee-loans/types?companyId={companyId}`
 
 Create:
 
 - `POST /api/v1/employee-loans`
 
-Important warning:
+Body create:
 
-- endpoint create loan masih punya mismatch backend antara validator dan controller
-- jangan dijadikan contract final untuk production sebelum backend dirapikan
+```json
+{
+  "loanTypeId": "uuid",
+  "amount": 5000000,
+  "totalInstallments": 10,
+  "installmentAmount": 500000,
+  "reason": "Medical support"
+}
+```
+
+Client rule:
+
+- `/my` memakai employee dari session login; client tidak mengirim `employeeId`. Query legacy `employeeId` diabaikan.
+- Body create hanya memuat lima field bisnis di atas. Backend menentukan `employeeId` dan `companyId` dari session terautentikasi.
+- Jika user belum memiliki employee record, tampilkan error `400` dari backend dan hentikan pengajuan.
+- Tampilkan `data.rows` dari amortization untuk rincian pokok, bunga, cicilan, dan sisa pokok per bulan; perhitungan ini tidak mengubah jadwal installment tersimpan.
+- Detail, installments, amortization, dan workflow memerlukan permission `employee-loan:read`; sesuaikan akses screen dengan permission user.
 
 ### Screen: Travel Requests
 
 Trip list:
 
-- `GET /api/v1/travel-expenses/trips/my?employeeId={employeeId}`
+- `GET /api/v1/travel-expenses/trips/my` (query `status` opsional)
 
 Claim list:
 
-- `GET /api/v1/travel-expenses/claims/my?employeeId={employeeId}`
+- `GET /api/v1/travel-expenses/claims/my` (query `status` opsional)
 
 Create trip:
 
@@ -280,6 +297,12 @@ Create trip:
 Create claim:
 
 - `POST /api/v1/travel-expenses/claims`
+
+Client rule:
+
+- Self-list memakai employee dari session login; query legacy `employeeId` diabaikan.
+- Create trip/claim menentukan actor dari session. Validator saat ini masih meminta `employeeId` berupa UUID di body, jadi gunakan ID employee user aktif; nilainya akan ditimpa backend. `companyId` opsional untuk memilih scope company yang diizinkan.
+- User tanpa employee profile atau company scope menerima `403`; create tanpa field legacy `employeeId` masih menghasilkan `422`.
 
 Reimburse biasanya bukan flow employee, tapi approver/admin:
 
@@ -387,6 +410,15 @@ Actions:
 - `PATCH /api/v1/employee-loans/:id/approve`
 - `PATCH /api/v1/employee-loans/:id/reject`
 
+Kedua aksi menerima body `{ "notes": "Catatan reviewer" }`. `notes` opsional, maksimal 500 karakter, dan diteruskan ke workflow sebagai komentar approve atau alasan reject.
+
+Workflow requests:
+
+- `GET /api/v1/employee-loans/:id/workflow`
+- `PATCH /api/v1/employee-loans/:id/workflow-action`
+
+Body aksi workflow berisi `action` (`APPROVE`, `REJECT`, atau `ESCALATE`) dan `comment` opsional maksimal 2000 karakter. Gunakan `data.loan` dan `data.workflowInstance` dari response aksi untuk memperbarui status loan serta langkah workflow; approval dapat berlanjut ke reviewer berikutnya. Endpoint legacy approve/reject mengembalikan bentuk `data` yang sama. Read workflow memerlukan `employee-loan:read`; aksi memerlukan `employee-loan:update` dan kewenangan pada langkah workflow.
+
 ### Screen: Travel Approval
 
 Trip approvals:
@@ -409,6 +441,7 @@ Primary requests:
 - `GET /api/v1/work-calendars?companyId={companyId}`
 - `GET /api/v1/work-calendars/:id`
 - `GET /api/v1/work-calendars/:id/days?year={year}&month={month}`
+- `GET /api/v1/work-calendars/:id/working-days?start={YYYY-MM-DD}&end={YYYY-MM-DD}`
 - `GET /api/v1/work-calendars/holidays/list?companyId={companyId}&year={year}`
 
 Mutation requests:
@@ -422,9 +455,11 @@ Mutation requests:
 - `PUT /api/v1/work-calendars/holidays/:hid`
 - `DELETE /api/v1/work-calendars/holidays/:hid`
 
-Known caveat:
+Working-days request:
 
-- endpoint `GET /api/v1/work-calendars/:id/working-days` saat ini lebih aman dipanggil dengan query `calendarId`, `start`, dan `end`
+- Isi path `:id` dengan UUID calendar. Query cukup memuat `start` dan `end`.
+- Kedua tanggal harus valid dalam format `YYYY-MM-DD`, dengan `end` sama dengan atau setelah `start`. Input tidak valid menghasilkan `422`.
+- Gunakan `data.count` untuk jumlah hari kerja pada rentang tanggal inklusif.
 
 ### Screen: User Access Management
 
@@ -463,7 +498,5 @@ Supaya caching mobile rapi, gunakan key berbasis company dan employee:
 ## Handoff Notes
 
 - Dokumen ini cocok dipakai untuk planning screen API integration.
-- Untuk kontrak field detail dan sample payload, rujuk [mobile-api-documentation.md](file:///Users/f/Documents/sdk-project/hrms/hris-draft/docs/mobile-api-documentation.md).
-- Sebelum mobile production kickoff, backend sebaiknya merapikan dua gap yang sudah teridentifikasi:
-  - create employee loan request
-  - working days calendar query contract
+- Untuk kontrak field detail dan sample payload, rujuk [mobile-api-documentation.md](mobile-api-documentation.md).
+- Integrasi loan memakai actor dari session, sementara perhitungan working days memakai UUID calendar di path dan tanggal `start`/`end` pada query.

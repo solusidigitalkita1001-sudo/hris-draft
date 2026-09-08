@@ -1,3 +1,4 @@
+import { receiptOwnerDirectory } from '@/shared/storage/receipt-reference';
 import { NextFunction, Request, Response } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { Result } from '@/shared/core/Result';
@@ -225,7 +226,8 @@ export class TravelExpenseController {
         throw new BadRequestError('Receipt file is required');
       }
 
-      const receiptUrl = `${config.app.url}/uploads/travel-expenses/receipts/${req.file.filename}`;
+      const ownerDirectory = receiptOwnerDirectory(req.user?.companyId, req.user?.employeeId);
+      const receiptUrl = `${config.app.url}/uploads/travel-expenses/receipts/${ownerDirectory}/${req.file.filename}`;
 
       res.status(201).json(
         Result.created(
@@ -234,7 +236,7 @@ export class TravelExpenseController {
             originalName: req.file.originalname,
             mimeType: req.file.mimetype,
             size: req.file.size,
-            filePath: req.file.path,
+            filePath: `${ownerDirectory}/${req.file.filename}`,
             url: receiptUrl,
           },
           'Receipt uploaded'

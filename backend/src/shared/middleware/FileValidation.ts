@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import path from 'path';
 import { Request, Response, NextFunction } from 'express';
 import { BadRequestError } from '@/shared/exceptions/AppError';
 import config from '@/config';
@@ -53,6 +54,19 @@ export function validateFileMagicBytes(allowedMimes: string[] = config.upload.al
             `Tipe file tidak diizinkan (terdeteksi ${detectedMime ?? 'tidak dikenal'})`
           );
         }
+        if (file.originalname) {
+          const extensions: Record<string, string[]> = {
+            'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'],
+            'image/gif': ['.gif'], 'application/pdf': ['.pdf'],
+          };
+          if (!extensions[detectedMime]?.includes(path.extname(file.originalname).toLowerCase())) {
+            throw new BadRequestError('File extension does not match content');
+          }
+        }
+        if (file.mimetype && file.mimetype !== detectedMime) {
+          throw new BadRequestError('File MIME does not match content');
+        }
+        file.mimetype = detectedMime;
       }
       next();
     } catch (err) {

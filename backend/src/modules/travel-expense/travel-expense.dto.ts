@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 export const createBusinessTripSchema = z.object({
   companyId: z.string().uuid().optional(),
-  employeeId: z.string().uuid(),
   destination: z.string().min(1).max(255),
   purpose: z.string().min(1).max(2000),
   startDate: z.string(),
@@ -24,7 +23,6 @@ export const createTravelAdvanceSchema = z.object({
 
 export const createExpenseClaimSchema = z.object({
   companyId: z.string().uuid().optional(),
-  employeeId: z.string().uuid(),
   tripId: z.string().uuid().optional(),
   category: z.enum(['TRANSPORTATION', 'HOTEL', 'MEAL', 'ENTERTAINMENT', 'OPERATIONAL']),
   amount: z.number().positive(),
@@ -47,9 +45,12 @@ export const reimburseExpenseClaimSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
-export type CreateBusinessTripDTO = z.infer<typeof createBusinessTripSchema>;
+export type CreateBusinessTripRequestDTO = z.infer<typeof createBusinessTripSchema>;
+// Employee identity is added by the authenticated controller before service/repository calls.
+export type CreateBusinessTripDTO = CreateBusinessTripRequestDTO & { employeeId: string };
 export type ApproveBusinessTripDTO = z.infer<typeof approveBusinessTripSchema>;
 export type CreateTravelAdvanceDTO = z.infer<typeof createTravelAdvanceSchema>;
-export type CreateExpenseClaimDTO = z.infer<typeof createExpenseClaimSchema>;
+export type CreateExpenseClaimRequestDTO = z.infer<typeof createExpenseClaimSchema>;
+export type CreateExpenseClaimDTO = CreateExpenseClaimRequestDTO & { employeeId: string };
 export type ApproveExpenseClaimDTO = z.infer<typeof approveExpenseClaimSchema>;
 export type ReimburseExpenseClaimDTO = z.infer<typeof reimburseExpenseClaimSchema>;

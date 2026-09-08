@@ -1,3 +1,4 @@
+import { appConfig } from '@/config/app';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -596,7 +597,7 @@ export function PerformanceExecutionPage() {
                   ) : (
                     selectedTarget.evidences.map((evidence) => (
                       <div key={evidence.id} className="rounded-lg border border-border bg-background px-3 py-2">
-                        <a href={evidence.fileUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary underline-offset-2 hover:underline">
+                        <a href={`${appConfig.apiUrl}/private-files/performance-evidence/${evidence.id}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary underline-offset-2 hover:underline">
                           {evidence.originalName}
                         </a>
                         <p className="mt-1 text-xs text-muted-foreground">

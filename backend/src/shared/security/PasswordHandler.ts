@@ -73,7 +73,7 @@ export class PasswordHandler {
       });
     }
 
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
       errors.push({
         field: 'password',
         message: 'Password must contain at least one special character',

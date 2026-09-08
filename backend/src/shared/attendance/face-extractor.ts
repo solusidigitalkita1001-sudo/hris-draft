@@ -115,6 +115,7 @@ async function getHumanInstance(): Promise<any> {
   humanLoadPromise = (async () => {
     try {
       const humanRoot = resolveHumanPackageRoot();
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Load the resolved CommonJS WASM bundle lazily, preserving its constructor export without importing native bindings.
       const HumanModule = require(path.join(humanRoot, 'dist', 'human.node-wasm.js'));
       const Human = HumanModule.default ?? HumanModule.Human ?? HumanModule;
       const wasmRoot = path.dirname(require.resolve('@tensorflow/tfjs-backend-wasm'));

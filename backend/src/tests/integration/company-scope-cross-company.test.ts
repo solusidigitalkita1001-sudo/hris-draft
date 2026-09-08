@@ -752,7 +752,7 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
       ).rejects.toThrow(ForbiddenError);
     });
 
-    it('applyAction APPROVE dengan requesterId === userId TAPI SUPER_ADMIN → TIDAK throw (bypass self)', async () => {
+    it('applyAction APPROVE own request remains forbidden for SUPER_ADMIN', async () => {
       const wf = buildWorkflowInstance({
         id: 'wf-self-sa',
         companyId: COMPANY_A_ID,
@@ -780,7 +780,7 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
             { action: 'APPROVE', comment: 'sa approve' }
           )
         )
-      ).resolves.toBeDefined();
+      ).rejects.toThrow(ForbiddenError);
     });
   });
 });

@@ -148,6 +148,8 @@ async function simulateBulkAction(
 describe('Workflow Bulk Approval Partial Result Semantics (A.5 cross-verification)', () => {
   beforeEach(() => {
     clearAllPrismaMocks();
+    jest.spyOn(prisma.workflowInstance, 'updateMany').mockResolvedValue({ count: 1 });
+    jest.spyOn(prisma.workflowInstanceStep, 'updateMany').mockResolvedValue({ count: 1 });
   });
 
   afterEach(() => {
@@ -377,7 +379,7 @@ describe('Workflow Bulk Approval Partial Result Semantics (A.5 cross-verificatio
   });
 
   describe('SUPER_ADMIN bulk cross company + self', () => {
-    it('SUPER_ADMIN bulk campur A + B + self → SEMUA SUCCESS (bypass scope + self)', async () => {
+    it('SUPER_ADMIN bulk: other requests succeed; own request remains forbidden', async () => {
       (jest
         .spyOn(prisma.workflowInstance, 'findUnique') as any)
         .mockImplementation((opts: any) => {
@@ -410,7 +412,8 @@ describe('Workflow Bulk Approval Partial Result Semantics (A.5 cross-verificatio
       );
 
       expect(results).toHaveLength(3);
-      results.forEach((r) => expect(r.success).toBe(true));
+      expect(results.filter(result => result.instanceId !== 'wf-self').every(result => result.success)).toBe(true);
+      expect(results.find(result => result.instanceId === 'wf-self')).toEqual(expect.objectContaining({ success: false, errorCode: 'FORBIDDEN' }));
     });
   });
 

@@ -1,4 +1,5 @@
-import { NextFunction, Request, Response } from 'express';
+import fs from 'fs/promises';
+import { NextFunction, Response } from 'express';
 import path from 'path';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
@@ -13,7 +14,7 @@ export class DocumentManagementController {
   async findCategories(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = (req.query.companyId as string) || req.user?.companyId;
-      const groupId = (req.query.groupId as string) || req.user?.groupId;
+      const groupId = req.user?.groupId;
       const data = await documentManagementService.findCategories(companyId, groupId);
       res.json(Result.success(data));
     } catch (error) {
@@ -75,6 +76,7 @@ export class DocumentManagementController {
       const data = await documentManagementService.createDocument(payload, req.file, req.user);
       res.status(201).json(Result.created(data, 'Document uploaded'));
     } catch (error) {
+      if (req.file?.path) await fs.unlink(req.file.path).catch(() => {});
       next(error);
     }
   }
@@ -86,7 +88,8 @@ export class DocumentManagementController {
       }
 
       const file = await documentManagementService.getDownloadPayload(req.params.id as string, req.user);
-      res.download(path.resolve(file.absolutePath), file.fileName);
+      res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+      res.download(path.resolve(file.absolutePath), file.fileName, (error) => { if (error) next(error); });
     } catch (error) {
       next(error);
     }
@@ -105,15 +108,18 @@ export class DocumentManagementController {
     }
   }
 
-  // Task 1.3: serve a file by HMAC signature (public — no auth, signature is the token).
-  async serveSignedFile(req: Request, res: Response, next: NextFunction) {
+  // Signed links still require the current session and document access checks.
+  async serveSignedFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      if (!req.user) return res.status(401).json(Result.error('Authentication required'));
       const file = await documentManagementService.getFileBySignature(
         req.params.id as string,
         req.query.expires as string | undefined,
-        req.query.sig as string | undefined
+        req.query.sig as string | undefined,
+        req.user
       );
-      res.type(file.mimeType).sendFile(path.resolve(file.absolutePath));
+      res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+      res.download(file.absolutePath, file.fileName, (error) => { if (error) next(error); });
     } catch (error) {
       next(error);
     }

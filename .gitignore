@@ -65,7 +65,3 @@ coverage/
 # Docker Compose configuration is environment-specific
 docker-compose*.yml
 docker-compose*.yaml
-
-# Environment-specific deployment automation
-/scripts/server-deploy.sh
-/.github/workflows/

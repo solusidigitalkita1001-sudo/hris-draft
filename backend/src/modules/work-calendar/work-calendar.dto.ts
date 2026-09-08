@@ -108,6 +108,12 @@ export const countWorkingDaysQuerySchema = z.object({
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid start date format. Use YYYY-MM-DD'),
   end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid end date format. Use YYYY-MM-DD'),
 }).superRefine((value, ctx) => {
+  for (const field of ['start', 'end'] as const) {
+    const date = new Date(`${value[field]}T00:00:00.000Z`);
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value[field]) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: 'Invalid calendar date' });
+    }
+  }
   if (new Date(value.end) < new Date(value.start)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

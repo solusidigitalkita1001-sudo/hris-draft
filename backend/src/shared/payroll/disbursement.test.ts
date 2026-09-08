@@ -1,12 +1,14 @@
 /**
- * B.6 Multibank Disbursement Utilities Jest Test (6 test cases).
+ * B.6 Multibank Disbursement Utilities Jest Test.
  *
  * Target acceptance: 3 karyawan beda bank → 3 group CSV terpisah BCA/MANDIRI/BNI.
  * Fallback legacy single bank fields (employee.bankName) tetap bisa dipakai.
- * BCA delimiter ";" sesuai KlikBCA standard, header kolom BCA/MANDIRI/BNI tepat.
+ * CSV round trips preserve recipient fields and bank identity for each template.
  */
-import { resolveEmployeeBankInfo, groupPayslipsByBank, generateBankCsv } from './disbursement';
-import type { EmployeeForDisbursement } from './disbursement';
+import { Prisma } from '@prisma/client';
+import { parse } from 'csv-parse/sync';
+import { resolveEmployeeBankInfo, groupPayslipsByBank, generateBankCsv, csvEscape } from './disbursement';
+import type { DisbursementRow, EmployeeForDisbursement } from './disbursement';
 
 describe('resolveEmployeeBankInfo (B.6 multibank select)', () => {
   it('CASE 1: Multi bank ada primary BCA → source MULTI_BANK, code BCA, pakai primary bukan first', () => {
@@ -111,9 +113,110 @@ describe('groupPayslipsByBank + generateBankCsv (B.6 grouping + CSV)', () => {
 
     // BNI e-Collect punya NOMOR_REF kolom
     expect(bniCsv.headers).toEqual(['REKENING', 'NAMA', 'NOMOR_REF', 'NOMINAL', 'KETERANGAN']);
-    // rows 1 kolom referenceNo: 'PS-ps33xxxBNI' — berisi BNI & ID potong ps3
+    // Reference contains the complete payslip ID.
     expect(bniCsv.rows[0]).toContain('BNI303');
     expect(bniCsv.rows[0]).toContain('Citra W');
     expect(bniCsv.rows[0]).toContain(',8500000,');
+  });
+});
+
+describe('bank export integrity', () => {
+  const row: DisbursementRow = {
+    payslipId: '12345678-1234-4321-8234-123456789012',
+    employeeId: 'employee-1',
+    employeeName: 'Ani',
+    bankName: 'Bank Alpha',
+    accountNumber: '0012345678',
+    accountHolder: 'Ani',
+    netPay: 100_000,
+    referenceNo: 'PS-12345678-1234-4321-8234-123456789012-BNI',
+    description: 'Salary payout',
+  };
+
+  it.each(['BCA', 'MANDIRI', 'BNI', 'OTHER'])('%s CSV preserves delimiters, quotes, newlines and account leading zeroes', (bankCode) => {
+    const accountHolder = 'Ani; "Finance", HR\r\nJakarta';
+    const description = 'Payroll; September, "regular"\nRun 1';
+    const csv = generateBankCsv(bankCode, [{ ...row, accountHolder, description }]);
+    const records: Record<string, string>[] = parse(csv.content, { columns: true, delimiter: csv.delimiter });
+
+    expect(records).toHaveLength(1);
+    expect(Object.keys(records[0])).toHaveLength(csv.headers.length);
+    expect(records[0][bankCode === 'BCA' ? 'NAMA_PENERIMA' : 'NAMA']).toBe(accountHolder);
+    expect(records[0].NO_REKENING ?? records[0].REKENING).toBe('0012345678');
+    expect(records[0].KETERANGAN).toBe(description);
+    expect(records[0].NOMINAL).toBe('100000');
+  });
+
+  it('csvEscape retains comma as its default delimiter', () => {
+    expect(csvEscape('Ani, HR')).toBe('"Ani, HR"');
+    expect(csvEscape('Ani; HR', ';')).toBe('"Ani; HR"');
+  });
+
+  it('keeps distinct OTHER bank names on their own recipient rows', () => {
+    const employees: Record<string, EmployeeForDisbursement> = {
+      alpha: { id: 'alpha', fullName: 'Ani', bankName: 'Bank Alpha, Indonesia', bankAccount: '0001' },
+      beta: { id: 'beta', fullName: 'Budi', bankName: 'Bank Beta', bankAccount: '0002' },
+    };
+    const [group] = groupPayslipsByBank([
+      { id: 'slip-alpha', employeeId: 'alpha', netPay: 10_000 },
+      { id: 'slip-beta', employeeId: 'beta', netPay: 20_000 },
+    ], employees);
+    const csv = generateBankCsv(group.bankCode, group.rows, group.bankName);
+    const records: Record<string, string>[] = parse(csv.content, { columns: true });
+
+    expect(group.bankCode).toBe('OTHER');
+    expect(group.bankName).toBe('OTHER');
+    expect(records.map((record) => [record.BANK, record.REKENING])).toEqual([
+      ['Bank Alpha, Indonesia', '0001'],
+      ['Bank Beta', '0002'],
+    ]);
+  });
+
+  it('supports legacy manually constructed rows with a supplied bank name', () => {
+    const csv = generateBankCsv('OTHER', [{ ...row, bankName: undefined }], 'Legacy Bank');
+    const [record]: Record<string, string>[] = parse(csv.content, { columns: true });
+    expect(record.BANK).toBe('Legacy Bank');
+  });
+
+  it('exports different full references for payslip IDs sharing their first eight characters', () => {
+    const ids = ['12345678-1234-4321-8234-123456789012', '12345678-1234-4321-8234-123456789013'];
+    const employees = { employee: { id: 'employee', fullName: 'Ani', bankName: 'BNI', bankAccount: '0001' } };
+    const [group] = groupPayslipsByBank(ids.map((id) => ({ id, employeeId: 'employee', netPay: 100 })), employees);
+    const csv = generateBankCsv('BNI', group.rows);
+    const records: Record<string, string>[] = parse(csv.content, { columns: true });
+
+    expect(records.map((record) => record.NOMOR_REF)).toEqual(ids.map((id) => `PS-${id}-BNI`));
+    expect(new Set(records.map((record) => record.NOMOR_REF)).size).toBe(2);
+  });
+
+  it.each([
+    NaN, Infinity, -Infinity, -1, '', ' ', 'NaN', 'Infinity', '1_000', '0x10',
+    true, null, undefined, [], {}, Number.MAX_VALUE,
+  ])('rejects invalid net pay %p during grouping and direct CSV export', (netPay) => {
+    const invalidAmount = netPay as unknown as number;
+    expect(() => groupPayslipsByBank([{ id: row.payslipId, employeeId: row.employeeId, netPay: invalidAmount }], {}))
+      .toThrow('Payroll export requires a finite, non-negative net pay');
+    expect(() => generateBankCsv('BNI', [{ ...row, netPay: invalidAmount }]))
+      .toThrow('Payroll export requires a finite, non-negative net pay');
+  });
+
+  it('accepts database Decimal, decimal strings, and explicit zero without changing rupiah rounding', () => {
+    const [group] = groupPayslipsByBank([
+      { id: 'decimal', employeeId: 'employee', netPay: new Prisma.Decimal('100.49') },
+      { id: 'string', employeeId: 'employee', netPay: '100.50' },
+      { id: 'zero', employeeId: 'employee', netPay: 0 },
+    ], { employee: { id: 'employee', fullName: 'Ani', bankName: 'BNI', bankAccount: '0001' } });
+    const csv = generateBankCsv('BNI', group.rows);
+    const records: Record<string, string>[] = parse(csv.content, { columns: true });
+
+    expect(group.totalAmount).toBe(200.99);
+    expect(records.map((record) => record.NOMINAL)).toEqual(['100', '101', '0']);
+  });
+
+  it('rejects group totals beyond safe numeric precision', () => {
+    expect(() => groupPayslipsByBank([
+      { id: 'first', employeeId: 'employee', netPay: 50_000_000_000_000 },
+      { id: 'second', employeeId: 'employee', netPay: 50_000_000_000_000 },
+    ], {})).toThrow('supported range');
   });
 });

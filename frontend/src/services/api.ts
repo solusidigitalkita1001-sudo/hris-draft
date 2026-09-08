@@ -47,23 +47,26 @@ function readCookie(name: string): string | undefined {
   return item ? decodeURIComponent(item.slice(prefix.length)) : undefined;
 }
 
-async function ensureCsrfToken(): Promise<string> {
-  let token = readCookie('csrf');
-  if (token) return token;
-
-  await axios.get(`${appConfig.apiUrl}/auth/csrf`, { withCredentials: true });
-  token = readCookie('csrf');
-  if (!token) throw new Error('CSRF bootstrap did not issue a readable token');
-  return token;
+let csrfBootstrap: Promise<string> | null = null;
+async function ensureCsrfToken(force = false): Promise<string> {
+  if (csrfBootstrap) return csrfBootstrap;
+  const token = readCookie('csrf');
+  if (token && !force) return token;
+  csrfBootstrap = axios.get(`${appConfig.apiUrl}/auth/csrf`, { withCredentials: true, timeout: 10000 })
+    .then(() => {
+      const issued = readCookie('csrf');
+      if (!issued) throw new Error('CSRF bootstrap did not issue a readable token');
+      return issued;
+    }).finally(() => { csrfBootstrap = null; });
+  return csrfBootstrap;
 }
 
 // Request interceptor - auth token is sent automatically via httpOnly cookies (withCredentials:true)
 // No manual Authorization header attachment from localStorage for security (XSS mitigation).
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
     if (UNSAFE_METHODS.has((config.method || '').toLowerCase())) {
-      const csrfToken = readCookie('csrf');
-      if (csrfToken) config.headers.set('X-CSRF-Token', csrfToken);
+      config.headers.set('X-CSRF-Token', await ensureCsrfToken());
     }
     return config;
   },
@@ -74,7 +77,15 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _csrfRetry?: boolean };
+    if (!originalRequest) return Promise.reject(error);
+    const responseData = error.response?.data as { message?: string } | undefined;
+    if (error.response?.status === 403 && responseData?.message === 'Invalid or missing CSRF token'
+      && UNSAFE_METHODS.has((originalRequest.method || '').toLowerCase()) && !originalRequest._csrfRetry) {
+      originalRequest._csrfRetry = true;
+      await ensureCsrfToken(true);
+      return api(originalRequest);
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {

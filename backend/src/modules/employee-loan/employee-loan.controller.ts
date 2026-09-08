@@ -26,9 +26,9 @@ export class EmployeeLoanController {
 
   async findMyLoans(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const employeeId = req.query.employeeId as string;
+      const employeeId = req.user?.employeeId;
       const status = req.query.status as string | undefined;
-      if (!employeeId) return res.status(400).json(Result.error('employeeId is required'));
+      if (!employeeId) throw new BadRequestError('User has no associated employee record');
       const data = await employeeLoanService.findMyLoans(employeeId, status);
       res.json(Result.success(data));
     } catch (error) { next(error); }
@@ -71,7 +71,8 @@ export class EmployeeLoanController {
       const result = await employeeLoanService.approveLoan(
         req.params.id as string,
         req.user!.id,
-        req.user!.employeeId
+        req.user!.employeeId,
+        req.body?.notes
       );
       res.json(Result.updated(result, 'Loan approved via workflow'));
     } catch (error) { next(error); }

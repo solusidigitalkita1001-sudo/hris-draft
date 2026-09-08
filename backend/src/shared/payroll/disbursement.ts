@@ -4,7 +4,9 @@
  * 3 fungsi utama:
  *   a. resolveEmployeeBankInfo()   : pilih bank primary karyawan, fallback ke legacy single fields (backward compat).
  *   b. groupPayslipsByBank()       : kelompokkan payslip karyawan per bank (untuk bulk transfer batch).
- *   c. generateBankCsv()           : export file CSV / TSV sesuai format standard bank umum Indonesia (BCA, Mandiri, BNI).
+ *   c. generateBankCsv()           : export template CSV per bank (BCA, Mandiri, BNI).
+ *
+ * Templates must be checked against the receiving bank's import specification.
  */
 
 /**
@@ -45,6 +47,8 @@ export interface DisbursementRow {
   payslipId: string;
   employeeId: string;
   employeeName: string;
+  /** Per-recipient bank name; OTHER groups can contain several different banks. */
+  bankName?: string;
   accountNumber: string;
   accountHolder: string;
   netPay: number;
@@ -63,6 +67,28 @@ export interface DisbursementGroup {
 }
 
 const KNOWN_BANK_ENUM: Array<ResolvedBankInfo['bankCode']> = ['BCA', 'MANDIRI', 'BNI', 'OTHER'];
+
+type DisbursementAmount = number | string | { toString(): string };
+
+function parseDisbursementAmount(value: DisbursementAmount): number {
+  // Prisma Decimal values expose toString(); also accept plain numeric API values.
+  // Reject missing/blank amounts instead of coercing them into a zero transfer.
+  const numericText = typeof value === 'number'
+    ? null
+    : typeof value === 'string'
+      ? value.trim()
+      : value && typeof value === 'object' && !Array.isArray(value)
+        ? value.toString()
+        : '';
+  if (numericText !== null && !/^\d+(?:\.\d+)?$/.test(numericText)) {
+    throw new Error('Payroll export requires a finite, non-negative net pay');
+  }
+  const amount = typeof value === 'number' ? value : Number(numericText);
+  if (!Number.isFinite(amount) || amount < 0 || !Number.isSafeInteger(Math.round(amount * 100))) {
+    throw new Error('Payroll export requires a finite, non-negative net pay within the supported range');
+  }
+  return amount;
+}
 
 function legacyBankCodeToEnum(bankCodeText?: string | null, bankName?: string | null): ResolvedBankInfo['bankCode'] {
   const hay = `${bankCodeText ?? ''} ${bankName ?? ''}`.trim().toUpperCase();
@@ -121,7 +147,7 @@ export function resolveEmployeeBankInfo(emp: EmployeeForDisbursement): ResolvedB
  * Input: array payslip (netPay + employeeId + employeeName + payslipId) dan map employee by id.
  * Output: Record<bankCode, DisbursementGroup> + sorted alphabetic bankCode A-Z.
  */
-export function groupPayslipsByBank<T extends { id: string; employeeId: string; employee?: { fullName: string } | null; netPay: number | string }>(
+export function groupPayslipsByBank<T extends { id: string; employeeId: string; employee?: { fullName: string } | null; netPay: DisbursementAmount }>(
   payslips: T[],
   employeesById: Record<string, EmployeeForDisbursement>
 ): DisbursementGroup[] {
@@ -135,44 +161,44 @@ export function groupPayslipsByBank<T extends { id: string; employeeId: string; 
     if (!acc[info.bankCode]) {
       acc[info.bankCode] = {
         bankCode: info.bankCode,
-        bankName: info.bankName,
+        bankName: info.bankCode,
         employeeCount: 0,
         totalAmount: 0,
         rows: [],
       };
     }
     const group = acc[info.bankCode];
-    if (info.bankCode !== 'OTHER') group.bankName = info.bankCode; // BCA/MANDIRI/BNI pakai enum label, OVERRIDE nama bank lain per row.
-    const netPay = Number(ps.netPay) || 0;
+    const netPay = parseDisbursementAmount(ps.netPay);
     group.rows.push({
       payslipId: ps.id,
       employeeId: ps.employeeId,
       employeeName: (emp?.fullName || ps.employee?.fullName || `Employee ${ps.employeeId.slice(0, 6)}`).trim(),
+      bankName: info.bankName,
       accountNumber: info.accountNumber,
       accountHolder: info.accountHolder,
       netPay,
-      referenceNo: `PS-${ps.id.slice(0, 8)}${info.bankCode}`,
+      referenceNo: `PS-${ps.id}-${info.bankCode}`,
       description: `Salary payout ${info.bankCode}`,
     });
     group.employeeCount += 1;
-    group.totalAmount = Math.round((group.totalAmount + netPay) * 100) / 100;
+    group.totalAmount = parseDisbursementAmount(Math.round((group.totalAmount + netPay) * 100) / 100);
   }
   return Object.values(acc).sort((a, b) => a.bankCode.localeCompare(b.bankCode));
 }
 
 /**
- * Utility kecil escape CSV value (kompilasi RFC4180 sederhana: wrap jika ada koma / quote / newlines).
+ * Escape CSV values using the delimiter of the selected export template.
  */
-export function csvEscape(val: string | number): string {
+export function csvEscape(val: string | number, delimiter = ','): string {
   const s = String(val ?? '');
-  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  if (s.includes(delimiter) || /["\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
   return s;
 }
 
 /**
- * Fungsi (c) — generate CSV content / TSV per bank standard.
+ * Fungsi (c) — generate CSV content per bank template.
  *
- * Format standard umum transfer bulk:
+ * Existing export templates (bank acceptance is not implied):
  *  - BCA     : KlikBCA format ";" delimiter: KODE_TRANSAKSI;NO_REKENING;NAMA_PENERIMA;NOMINAL;KETERANGAN
  *  - MANDIRI : Mandiri Online format "," delimiter: NO_REKENING,NAMA,NOMINAL,KETERANGAN
  *  - BNI     : BNI e-Collect format "," delimiter: REKENING,NAMA,NOMOR_REF,NOMINAL,KETERANGAN
@@ -181,9 +207,11 @@ export function csvEscape(val: string | number): string {
  *
  * Return: { header, rows: string[], content: string }
  */
-export function generateBankCsv(bankCode: string, rows: DisbursementRow[], bankName?: string) {
+export function generateBankCsv(bankCode: string, rows: DisbursementRow[], bankName?: string, options: { amountPrecision?: 0 | 2 } = {}) {
   const code = (bankCode || 'OTHER').toUpperCase();
-  const toAmount = (n: number) => Math.round(Number(n || 0)); // integer rupiah, no sen
+  const toAmount = (n: number) => options.amountPrecision === 2
+    ? parseDisbursementAmount(n).toFixed(2)
+    : Math.round(parseDisbursementAmount(n)); // preserve existing callers' integer-rupiah rounding
 
   let headers: string[] = [];
   let buildRow: (r: DisbursementRow, idx: number) => (string | number)[];
@@ -214,11 +242,11 @@ export function generateBankCsv(bankCode: string, rows: DisbursementRow[], bankN
     default:
       delimiter = ',';
       headers = ['BANK', 'REKENING', 'NAMA', 'NOMOR_REF', 'NOMINAL', 'KETERANGAN'];
-      buildRow = (r) => [bankName || 'OTHER', r.accountNumber, r.accountHolder, r.referenceNo, toAmount(r.netPay), r.description];
+      buildRow = (r) => [r.bankName || bankName || 'OTHER', r.accountNumber, r.accountHolder, r.referenceNo, toAmount(r.netPay), r.description];
       break;
   }
 
-  const rowsArr: string[] = (rows || []).map((r, idx) => buildRow(r, idx).map((v) => csvEscape(v)).join(delimiter));
+  const rowsArr: string[] = (rows || []).map((r, idx) => buildRow(r, idx).map((v) => csvEscape(v, delimiter)).join(delimiter));
   const headerLine = headers.join(delimiter);
   const content = [headerLine, ...rowsArr].join('\n') + '\n';
   const filename = `disbursement_${code}_${rows.length}karyawan_${new Date().toISOString().slice(0, 10)}.${code === 'BCA' ? 'csv' : 'csv'}`;

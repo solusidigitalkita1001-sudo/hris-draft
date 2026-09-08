@@ -1,13 +1,18 @@
+import axios from 'axios';
+import { useAuthStore } from '@/stores/auth.store';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { payrollService, type PayrollRun } from '@/services/payroll.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CheckCircle2, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { PayrollPaymentPanel } from '../components/PayrollPaymentPanel';
 
 export function PayrollRunDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const currentUserId = useAuthStore(state => state.user?.id);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [run, setRun] = useState<PayrollRun | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -19,7 +24,7 @@ export function PayrollRunDetail() {
       const data = await payrollService.getPayrollRun(id);
       setRun(data);
     } catch (error) {
-      console.error('Failed to fetch payroll run:', error);
+      setActionError(axios.isAxiosError(error) && typeof error.response?.data?.message === 'string' ? error.response.data.message : 'Payroll gagal dimuat. Coba lagi.');
     } finally {
       setLoading(false);
     }
@@ -31,29 +36,18 @@ export function PayrollRunDetail() {
 
   const handleApprove = async () => {
     if (!id) return;
+    setActionError(null);
     setActionLoading(true);
     try {
       await payrollService.approvePayrollRun(id);
       await fetchData();
     } catch (error) {
-      console.error('Failed to approve:', error);
+      setActionError(axios.isAxiosError(error) && typeof error.response?.data?.message === 'string' ? error.response.data.message : 'Persetujuan payroll gagal. Coba muat ulang.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleDisburse = async () => {
-    if (!id) return;
-    setActionLoading(true);
-    try {
-      await payrollService.disbursePayrollRun(id);
-      await fetchData();
-    } catch (error) {
-      console.error('Failed to disburse:', error);
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -66,7 +60,8 @@ export function PayrollRunDetail() {
   if (!run) {
     return (
       <div className="text-center py-12">
-        <p className="text-sm text-muted-foreground">Payroll run not found</p>
+        <p role="alert" className="text-sm text-muted-foreground">{actionError || 'Payroll run not found'}</p>
+        <Button variant="outline" onClick={() => void fetchData()}>Muat ulang</Button>
         <Button variant="link" onClick={() => navigate('/payroll/runs')}>Back to Payroll Runs</Button>
       </div>
     );
@@ -109,23 +104,25 @@ export function PayrollRunDetail() {
         </div>
       </div>
 
+      {actionError && <p role="alert" className="mb-4 text-sm text-destructive">{actionError}</p>}
+      {run.status === 'COMPLETED' && (!run.createdBy || run.createdBy === currentUserId) && (
+        <p className="mb-4 text-sm text-muted-foreground">
+          {!run.createdBy ? 'Identitas pembuat payroll lama belum tercatat. Tinjauan diperlukan sebelum persetujuan.' : 'Payroll harus disetujui pengguna lain dari pembuatnya.'}
+        </p>
+      )}
       {/* Actions */}
       {run.status === 'COMPLETED' && (
         <div className="flex gap-2 mb-6">
-          <Button onClick={handleApprove} disabled={actionLoading}>
+          <Button onClick={handleApprove} disabled={actionLoading || !run.createdBy || run.createdBy === currentUserId}>
             <CheckCircle2 size={16} className="mr-2" />
             Approve Payroll
           </Button>
         </div>
       )}
 
-      {run.status === 'APPROVED' && (
-        <div className="flex gap-2 mb-6">
-          <Button onClick={handleDisburse} disabled={actionLoading}>
-            <Send size={16} className="mr-2" />
-            Disburse Payroll
-          </Button>
-        </div>
+      {['APPROVED', 'DISBURSED'].includes(run.status) && (
+        <PayrollPaymentPanel key={`${run.id}:${run.companyId}:${currentUserId}`}
+          runId={run.id} runStatus={run.status} onReconciled={fetchData} />
       )}
 
       {/* Status Timeline */}

@@ -1052,7 +1052,7 @@ export async function seedTestData(): Promise<void> {
   const createdComponents: any[] = [];
   for (const sc of salaryComponents) {
     const created = await prisma.salaryComponent.upsert({
-      where: { code: sc.code },
+      where: { companyId_code: { companyId: company.id, code: sc.code } },
       update: {},
       create: {
         companyId: company.id, name: sc.name, code: sc.code,

@@ -22,7 +22,7 @@ Production base URL mengikuti environment `APP_URL` dan `API_PREFIX`.
 - Content type: `application/json`
 - Authentication: `Authorization: Bearer <accessToken>`
 - Protected endpoint wajib memakai access token hasil login.
-- Untuk endpoint yang berhubungan dengan data company, mobile disarankan selalu mengirim `companyId` secara eksplisit pada query atau body walaupun backend kadang bisa fallback ke `req.user.companyId`.
+- Kirim `companyId` secara eksplisit jika kontrak endpoint memintanya. Endpoint self-service loan mengambil identitas employee dan company dari session terautentikasi.
 - Beberapa endpoint employee-self memakai `employeeId` sebagai query/body parameter.
 
 Contoh header:
@@ -591,16 +591,22 @@ Body:
 
 ### GET `/work-calendars/:id/working-days`
 
+Path params:
+
+- `id` required, UUID calendar
+
 Query params:
 
-- `calendarId` required
-- `start` required
-- `end` required
+- `start` required, tanggal kalender valid dalam format `YYYY-MM-DD`
+- `end` required, tanggal kalender valid dalam format `YYYY-MM-DD`, harus sama dengan atau setelah `start`
 
-Catatan:
+Contoh:
 
-- Walaupun route memakai `/:id/working-days`, implementasi controller saat ini membaca `calendarId` dari query, bukan dari path param.
-- Untuk aman, kirim keduanya dengan nilai yang sama sampai backend dirapikan.
+```http
+GET /api/v1/work-calendars/11111111-1111-4111-8111-111111111111/working-days?start=2026-09-01&end=2026-09-30
+```
+
+Calendar ditentukan oleh path `id`; client cukup mengirim `start` dan `end` pada query. Response `data` berisi `{ "count": 22 }` (contoh), yaitu jumlah hari bertipe `WD`, `WS`, atau `OT` yang tersimpan dalam calendar pada rentang tanggal inklusif. UUID, tanggal, atau urutan rentang yang tidak valid menghasilkan `422`.
 
 ### GET `/work-calendars/holidays/list`
 
@@ -654,12 +660,13 @@ Query params:
 
 ### GET `/employee-loans/my`
 
-List loan milik employee.
+List loan milik employee yang terhubung dengan session login. Backend mengambil `employeeId` dari user terautentikasi; client tidak mengirim `employeeId`. Query `employeeId` dari client lama diabaikan dan tidak mengubah pemilik data yang dikembalikan.
 
 Query params:
 
-- `employeeId` required
 - `status` optional
+
+User tanpa employee record menerima `400`.
 
 ### GET `/employee-loans/:id`
 
@@ -671,8 +678,6 @@ Body:
 
 ```json
 {
-  "employeeId": "uuid",
-  "companyId": "uuid",
   "loanTypeId": "uuid",
   "amount": 5000000,
   "totalInstallments": 10,
@@ -681,15 +686,16 @@ Body:
 }
 ```
 
-Catatan implementasi saat ini:
+Aturan request:
 
-- Validator route saat ini hanya mendefinisikan `loanTypeId`, `amount`, `totalInstallments`, `installmentAmount`, dan `reason`.
-- `employeeId` dan `companyId` dipakai oleh controller, tetapi belum masuk schema validator route.
-- Sebelum dipakai penuh oleh mobile production, endpoint ini sebaiknya diselaraskan dulu di backend.
+- Kirim hanya `loanTypeId`, `amount`, `totalInstallments`, `installmentAmount`, dan `reason`. `employeeId` dan `companyId` ditentukan backend dari session terautentikasi.
+- `loanTypeId` harus UUID; `amount` dan `installmentAmount` harus angka positif; `totalInstallments` harus bilangan bulat 1–60; `reason` wajib berisi 1–1000 karakter.
+- Batas nominal dan jumlah cicilan juga mengikuti loan type yang dipilih.
+- User tanpa employee record atau company menerima `400`; request dengan field tidak valid menerima `422`. Request berhasil menghasilkan `201`.
 
 ### PATCH `/employee-loans/:id/approve`
 
-Approve loan.
+Approve loan melalui workflow. `notes` opsional, maksimal 500 karakter, dan diteruskan sebagai komentar aksi workflow.
 
 Body:
 
@@ -701,15 +707,58 @@ Body:
 
 ### PATCH `/employee-loans/:id/reject`
 
-Reject loan.
+Reject loan melalui workflow. Gunakan field `notes` untuk alasan penolakan, opsional dan maksimal 500 karakter; nilainya diteruskan sebagai komentar aksi workflow dan alasan penolakan loan.
+
+Body:
+
+```json
+{
+  "notes": "Please revise the installment plan"
+}
+```
 
 ### GET `/employee-loans/:id/installments`
 
 List installment schedule.
 
+### GET `/employee-loans/:id/amortization`
+
+Hitung tabel amortisasi untuk loan yang sudah tersimpan. Endpoint ini memerlukan permission `employee-loan:read` dan tidak menyimpan perubahan jadwal cicilan.
+
+Query params:
+
+- `method` optional: `FLAT` atau `EFFECTIVE`, default `FLAT`. Implementasi saat ini memilih `EFFECTIVE` hanya jika nilainya persis `EFFECTIVE`; nilai lainnya memakai `FLAT`.
+
+Response `data` memuat `loanId`, `loanType` (nama), `principal`, `annualRatePercent`, `tenorMonths`, `method`, `totalPrincipal`, `totalInterest`, `totalPayment`, dan `rows`. Setiap row berisi `month`, `principal`, `interest`, `total`, dan `remaining`; `monthlyPaymentFlat` tersedia untuk metode `FLAT`. Loan yang tidak ditemukan menghasilkan `404`.
+
+### GET `/employee-loans/:id/workflow`
+
+Ambil workflow instance loan, termasuk `steps` berurutan berdasarkan level, `logs` dari yang terbaru, dan `template`. Memerlukan permission `employee-loan:read`; workflow yang tidak ditemukan menghasilkan `404`.
+
+### PATCH `/employee-loans/:id/workflow-action`
+
+Jalankan aksi pada workflow loan. Memerlukan permission `employee-loan:update`; kewenangan user pada langkah workflow juga diperiksa backend.
+
+Body:
+
+```json
+{
+  "action": "APPROVE",
+  "comment": "Reviewed installment plan"
+}
+```
+
+- `action` required: `APPROVE`, `REJECT`, atau `ESCALATE`.
+- `comment` optional, maksimal 2000 karakter.
+- Identitas user, role, dan sumber aksi ditentukan backend dari request terautentikasi.
+
+Response `data` berisi `{ "loan": { ... }, "workflowInstance": { ... } }`. Gunakan status dari response untuk memperbarui UI: approval pada satu langkah dapat menyisakan langkah berikutnya. Endpoint legacy `/approve` dan `/reject` juga menjalankan workflow dan mengembalikan bentuk `data` yang sama.
+
 ## Travel Expenses
 
 Modul ini mencakup business trip, travel advance, dan expense claim.
+
+Identitas employee untuk self-list dan create berasal dari user terautentikasi. Jika session belum memuat `employeeId`, backend membaca relasi employee dari akun user. Company memakai scope aktif yang sudah divalidasi middleware; akun tanpa employee profile atau company scope menerima `403`.
 
 ### GET `/travel-expenses/categories`
 
@@ -727,14 +776,13 @@ List kategori expense statis.
 Query params untuk list:
 
 - approver list `/trips`: `companyId` required secara praktis, `status` optional
-- self list `/trips/my`: `employeeId` required, `status` optional
+- self list `/trips/my`: `status` optional. `employeeId` tidak perlu dikirim; query legacy `employeeId` diabaikan.
 
 Create trip body:
 
 ```json
 {
   "employeeId": "uuid",
-  "companyId": "uuid",
   "destination": "Singapore",
   "purpose": "Client meeting",
   "startDate": "2026-08-10T00:00:00.000Z",
@@ -743,6 +791,8 @@ Create trip body:
   "notes": "Need hotel near venue"
 }
 ```
+
+Catatan kontrak create saat ini: validator masih mewajibkan `employeeId` berupa UUID, jadi isi dengan ID employee user aktif. Controller menentukan employee pemilik trip dari session dan menimpa nilai body. `companyId` opsional untuk memilih company yang ada dalam scope user; company yang disimpan berasal dari konteks request yang sudah divalidasi. Menghilangkan `employeeId` dari body masih menghasilkan `422`.
 
 Create advance body:
 
@@ -767,14 +817,13 @@ Create advance body:
 Query params untuk list:
 
 - approver list `/claims`: `companyId` required secara praktis, `status` optional
-- self list `/claims/my`: `employeeId` required, `status` optional
+- self list `/claims/my`: `status` optional. `employeeId` tidak perlu dikirim; query legacy `employeeId` diabaikan.
 
 Create claim body:
 
 ```json
 {
   "employeeId": "uuid",
-  "companyId": "uuid",
   "tripId": "uuid",
   "category": "HOTEL",
   "amount": 1250000,
@@ -784,6 +833,8 @@ Create claim body:
   "notes": "Paid personally"
 }
 ```
+
+Kontrak identitas create claim sama dengan create trip: `employeeId` masih wajib berupa UUID untuk validator, tetapi pemilik claim ditentukan dari session. `companyId` opsional dan harus termasuk scope user. Client memakai ID employee sendiri; body tidak dapat dipakai untuk mengajukan atas nama employee lain.
 
 Reimburse claim body:
 
@@ -854,7 +905,7 @@ Delete akses company user.
 
 1. Simpan `accessToken`, `refreshToken`, `companyId`, `companyScope`, `employeeId`, dan `groupId` setelah login.
 2. Saat menerima `401`, lakukan `POST /auth/refresh` sekali. Jika refresh gagal, clear seluruh session lokal lalu arahkan user ke login.
-3. Saat screen bergantung pada company aktif, jangan mengandalkan fallback backend. Selalu kirim `companyId`.
+3. Saat screen bergantung pada company aktif, kirim `companyId` sesuai kontrak endpoint. Untuk self-service loan, identitas employee dan company berasal dari session; body create hanya memuat field bisnis.
 4. Untuk employee app, prioritaskan endpoint self-service berikut:
    - `/auth/me`
    - `/notifications`
@@ -874,6 +925,10 @@ Delete akses company user.
 
 - Belum ada Swagger/OpenAPI JSON yang digenerate otomatis.
 - Belum ada Postman collection resmi.
-- `POST /employee-loans` masih punya mismatch antara request validator dan controller.
-- `GET /work-calendars/:id/working-days` masih membaca `calendarId` dari query, bukan path param.
+- Validator create trip/claim masih mewajibkan `employeeId`, sementara controller menentukan actor dari session. Field legacy ini masih diperlukan pada body sampai validator diselaraskan.
 - Beberapa endpoint internal admin lain masih tersedia di backend tetapi belum diprioritaskan di dokumen ini karena fokusnya konsumsi mobile app.
+
+
+## Pembayaran payroll manual (8 September 2026)
+
+Endpoint batch baru, idempotency key, payload nominal string desimal, migration, dan penggantian endpoint disburse lama terdokumentasi di [payroll-payment-ledger.md](payroll-payment-ledger.md). Fitur ini menghasilkan file bank dan mencatat hasil pembayaran; tidak mengirim transfer ke bank.

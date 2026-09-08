@@ -455,6 +455,8 @@ export class AuthService {
       throw new AuthError('User not found');
     }
 
+    this.validateUserStatus(user);
+
     const authUser = await this.buildAuthContext(user);
 
     return {

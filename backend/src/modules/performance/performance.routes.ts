@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
@@ -64,8 +66,7 @@ const evidenceStorage = multer.diskStorage({
     cb(null, evidenceUploadDirectory);
   },
   filename: (_req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${Date.now()}-${safeName}`);
+    cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`);
   },
 });
 
@@ -87,8 +88,7 @@ const attachmentStorage = multer.diskStorage({
     cb(null, attachmentUploadDirectory);
   },
   filename: (_req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${Date.now()}-${safeName}`);
+    cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`);
   },
 });
 
@@ -169,7 +169,7 @@ router.post('/planning-assignments/:id/targets', authorize({ resource: 'performa
 router.put('/planning-targets/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformancePlanningTargetSchema), performanceController.updatePlanningTarget.bind(performanceController));
 router.delete('/planning-targets/:id', authorize({ resource: 'performance', action: 'update' }), performanceController.deletePlanningTarget.bind(performanceController));
 router.post('/planning-targets/:id/progress', authorize({ resource: 'performance', action: 'update' }), validate(createPerformanceTargetProgressSchema), performanceController.createPlanningTargetProgress.bind(performanceController));
-router.post('/planning-targets/:id/evidences', authorize({ resource: 'performance', action: 'update' }), evidenceUpload.single('file'), performanceController.uploadPlanningEvidence.bind(performanceController));
+router.post('/planning-targets/:id/evidences', authorize({ resource: 'performance', action: 'update' }), evidenceUpload.single('file'), validateFileMagicBytes(), performanceController.uploadPlanningEvidence.bind(performanceController));
 router.get('/execution/approval-queue', authorize({ resource: 'performance', action: 'read' }), performanceController.getExecutionApprovalQueue.bind(performanceController));
 router.get('/execution/my-assignments', authorize({ resource: 'performance', action: 'read' }), performanceController.getMyExecutionAssignments.bind(performanceController));
 router.get('/execution/assignments/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.getExecutionAssignmentById.bind(performanceController));

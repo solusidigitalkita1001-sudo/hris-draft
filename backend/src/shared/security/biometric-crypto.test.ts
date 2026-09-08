@@ -36,3 +36,9 @@ describe('biometric embedding encryption', () => {
     expect(() => decryptFaceEmbedding(tampered, context)).toThrow();
   });
 });
+
+ it('rejects noncanonical base64url encoding', () => {
+  const vector = Array.from({ length: 256 }, (_, index) => Math.sin(index + 1));
+  const encrypted = encryptFaceEmbedding(vector, context);
+  expect(() => decryptFaceEmbedding(`${encrypted}=`, context)).toThrow('encoding');
+});

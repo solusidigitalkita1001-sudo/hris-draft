@@ -74,6 +74,13 @@ export function decryptFaceEmbedding(
     throw new Error('Stored face embedding has an unsupported format');
   }
 
+  // Node accepts noncanonical base64url spellings; reject altered serialized data.
+  for (const encoded of [encodedIv, encodedTag, encodedCiphertext]) {
+    if (Buffer.from(encoded, 'base64url').toString('base64url') !== encoded) {
+      throw new Error('Stored face embedding encoding is invalid');
+    }
+  }
+
   const iv = Buffer.from(encodedIv, 'base64url');
   const tag = Buffer.from(encodedTag, 'base64url');
   if (iv.length !== IV_BYTES || tag.length !== 16) {

@@ -6,6 +6,8 @@ import { ForbiddenError } from '@/shared/exceptions/AppError';
 export const CSRF_COOKIE = 'csrf';
 export const CSRF_HEADER = 'x-csrf-token';
 
+const TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function sign(nonce: string): string {
@@ -17,6 +19,8 @@ function isValidSignedToken(token: string): boolean {
   if (separator <= 0) return false;
 
   const nonce = token.slice(0, separator);
+  const issuedAt = Number(nonce.split('-')[0]);
+  if (!Number.isSafeInteger(issuedAt) || issuedAt > Date.now() || Date.now() - issuedAt > TOKEN_TTL_MS) return false;
   const suppliedSignature = token.slice(separator + 1);
   const expectedSignature = sign(nonce);
   const supplied = Buffer.from(suppliedSignature);
@@ -32,10 +36,11 @@ function tokensMatch(cookieToken: string, headerToken: string): boolean {
 }
 
 export function issueCsrfToken(res: Response): string {
-  const nonce = crypto.randomBytes(32).toString('base64url');
+  const nonce = `${Date.now()}-${crypto.randomBytes(32).toString('base64url')}`;
   const token = `${nonce}.${sign(nonce)}`;
   res.cookie(CSRF_COOKIE, token, {
     httpOnly: false,
+    maxAge: TOKEN_TTL_MS,
     secure: config.app.env === 'production',
     sameSite: 'lax',
     path: '/',
@@ -67,6 +72,11 @@ export function csrfProtection(req: Request, _res: Response, next: NextFunction)
   if (!usesAuthCookie) {
     next();
     return;
+  }
+
+  const origin = req.get('origin');
+  if (origin && !config.cors.origins.includes(origin)) {
+    throw new ForbiddenError('Request origin is not allowed');
   }
 
   const cookieToken = req.cookies?.[CSRF_COOKIE];

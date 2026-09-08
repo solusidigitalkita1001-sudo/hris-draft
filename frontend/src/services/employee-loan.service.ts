@@ -1,5 +1,13 @@
 import api from './api';
 
+export interface CreateLoanRequest {
+  loanTypeId: string;
+  amount: number;
+  totalInstallments: number;
+  installmentAmount: number;
+  reason: string;
+}
+
 export interface LoanType {
   id: string;
   companyId: string;
@@ -98,8 +106,8 @@ class EmployeeLoanService {
     return r.data.data as Loan[];
   }
 
-  async findMyLoans(employeeId: string, status?: string) {
-    const params: Record<string, string> = { employeeId };
+  async findMyLoans(status?: string) {
+    const params: Record<string, string> = {};
     if (status) params.status = status;
     const r = await api.get('/employee-loans/my', { params });
     return r.data.data as Loan[];
@@ -110,7 +118,7 @@ class EmployeeLoanService {
     return r.data.data as Loan;
   }
 
-  async create(data: Partial<Loan>) {
+  async create(data: CreateLoanRequest) {
     const r = await api.post('/employee-loans', data);
     return r.data.data as Loan;
   }

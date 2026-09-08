@@ -5,12 +5,7 @@ import {
   UpsertRoleDataScopeDTO,
 } from './administration.dto';
 import { ForbiddenError, ValidationError } from '@/shared/exceptions/AppError';
-import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { DataScopeType } from '@prisma/client';
-
-const logger = new WinstonLogger('AdministrationService');
-
-const ADMIN_ROLES = ['SUPER_ADMIN', 'GROUP_ADMIN', 'COMPANY_ADMIN'];
 
 interface UserContext {
   id: string;
@@ -25,7 +20,7 @@ export class AdministrationService {
     user: UserContext,
     targetCompanyId: string
   ): void {
-    if (!user.roles?.some((r) => ADMIN_ROLES.includes(r))) {
+    if (!this.isSuperAdmin(user)) {
       const allowed =
         user.companyScope && user.companyScope.length > 0
           ? user.companyScope
@@ -126,6 +121,7 @@ export class AdministrationService {
     companyId: string,
     user: UserContext
   ): Promise<{ deniedMenuPaths: string[]; details: Array<{ menuPath: string; roleCode: string }> }> {
+    this.ensureCompanyScope(user, companyId);
     const roles = user.roles ?? [];
     if (this.isSuperAdmin(user)) {
       return { deniedMenuPaths: [], details: [] };
@@ -147,6 +143,7 @@ export class AdministrationService {
     user: UserContext,
     resource: string = 'ALL'
   ) {
+    this.ensureCompanyScope(user, companyId);
     const roles = user.roles ?? [];
     return administrationRepository.findMyDataScopeByUser(
       companyId,
@@ -171,6 +168,11 @@ export class AdministrationService {
     }
 
     const { scopeType, scopeValue } = scope;
+    this.validateScopeValue(scopeType, scopeValue);
+    if (['BRANCH_ONLY', 'DEPARTMENT_ONLY', 'SUB_DEPARTMENT_ONLY'].includes(scopeType)
+      && !scopeValue?.split(',').some((id) => id.trim())) {
+      throw new ForbiddenError('Data scope has no permitted identifiers');
+    }
 
     switch (scopeType) {
       case 'ALL':
@@ -199,6 +201,9 @@ export class AdministrationService {
         break;
 
       case 'EMPLOYEE_SELF':
+        if (!user.employeeId) {
+          throw new ForbiddenError('Employee identity is required for self scope');
+        }
         if (resource === 'employee') {
           filter.id = user.employeeId;
         } else {
@@ -207,13 +212,12 @@ export class AdministrationService {
         break;
 
       case 'MANAGER_TEAM':
-        logger.warn(
-          `MANAGER_TEAM scope for resource=${resource} is placeholder — not applying filter yet`
-        );
-        break;
+        // Position hierarchy does not establish an employee reporting line.
+        // Deny until an authoritative employee hierarchy is available.
+        throw new ForbiddenError('Manager team scope is not available');
 
       default:
-        break;
+        throw new ForbiddenError('Unsupported data scope');
     }
 
     return filter;

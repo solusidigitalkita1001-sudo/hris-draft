@@ -28,8 +28,9 @@ export class DocumentManagementRepository {
     return prisma.documentCategory.create({ data });
   }
 
-  async findDocuments(params: DocumentQueryDTO & { companyId: string; userId?: string }) {
+  async findDocuments(params: DocumentQueryDTO & { companyId: string; userId?: string }, access: Prisma.DocumentWhereInput = {}) {
     const where: Prisma.DocumentWhereInput = {
+      AND: [access],
       companyId: params.companyId,
       deletedAt: null,
     };
@@ -68,9 +69,9 @@ export class DocumentManagementRepository {
     return rows;
   }
 
-  async findDocumentById(id: string) {
+  async findDocumentById(id: string, access: Prisma.DocumentWhereInput = {}) {
     return prisma.document.findFirst({
-      where: { id, deletedAt: null },
+      where: { AND: [access], id, deletedAt: null },
       include: {
         category: true,
         employee: {

@@ -2,16 +2,18 @@ import 'express';
 export {};
 
 import express from 'express';
+import { privateFilesRouter } from '@/shared/storage/private-files';
 import type { Request, Response } from 'express';
 import type { IncomingMessage, ServerResponse } from 'http';
 import crypto from 'crypto';
-import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import config from '@/config';
+import prisma from '@/shared/database/prisma';
+import { createReadinessProbe } from '@/shared/health/readiness';
 import { errorHandler } from '@/shared/middleware/ErrorHandler';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
@@ -96,7 +98,7 @@ app.use(
     origin: config.cors.origins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Idempotency-Key'],
     exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining'],
     maxAge: 86400, // 24 hours
   })
@@ -125,11 +127,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser(config.session.secret));
 app.use(csrfProtection);
 app.use(auditMutationFallback);
-// Task 1.3 (SEC-010): documents must go through the signed-URL route, never raw static.
-app.use('/uploads/documents', (_req: Request, res: Response) => {
-  res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Use a signed document URL' });
+// Private uploads are served exclusively through authorized resource controllers.
+app.use('/uploads', (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Use the authorized file download endpoint' });
 });
-app.use('/uploads', express.static(path.resolve(process.cwd(), config.upload.uploadPath)));
 
 // ==================== Request Logging ====================
 app.use((req, res, next) => {
@@ -148,14 +150,33 @@ app.use((req, res, next) => {
 });
 
 // ==================== Health Check ====================
-app.get('/health', async (_req, res) => {
-  const [redisHealthy, rabbitHealthy, queueHealthy] = await Promise.all([
-    config.redis.enabled ? redisCache.ping() : Promise.resolve(false),
-    config.rabbitmq.enabled ? rabbitMQBroker.isHealthy() : Promise.resolve(false),
-    config.queue.enabled ? queueManager.isHealthy() : Promise.resolve(false),
+const databaseReady = createReadinessProbe(() => prisma.$queryRaw`SELECT 1`);
+const redisReady = createReadinessProbe(async () => {
+  if (!await redisCache.ping()) throw new Error('Unavailable');
+});
+const rabbitReady = createReadinessProbe(async () => {
+  if (!await rabbitMQBroker.isHealthy()) throw new Error('Unavailable');
+});
+const queueReady = createReadinessProbe(async () => {
+  if (!await queueManager.isHealthy()) throw new Error('Unavailable');
+});
+
+app.get('/health/live', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({ success: true });
+});
+
+app.get(['/health', '/health/ready'], async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const [databaseHealthy, redisHealthy, rabbitHealthy, queueHealthy] = await Promise.all([
+    databaseReady(),
+    config.redis.enabled ? redisReady() : Promise.resolve(false),
+    config.rabbitmq.enabled ? rabbitReady() : Promise.resolve(false),
+    config.queue.enabled ? queueReady() : Promise.resolve(false),
   ]);
 
   const enabledChecks = [
+    databaseHealthy,
     !config.redis.enabled || redisHealthy,
     !config.rabbitmq.enabled || rabbitHealthy,
     !config.queue.enabled || queueHealthy,
@@ -170,6 +191,7 @@ app.get('/health', async (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     services: {
+      database: databaseHealthy ? 'up' : 'down',
       redis: config.redis.enabled ? (redisHealthy ? 'up' : 'down') : 'disabled',
       rabbitmq: config.rabbitmq.enabled ? (rabbitHealthy ? 'up' : 'down') : 'disabled',
       queue: config.queue.enabled ? (queueHealthy ? 'up' : 'down') : 'disabled',
@@ -179,6 +201,7 @@ app.get('/health', async (_req, res) => {
 
 // ==================== API Routes ====================
 const apiPrefix = config.app.apiPrefix;
+app.use(`${apiPrefix}/private-files`, privateFilesRouter);
 
 app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/organization`, organizationRoutes);

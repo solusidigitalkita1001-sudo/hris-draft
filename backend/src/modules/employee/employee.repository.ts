@@ -1,3 +1,4 @@
+import { employeeAccessWhere } from '@/shared/security/employee-data-scope';
 import { prisma } from '@/shared/database/prisma';
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import { Prisma } from '@prisma/client';
@@ -15,7 +16,7 @@ import {
 export class EmployeeRepository {
   async findAll(query: EmployeeQueryDTO) {
     const { companyId, departmentId, positionId, status, search, page, limit } = query;
-    const where: Prisma.EmployeeWhereInput = { companyId, deletedAt: null };
+    const where: Prisma.EmployeeWhereInput = { companyId, deletedAt: null, AND: [await employeeAccessWhere()] };
 
     if (departmentId) where.departmentId = departmentId;
     if (positionId) where.positionId = positionId;
@@ -48,7 +49,7 @@ export class EmployeeRepository {
 
   async findById(id: string) {
     return prisma.employee.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, AND: [await employeeAccessWhere()] },
       include: {
         department: true,
         position: true,
@@ -226,7 +227,7 @@ export class EmployeeRepository {
     if (data.shiftStartDate !== undefined) updateData.shiftStartDate = data.shiftStartDate ? new Date(data.shiftStartDate) : null;
 
     return prisma.employee.update({
-      where: { id },
+      where: { id, AND: [await employeeAccessWhere()] },
       data: updateData,
       include: {
         department: { select: { id: true, name: true } },
@@ -238,12 +239,12 @@ export class EmployeeRepository {
   }
 
   async softDelete(id: string) {
-    return prisma.employee.update({ where: { id }, data: { deletedAt: new Date() } });
+    return prisma.employee.update({ where: { id, AND: [await employeeAccessWhere()] }, data: { deletedAt: new Date() } });
   }
 
   async updateStatus(id: string, status: string) {
     return prisma.employee.update({
-      where: { id },
+      where: { id, AND: [await employeeAccessWhere()] },
       data: { employmentStatus: status as any },
     });
   }

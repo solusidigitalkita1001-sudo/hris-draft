@@ -10,6 +10,26 @@ export type ExpenseCategory =
   | 'OPERATIONAL';
 export type ReimbursementMethod = 'TRANSFER' | 'PAYROLL';
 
+export interface CreateBusinessTripRequest {
+  destination: string;
+  purpose: string;
+  startDate: string;
+  endDate: string;
+  estimatedCost: number;
+  notes?: string;
+}
+
+export interface CreateExpenseClaimRequest {
+  tripId?: string;
+  category: ExpenseCategory;
+  amount: number;
+  description?: string;
+  expenseDate: string;
+  receiptFilePath?: string;
+  ocrExtractedAmount?: number;
+  notes?: string;
+}
+
 export interface WorkflowStep {
   id: string;
   level: number;
@@ -152,8 +172,8 @@ class TravelExpenseService {
     return response.data.data as BusinessTrip[];
   }
 
-  async findMyTrips(employeeId: string, status?: string) {
-    const params: Record<string, string> = { employeeId };
+  async findMyTrips(status?: string) {
+    const params: Record<string, string> = {};
     if (status) params.status = status;
     const response = await api.get('/travel-expenses/trips/my', { params });
     return response.data.data as BusinessTrip[];
@@ -164,7 +184,7 @@ class TravelExpenseService {
     return response.data.data as BusinessTrip;
   }
 
-  async createTrip(data: Partial<BusinessTrip>) {
+  async createTrip(data: CreateBusinessTripRequest) {
     const response = await api.post('/travel-expenses/trips', data);
     return response.data.data as BusinessTrip;
   }
@@ -205,8 +225,8 @@ class TravelExpenseService {
     return response.data.data as ExpenseClaim[];
   }
 
-  async findMyClaims(employeeId: string, status?: string) {
-    const params: Record<string, string> = { employeeId };
+  async findMyClaims(status?: string) {
+    const params: Record<string, string> = {};
     if (status) params.status = status;
     const response = await api.get('/travel-expenses/claims/my', { params });
     return response.data.data as ExpenseClaim[];
@@ -217,7 +237,7 @@ class TravelExpenseService {
     return response.data.data as ExpenseClaim;
   }
 
-  async createClaim(data: Partial<ExpenseClaim>) {
+  async createClaim(data: CreateExpenseClaimRequest) {
     const response = await api.post('/travel-expenses/claims', data);
     return response.data.data as ExpenseClaim;
   }

@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import app from './app';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
-import { testDatabaseConnection } from '@/shared/database/prisma';
+import { disconnectDatabase, testDatabaseConnection } from '@/shared/database/prisma';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
 import { rabbitMQBroker } from '@/infrastructure/messaging/RabbitMQBroker';
 import { queueManager } from '@/infrastructure/queue/QueueManager';
@@ -78,7 +78,6 @@ async function bootstrap(): Promise<void> {
       logger.info('HTTP server closed');
 
       try {
-        const { disconnectDatabase } = require('@/shared/database/prisma');
         await disconnectDatabase();
       } catch (e) {
         // ignore

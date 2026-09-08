@@ -76,9 +76,7 @@ function LoanForm({ onClose }: { onClose: () => void }) {
         totalInstallments: installments,
         installmentAmount: Math.round(installmentAmount * 100) / 100,
         reason: reason.trim(),
-        employeeId,
-        companyId,
-      } as any);
+      });
       toast.success('Pengajuan pinjaman berhasil dikirim');
       onClose();
     } catch (err: any) {
@@ -163,7 +161,7 @@ export function EmployeeLoanPage() {
     setLoading(true);
     try {
       const data = isEmployee
-        ? await employeeLoanService.findMyLoans(employeeId, statusFilter || undefined)
+        ? await employeeLoanService.findMyLoans(statusFilter || undefined)
         : await employeeLoanService.findAll(companyId, statusFilter || undefined);
       setLoans(data);
     } catch { toast.error('Gagal memuat data pinjaman'); }

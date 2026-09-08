@@ -170,7 +170,7 @@ describe('CompanyScope Cross-Tenant — Payroll & Benefit Module (Task 1.4)', ()
 
     it('findPayrollRunById company A oleh user A → sukses', async () => {
       jest.spyOn(prisma.payrollRun, 'findFirst').mockResolvedValue(
-        mock(PR_A_ID, COMPANY_A_ID, { periodId: PP_A_ID, runNumber: 1, totalNetPay: 100000000 })
+        mock(PR_A_ID, COMPANY_A_ID, { periodId: PP_A_ID, runNumber: 1, totalNetPay: 100000000, payslips: [] })
       );
       const res = await runAs(userCompanyA(), () => payrollService.findPayrollRunById(PR_A_ID));
       expect(res.id).toBe(PR_A_ID);
