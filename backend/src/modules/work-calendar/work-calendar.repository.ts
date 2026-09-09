@@ -1483,8 +1483,8 @@ export class WorkCalendarRepository {
   }
 
   // ─── Working Days Calculation ────────────────────────────
-  async countWorkingDays(calendarId: string, start: Date, end: Date) {
-    return prisma.workCalendarDay.count({
+  async countWorkingDays(calendarId: string, start: Date, end: Date, database: Prisma.TransactionClient = prisma) {
+    return database.workCalendarDay.count({
       where: {
         calendarId,
         date: { gte: start, lte: end },
@@ -1494,11 +1494,11 @@ export class WorkCalendarRepository {
   }
 
   // ─── Employee Calendar Resolution ────────────────────────
-  async findCalendarByContext(context: WorkCalendarResolutionContext) {
+  async findCalendarByContext(context: WorkCalendarResolutionContext, database: Prisma.TransactionClient = prisma) {
     const { companyId, branchId, departmentId } = context;
 
     if (departmentId) {
-      const deptCal = await prisma.workCalendar.findFirst({
+      const deptCal = await database.workCalendar.findFirst({
         where: { companyId, departmentId, deletedAt: null, isActive: true },
         orderBy: { year: 'desc' },
       });
@@ -1506,14 +1506,14 @@ export class WorkCalendarRepository {
     }
 
     if (branchId) {
-      const branchCal = await prisma.workCalendar.findFirst({
+      const branchCal = await database.workCalendar.findFirst({
         where: { companyId, branchId, departmentId: null, deletedAt: null, isActive: true },
         orderBy: { year: 'desc' },
       });
       if (branchCal) return branchCal;
     }
 
-    return prisma.workCalendar.findFirst({
+    return database.workCalendar.findFirst({
       where: { companyId, branchId: null, departmentId: null, deletedAt: null, isActive: true },
       orderBy: { year: 'desc' },
     });

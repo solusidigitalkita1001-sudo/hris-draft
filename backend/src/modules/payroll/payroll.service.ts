@@ -28,8 +28,9 @@ import { calculateOvertimePay } from '@/shared/attendance/overtime';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 import { companySettingsService } from '@/modules/company-settings/company-settings.service';
 import { JKKRiskClass, Prisma } from '@prisma/client';
-import { ewaRepository } from '@/modules/ewa/ewa.repository';
-import { ewaService } from '@/modules/ewa/ewa.service';
+import { selectFormulaVersions } from '@/shared/payroll/formula';
+import { calculateEmployeePay, PayComponent } from '@/shared/payroll/employee-pay';
+import { ewaRepository, PayrollEWADeduction } from '@/modules/ewa/ewa.repository';
 
 const JKK_RISK_TO_RATE: Record<JKKRiskClass, number> = {
   [JKKRiskClass.I]: 0.24,
@@ -55,7 +56,7 @@ export class PayrollService {
   async createSalaryComponent(data: CreateSalaryComponentDTO) {
     if (data.calculationMethod === 'FORMULA') {
       throw new BadRequestError(
-        'Fitur Formula perhitungan salary component coming soon. Silakan gunakan metode FIXED_AMOUNT atau manfaatkan 4 auto components (OVERTIME_EARNING_AUTO / LATE_DEDUCTION_AUTO / ABSENCE_DEDUCTION_AUTO / LOAN_DEDUCTION_AUTO) untuk kebutuhan standard saat ini.',
+        'Buat komponen FIXED atau PERCENTAGE terlebih dahulu, lalu simulasikan dan publikasikan versi formula melalui menu Formula. Metode dasar tetap berlaku sebelum tanggal efektif formula.',
       );
     }
     const code = await generateSystemCode({
@@ -76,7 +77,7 @@ export class PayrollService {
     const currentComponent = await this.findSalaryComponentById(id);
     if (data.calculationMethod === 'FORMULA') {
       throw new BadRequestError(
-        'Fitur Formula perhitungan salary component coming soon. Silakan gunakan metode FIXED_AMOUNT atau manfaatkan 4 auto components (OVERTIME_EARNING_AUTO / LATE_DEDUCTION_AUTO / ABSENCE_DEDUCTION_AUTO / LOAN_DEDUCTION_AUTO) untuk kebutuhan standard saat ini.',
+        'Buat komponen FIXED atau PERCENTAGE terlebih dahulu, lalu simulasikan dan publikasikan versi formula melalui menu Formula. Metode dasar tetap berlaku sebelum tanggal efektif formula.',
       );
     }
     const requestedCode = (data as Record<string, unknown>).code;
@@ -275,39 +276,47 @@ export class PayrollService {
 
   async createPayrollRun(data: CreatePayrollRunDTO, userId?: string) {
     if (!userId) throw new BadRequestError('Authenticated payroll creator is required');
-    // Validate period exists and is not closed
-    const period = await this.findPayrollPeriodById(data.periodId);
-    if (period.status === 'CLOSED') {
-      throw new BadRequestError('Cannot create payroll run for a closed period');
+    const run = await this.createPayrollRunTransaction(data, userId);
+    // No external side effects run until the payroll transaction has committed.
+    try {
+      await eventBus.publish({
+        name: DomainEvents.PAYROLL_RUN_CREATED,
+        aggregateId: run.id,
+        aggregateType: 'PayrollRun',
+        data: { runNumber: run.runNumber, companyId: data.companyId, periodId: data.periodId },
+        metadata: { eventId: uuidv4(), occurredAt: new Date() },
+      });
+    } catch {
+      logger.warn('Payroll event publication failed after commit', { runId: run.id });
     }
-    if (!period.attendanceReviewedAt) {
-      throw new BadRequestError('Attendance harus dikonfirmasi terlebih dahulu sebelum payroll run bisa dieksekusi. Gunakan endpoint PUT /payroll/periods/:id/confirm-attendance.');
-    }
-
-    // Get run number
-    const lastRunNumber = await payrollRepository.findLatestRunNumber(data.companyId);
-    const runNumber = lastRunNumber + 1;
-
-    // Create run
-    const run = await payrollRepository.createPayrollRun(data, runNumber, userId);
-
-    // Run payroll calculation
-    await this.calculatePayroll(run.id);
-
-    // Publish event
-    await eventBus.publish({
-      name: DomainEvents.PAYROLL_RUN_CREATED,
-      aggregateId: run.id,
-      aggregateType: 'PayrollRun',
-      data: { runNumber, companyId: data.companyId, periodId: data.periodId },
-      metadata: {
-        eventId: uuidv4(),
-        occurredAt: new Date(),
-      },
-    });
-
-    logger.info('Payroll run created', { runId: run.id, runNumber });
+    logger.info('Payroll run created', { runId: run.id, runNumber: run.runNumber });
     return this.findPayrollRunById(run.id);
+  }
+
+  private async createPayrollRunTransaction(data: CreatePayrollRunDTO, userId: string) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await prisma.$transaction(async tx => {
+          // Same lock as formula publication: revisions cannot change midway
+          // through a run, and requests for this company receive distinct numbers.
+          const company = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM companies WHERE id = ${data.companyId} AND deleted_at IS NULL FOR UPDATE`;
+          if (!company.length) throw new NotFoundError('Company not found');
+          const period = await payrollRepository.findPayrollPeriodById(data.periodId, tx);
+          if (!period || period.companyId !== data.companyId) throw new NotFoundError('Payroll period not found in this company');
+          if (period.status === 'CLOSED') throw new BadRequestError('Cannot create payroll run for a closed period');
+          if (!period.attendanceReviewedAt) throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
+          const existing = await tx.payrollRun.findFirst({ where: { companyId: data.companyId, periodId: period.id, deletedAt: null }, select: { id: true } });
+          if (existing) throw new ConflictError(`Payroll already exists for this period (${existing.id}); review the existing run before creating a correction`);
+          const runNumber = await payrollRepository.findLatestRunNumber(data.companyId, tx) + 1;
+          const run = await payrollRepository.createPayrollRun(data, runNumber, userId, tx);
+          await this.calculatePayroll(run.id, tx);
+          return run;
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 60000 });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 2) continue;
+        throw error;
+      }
+    }
   }
 
   async approvePayrollRun(id: string, userId: string) {
@@ -381,21 +390,26 @@ export class PayrollService {
 
   // ==================== Payroll Calculation ====================
 
-  private async calculatePayroll(runId: string) {
-    const run = await payrollRepository.findPayrollRunById(runId);
+  private async calculatePayroll(runId: string, database: Prisma.TransactionClient) {
+    const run = await payrollRepository.findPayrollRunById(runId, database);
     if (!run) throw new NotFoundError('Payroll run not found');
 
     // Get all employees with active salary in this company
-    const employeeSalaries = await payrollRepository.findAllEmployeeSalaries(run.companyId);
-    const loanDeductionComponent = await this.ensureLoanDeductionComponent(run.companyId);
-    const overtimeEarningComponent = await this.ensureOvertimeEarningComponent(run.companyId);
-    const lateDeductionComponent = await this.ensureLateDeductionComponent(run.companyId);
-    const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId);
-    const ewaDeductionComponent = await this.ensureEWADeductionComponent(run.companyId);
-    const lateCfg = await companySettingsService.getLateDeductionConfig(run.companyId);
+    const employeeSalaries = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
+    // Read the published revision set once for the whole run. Later publications
+    // never change the version used midway through employee calculations.
+    const formulaVersions = selectFormulaVersions(await database.payrollFormulaVersion.findMany({
+      where: { companyId: run.companyId, status: 'PUBLISHED' },
+    }), new Date(run.period.startDate));
+    const loanDeductionComponent = await this.ensureLoanDeductionComponent(run.companyId, database);
+    const overtimeEarningComponent = await this.ensureOvertimeEarningComponent(run.companyId, database);
+    const lateDeductionComponent = await this.ensureLateDeductionComponent(run.companyId, database);
+    const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId, database);
+    const ewaDeductionComponent = await this.ensureEWADeductionComponent(run.companyId, database);
+    const lateCfg = await companySettingsService.getLateDeductionConfig(run.companyId, database);
     const dueLoanInstallments = await employeeLoanRepository.findDueInstallmentsForPayroll(
       run.companyId,
-      new Date(run.period.endDate)
+      new Date(run.period.endDate), database
     );
     const loanDeductionByEmployee = dueLoanInstallments.reduce<Record<string, Prisma.Decimal>>((acc, installment) => {
       const employeeId = installment.loan.employeeId;
@@ -404,7 +418,7 @@ export class PayrollService {
     }, {});
 
     // Aggregate approved overtime hours per employee within the pay period
-    const approvedOvertimes = await prisma.overtimeRequest.findMany({
+    const approvedOvertimes = await database.overtimeRequest.findMany({
       where: {
         companyId: run.companyId,
         status: 'APPROVED',
@@ -421,29 +435,25 @@ export class PayrollService {
     const periodStart = new Date(run.period.startDate);
     const periodEnd = new Date(run.period.endDate);
 
-    // EWA: Fetch semua PAID status EWA yang belum di-deduct (payrollRunId null) untuk periode ini
     const paidEWAsForPeriod = await ewaRepository.findPAIDByEmployeeAndPeriod(
-      run.companyId,
-      'all',
-      periodStart,
-      periodEnd,
-    ) as any[];
-    const ewaAggregated = ewaService.aggregateDeductionsForPayroll(paidEWAsForPeriod);
-    const ewaDeductionByEmployee: Record<string, { total: number; ewaIds: string[]; amountMap: Record<string, number> }> = {};
-    for (const row of ewaAggregated as any[]) {
-      if (!ewaDeductionByEmployee[row.employeeId]) {
-        ewaDeductionByEmployee[row.employeeId] = { total: 0, ewaIds: [], amountMap: {} };
+      run.companyId, 'all', periodStart, periodEnd, database,
+    );
+    const ewaDeductionByEmployee = new Map<string, { total: Prisma.Decimal; deductions: PayrollEWADeduction[] }>();
+    for (const row of paidEWAsForPeriod) {
+      const amount = new Prisma.Decimal(row.amountPaidOut ?? row.amountRequested);
+      if (!amount.isFinite() || amount.isNegative() || amount.greaterThan('9999999999999.99')) {
+        throw new BadRequestError('EWA contains an invalid payroll deduction amount');
       }
-      const amount = Number(row.deductedAmount ?? row.amountPaidOut ?? row.amountRequested ?? 0);
-      ewaDeductionByEmployee[row.employeeId].total += amount;
-      if (row.id) {
-        ewaDeductionByEmployee[row.employeeId].ewaIds.push(row.id);
-        ewaDeductionByEmployee[row.employeeId].amountMap[row.id] = amount;
-      }
+      if (amount.isZero()) continue;
+      const employee = ewaDeductionByEmployee.get(row.employeeId) ?? { total: new Prisma.Decimal(0), deductions: [] };
+      employee.total = employee.total.plus(amount);
+      employee.deductions.push({ id: row.id, employeeId: row.employeeId, amount,
+        amountRequested: row.amountRequested, amountPaidOut: row.amountPaidOut });
+      ewaDeductionByEmployee.set(row.employeeId, employee);
     }
 
     // Batch attendance summary per employee for the pay period
-    const attendanceGroups = await prisma.attendance.groupBy({
+    const attendanceGroups = await database.attendance.groupBy({
       by: ['employeeId', 'status'],
       where: { companyId: run.companyId, date: { gte: periodStart, lte: periodEnd }, deletedAt: null },
       _count: { id: true },
@@ -456,7 +466,7 @@ export class PayrollService {
     }
 
     // Batch approved leave days per employee overlapping the pay period
-    const approvedLeaves = await prisma.leaveRequest.findMany({
+    const approvedLeaves = await database.leaveRequest.findMany({
       where: {
         companyId: run.companyId,
         status: 'APPROVED',
@@ -475,9 +485,9 @@ export class PayrollService {
     }, {});
 
     // Working days in period from company-level calendar (shared across all employees)
-    const companyCalendar = await workCalendarRepository.findCalendarByContext({ companyId: run.companyId });
+    const companyCalendar = await workCalendarRepository.findCalendarByContext({ companyId: run.companyId }, database);
     const workDaysInPeriod = companyCalendar
-      ? await workCalendarRepository.countWorkingDays(companyCalendar.id, periodStart, periodEnd)
+      ? await workCalendarRepository.countWorkingDays(companyCalendar.id, periodStart, periodEnd, database)
       : 0;
 
     // Task 4.2 — Aggregate net LATE MINUTES per employee + per day key for daily cap deduction
@@ -485,7 +495,7 @@ export class PayrollService {
     const netLateMinutesByEmployee: Record<string, number> = {};
     const perDayLateMinutesByEmployee: Record<string, Record<string, number>> = {};
     if (lateCfg.enabled) {
-      const lateAttendanceRows = await prisma.attendance.findMany({
+      const lateAttendanceRows = await database.attendance.findMany({
         where: {
           companyId: run.companyId,
           date: { gte: periodStart, lte: periodEnd },
@@ -511,15 +521,21 @@ export class PayrollService {
       }
     }
 
-    // Delete existing payslips for this run (recalculation)
-    await payrollRepository.deletePayslipsByRunId(runId);
-
-    let totalEarnings = 0;
-    let totalDeductions = 0;
+    let totalEarnings = new Prisma.Decimal(0);
+    let totalDeductions = new Prisma.Decimal(0);
+    const processedEmployees = new Set<string>();
+    const appliedEwaDeductions: PayrollEWADeduction[] = [];
     let employeeCount = 0;
 
     for (const salary of employeeSalaries) {
       if (!salary.isActive) continue;
+      if (salary.companyId !== run.companyId || salary.employee.companyId !== run.companyId || salary.components.some(allocation => allocation.salaryComponent.companyId !== run.companyId)) {
+        throw new ConflictError('Salary allocation references a component outside the payroll company');
+      }
+
+      if (processedEmployees.has(salary.employeeId)) throw new ConflictError('Multiple active salaries found for one employee; review salary allocations');
+      if (salary.currency !== 'IDR') throw new BadRequestError('Payroll calculation currently supports IDR salary allocations');
+      processedEmployees.add(salary.employeeId);
 
       const loanDeductionAmount = loanDeductionByEmployee[salary.employeeId]?.toNumber() ?? 0;
       const overtimeHoursForEmployee = overtimeHoursByEmployee[salary.employeeId] || 0;
@@ -550,7 +566,7 @@ export class PayrollService {
         absenceDeductionAmount = Math.round(perDayDeduction * absentDays);
       }
 
-      const extraComponents: Array<{ salaryComponentId: string; name: string; type: string; amount: number; isTaxable: boolean }> = [];
+      const extraComponents: PayComponent[] = [];
       if (loanDeductionAmount > 0) {
         extraComponents.push({
           salaryComponentId: loanDeductionComponent.id,
@@ -587,9 +603,10 @@ export class PayrollService {
           isTaxable: false,
         });
       }
-      const ewaDeductInfo = ewaDeductionByEmployee[salary.employeeId];
-      const ewaDeductionAmount = ewaDeductInfo?.total || 0;
+      const ewaDeductInfo = ewaDeductionByEmployee.get(salary.employeeId);
+      const ewaDeductionAmount = ewaDeductInfo?.total.toNumber() ?? 0;
       if (ewaDeductionAmount > 0) {
+        appliedEwaDeductions.push(...(ewaDeductInfo?.deductions ?? []));
         extraComponents.push({
           salaryComponentId: ewaDeductionComponent.id,
           name: 'Potongan EWA (Tarik Gaji Awal)',
@@ -599,15 +616,20 @@ export class PayrollService {
         });
       }
 
-      const emp = salary.employee as { maritalStatus?: string | null; taxId?: string | null; _count?: { families: number } };
+      const emp = salary.employee;
       const taxContext = {
         married: emp?.maritalStatus === 'MARRIED',
         dependents: emp?._count?.families ?? 0,
         hasNpwp: Boolean(emp?.taxId),
       };
 
-      const { earningsTotal, deductionsTotal, components } = this.calculateEmployeePay(salary, extraComponents, taxContext);
-      const netPay = earningsTotal - deductionsTotal;
+      const { earningsTotal, deductionsTotal, components, formulaCalculations } = calculateEmployeePay(salary, extraComponents, taxContext, {
+        BASE_SALARY: salary.baseSalary.toString(), WORK_DAYS: String(workDaysInPeriod),
+        PRESENT_DAYS: String(attd.present), LEAVE_DAYS: String(leaveDaysForEmployee),
+        ABSENT_DAYS: String(absentDays), OVERTIME_HOURS: String(overtimeHoursForEmployee),
+      }, formulaVersions);
+      const netPay = new Prisma.Decimal(earningsTotal).minus(deductionsTotal).toDecimalPlaces(2).toNumber();
+      if (netPay < 0) throw new BadRequestError('Payroll deductions exceed earnings; review the calculation before approval');
 
       // Create payslip
       const payslip = await payrollRepository.createPayslip({
@@ -625,13 +647,18 @@ export class PayrollService {
         absentDays,
         overtimeHours: overtimeHoursForEmployee,
         status: 'DRAFT',
+        formulaCalculations: { create: formulaCalculations.map(calculation => ({
+          companyId: run.companyId, runId, componentId: calculation.componentId,
+          versionId: calculation.versionId, expression: calculation.expression, amount: calculation.amount,
+          inputs: calculation.inputs, dependencies: calculation.dependencies, engineVersion: calculation.engineVersion,
+        })) },
         loanDeductionSnapshots: {
           create: dueLoanInstallments
             .filter(installment => installment.loan.employeeId === salary.employeeId)
             .map(installment => ({ companyId: run.companyId, runId,
               loanId: installment.loanId, installmentId: installment.id, amount: installment.amount })),
         },
-      });
+      }, database);
 
       // Create payslip components
       if (components.length > 0) {
@@ -640,27 +667,27 @@ export class PayrollService {
             payslipId: payslip.id,
             salaryComponentId: c.salaryComponentId,
             name: c.name,
-            type: c.type as any,
+            type: c.type,
             amount: c.amount,
             isTaxable: c.isTaxable,
-          }))
+          })), database
         );
       }
 
-      totalEarnings += earningsTotal;
-      totalDeductions += deductionsTotal;
+      totalEarnings = totalEarnings.plus(earningsTotal);
+      totalDeductions = totalDeductions.plus(deductionsTotal);
       employeeCount++;
     }
 
-    // EWA: Bulk mark semua PAID EWA yang sudah di-deduct di payroll run ini menjadi DEDUCTED + attach payrollRunId supaya recalculate tidak double deduct
-    const allEwaIds: string[] = [];
-    const ewaAmountMapGlobal: Record<string, number> = {};
-    for (const emp of Object.values(ewaDeductionByEmployee)) {
-      allEwaIds.push(...emp.ewaIds);
-      Object.assign(ewaAmountMapGlobal, emp.amountMap);
-    }
-    if (allEwaIds.length > 0) {
-      await ewaRepository.bulkMarkDeducted(allEwaIds, runId, new Date(), ewaAmountMapGlobal);
+    // Claim only EWA rows actually represented on a generated slip. Conditional
+    // updates detect stale amounts/statuses; any failure rolls the entire run back.
+    if (employeeCount === 0) throw new BadRequestError('No active employee salaries are available for this payroll');
+    await ewaRepository.markPayrollDeductions(run.companyId, runId, appliedEwaDeductions, database);
+    const totalNetPay = totalEarnings.minus(totalDeductions);
+    for (const amount of [totalEarnings, totalDeductions, totalNetPay]) {
+      if (!amount.isFinite() || amount.isNegative() || amount.greaterThan('9999999999999.99')) {
+        throw new BadRequestError('Payroll totals exceed the supported monetary range');
+      }
     }
 
     // Update run totals
@@ -668,23 +695,17 @@ export class PayrollService {
       totalEmployees: employeeCount,
       totalEarnings,
       totalDeductions,
-      totalNetPay: totalEarnings - totalDeductions,
-    });
+      totalNetPay,
+    }, database);
 
     // Mark run as completed
-    await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED');
+    await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
 
-    logger.info('Payroll calculation completed', {
-      runId,
-      employeeCount,
-      totalEarnings,
-      totalDeductions,
-    });
   }
 
-  private async ensureOvertimeEarningComponent(companyId: string) {
+  private async ensureOvertimeEarningComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'OVERTIME_EARNING_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
     if (existing) return existing;
     return payrollRepository.createSalaryComponent({
       companyId,
@@ -697,12 +718,12 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated: overtime pay per PP 35/2021',
       sortOrder: 998,
-    });
+    }, database);
   }
 
-  private async ensureLoanDeductionComponent(companyId: string) {
+  private async ensureLoanDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'LOAN_DEDUCTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
 
     if (existing) {
       return existing;
@@ -719,12 +740,12 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated deduction for employee loan installments',
       sortOrder: 999,
-    });
+    }, database);
   }
 
-  private async ensureLateDeductionComponent(companyId: string) {
+  private async ensureLateDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'LATE_DEDUCTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
     if (existing) return existing;
     return payrollRepository.createSalaryComponent({
       companyId,
@@ -737,12 +758,12 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated: automatic late attendance deduction per minutes after branch tolerance',
       sortOrder: 997,
-    });
+    }, database);
   }
 
-  private async ensureAbsenceDeductionComponent(companyId: string) {
+  private async ensureAbsenceDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'ABSENCE_DEDUCTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
     if (existing) return existing;
     return payrollRepository.createSalaryComponent({
       companyId,
@@ -755,12 +776,12 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated: automatic absence per day deduction based on basic salary / working days',
       sortOrder: 996,
-    });
+    }, database);
   }
 
-  private async ensureEWADeductionComponent(companyId: string) {
+  private async ensureEWADeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'EWA-DEDUCT';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code);
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
     if (existing) return existing;
     return payrollRepository.createSalaryComponent({
       companyId,
@@ -773,83 +794,7 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated: automatic deduction for approved Earned Wage Access paid requests (employer-funded float model). Deducted bulan berjalan di payslip.',
       sortOrder: 995,
-    });
-  }
-
-  private calculateEmployeePay(
-    salary: any,
-    extraComponents: Array<{
-      salaryComponentId: string;
-      name: string;
-      type: string;
-      amount: number;
-      isTaxable: boolean;
-    }> = [],
-    taxContext?: { married: boolean; dependents: number; hasNpwp: boolean }
-  ) {
-    const wage = Number(salary.baseSalary);
-
-    // Pass 1: resolve each active component's amount (percentage on base wage).
-    const resolved = (salary.components as any[])
-      .filter((c) => c.isActive)
-      .map((comp) => {
-        const sc = comp.salaryComponent;
-        let amount = Number(comp.amount);
-        if (sc.calculationMethod === 'PERCENTAGE' && sc.ratePercent) {
-          amount = wage * (Number(sc.ratePercent) / 100);
-        } else if (sc.calculationMethod === 'FORMULA') {
-          // ponytail: FORMULA is declared in schema but not yet implemented; throw so it doesn't silently return zero
-          throw new Error(`Salary component "${sc.name}" uses FORMULA calculationMethod which is not yet supported`);
-        }
-        return {
-          code: sc.code as string,
-          entry: {
-            salaryComponentId: sc.id,
-            name: sc.name,
-            type: sc.type as any,
-            amount,
-            isTaxable: sc.isTaxable,
-          },
-        };
-      });
-
-    // Task 2.6/2.7: statutory engines replace the naive flat-rate components.
-    const taxableGross = resolved
-      .filter((r) => r.entry.type === 'ALLOWANCE' && r.entry.isTaxable)
-      .reduce((sum, r) => sum + r.entry.amount, 0);
-    const bpjs = calculateBpjs(wage);
-    const pension = bpjs.employee.jht + bpjs.employee.jp; // deductible from PPh21 gross
-    const pph = taxContext
-      ? calculatePph21({
-          monthlyGross: taxableGross,
-          married: taxContext.married,
-          dependents: taxContext.dependents,
-          monthlyPensionContribution: pension,
-          hasNpwp: taxContext.hasNpwp,
-        })
-      : null;
-
-    for (const r of resolved) {
-      if (r.code === 'BPJS-TK') r.entry.amount = bpjs.employee.jht + bpjs.employee.jp;
-      else if (r.code === 'BPJS-KES') r.entry.amount = bpjs.employee.jkn;
-      else if (r.code === 'PPH21' && pph) r.entry.amount = pph.monthlyTax;
-    }
-
-    let earningsTotal = 0;
-    let deductionsTotal = 0;
-    const components = resolved.map((r) => r.entry);
-    for (const r of resolved) {
-      if (r.entry.type === 'ALLOWANCE') earningsTotal += r.entry.amount;
-      else deductionsTotal += r.entry.amount;
-    }
-
-    for (const comp of extraComponents) {
-      components.push(comp);
-      if (comp.type === 'ALLOWANCE') earningsTotal += comp.amount;
-      else deductionsTotal += comp.amount;
-    }
-
-    return { earningsTotal, deductionsTotal, components };
+    }, database);
   }
 
   // ==================== Standalone Calculation Endpoints (B.1, B.2, B.3) ====================

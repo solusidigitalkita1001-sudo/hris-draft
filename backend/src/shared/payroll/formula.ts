@@ -97,7 +97,7 @@ export function evaluateFormula(formula: CompiledFormula, inputs: FormulaInputs,
     if (typeof inputs[name] !== 'string' || !/^(?:0|[1-9]\d{0,12})(?:\.\d{1,6})?$/.test(inputs[name])) invalid(`invalid numeric input ${name}`);
     const value = new Decimal(inputs[name]);
     if (name !== 'BASE_SALARY' && value.greaterThan(10000)) invalid(`${name} exceeds 10000`);
-    if (name.endsWith('_DAYS') && !value.isInteger()) invalid(`${name} must be a whole number`);
+    if ((name === 'WORK_DAYS' || name === 'PRESENT_DAYS') && !value.isInteger()) invalid(`${name} must be a whole number`);
     values.set(name, value);
   }
   function evaluate(node: Node): Prisma.Decimal {

@@ -1,6 +1,7 @@
 import { ConflictError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma, PayrollRunStatus } from '@prisma/client';
+import { compileFormula } from '@/shared/payroll/formula';
 import {
   CreateSalaryComponentDTO,
   UpdateSalaryComponentDTO,
@@ -17,6 +18,7 @@ export class PayrollRepository {
   async findAllSalaryComponents(companyId: string) {
     return prisma.salaryComponent.findMany({
       where: { companyId, deletedAt: null },
+      include: { formulaVersions: { select: { id: true, version: true, effectiveFrom: true, status: true }, orderBy: { version: 'desc' } } },
       orderBy: { sortOrder: 'asc' },
     });
   }
@@ -27,19 +29,19 @@ export class PayrollRepository {
     });
   }
 
-  async findSalaryComponentByCode(companyId: string, code: string) {
-    return prisma.salaryComponent.findFirst({
+  async findSalaryComponentByCode(companyId: string, code: string, database: Prisma.TransactionClient = prisma) {
+    return database.salaryComponent.findFirst({
       where: { companyId, code, deletedAt: null },
     });
   }
 
-  async createSalaryComponent(data: CreateSalaryComponentDTO & { code: string }) {
-    return prisma.salaryComponent.create({
+  async createSalaryComponent(data: CreateSalaryComponentDTO & { code: string }, database: Prisma.TransactionClient = prisma) {
+    return database.salaryComponent.create({
       data: {
         companyId: data.companyId,
         name: data.name,
         code: data.code,
-        type: data.type as any,
+        type: data.type,
         calculationMethod: data.calculationMethod,
         amount: data.amount,
         ratePercent: data.ratePercent,
@@ -56,7 +58,7 @@ export class PayrollRepository {
       where: { id },
       data: {
         name: data.name,
-        type: data.type as any,
+        type: data.type,
         calculationMethod: data.calculationMethod,
         amount: data.amount,
         ratePercent: data.ratePercent,
@@ -69,24 +71,32 @@ export class PayrollRepository {
   }
 
   async softDeleteSalaryComponent(id: string) {
-    return prisma.salaryComponent.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    return prisma.$transaction(async tx => {
+      const component = await tx.salaryComponent.findFirstOrThrow({ where: { id, deletedAt: null } });
+      // Shares the publication lock so a reference cannot be published while
+      // its component is being removed.
+      await tx.$queryRaw`SELECT id FROM companies WHERE id = ${component.companyId} FOR UPDATE`;
+      const versions = await tx.payrollFormulaVersion.findMany({ where: { companyId: component.companyId, status: 'PUBLISHED' } });
+      if (versions.some(version => version.componentId === id || compileFormula(version.expression).references.includes(component.code))) {
+        throw new ConflictError('A component used by a published payroll formula cannot be deleted');
+      }
+      return tx.salaryComponent.update({ where: { id, companyId: component.companyId }, data: { deletedAt: new Date() } });
     });
   }
 
   // ==================== Employee Salaries ====================
 
-  async findAllEmployeeSalaries(companyId: string, employeeId?: string) {
+  async findAllEmployeeSalaries(companyId: string, employeeId?: string, database: Prisma.TransactionClient = prisma) {
     const where: Prisma.EmployeeSalaryWhereInput = { companyId, deletedAt: null };
     if (employeeId) where.employeeId = employeeId;
 
-    return prisma.employeeSalary.findMany({
+    return database.employeeSalary.findMany({
       where,
       include: {
         employee: {
           select: {
             id: true,
+            companyId: true,
             fullName: true,
             employeeNumber: true,
             maritalStatus: true,
@@ -224,8 +234,8 @@ export class PayrollRepository {
     });
   }
 
-  async findPayrollPeriodById(id: string) {
-    return prisma.payrollPeriod.findFirst({
+  async findPayrollPeriodById(id: string, database: Prisma.TransactionClient = prisma) {
+    return database.payrollPeriod.findFirst({
       where: { id, deletedAt: null },
     });
   }
@@ -284,8 +294,8 @@ export class PayrollRepository {
     });
   }
 
-  async findPayrollRunById(id: string) {
-    return prisma.payrollRun.findFirst({
+  async findPayrollRunById(id: string, database: Prisma.TransactionClient = prisma) {
+    return database.payrollRun.findFirst({
       where: { id, deletedAt: null },
       include: {
         period: true,
@@ -308,8 +318,8 @@ export class PayrollRepository {
     });
   }
 
-  async findLatestRunNumber(companyId: string): Promise<number> {
-    const lastRun = await prisma.payrollRun.findFirst({
+  async findLatestRunNumber(companyId: string, database: Prisma.TransactionClient = prisma): Promise<number> {
+    const lastRun = await database.payrollRun.findFirst({
       where: { companyId },
       orderBy: { runNumber: 'desc' },
       select: { runNumber: true },
@@ -317,8 +327,8 @@ export class PayrollRepository {
     return lastRun?.runNumber ?? 0;
   }
 
-  async createPayrollRun(data: CreatePayrollRunDTO, runNumber: number, createdBy: string) {
-    return prisma.payrollRun.create({
+  async createPayrollRun(data: CreatePayrollRunDTO, runNumber: number, createdBy: string, database: Prisma.TransactionClient = prisma) {
+    return database.payrollRun.create({
       data: {
         periodId: data.periodId,
         companyId: data.companyId,
@@ -340,9 +350,9 @@ export class PayrollRepository {
     });
   }
 
-  async updatePayrollRunStatus(id: string, status: string, userId?: string) {
+  async updatePayrollRunStatus(id: string, status: PayrollRunStatus, userId?: string, database: Prisma.TransactionClient = prisma) {
     const updateData: Prisma.PayrollRunUpdateInput = {
-      status: status as any,
+      status,
     };
 
     if (status === 'APPROVED') {
@@ -354,14 +364,14 @@ export class PayrollRepository {
       updateData.disbursedAt = new Date();
     }
 
-    return prisma.payrollRun.update({
+    return database.payrollRun.update({
       where: { id },
       data: updateData,
     });
   }
 
-  async updatePayrollRunTotals(id: string, data: { totalEmployees: number; totalEarnings: number; totalDeductions: number; totalNetPay: number }) {
-    return prisma.payrollRun.update({
+  async updatePayrollRunTotals(id: string, data: { totalEmployees: number; totalEarnings: Prisma.Decimal; totalDeductions: Prisma.Decimal; totalNetPay: Prisma.Decimal }, database: Prisma.TransactionClient = prisma) {
+    return database.payrollRun.update({
       where: { id },
       data,
     });
@@ -387,6 +397,7 @@ export class PayrollRepository {
     return prisma.payslip.findFirst({
       where: { id },
       include: {
+        formulaCalculations: true,
         employee: {
           select: { id: true, fullName: true, employeeNumber: true, departmentId: true, positionId: true },
         },
@@ -417,13 +428,13 @@ export class PayrollRepository {
     });
   }
 
-  async createPayslip(data: Prisma.PayslipCreateInput) {
-    return prisma.payslip.create({ data });
+  async createPayslip(data: Prisma.PayslipCreateInput, database: Prisma.TransactionClient = prisma) {
+    return database.payslip.create({ data });
   }
 
-  async createPayslipComponents(data: Prisma.PayslipComponentCreateManyInput[]) {
+  async createPayslipComponents(data: Prisma.PayslipComponentCreateManyInput[], database: Prisma.TransactionClient = prisma) {
     if (data.length === 0) return;
-    await prisma.payslipComponent.createMany({ data });
+    await database.payslipComponent.createMany({ data });
   }
 
   async deletePayslipsByRunId(payrollRunId: string) {

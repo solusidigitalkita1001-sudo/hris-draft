@@ -1,6 +1,12 @@
 import prisma from '@/shared/database/prisma';
 import type { CreateEWARequestDTO } from './ewa.dto';
 import type { EWATransactionStatus, Prisma } from '@prisma/client';
+import { ConflictError } from '@/shared/exceptions/AppError';
+
+export interface PayrollEWADeduction {
+  id: string; employeeId: string; amount: Prisma.Decimal;
+  amountRequested: Prisma.Decimal; amountPaidOut: Prisma.Decimal | null;
+}
 
 type CreateWithMeta = CreateEWARequestDTO & {
   companyId: string;
@@ -132,8 +138,8 @@ export class EWARepository {
     });
   }
 
-  async findPAIDByEmployeeAndPeriod(companyId: string, employeeId: string | 'all', periodStart: Date, periodEnd: Date) {
-    return prisma.earnedWageAccess.findMany({
+  async findPAIDByEmployeeAndPeriod(companyId: string, employeeId: string | 'all', periodStart: Date, periodEnd: Date, database: Prisma.TransactionClient = prisma) {
+    return database.earnedWageAccess.findMany({
       where: {
         companyId,
         employeeId: employeeId !== 'all' ? employeeId : undefined,
@@ -153,19 +159,15 @@ export class EWARepository {
     });
   }
 
-  async bulkMarkDeducted(ids: string[], payrollRunId: string, deductedAt: Date, amountMap: Record<string, number>) {
-    const transactions = ids.map((id) =>
-      prisma.earnedWageAccess.update({
-        where: { id },
-        data: {
-          status: 'DEDUCTED',
-          payrollRunId,
-          deductedAt,
-          amountDeductedPayroll: amountMap[id] ?? undefined,
-        },
-      }),
-    );
-    return prisma.$transaction(transactions);
+  async markPayrollDeductions(companyId: string, payrollRunId: string, deductions: PayrollEWADeduction[], database: Prisma.TransactionClient) {
+    for (const row of deductions) {
+      const claimed = await database.earnedWageAccess.updateMany({
+        where: { id: row.id, employeeId: row.employeeId, companyId, status: 'PAID', payrollRunId: null,
+          amountRequested: row.amountRequested, amountPaidOut: row.amountPaidOut },
+        data: { status: 'DEDUCTED', payrollRunId, deductedAt: new Date(), amountDeductedPayroll: row.amount },
+      });
+      if (claimed.count !== 1) throw new ConflictError('EWA changed during payroll calculation; retry after reviewing its status');
+    }
   }
 }
 

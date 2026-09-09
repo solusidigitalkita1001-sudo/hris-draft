@@ -67,6 +67,15 @@ export function PayslipDetail() {
         }
       />
 
+      {Boolean(payslip.formulaCalculations?.length) && <details className="mx-auto mb-5 max-w-2xl rounded-xl border border-border p-4">
+        <summary className="cursor-pointer text-sm font-medium">Jejak perhitungan formula</summary>
+        <p className="mt-3 text-sm text-muted-foreground">Ekspresi dan input berikut disimpan saat slip dihitung.</p>
+        {payslip.formulaCalculations?.map(calculation => <div key={calculation.id} className="mt-4 border-t border-border pt-3 text-sm">
+          <p className="font-medium">{payslip.components.find(component => component.salaryComponentId === calculation.componentId)?.name || 'Komponen formula'} · Rp {Number(calculation.amount).toLocaleString('id-ID', { minimumFractionDigits: 2 })}</p>
+          <pre className="mt-2 whitespace-pre-wrap break-words">{calculation.expression}</pre>
+          <dl className="mt-2 grid gap-2 sm:grid-cols-2">{Object.entries({ ...calculation.inputs, ...calculation.dependencies }).map(([key, value]) => <div key={key} className="min-w-0"><dt className="break-words text-muted-foreground">{key}</dt><dd className="tabular-nums">{value}</dd></div>)}</dl>
+        </div>)}
+      </details>}
       {/* Payslip Card */}
       <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-xl border border-border shadow-sm">
         {/* Header */}

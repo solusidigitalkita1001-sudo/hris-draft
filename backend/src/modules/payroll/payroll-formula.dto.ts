@@ -10,7 +10,7 @@ const number = z.string().regex(/^(?:0|[1-9]\d{0,12})(?:\.\d{1,6})?$/);
 const days = z.string().regex(/^(?:0|[1-9]\d{0,3}|10000)$/);
 export const formulaPreviewSchema = z.object({
   inputs: z.object({ BASE_SALARY: number, WORK_DAYS: days, PRESENT_DAYS: days,
-    LEAVE_DAYS: days, ABSENT_DAYS: days, OVERTIME_HOURS: number }).strict(),
+    LEAVE_DAYS: number, ABSENT_DAYS: number, OVERTIME_HOURS: number }).strict(),
   componentAmounts: z.record(z.string().regex(/^[A-Za-z0-9_-]{1,50}$/), number).default({}),
 }).strip();
 export const formulaComponentParams = z.object({ componentId: z.string().uuid() });

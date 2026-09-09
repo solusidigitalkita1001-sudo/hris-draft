@@ -1,6 +1,7 @@
 import api from './api';
 
 export interface SalaryComponent {
+  formulaVersions?: { id: string; version: number; effectiveFrom: string; status: 'DRAFT' | 'PUBLISHED' }[];
   id: string;
   companyId: string;
   name: string;
@@ -89,6 +90,8 @@ export interface PayslipComponent {
 }
 
 export interface Payslip {
+  formulaCalculations?: { id: string; componentId: string; versionId: string; expression: string; amount: string;
+    inputs: Record<string, string>; dependencies: Record<string, string>; engineVersion: number }[];
   id: string;
   payrollRunId: string;
   employeeId: string;

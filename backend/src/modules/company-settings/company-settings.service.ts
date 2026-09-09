@@ -1,7 +1,7 @@
 import prisma from '@/shared/database/prisma';
 import { getCurrentCompanyId, getCurrentRoles } from '@/shared/context/RequestContext';
 import { ForbiddenError, BadRequestError } from '@/shared/exceptions/AppError';
-import type { CompanySetting } from '@prisma/client';
+import type { CompanySetting, Prisma } from '@prisma/client';
 import type { BulkUpsertSettingsDTO } from './company-settings.dto';
 
 export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
@@ -116,7 +116,7 @@ export class CompanySettingsService {
   // These are pure-read helpers consumed by Task 4.2 payroll calculatePayroll().
   // Returns typed parsed values with fallback default to avoid errors.
 
-  async getLateDeductionConfig(explicitCompanyId?: string): Promise<{
+  async getLateDeductionConfig(explicitCompanyId?: string, database: Prisma.TransactionClient = prisma): Promise<{
     enabled: boolean;
     ratePerMinuteIdr: number;
     dailyCapPercentOfBasic: number;
@@ -125,11 +125,11 @@ export class CompanySettingsService {
   }> {
     const companyId = this.resolveCompanyIdWithPermission(explicitCompanyId);
     const [enabledStr, rateStr, capStr, absenceStr, wdStr] = await Promise.all([
-      this.readRawKeyOrFallback(LATE_DEDUCTION_ENABLED, companyId),
-      this.readRawKeyOrFallback(LATE_DEDUCTION_RATE, companyId),
-      this.readRawKeyOrFallback(LATE_DEDUCTION_CAP, companyId),
-      this.readRawKeyOrFallback(ABSENCE_DEDUCTION_KEY, companyId),
-      this.readRawKeyOrFallback('attendance_default_working_days_per_month', companyId),
+      this.readRawKeyOrFallback(LATE_DEDUCTION_ENABLED, companyId, database),
+      this.readRawKeyOrFallback(LATE_DEDUCTION_RATE, companyId, database),
+      this.readRawKeyOrFallback(LATE_DEDUCTION_CAP, companyId, database),
+      this.readRawKeyOrFallback(ABSENCE_DEDUCTION_KEY, companyId, database),
+      this.readRawKeyOrFallback('attendance_default_working_days_per_month', companyId, database),
     ]);
     const rate = Number(rateStr);
     const cap = Number(capStr);
@@ -172,8 +172,8 @@ export class CompanySettingsService {
     return explicitCompanyId;
   }
 
-  private async readRawKeyOrFallback(key: string, companyId: string): Promise<string> {
-    const row = await prisma.companySetting.findFirst({
+  private async readRawKeyOrFallback(key: string, companyId: string, database: Prisma.TransactionClient = prisma): Promise<string> {
+    const row = await database.companySetting.findFirst({
       where: { companyId, key },
       select: { value: true },
     });

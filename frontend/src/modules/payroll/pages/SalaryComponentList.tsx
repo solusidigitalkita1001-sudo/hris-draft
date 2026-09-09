@@ -1,3 +1,7 @@
+import axios from 'axios';
+import { PayrollFormulaPanel } from '../components/PayrollFormulaPanel';
+import { useCompanyStore } from '@/stores/company.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { payrollService, type SalaryComponent } from '@/services/payroll.service';
@@ -123,6 +127,7 @@ function SalaryComponentForm({
       });
       onClose();
     } catch {
+      // onSave displays the API error; keep the form and inputs open for correction.
     } finally {
       setSaving(false);
     }
@@ -171,7 +176,7 @@ function SalaryComponentForm({
             className="h-9"
           />
           <p className="text-xs text-muted-foreground">
-            Formula method coming soon. Gunakan FIXED untuk nominal pasti atau PERCENTAGE untuk persentase gaji.
+            Metode dasar berlaku sebelum formula terjadwal. Setelah komponen disimpan, gunakan tombol Formula untuk membuat, menyimulasikan, dan memublikasikan versi.
           </p>
         </div>
       </div>
@@ -225,17 +230,25 @@ function SalaryComponentForm({
 }
 
 export function SalaryComponentList() {
+  const activeCompanyId = useCompanyStore(state => state.activeCompany?.id);
+  const sessionCompanyId = useAuthStore(state => state.user?.companyId);
+  const companyId = activeCompanyId ?? sessionCompanyId ?? '';
+  // Discard open editors, simulation results and pending UI callbacks on a switch.
+  return <SalaryComponentListForCompany key={companyId} companyId={companyId} />;
+}
+
+function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
   const [components, setComponents] = useState<SalaryComponent[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<SalaryComponent | null>(null);
   const [deleting, setDeleting] = useState<SalaryComponent | null>(null);
+  const [formulaComponent, setFormulaComponent] = useState<SalaryComponent | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await payrollService.getSalaryComponents(companyId);
       setComponents(data);
     } catch (error) {
@@ -244,7 +257,7 @@ export function SalaryComponentList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     fetchData();
@@ -257,7 +270,6 @@ export function SalaryComponentList() {
   );
 
   const handleCreate = async (data: Partial<SalaryComponent>) => {
-    const companyId = localStorage.getItem('companyId') || '';
     if (!companyId) {
       toast.error('companyId tidak tersedia. Silakan login ulang.');
       throw new Error('companyId missing');
@@ -268,8 +280,8 @@ export function SalaryComponentList() {
       toast.success('Salary component created');
       setShowCreate(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal membuat salary component');
+    } catch (err) {
+      toast.error(axios.isAxiosError(err) && typeof err.response?.data?.message === 'string' ? err.response.data.message : 'Gagal membuat salary component');
       throw err;
     }
   };
@@ -281,8 +293,8 @@ export function SalaryComponentList() {
       toast.success('Salary component updated');
       setEditing(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal update salary component');
+    } catch (err) {
+      toast.error(axios.isAxiosError(err) && typeof err.response?.data?.message === 'string' ? err.response.data.message : 'Gagal update salary component');
       throw err;
     }
   };
@@ -294,8 +306,8 @@ export function SalaryComponentList() {
       toast.success('Salary component deleted');
       setDeleting(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal delete salary component');
+    } catch (err) {
+      toast.error(axios.isAxiosError(err) && typeof err.response?.data?.message === 'string' ? err.response.data.message : 'Gagal delete salary component');
     }
   };
 
@@ -318,6 +330,8 @@ export function SalaryComponentList() {
         }
       />
 
+      {formulaComponent && <PayrollFormulaPanel key={`${formulaComponent.companyId}:${formulaComponent.id}`}
+        component={formulaComponent} components={components} onClose={() => setFormulaComponent(null)} onChanged={() => void fetchData()} />}
       <div className="relative mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -386,7 +400,9 @@ export function SalaryComponentList() {
                       {comp.type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-center text-sm text-muted-foreground">{comp.calculationMethod}</td>
+                  <td className="px-4 py-3 text-center text-sm text-muted-foreground">{comp.calculationMethod}
+                    {comp.formulaVersions?.some(version => version.status === 'PUBLISHED') && <span className="block">Formula terjadwal</span>}
+                  </td>
                   <td className="px-4 py-3 text-right text-sm">
                     {comp.calculationMethod === 'PERCENTAGE'
                       ? `${comp.ratePercent}%`
@@ -414,6 +430,7 @@ export function SalaryComponentList() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {!['BPJS-TK', 'BPJS-KES', 'PPH21', 'LOAN_DEDUCTION_AUTO', 'OVERTIME_EARNING_AUTO', 'LATE_DEDUCTION_AUTO', 'ABSENCE_DEDUCTION_AUTO', 'EWA-DEDUCT'].includes(comp.code) && <Button variant="outline" size="sm" onClick={() => setFormulaComponent(comp)} aria-label={`Kelola formula ${comp.name}`}>Formula</Button>}
                       <button
                         type="button"
                         onClick={() => setEditing(comp)}

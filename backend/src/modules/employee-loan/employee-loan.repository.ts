@@ -200,10 +200,11 @@ export class EmployeeLoanRepository {
     return prisma.loanInstallment.createMany({ data: installments });
   }
 
-  async findDueInstallmentsForPayroll(companyId: string, periodEndDate: Date) {
-    return prisma.loanInstallment.findMany({
+  async findDueInstallmentsForPayroll(companyId: string, periodEndDate: Date, database: Prisma.TransactionClient = prisma) {
+    return database.loanInstallment.findMany({
       where: {
         status: { in: ['PENDING', 'OVERDUE'] },
+        loanDeductionSnapshots: { none: {} },
         dueDate: { lte: periodEndDate },
         loan: {
           companyId,
