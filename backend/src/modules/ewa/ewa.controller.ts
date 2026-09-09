@@ -2,7 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { ewaService } from './ewa.service';
 import { getRequestContext, getCurrentCompanyId } from '@/shared/context/RequestContext';
 import type { ListEWARequestsDTO, CreateEWARequestDTO, ApproveEWARequestDTO, RejectEWARequestDTO, MarkPaidEWARequestDTO } from './ewa.dto';
-import { BadRequestError } from '@/shared/exceptions/AppError';
+import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
+
+function actorId(): string {
+  const id = getRequestContext()?.user?.id;
+  if (!id) throw new ForbiddenError('Authenticated EWA actor is required');
+  return id;
+}
 
 interface UserContextLite {
   id?: string;
@@ -73,8 +79,7 @@ export class EWAController {
   async approveRequest(req: Request<any, any, ApproveEWARequestDTO>, res: Response, next: NextFunction) {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const ctx = getRequestContext()?.user as UserContextLite | undefined;
-      const result = await ewaService.approveRequest(id, ctx?.id ?? 'system', req.body);
+      const result = await ewaService.approveRequest(id, actorId(), req.body);
       res.json({ success: true, data: result });
     } catch (e) {
       next(e);
@@ -84,8 +89,7 @@ export class EWAController {
   async rejectRequest(req: Request<any, any, RejectEWARequestDTO>, res: Response, next: NextFunction) {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const ctx = getRequestContext()?.user as UserContextLite | undefined;
-      const result = await ewaService.rejectRequest(id, ctx?.id ?? 'system', req.body);
+      const result = await ewaService.rejectRequest(id, actorId(), req.body);
       res.json({ success: true, data: result });
     } catch (e) {
       next(e);
@@ -95,8 +99,7 @@ export class EWAController {
   async cancelRequest(req: Request, res: Response, next: NextFunction) {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const ctx = getRequestContext()?.user as UserContextLite | undefined;
-      const result = await ewaService.cancelRequest(id, ctx?.id ?? 'system');
+      const result = await ewaService.cancelRequest(id, actorId());
       res.json({ success: true, data: result });
     } catch (e) {
       next(e);
@@ -106,8 +109,7 @@ export class EWAController {
   async markPaid(req: Request<any, any, MarkPaidEWARequestDTO>, res: Response, next: NextFunction) {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const ctx = getRequestContext()?.user as UserContextLite | undefined;
-      const result = await ewaService.markPaid(id, ctx?.id ?? 'system', req.body);
+      const result = await ewaService.markPaid(id, actorId(), req.body);
       res.json({ success: true, data: result });
     } catch (e) {
       next(e);

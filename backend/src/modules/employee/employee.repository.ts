@@ -1,4 +1,4 @@
-import { employeeAccessWhere } from '@/shared/security/employee-data-scope';
+import { employeeAccessWhere, profileSalaryAccessWhere } from '@/shared/security/employee-data-scope';
 import { prisma } from '@/shared/database/prisma';
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import { Prisma } from '@prisma/client';
@@ -57,9 +57,9 @@ export class EmployeeRepository {
         subDepartment: true,
         user: { select: { id: true, email: true, status: true } },
         employeeSalaries: {
-          where: { isActive: true },
+          where: { isActive: true, deletedAt: null, AND: [await profileSalaryAccessWhere()] },
           include: {
-            components: { include: { salaryComponent: true } },
+            components: { where: { salaryComponent: { companyId: getCurrentCompanyId() } }, include: { salaryComponent: true } },
           },
           take: 1,
         },

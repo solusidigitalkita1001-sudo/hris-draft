@@ -22,11 +22,11 @@ Grammar hanya menerima literal desimal, variabel berikut, `+`, `-`, `*`, `/`, ta
 | Variabel | Sumber saat payroll |
 | --- | --- |
 | `BASE_SALARY` | Gaji pokok dari alokasi gaji pegawai |
-| `WORK_DAYS` | Hitungan hari kerja kalender company; nol jika kalender tidak tersedia |
-| `PRESENT_DAYS` | Jumlah record kehadiran PRESENT/LATE dalam periode |
-| `LEAVE_DAYS` | Rekap cuti disetujui dari proses payroll yang ada |
-| `ABSENT_DAYS` | Maksimum nol atau hari kerja dikurangi hadir dan cuti |
-| `OVERTIME_HOURS` | Jam lembur disetujui dalam periode |
+| `WORK_DAYS` | Hari kerja terjadwal per pegawai menurut kalender/shift dan tahun periode; kalender hilang/ambigu ditolak |
+| `PRESENT_DAYS` | Hari kerja dengan attendance PRESENT/LATE; satu tanggal dihitung sekali |
+| `LEAVE_DAYS` | Hari kerja dalam periode yang tercakup cuti APPROVED, tanpa menggandakan tanggal hadir atau cuti bertumpuk |
+| `ABSENT_DAYS` | Hari kerja tanpa hadir maupun cuti disetujui |
+| `OVERTIME_HOURS` | Jam lembur APPROVED dalam periode, dijumlahkan dengan Decimal |
 
 Contoh prorata eksplisit:
 
@@ -117,6 +117,6 @@ Batas fase ini:
 
 - Retroactive adjustment/correction run belum dibuat; perubahan yang mencakup run lama ditolak dan diuji sebagai conflict. Checklist pengujian retroactive adjustment tetap partial.
 - Mulai 9 September, pembuatan run dan seluruh slip/snapshot bersifat atomik; kegagalan kalkulasi membatalkan penulisan. Run parsial legacy tidak diperbaiki otomatis. Lihat [payroll-run-transactions.md](payroll-run-transactions.md).
-- Agregasi kalender/kehadiran/cuti tetap mengikuti proses yang ada. Audit sumber data seluruh variasi kalender dan cuti lintas periode belum selesai. Simulasi yang berhasil tidak menjamin seluruh input pegawai valid saat payroll berjalan.
+- Input kalender/kehadiran/cuti memakai [aturan payroll per tanggal](payroll-attendance-inputs.md), termasuk kalender organisasi, rotasi dan cuti lintas periode. Histori assignment, snapshot sumber per hari, unpaid/partial-day leave dan correction masih terbuka. Simulasi memakai input yang diberikan pengguna; keberhasilannya tidak menjamin seluruh sumber data pegawai valid saat payroll berjalan.
 - Belum ada currency selain IDR untuk formula, pembatalan publikasi, rollback otomatis, atau eksekusi pembayaran bank.
 - E2E aplikasi lengkap, lint frontend keseluruhan, quality gate CI, serta restore drill produksi masih terbuka. Hasil gabungan ada di [checklist-implementation-status.md](checklist-implementation-status.md).

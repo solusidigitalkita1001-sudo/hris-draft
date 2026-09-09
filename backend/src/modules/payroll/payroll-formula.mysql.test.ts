@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { runInRequestContext } from '@/shared/context/RequestContext';
 import { PrismaClient } from '@prisma/client';
 let mockDatabase: PrismaClient;
 jest.mock('@/shared/database/prisma', () => ({ get prisma() { return mockDatabase; } }));
@@ -6,9 +7,6 @@ jest.mock('@/shared/events/EventBus', () => ({ eventBus: { publish: jest.fn() } 
 jest.mock('@/shared/logger/WinstonLogger', () => ({ logger: { info: jest.fn() } }));
 jest.mock('@/modules/company-settings/company-settings.service', () => ({ companySettingsService: {
   getLateDeductionConfig: jest.fn(async () => ({ enabled: false, absenceDailyPercentOfBasic: 0 })),
-} }));
-jest.mock('@/modules/work-calendar/work-calendar.repository', () => ({ workCalendarRepository: {
-  findCalendarByContext: jest.fn(async () => ({ id: 'synthetic-calendar' })), countWorkingDays: jest.fn(async () => 20),
 } }));
 jest.mock('@/modules/ewa/ewa.repository', () => ({ ewaRepository: { findPAIDByEmployeeAndPeriod: jest.fn(async () => []), markPayrollDeductions: jest.fn() } }));
 import { PayrollFormulaService } from './payroll-formula.service';
@@ -43,6 +41,7 @@ withDatabase('payroll formula revisions (isolated real MySQL)', () => {
       await mockDatabase.employeeSalaryComponent.deleteMany({ where: { employeeSalary: { companyId } } });
       await mockDatabase.employeeSalary.deleteMany({ where: { companyId } });
       await mockDatabase.salaryComponent.deleteMany({ where: { companyId } });
+      await mockDatabase.workCalendar.deleteMany({ where: { companyId } });
       await mockDatabase.employee.deleteMany({ where: { companyId } });
       await mockDatabase.company.deleteMany({ where: { id: companyId } });
       await mockDatabase.companyGroup.deleteMany({ where: { id: { in: groups } } });
@@ -52,6 +51,8 @@ withDatabase('payroll formula revisions (isolated real MySQL)', () => {
     const companyId = randomUUID(), groupId = randomUUID(); companies.push(companyId); groups.push(groupId);
     await mockDatabase.companyGroup.create({ data: { id: groupId, code: groupId, name: 'Formula tests' } });
     await mockDatabase.company.create({ data: { id: companyId, groupId, code: companyId, name: 'Synthetic only' } });
+    await mockDatabase.workCalendar.create({ data: { companyId, name: 'Synthetic calendar', year: 2026, workDays: {}, createdBy: randomUUID(),
+      days: { create: ['09', '10'].flatMap(month => Array.from({ length: 20 }, (_, index) => ({ date: new Date(`2026-${month}-${String(index + 1).padStart(2, '0')}`), dayType: 'WD' }))) } } });
     const component = await mockDatabase.salaryComponent.create({ data: { companyId, code: 'BONUS', name: 'Bonus', type: 'ALLOWANCE', calculationMethod: 'FIXED', amount: '100', isTaxable: true } });
     return { context: { companyId, actorId: randomUUID(), requestId: 'synthetic-request' }, checker: { companyId, actorId: randomUUID() }, component };
   }
@@ -135,7 +136,8 @@ withDatabase('payroll formula revisions (isolated real MySQL)', () => {
     await mockDatabase.employeeSalary.create({ data: { companyId: f.context.companyId, employeeId: employee.id, effectiveDate: new Date('2026-01-01'), baseSalary: '10000000',
       components: { create: { salaryComponentId: f.component.id, amount: '100' } } } });
     const p = await period(f);
-    const run = await new PayrollService().createPayrollRun({ companyId: f.context.companyId, periodId: p.id, name: 'Formula payroll' }, f.context.actorId);
+    const run = await runInRequestContext({ user: { id: f.context.actorId, email: 'payroll@example.test', companyId: f.context.companyId, companyScope: [f.context.companyId] } },
+      () => new PayrollService().createPayrollRun({ companyId: f.context.companyId, periodId: p.id, name: 'Formula payroll' }, f.context.actorId));
     const slip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: run.id }, include: { formulaCalculations: true, components: true } });
     expect(slip.netPay.toFixed(2)).toBe('500000.11');
     expect(slip.components[0].amount.toFixed(2)).toBe('500000.11');
@@ -145,7 +147,8 @@ withDatabase('payroll formula revisions (isolated real MySQL)', () => {
     const future = await draft(f, 'BASE_SALARY / 10', '2026-11-01'); await preview(f, future); await service.publish(f.checker, f.component.id, future.id);
     expect(await mockDatabase.payrollFormulaCalculation.findUniqueOrThrow({ where: { id: slip.formulaCalculations[0].id } })).toEqual(slip.formulaCalculations[0]);
     const before = await period(f, '2026-09-01');
-    const baseline = await new PayrollService().createPayrollRun({ companyId: f.context.companyId, periodId: before.id, name: 'Baseline payroll' }, f.context.actorId);
+    const baseline = await runInRequestContext({ user: { id: f.context.actorId, email: 'payroll@example.test', companyId: f.context.companyId, companyScope: [f.context.companyId] } },
+      () => new PayrollService().createPayrollRun({ companyId: f.context.companyId, periodId: before.id, name: 'Baseline payroll' }, f.context.actorId));
     const earlier = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: baseline.id }, include: { formulaCalculations: true } });
     expect(earlier.netPay.toFixed(2)).toBe('100.00'); expect(earlier.formulaCalculations).toEqual([]);
   });

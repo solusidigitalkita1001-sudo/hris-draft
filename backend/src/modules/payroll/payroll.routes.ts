@@ -20,17 +20,25 @@ import {
   calculateBpjsSchema,
   calculateJknSchema,
 } from './payroll.dto';
-import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema } from './payroll.validation';
+import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema } from './payroll.validation';
 import { auditLog } from '@/shared/middleware/AuditLog';
+import { requireCompanyPayrollAccess } from './payroll-access';
 
 const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips'], (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
 // All routes require authentication
 router.use(authenticate);
 router.use(requireCompanyAccess());
+// These resources contain company totals or operate on every employee. Guard
+// before audit middleware can read the old aggregate record.
+router.use(['/runs', '/periods'], requireCompanyPayrollAccess);
 
 // ==================== Salary Components ====================
 router.get(
@@ -75,6 +83,7 @@ router.delete(
 router.get(
   '/employee-salaries',
   authorize({ resource: 'payroll', action: 'read' }),
+  validate(employeeSalaryListQuerySchema, 'query'),
   payrollController.findAllEmployeeSalaries.bind(payrollController)
 );
 
@@ -88,7 +97,7 @@ router.get(
 router.post(
   '/employee-salaries',
   authorize({ resource: 'payroll', action: 'create' }),
-  auditLog({ action: 'CREATE', entity: 'EmployeeSalary' }),
+  auditLog({ action: 'CREATE', entity: 'EmployeeSalary', redactFields: ['baseSalary', 'components', 'notes', 'employee'] }),
   validate(createEmployeeSalarySchema, 'body'),
   payrollController.createEmployeeSalary.bind(payrollController)
 );
@@ -96,7 +105,7 @@ router.post(
 router.patch(
   '/employee-salaries/:id',
   authorize({ resource: 'payroll', action: 'update' }),
-  auditLog({ action: 'UPDATE', entity: 'EmployeeSalary', model: 'employeeSalary' }),
+  auditLog({ action: 'UPDATE', entity: 'EmployeeSalary', model: 'employeeSalary', redactFields: ['baseSalary', 'components', 'notes', 'employee'] }),
   validate(idParamSchema, 'params'),
   validate(updateEmployeeSalarySchema, 'body'),
   payrollController.updateEmployeeSalary.bind(payrollController)
@@ -105,6 +114,8 @@ router.patch(
 router.get(
   '/employees/:employeeId/thr',
   authorize({ resource: 'payroll', action: 'read' }),
+  validate(employeeThrParamSchema, 'params'),
+  validate(employeeThrQuerySchema, 'query'),
   payrollController.calculateEmployeeThr.bind(payrollController)
 );
 
@@ -138,6 +149,7 @@ router.post(
 router.get(
   '/periods',
   authorize({ resource: 'payroll', action: 'read' }),
+  validate(employeeSalaryListQuerySchema.pick({ companyId: true }), 'query'),
   payrollController.findAllPayrollPeriods.bind(payrollController)
 );
 
@@ -175,12 +187,14 @@ router.patch(
 router.get(
   '/periods/:id/attendance-summary',
   authorize({ resource: 'payroll', action: 'read' }),
+  validate(idParamSchema, 'params'),
   payrollController.getAttendanceSummary.bind(payrollController)
 );
 router.put(
   '/periods/:id/confirm-attendance',
   authorize({ resource: 'payroll', action: 'update' }),
   auditLog({ action: 'CONFIRM_ATTENDANCE', entity: 'PayrollPeriod', model: 'payrollPeriod' }),
+  validate(idParamSchema, 'params'),
   payrollController.confirmAttendanceReview.bind(payrollController)
 );
 
@@ -189,6 +203,7 @@ router.get(
   '/runs',
   authorize({ resource: 'payroll', action: 'read' }),
   parsePagination,
+  validate(employeeSalaryListQuerySchema.pick({ companyId: true }), 'query'),
   payrollController.findAllPayrollRuns.bind(payrollController)
 );
 

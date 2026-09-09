@@ -21,6 +21,9 @@ jest.mock('./payroll-payment.service', () => ({
   },
 }));
 
+jest.mock('@/shared/security/employee-data-scope', () => ({ employeeAccessWhere: jest.fn() }));
+import { employeeAccessWhere } from '@/shared/security/employee-data-scope';
+import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import router from './payroll-payment.routes';
 import { payrollPaymentService } from './payroll-payment.service';
 
@@ -58,7 +61,27 @@ function app(options: { authenticated?: boolean; permissions?: string[] } = {}) 
 }
 
 describe('payroll payment HTTP boundary', () => {
-  beforeEach(() => jest.resetAllMocks());
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.mocked(employeeAccessWhere).mockImplementation(async () => ({ companyId: getCurrentCompanyId() }));
+  });
+
+  it.each([
+    ['post', '', { runId: RUN }], ['get', `/run/${RUN}`, {}], ['get', `/${BATCH}`, {}],
+    ['post', `/${BATCH}/export`, {}], ['patch', `/${BATCH}/transactions/${TRANSACTION}`, { status: 'PAID', amount: '100.25', bankReference: 'BANK-001' }],
+    ['post', `/${BATCH}/reconcile`, {}], ['post', `/${BATCH}/cancel`, {}],
+  ])('denies restricted payroll scope on %s %s despite payment permissions', async (method, path, body) => {
+    jest.mocked(employeeAccessWhere).mockResolvedValue({ companyId: COMPANY_A, branchId: { in: ['restricted-branch'] } });
+    const response = await request(app())[method as string](`${BASE}${path}`).set('Idempotency-Key', KEY).send(body).expect(403);
+    expect(response.headers['cache-control']).toBe('no-store');
+    for (const operation of Object.values(service)) expect(operation).not.toHaveBeenCalled();
+  });
+
+  it('denies export if payroll scope lookup fails', async () => {
+    jest.mocked(employeeAccessWhere).mockRejectedValueOnce(new Error('Scope unavailable'));
+    const response = await request(app()).post(`${BASE}/${BATCH}/export`).send({}).expect(500);
+    expect(response.headers['cache-control']).toBe('no-store'); expect(service.exportBatch).not.toHaveBeenCalled();
+  });
 
   it.each(['record', 'reconcile'])('requires payroll:disburse in addition to process for %s', async action => {
     const client = request(app({ permissions: ['payroll:process'] }));

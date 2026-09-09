@@ -1,5 +1,7 @@
 # Payroll: ekspor bank dan rekonsiliasi manual
 
+Pembaruan akses 9 September 2026: run, period/review attendance dan seluruh endpoint payment batch memerlukan scope payroll seluruh company aktif, selain permission endpoint. Lihat [matriks scope run/payslip](payroll-run-payslip-access.md) untuk kontrak dan hasil verifikasi terbaru.
+
 Implementasi 8 September 2026. Fitur ini **tidak mengirim pembayaran ke bank**. `PAID` berarti petugas sudah mencatat bukti pembayaran; `RECONCILED` berarti seluruh catatan cocok dengan snapshot nominal dan payroll berhasil diselesaikan.
 
 ## Alur

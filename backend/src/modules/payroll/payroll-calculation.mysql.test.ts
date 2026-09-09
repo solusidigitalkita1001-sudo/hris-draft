@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { runInRequestContext } from '@/shared/context/RequestContext';
 import { Prisma, PrismaClient } from '@prisma/client';
 let mockDatabase: PrismaClient;
 jest.mock('@/shared/database/prisma', () => ({ __esModule: true, get prisma() { return mockDatabase; }, get default() { return mockDatabase; } }));
@@ -84,7 +85,8 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     const row = await mockDatabase.loan.create({ data: { companyId: f.companyId, employeeId, loanTypeId: loanType.id, amount: '30.30', remainingBalance: '30.30', installmentAmount: '30.30', totalInstallments: 1, status: 'ACTIVE', reason: 'Synthetic test' } });
     return mockDatabase.loanInstallment.create({ data: { loanId: row.id, amount: '30.30', dueDate: new Date('2026-10-01') } });
   }
-  const run = (f: Awaited<ReturnType<typeof fixture>>, periodId = f.period.id) => service.createPayrollRun({ companyId: f.companyId, periodId, name: 'Synthetic payroll' }, f.maker);
+  const run = (f: Awaited<ReturnType<typeof fixture>>, periodId = f.period.id) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+    () => service.createPayrollRun({ companyId: f.companyId, periodId, name: 'Synthetic payroll' }, f.maker));
   async function expectNoPayroll(f: Awaited<ReturnType<typeof fixture>>) {
     for (const count of [await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } }),
       await mockDatabase.payslip.count({ where: { companyId: f.companyId } }),

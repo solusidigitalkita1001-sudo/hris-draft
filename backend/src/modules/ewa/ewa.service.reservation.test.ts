@@ -3,6 +3,7 @@ import { ewaRepository } from './ewa.repository';
 import * as advisoryLock from '@/shared/database/advisory-lock';
 import { runInRequestContext } from '@/shared/context/RequestContext';
 import { BadRequestError } from '@/shared/exceptions/AppError';
+import * as scope from '@/shared/security/employee-data-scope';
 
 describe('EWAService reservation enforcement', () => {
   const periodStart = new Date('2026-08-01T00:00:00.000Z');
@@ -17,6 +18,8 @@ describe('EWAService reservation enforcement', () => {
   };
 
   beforeEach(() => {
+    jest.spyOn(scope, 'employeeAccessWhere').mockResolvedValue({ companyId: user.companyId });
+    jest.spyOn(ewaRepository, 'findEmployeeForAccess').mockResolvedValue({ id: user.employeeId });
     jest.spyOn(ewaService as any, 'resolvePeriod').mockResolvedValue({
       payrollPeriodId: null,
       periodStart,
@@ -31,7 +34,7 @@ describe('EWAService reservation enforcement', () => {
       dailyRate: 10_000_000 / 22,
     });
     jest.spyOn(advisoryLock, 'withDatabaseAdvisoryLock').mockImplementation(
-      async (_namespace, _key, operation) => operation({} as any),
+      async (_namespace, _key, operation) => operation({ $queryRaw: jest.fn().mockResolvedValue([]) } as any),
     );
     jest.spyOn(ewaRepository, 'findByRequestCode').mockResolvedValue(null);
   });
@@ -60,7 +63,7 @@ describe('EWAService reservation enforcement', () => {
   });
 
   it('executes the reservation read and insert inside the same advisory-lock callback', async () => {
-    const tx = { marker: 'transaction-client' } as any;
+    const tx = { marker: 'transaction-client', $queryRaw: jest.fn().mockResolvedValue([]) } as any;
     const lock = jest.spyOn(advisoryLock, 'withDatabaseAdvisoryLock').mockImplementation(
       async (_namespace, _key, operation) => operation(tx),
     );

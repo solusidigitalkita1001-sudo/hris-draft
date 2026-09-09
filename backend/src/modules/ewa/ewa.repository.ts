@@ -2,13 +2,15 @@ import prisma from '@/shared/database/prisma';
 import type { CreateEWARequestDTO } from './ewa.dto';
 import type { EWATransactionStatus, Prisma } from '@prisma/client';
 import { ConflictError } from '@/shared/exceptions/AppError';
+import { ewaRecordWhere } from './ewa-access';
 
 export interface PayrollEWADeduction {
   id: string; employeeId: string; amount: Prisma.Decimal;
   amountRequested: Prisma.Decimal; amountPaidOut: Prisma.Decimal | null;
 }
 
-type CreateWithMeta = CreateEWARequestDTO & {
+type CreateWithMeta = Omit<CreateEWARequestDTO, 'payrollPeriodId' | 'periodStart' | 'periodEnd' | 'earnedGross'> & {
+  payrollPeriodId: string | null;
   companyId: string;
   employeeId: string;
   requestCode: string;
@@ -22,6 +24,10 @@ type CreateWithMeta = CreateEWARequestDTO & {
 };
 
 export class EWARepository {
+  async findEmployeeForAccess(employeeId: string, employeeWhere: Prisma.EmployeeWhereInput, client: Prisma.TransactionClient = prisma) {
+    return client.employee.findFirst({ where: { id: employeeId, AND: [employeeWhere] }, select: { id: true } });
+  }
+
   async create(data: CreateWithMeta, client: Prisma.TransactionClient | typeof prisma = prisma) {
     return client.earnedWageAccess.create({
       data: {
@@ -63,9 +69,9 @@ export class EWARepository {
     });
   }
 
-  async findById(id: string) {
+  async findById(id: string, companyId: string, employeeWhere: Prisma.EmployeeWhereInput) {
     return prisma.earnedWageAccess.findFirst({
-      where: { id },
+      where: { id, ...ewaRecordWhere(companyId, employeeWhere) },
       include: {
         employee: {
           select: {
@@ -85,30 +91,34 @@ export class EWARepository {
     });
   }
 
-  async findAll(companyId: string, filters: { status?: EWATransactionStatus; employeeId?: string }) {
+  async findAll(companyId: string, filters: { status?: EWATransactionStatus; employeeId?: string }, employeeWhere: Prisma.EmployeeWhereInput) {
     return prisma.earnedWageAccess.findMany({
       where: {
-        companyId,
+        ...ewaRecordWhere(companyId, employeeWhere),
         status: filters.status ?? undefined,
         employeeId: filters.employeeId ?? undefined,
       },
       include: { employee: { select: { id: true, fullName: true, employeeNumber: true, branchId: true, departmentId: true } } },
-      orderBy: [{ createdAt: 'desc' }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     });
   }
 
-  async findMyRequests(employeeId: string, status?: EWATransactionStatus) {
+  async findMyRequests(employeeId: string, companyId: string, employeeWhere: Prisma.EmployeeWhereInput, status?: EWATransactionStatus) {
     return prisma.earnedWageAccess.findMany({
       where: {
+        ...ewaRecordWhere(companyId, employeeWhere),
         employeeId,
         status: status ?? undefined,
       },
-      orderBy: [{ createdAt: 'desc' }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     });
   }
 
   async updateStatus(
     id: string,
+    companyId: string,
+    employeeWhere: Prisma.EmployeeWhereInput,
+    expectedStatus: EWATransactionStatus,
     data: {
       status: EWATransactionStatus;
       approverId?: string;
@@ -126,9 +136,12 @@ export class EWARepository {
       cancelledAt?: Date;
     },
   ) {
-    return prisma.earnedWageAccess.update({
-      where: { id },
-      data,
+    return prisma.$transaction(async client => {
+      const result = await client.earnedWageAccess.updateMany({
+        where: { id, ...ewaRecordWhere(companyId, employeeWhere), status: expectedStatus }, data,
+      });
+      if (result.count !== 1) throw new ConflictError('EWA status or access changed; reload the request before retrying');
+      return client.earnedWageAccess.findFirstOrThrow({ where: { id, ...ewaRecordWhere(companyId, employeeWhere) } });
     });
   }
 

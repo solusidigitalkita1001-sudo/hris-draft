@@ -6,19 +6,25 @@ import {
   aggregateEwaForPayroll,
 } from '@/shared/ewa/ewa-mvp';
 import { generateSystemCode } from '@/shared/utils/system-code';
-import { getRequestContext, getCurrentCompanyId, getCurrentRoles } from '@/shared/context/RequestContext';
+import { getCurrentUser, getCurrentRoles } from '@/shared/context/RequestContext';
 import { logger } from '@/shared/logger/WinstonLogger';
-import { NotFoundError, ForbiddenError, BadRequestError } from '@/shared/exceptions/AppError';
+import { NotFoundError, ForbiddenError, BadRequestError, ConflictError, ValidationError } from '@/shared/exceptions/AppError';
 import type { CreateEWARequestDTO, ApproveEWARequestDTO, RejectEWARequestDTO, MarkPaidEWARequestDTO } from './ewa.dto';
 import type { EWATransactionStatus } from '@prisma/client';
+import { z } from 'zod';
+import { createEWARequestSchema, approveEWARequestSchema, rejectEWARequestSchema, markPaidEWARequestSchema, ewaLimitQuerySchema } from './ewa.dto';
+import { ewaAccess, EWA_HR_ROLES, EWA_FINANCE_ROLES } from './ewa-access';
 import { prisma } from '@/shared/database/prisma';
 import { payrollRepository } from '@/modules/payroll/payroll.repository';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
 import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
 
-const EMPLOYEE_ELEVATED_HR_ROLES = ['HR_STAFF', 'HR_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
-const FINANCE_DISBURSE_ROLES = ['FINANCE_STAFF', 'FINANCE_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
+function parse<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
+  const result = schema.safeParse(data);
+  if (!result.success) throw new ValidationError('Invalid EWA input', result.error.issues.map(issue => ({ field: issue.path.join('.'), message: issue.message })));
+  return result.data;
+}
 const DEFAULT_MAX_PERCENT = 50;
 const DEFAULT_WORKDAYS_FALLBACK = 22;
 
@@ -42,7 +48,7 @@ export class EWAService {
    */
   private async resolvePeriod(data: CreateEWARequestDTO, companyId: string): Promise<{ payrollPeriodId: string | null; periodStart: Date; periodEnd: Date }> {
     if (data.payrollPeriodId) {
-      const period = await payrollRepository.findPayrollPeriodById(data.payrollPeriodId);
+      const period = await payrollRepository.findPayrollPeriodById(data.payrollPeriodId, prisma, companyId);
       if (!period) throw new NotFoundError('Payroll period yang dipilih tidak ditemukan');
       if (period.companyId !== companyId) throw new ForbiddenError('Payroll period tidak sesuai company Anda');
       return {
@@ -71,16 +77,24 @@ export class EWAService {
     periodStart: Date,
     periodEnd: Date,
   ): Promise<{ earnedGrossToDate: number; baseSalary: number; presentDays: number; workDaysInPeriod: number; overtimePay: number; dailyRate: number }> {
+    const access = await ewaAccess({ companyId });
+    if (!Number.isFinite(periodStart.getTime()) || !Number.isFinite(periodEnd.getTime()) || periodEnd < periodStart) throw new ValidationError('Invalid EWA period');
+    const employee = await ewaRepository.findEmployeeForAccess(employeeId, access.employeeWhere);
+    if (!employee) throw new NotFoundError('Employee not found in the permitted EWA scope');
     const todayCutoff = new Date();
     const effectiveEnd = periodEnd < todayCutoff ? periodEnd : todayCutoff;
 
-    const activeSalaries = await payrollRepository.findAllEmployeeSalaries(companyId, employeeId);
-    const activeSalary = activeSalaries.find((s) => s.isActive && s.deletedAt == null) ?? activeSalaries[0];
+    const activeSalaries = await prisma.employeeSalary.findMany({
+      where: { companyId, employeeId, isActive: true, deletedAt: null }, select: { baseSalary: true, currency: true }, take: 2,
+    });
+    if (activeSalaries.length > 1) throw new ConflictError('Multiple active salaries found; review the existing allocations');
+    const activeSalary = activeSalaries[0];
     if (!activeSalary) {
       logger.warn('EWA earnedGross calc: active salary tidak ditemukan employeeId=' + employeeId);
       return { earnedGrossToDate: 0, baseSalary: 0, presentDays: 0, workDaysInPeriod: DEFAULT_WORKDAYS_FALLBACK, overtimePay: 0, dailyRate: 0 };
     }
-    const baseSalary = Number(activeSalary.baseSalary) || 0;
+    if (activeSalary.currency !== 'IDR' || !activeSalary.baseSalary.isFinite() || activeSalary.baseSalary.lessThanOrEqualTo(0)) throw new ValidationError('EWA requires a valid IDR salary allocation');
+    const baseSalary = Number(activeSalary.baseSalary);
 
     const companyCalendar = await workCalendarRepository.findCalendarByContext({ companyId });
     const workDaysInPeriodRaw = companyCalendar
@@ -117,47 +131,33 @@ export class EWAService {
   }
 
   async findAll(companyId: string, filters: { status?: EWATransactionStatus; employeeId?: string }) {
-    return ewaRepository.findAll(companyId, filters);
+    const access = await ewaAccess({ companyId });
+    return ewaRepository.findAll(access.companyId, filters, access.employeeWhere);
   }
 
   async findMyRequests(employeeId: string, status?: EWATransactionStatus) {
-    return ewaRepository.findMyRequests(employeeId, status);
+    const access = await ewaAccess({ self: true });
+    if (employeeId !== access.actor.employeeId) throw new ForbiddenError('EWA self-service requires the authenticated employee');
+    return ewaRepository.findMyRequests(employeeId, access.companyId, access.employeeWhere, status);
   }
 
   async findById(id: string) {
-    const ewa = await ewaRepository.findById(id);
+    const access = await ewaAccess();
+    const ewa = await ewaRepository.findById(id, access.companyId, access.employeeWhere);
     if (!ewa) throw new NotFoundError('EWA request tidak ditemukan');
-    const currentCompanyId = getCurrentCompanyId();
-    const roles = getCurrentRoles();
-    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
-    const ctx = getRequestContext();
-    const mine = ctx?.user?.employeeId && ctx.user.employeeId === ewa.employeeId;
-    if (!isAdmin && currentCompanyId && ewa.companyId !== currentCompanyId) throw new NotFoundError('EWA request tidak ditemukan');
-    if (!isAdmin && !mine && !roles.some((r) => EMPLOYEE_ELEVATED_HR_ROLES.includes(r) || FINANCE_DISBURSE_ROLES.includes(r))) {
-      throw new ForbiddenError('Anda tidak memiliki akses EWA request ini');
-    }
     return ewa;
   }
 
-  async createRequest(data: CreateEWARequestDTO) {
-    const ctx = getRequestContext();
-    const user = ctx?.user;
-    const roles = user?.roles ?? [];
-    const hasElevatedRole = roles.some((r) => EMPLOYEE_ELEVATED_HR_ROLES.includes(r));
-
-    const currentCompany = getCurrentCompanyId() ?? user?.companyId ?? '';
-    if (!currentCompany) throw new BadRequestError('companyId tidak ditemukan dalam context');
-
-    let employeeId = data.employeeId;
-    if (user?.employeeId && roles.includes('EMPLOYEE') && !hasElevatedRole) {
-      employeeId = user.employeeId;
-      if (data.employeeId && data.employeeId !== employeeId) {
-        throw new ForbiddenError('Role EMPLOYEE tidak bisa request EWA atas nama karyawan lain');
-      }
-    }
+  async createRequest(input: CreateEWARequestDTO) {
+    const data = parse(createEWARequestSchema, input);
+    const onBehalf = getCurrentUser()?.roles?.some(role => EWA_HR_ROLES.includes(role));
+    const access = await ewaAccess({ self: !onBehalf });
+    const employeeId = data.employeeId ?? access.actor.employeeId;
     if (!employeeId) throw new BadRequestError('employeeId wajib diisi');
-
-    const finalCompanyId = currentCompany;
+    if (!onBehalf && employeeId !== access.actor.employeeId) throw new ForbiddenError('EWA can only be requested for the authenticated employee');
+    const employee = await ewaRepository.findEmployeeForAccess(employeeId, access.employeeWhere);
+    if (!employee) throw new NotFoundError('Employee not found in the permitted EWA scope');
+    const finalCompanyId = access.companyId;
 
     const { payrollPeriodId, periodStart, periodEnd } = await this.resolvePeriod(data, finalCompanyId);
 
@@ -173,6 +173,11 @@ export class EWAService {
       // periods with different boundaries must still serialize.
       `${finalCompanyId}:${employeeId}`,
       async (tx) => {
+        // Keep serialization through COMMIT, including the interval between
+        // releasing the connection advisory lock and committing its transaction.
+        // Acquire this before any consistent read can establish a stale snapshot.
+        await tx.$queryRaw`SELECT id FROM employees WHERE id = ${employeeId} AND company_id = ${finalCompanyId} AND deleted_at IS NULL FOR UPDATE`;
+        if (!await ewaRepository.findEmployeeForAccess(employeeId, access.employeeWhere, tx)) throw new NotFoundError('Employee not found in the permitted EWA scope');
         // PENDING ikut dihitung sebagai reservasi. Tanpa ini, request paralel
         // dapat sama-sama lolos sebelum salah satunya di-approve.
         const existingReserved = await ewaRepository.findByEmployeePeriodStatus(
@@ -211,7 +216,7 @@ export class EWAService {
           maxAllowedPercent: DEFAULT_MAX_PERCENT,
           maxAllowedAtRequest: assessment.maxAllowedAmount,
           totalApprovedSamePeriod: totalExistingReserved,
-        } as any, tx);
+        }, tx);
       },
     );
 
@@ -219,25 +224,25 @@ export class EWAService {
       ewaId: created.id,
       requestCode: created.requestCode,
       employeeId,
-      amountRequested: data.amountRequested,
-      earnedGrossCalcBreakdown: grossCalc,
     });
     return created;
   }
 
   async approveRequest(id: string, approverId: string, dto: ApproveEWARequestDTO) {
+    const access = await ewaAccess({ actorId: approverId });
+    dto = parse(approveEWARequestSchema, dto);
     const ewa = await this.findById(id);
     const transition = isStatusTransitionValid({ fromStatus: ewa.status, toStatus: 'APPROVED', actor: approverId });
     if (!transition.allowed) throw new BadRequestError(`Status EWA tidak bisa di-approve: ${transition.reason}`);
     const roles = getCurrentRoles();
-    if (!roles.some((r) => EMPLOYEE_ELEVATED_HR_ROLES.includes(r))) throw new ForbiddenError('Hanya HR / Admin yang bisa approve EWA');
+    if (!roles.some((r) => EWA_HR_ROLES.includes(r))) throw new ForbiddenError('Hanya HR / Admin yang bisa approve EWA');
 
-    const ctxUser = getRequestContext()?.user;
+    const ctxUser = getCurrentUser();
     if (approverId && ctxUser?.employeeId && ctxUser.employeeId === ewa.employeeId) {
       throw new ForbiddenError('Tidak bisa approve EWA sendiri (self approval)');
     }
 
-    const updated = await ewaRepository.updateStatus(id, {
+    const updated = await ewaRepository.updateStatus(id, access.companyId, access.employeeWhere, ewa.status, {
       status: 'APPROVED',
       approverId,
       approvedAt: new Date(),
@@ -248,34 +253,36 @@ export class EWAService {
   }
 
   async rejectRequest(id: string, approverId: string, dto: RejectEWARequestDTO) {
+    const access = await ewaAccess({ actorId: approverId });
+    dto = parse(rejectEWARequestSchema, dto);
     const ewa = await this.findById(id);
     const transition = isStatusTransitionValid({ fromStatus: ewa.status, toStatus: 'REJECTED', actor: approverId });
     if (!transition.allowed) throw new BadRequestError(`Status EWA tidak bisa di-reject: ${transition.reason}`);
     const roles = getCurrentRoles();
-    if (!roles.some((r) => EMPLOYEE_ELEVATED_HR_ROLES.includes(r))) throw new ForbiddenError('Hanya HR / Admin yang bisa reject EWA');
-    const ctxUserReject = getRequestContext()?.user;
+    if (!roles.some((r) => EWA_HR_ROLES.includes(r))) throw new ForbiddenError('Hanya HR / Admin yang bisa reject EWA');
+    const ctxUserReject = getCurrentUser();
     if (approverId && ctxUserReject?.employeeId && ctxUserReject.employeeId === ewa.employeeId) {
       throw new ForbiddenError('Tidak bisa reject EWA sendiri (self reject)');
     }
-    const updated = await ewaRepository.updateStatus(id, {
+    const updated = await ewaRepository.updateStatus(id, access.companyId, access.employeeWhere, ewa.status, {
       status: 'REJECTED',
       approverId,
       rejectReason: dto.rejectReason,
     });
-    logger.info('EWA request rejected', { ewaId: id, approverId, reason: dto.rejectReason });
+    logger.info('EWA request rejected', { ewaId: id, approverId });
     return updated;
   }
 
   async cancelRequest(id: string, cancellerId: string) {
+    const access = await ewaAccess({ actorId: cancellerId });
     const ewa = await this.findById(id);
-    const ctx = getRequestContext();
-    const mine = ctx?.user?.employeeId === ewa.employeeId;
-    const roles = ctx?.user?.roles ?? [];
-    if (!mine && !roles.some((r) => EMPLOYEE_ELEVATED_HR_ROLES.includes(r))) {
+    const mine = access.actor.employeeId === ewa.employeeId;
+    const roles = access.actor.roles ?? [];
+    if (!mine && !roles.some((r) => EWA_HR_ROLES.includes(r))) {
       throw new ForbiddenError('Hanya pembuat request atau HR / Admin yang bisa cancel');
     }
     if (ewa.status !== 'PENDING') throw new BadRequestError('Hanya EWA status PENDING yang bisa dicancel');
-    const updated = await ewaRepository.updateStatus(id, {
+    const updated = await ewaRepository.updateStatus(id, access.companyId, access.employeeWhere, ewa.status, {
       status: 'CANCELLED',
       cancelledBy: cancellerId,
       cancelledAt: new Date(),
@@ -285,19 +292,21 @@ export class EWAService {
   }
 
   async markPaid(id: string, disburserId: string, dto: MarkPaidEWARequestDTO) {
+    const access = await ewaAccess({ actorId: disburserId });
+    dto = parse(markPaidEWARequestSchema, dto);
     const ewa = await this.findById(id);
     const transition = isStatusTransitionValid({ fromStatus: ewa.status, toStatus: 'PAID', actor: disburserId });
     if (!transition.allowed) throw new BadRequestError(`Status EWA tidak bisa di-mark PAID: ${transition.reason}`);
     const roles = getCurrentRoles();
-    if (!roles.some((r) => FINANCE_DISBURSE_ROLES.includes(r))) throw new ForbiddenError('Hanya Finance / Admin yang bisa mark PAID EWA');
-    const updated = await ewaRepository.updateStatus(id, {
+    if (!roles.some((r) => EWA_FINANCE_ROLES.includes(r))) throw new ForbiddenError('Hanya Finance / Admin yang bisa mark PAID EWA');
+    const updated = await ewaRepository.updateStatus(id, access.companyId, access.employeeWhere, ewa.status, {
       status: 'PAID',
       financeDisburserId: disburserId,
       paidOutAt: new Date(),
       amountPaidOut: dto.amountPaidOut,
       disbursementReference: dto.disbursementReference,
     });
-    logger.info('EWA request marked PAID', { ewaId: id, disburserId, amountPaid: dto.amountPaidOut });
+    logger.info('EWA request marked PAID', { ewaId: id, disburserId });
     return updated;
   }
 
@@ -323,6 +332,9 @@ export class EWAService {
     employeeId: string,
     overridePercent?: number,
   ): Promise<{ max: number; remaining: number; totalApproved: number; totalReserved: number; earnedGrossToDate: number; breakdown: any }> {
+    const access = await ewaAccess({ companyId, self: true });
+    if (employeeId !== access.actor.employeeId) throw new ForbiddenError('EWA self-service requires the authenticated employee');
+    parse(ewaLimitQuerySchema, { percent: overridePercent });
     const today = new Date();
     const periodStart = startOfMonth(today);
     const periodEnd = endOfMonth(today);

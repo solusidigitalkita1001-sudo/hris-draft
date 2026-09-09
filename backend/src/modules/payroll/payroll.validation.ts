@@ -4,12 +4,25 @@ export const idParamSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const employeeSalaryListQuerySchema = z.object({
+  companyId: z.string().uuid().optional(),
+  employeeId: z.string().uuid().optional(),
+});
+export const employeeThrParamSchema = z.object({ employeeId: z.string().uuid() });
+const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}, 'Use a valid calendar date');
+export const employeeThrQuerySchema = z.object({
+  date: z.union([calendarDateSchema, z.string().datetime({ offset: true })]).optional(),
+});
+
 export const payrollRunIdParamSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().uuid(),
 });
 
 export const payslipIdParamSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().uuid(),
 });
 
 export const periodIdParamSchema = z.object({

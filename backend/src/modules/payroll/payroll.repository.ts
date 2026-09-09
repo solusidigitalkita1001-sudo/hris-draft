@@ -12,6 +12,19 @@ import {
   CreatePayrollRunDTO,
 } from './payroll.dto';
 
+const payslipRunSelect = {
+  id: true, name: true, runNumber: true, status: true,
+  period: { select: { id: true, name: true, code: true, frequency: true, startDate: true, endDate: true, payDate: true } },
+} satisfies Prisma.PayrollRunSelect;
+
+function runAccessWhere(companyId: string): Prisma.PayrollRunWhereInput {
+  return { companyId, deletedAt: null, period: { companyId, deletedAt: null } };
+}
+
+function payslipAccessWhere(companyId: string, employeeWhere: Prisma.EmployeeWhereInput): Prisma.PayslipWhereInput {
+  return { companyId, employee: { companyId, deletedAt: null, AND: [employeeWhere] }, payrollRun: runAccessWhere(companyId) };
+}
+
 export class PayrollRepository {
   // ==================== Salary Components ====================
 
@@ -115,14 +128,26 @@ export class PayrollRepository {
     });
   }
 
-  async findEmployeeSalaryById(id: string) {
+  async findEmployeeSalariesForAccess(companyId: string, employeeWhere: Prisma.EmployeeWhereInput, employeeId?: string) {
+    return prisma.employeeSalary.findMany({
+      where: { companyId, employeeId, deletedAt: null, employee: { companyId, deletedAt: null, AND: [employeeWhere] } },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true } },
+        components: { where: { salaryComponent: { companyId } }, include: { salaryComponent: true } },
+      },
+      orderBy: [{ effectiveDate: 'desc' }, { id: 'asc' }],
+    });
+  }
+
+  async findEmployeeSalaryById(id: string, companyId: string, employeeWhere: Prisma.EmployeeWhereInput) {
     return prisma.employeeSalary.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, companyId, deletedAt: null, employee: { companyId, deletedAt: null, AND: [employeeWhere] } },
       include: {
         employee: {
           select: { id: true, fullName: true, employeeNumber: true },
         },
         components: {
+          where: { salaryComponent: { companyId } },
           include: {
             salaryComponent: true,
           },
@@ -143,25 +168,9 @@ export class PayrollRepository {
     });
   }
 
-  /** Input untuk kalkulasi THR: upah aktif + tanggal masuk karyawan. */
-  async findThrInputs(employeeId: string) {
-    const [salary, employee] = await Promise.all([
-      prisma.employeeSalary.findFirst({
-        where: { employeeId, isActive: true, deletedAt: null },
-        orderBy: { effectiveDate: 'desc' },
-        select: { baseSalary: true },
-      }),
-      prisma.employee.findUnique({
-        where: { id: employeeId },
-        select: { id: true, fullName: true, employeeNumber: true, joinDate: true },
-      }),
-    ]);
-    return { salary, employee };
-  }
-
-  async createEmployeeSalary(data: CreateEmployeeSalaryDTO) {
+  async createEmployeeSalary(data: CreateEmployeeSalaryDTO & { companyId: string }, database: Prisma.TransactionClient) {
     const { components, ...salaryData } = data;
-    return prisma.employeeSalary.create({
+    return database.employeeSalary.create({
       data: {
         employeeId: salaryData.employeeId,
         companyId: salaryData.companyId,
@@ -189,7 +198,7 @@ export class PayrollRepository {
     });
   }
 
-  async updateEmployeeSalary(id: string, data: UpdateEmployeeSalaryDTO) {
+  async updateEmployeeSalary(id: string, companyId: string, data: UpdateEmployeeSalaryDTO, database: Prisma.TransactionClient) {
     const { components, ...salaryData } = data;
     const updateData: Prisma.EmployeeSalaryUpdateInput = {};
 
@@ -201,8 +210,8 @@ export class PayrollRepository {
 
     if (components) {
       // Delete existing components and recreate
-      await prisma.employeeSalaryComponent.deleteMany({ where: { employeeSalaryId: id } });
-      await prisma.employeeSalaryComponent.createMany({
+      await database.employeeSalaryComponent.deleteMany({ where: { employeeSalaryId: id, employeeSalary: { companyId } } });
+      await database.employeeSalaryComponent.createMany({
         data: components.map((c) => ({
           employeeSalaryId: id,
           salaryComponentId: c.salaryComponentId,
@@ -211,8 +220,8 @@ export class PayrollRepository {
       });
     }
 
-    return prisma.employeeSalary.update({
-      where: { id },
+    return database.employeeSalary.update({
+      where: { id, companyId, deletedAt: null },
       data: updateData,
       include: {
         employee: {
@@ -234,9 +243,9 @@ export class PayrollRepository {
     });
   }
 
-  async findPayrollPeriodById(id: string, database: Prisma.TransactionClient = prisma) {
+  async findPayrollPeriodById(id: string, database: Prisma.TransactionClient = prisma, companyId?: string) {
     return database.payrollPeriod.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, companyId, deletedAt: null },
     });
   }
 
@@ -255,16 +264,16 @@ export class PayrollRepository {
     });
   }
 
-  async closePayrollPeriod(id: string) {
+  async closePayrollPeriod(id: string, companyId: string) {
     return prisma.payrollPeriod.update({
-      where: { id },
+      where: { id, companyId, deletedAt: null },
       data: { status: 'CLOSED' as any },
     });
   }
 
-  async updatePayrollPeriod(id: string, data: UpdatePayrollPeriodDTO) {
+  async updatePayrollPeriod(id: string, data: UpdatePayrollPeriodDTO, companyId: string) {
     return prisma.payrollPeriod.update({
-      where: { id },
+      where: { id, companyId, deletedAt: null },
       data: {
         name: data.name,
         notes: data.notes,
@@ -272,9 +281,9 @@ export class PayrollRepository {
     });
   }
 
-  async confirmAttendanceReview(id: string, userId: string) {
+  async confirmAttendanceReview(id: string, userId: string, companyId: string) {
     return prisma.payrollPeriod.update({
-      where: { id },
+      where: { id, companyId, deletedAt: null, status: { not: 'CLOSED' } },
       data: { attendanceReviewedAt: new Date(), attendanceReviewedBy: userId },
     });
   }
@@ -283,14 +292,31 @@ export class PayrollRepository {
 
   async findAllPayrollRuns(companyId: string) {
     return prisma.payrollRun.findMany({
-      where: { companyId, deletedAt: null },
+      where: runAccessWhere(companyId),
       include: {
         period: {
           select: { id: true, name: true, startDate: true, endDate: true },
         },
-        _count: { select: { payslips: true } },
+        _count: { select: { payslips: { where: payslipAccessWhere(companyId, {}) } } },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findPayrollRunForAccess(id: string, companyId: string) {
+    return prisma.payrollRun.findFirst({
+      where: { id, ...runAccessWhere(companyId) },
+      include: {
+        period: true,
+        company: { select: { id: true, name: true } },
+        payslips: {
+          where: payslipAccessWhere(companyId, {}),
+          include: {
+            employee: { select: { id: true, fullName: true, employeeNumber: true } },
+            components: { where: { salaryComponent: { companyId } }, include: { salaryComponent: true } },
+          },
+        },
+      },
     });
   }
 
@@ -339,14 +365,14 @@ export class PayrollRepository {
     });
   }
 
-  async approvePayrollRun(id: string, userId: string) {
+  async approvePayrollRun(id: string, userId: string, companyId: string) {
     return prisma.$transaction(async tx => {
       const result = await tx.payrollRun.updateMany({
-        where: { id, status: 'COMPLETED', createdBy: { not: null }, AND: [{ createdBy: { not: userId } }], deletedAt: null },
+        where: { id, ...runAccessWhere(companyId), status: 'COMPLETED', createdBy: { not: null }, AND: [{ createdBy: { not: userId } }] },
         data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
       });
       if (result.count !== 1) throw new ConflictError('Payroll changed or maker-checker validation failed');
-      return tx.payrollRun.findUniqueOrThrow({ where: { id } });
+      return tx.payrollRun.findUniqueOrThrow({ where: { id, companyId } });
     });
   }
 
@@ -393,37 +419,38 @@ export class PayrollRepository {
     });
   }
 
-  async findPayslipById(id: string) {
-    return prisma.payslip.findFirst({
-      where: { id },
-      include: {
-        formulaCalculations: true,
-        employee: {
-          select: { id: true, fullName: true, employeeNumber: true, departmentId: true, positionId: true },
+  async findPayslipById(id: string, companyId: string, employeeWhere: Prisma.EmployeeWhereInput) {
+    return prisma.$transaction(async database => {
+      const payslip = await database.payslip.findFirst({
+        where: { id, ...payslipAccessWhere(companyId, employeeWhere) },
+        include: {
+          employee: { select: { id: true, fullName: true, employeeNumber: true, departmentId: true, positionId: true } },
+          payrollRun: { select: payslipRunSelect },
+          components: { where: { salaryComponent: { companyId } }, include: { salaryComponent: true } },
         },
-        payrollRun: {
-          include: { period: true },
-        },
-        components: {
-          include: { salaryComponent: true },
-        },
-        benefitDeductions: {
-          include: { benefitEnrollment: { include: { benefitPlan: true } } },
-        },
-      },
-    });
+      });
+      if (!payslip) return null;
+      // Read dependent evidence only after the parent employee has passed scope.
+      const formulaCalculations = await database.payrollFormulaCalculation.findMany({
+        where: { companyId, payslipId: id, runId: payslip.payrollRunId,
+          component: { companyId }, version: { companyId } },
+      });
+      const benefitDeductions = await database.benefitDeduction.findMany({
+        where: { payslipId: id, benefitEnrollment: { companyId, employeeId: payslip.employeeId, benefitPlan: { companyId } } },
+        include: { benefitEnrollment: { include: { benefitPlan: true } } },
+      });
+      return { ...payslip, formulaCalculations, benefitDeductions };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, maxWait: 10000, timeout: 60000 });
   }
 
-  async findPayslipsByEmployee(employeeId: string, limit = 20) {
+  async findPayslipsByEmployee(employeeId: string, companyId: string, employeeWhere: Prisma.EmployeeWhereInput, limit = 20) {
     return prisma.payslip.findMany({
-      where: { employeeId },
+      where: { employeeId, ...payslipAccessWhere(companyId, employeeWhere) },
       include: {
-        payrollRun: {
-          include: { period: true },
-        },
-        components: true,
+        payrollRun: { select: payslipRunSelect },
+        components: { where: { salaryComponent: { companyId } } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       take: limit,
     });
   }

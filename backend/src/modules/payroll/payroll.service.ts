@@ -15,7 +15,7 @@ import {
 import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
-import { NotFoundError, ConflictError, BadRequestError, ValidationError } from '@/shared/exceptions/AppError';
+import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 import { generateSystemCode } from '@/shared/utils/system-code';
@@ -25,12 +25,15 @@ import { calculateThr } from '@/shared/payroll/thr';
 import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
 import { prisma } from '@/shared/database/prisma';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
-import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
+import { loadPayrollAttendance, PayrollAttendanceSummary } from './payroll-attendance';
+import { payrollDate, payrollDateKey } from '@/shared/payroll/attendance-calendar';
 import { companySettingsService } from '@/modules/company-settings/company-settings.service';
 import { JKKRiskClass, Prisma } from '@prisma/client';
 import { selectFormulaVersions } from '@/shared/payroll/formula';
 import { calculateEmployeePay, PayComponent } from '@/shared/payroll/employee-pay';
 import { ewaRepository, PayrollEWADeduction } from '@/modules/ewa/ewa.repository';
+import { employeeSalaryService } from './employee-salary.service';
+import { companyPayrollAccess, payrollAccess } from './payroll-access';
 
 const JKK_RISK_TO_RATE: Record<JKKRiskClass, number> = {
   [JKKRiskClass.I]: 0.24,
@@ -100,23 +103,15 @@ export class PayrollService {
   // ==================== Employee Salaries ====================
 
   async findAllEmployeeSalaries(companyId: string, employeeId?: string) {
-    return payrollRepository.findAllEmployeeSalaries(companyId, employeeId);
+    return employeeSalaryService.list(companyId, employeeId);
   }
 
   async findEmployeeSalaryById(id: string) {
-    const salary = await payrollRepository.findEmployeeSalaryById(id);
-    if (!salary) throw new NotFoundError('Employee salary not found');
-    return salary;
+    return employeeSalaryService.findById(id);
   }
 
   async createEmployeeSalary(data: CreateEmployeeSalaryDTO) {
-    // Deactivate existing active salary if any
-    const existing = await payrollRepository.findActiveEmployeeSalary(data.employeeId);
-    if (existing) {
-      await payrollRepository.updateEmployeeSalary(existing.id, { isActive: false });
-    }
-
-    const salary = await payrollRepository.createEmployeeSalary(data);
+    const salary = await employeeSalaryService.create(data);
 
     logger.info('Employee salary created', {
       employeeId: data.employeeId,
@@ -127,8 +122,7 @@ export class PayrollService {
   }
 
   async updateEmployeeSalary(id: string, data: UpdateEmployeeSalaryDTO) {
-    await this.findEmployeeSalaryById(id);
-    return payrollRepository.updateEmployeeSalary(id, data);
+    return employeeSalaryService.update(id, data);
   }
 
   /**
@@ -136,7 +130,8 @@ export class PayrollService {
    * ≥12 bulan = 1× upah; 1–<12 bulan = prorata (masa kerja/12 × upah); <1 bulan = tidak berhak.
    */
   async calculateEmployeeThr(employeeId: string, referenceDate?: Date) {
-    const { salary, employee } = await payrollRepository.findThrInputs(employeeId);
+    if (referenceDate && !Number.isFinite(referenceDate.getTime())) throw new ValidationError('Invalid THR reference date');
+    const { salary, employee } = await employeeSalaryService.thrInputs(employeeId);
     if (!employee) throw new NotFoundError('Employee not found');
     if (!employee.joinDate) {
       throw new BadRequestError('Tanggal masuk (joinDate) karyawan belum diisi');
@@ -151,7 +146,7 @@ export class PayrollService {
       referenceDate: referenceDate ?? new Date(),
     });
 
-    logger.info('THR calculated', { employeeId, tenureMonths: result.tenureMonths, amount: result.amount });
+    logger.info('THR calculated', { employeeId });
 
     return {
       employee: { id: employee.id, fullName: employee.fullName, employeeNumber: employee.employeeNumber },
@@ -163,16 +158,20 @@ export class PayrollService {
   // ==================== Payroll Periods ====================
 
   async findAllPayrollPeriods(companyId: string) {
-    return payrollRepository.findAllPayrollPeriods(companyId);
+    const access = await companyPayrollAccess(companyId);
+    return payrollRepository.findAllPayrollPeriods(access.companyId);
   }
 
   async findPayrollPeriodById(id: string) {
-    const period = await payrollRepository.findPayrollPeriodById(id);
+    const { companyId } = await companyPayrollAccess();
+    const period = await payrollRepository.findPayrollPeriodById(id, prisma, companyId);
     if (!period) throw new NotFoundError('Payroll period not found');
     return period;
   }
 
   async createPayrollPeriod(data: CreatePayrollPeriodDTO) {
+    const { companyId } = await companyPayrollAccess(data.companyId);
+    data = { ...data, companyId };
     const code = await generateSystemCode({
       prefix: 'PAY-PRD',
       label: data.name,
@@ -188,8 +187,8 @@ export class PayrollService {
   }
 
   async closePayrollPeriod(id: string) {
-    await this.findPayrollPeriodById(id);
-    const period = await payrollRepository.closePayrollPeriod(id);
+    const existing = await this.findPayrollPeriodById(id);
+    const period = await payrollRepository.closePayrollPeriod(id, existing.companyId);
 
     logger.info('Payroll period closed', { periodId: id });
     return period;
@@ -204,79 +203,51 @@ export class PayrollService {
     if (period.status === 'CLOSED') {
       throw new BadRequestError('Cannot update a closed payroll period');
     }
-    return payrollRepository.updatePayrollPeriod(id, data);
+    return payrollRepository.updatePayrollPeriod(id, data, period.companyId);
   }
 
   // ==================== Payroll Runs ====================
 
   async findAllPayrollRuns(companyId: string) {
-    return payrollRepository.findAllPayrollRuns(companyId);
+    const access = await companyPayrollAccess(companyId);
+    return payrollRepository.findAllPayrollRuns(access.companyId);
   }
 
   async findPayrollRunById(id: string) {
-    const run = await payrollRepository.findPayrollRunById(id);
+    const { companyId } = await companyPayrollAccess();
+    const run = await payrollRepository.findPayrollRunForAccess(id, companyId);
     if (!run) throw new NotFoundError('Payroll run not found');
-    return { ...run, payslips: run.payslips.map(payslip => ({ ...payslip,
-      employee: { id: payslip.employee.id, fullName: payslip.employee.fullName,
-        employeeNumber: payslip.employee.employeeNumber },
-    })) };
+    return run;
   }
 
   async getAttendanceSummaryForPeriod(periodId: string) {
-    const period = await this.findPayrollPeriodById(periodId);
-    const periodStart = new Date(period.startDate);
-    const periodEnd = new Date(period.endDate);
-
-    const [attendanceGroups, approvedLeaves, overtimes] = await Promise.all([
-      prisma.attendance.groupBy({
-        by: ['employeeId', 'status'],
-        where: { companyId: period.companyId, date: { gte: periodStart, lte: periodEnd }, deletedAt: null },
-        _count: { id: true },
-      }),
-      prisma.leaveRequest.findMany({
-        where: {
-          companyId: period.companyId, status: 'APPROVED', deletedAt: null,
-          OR: [
-            { startDate: { gte: periodStart, lte: periodEnd } },
-            { endDate: { gte: periodStart, lte: periodEnd } },
-            { startDate: { lte: periodStart }, endDate: { gte: periodEnd } },
-          ],
-        },
-        select: { employeeId: true, totalDays: true },
-      }),
-      prisma.overtimeRequest.findMany({
-        where: { companyId: period.companyId, status: 'APPROVED', date: { gte: periodStart, lte: periodEnd }, deletedAt: null },
-        select: { employeeId: true, durationHours: true },
-      }),
-    ]);
-
-    const summary: Record<string, { present: number; absent: number; leave: number; overtime: number }> = {};
-    for (const row of attendanceGroups) {
-      if (!summary[row.employeeId]) summary[row.employeeId] = { present: 0, absent: 0, leave: 0, overtime: 0 };
-      if (row.status === 'PRESENT' || row.status === 'LATE') summary[row.employeeId].present += row._count.id;
-      else if (row.status === 'ABSENT') summary[row.employeeId].absent += row._count.id;
-    }
-    for (const lr of approvedLeaves) {
-      if (!summary[lr.employeeId]) summary[lr.employeeId] = { present: 0, absent: 0, leave: 0, overtime: 0 };
-      summary[lr.employeeId].leave += lr.totalDays;
-    }
-    for (const ot of overtimes) {
-      if (!summary[ot.employeeId]) summary[ot.employeeId] = { present: 0, absent: 0, leave: 0, overtime: 0 };
-      summary[ot.employeeId].overtime += Number(ot.durationHours);
-    }
-
-    return { period, attendanceReviewedAt: period.attendanceReviewedAt, summary };
+    const { companyId } = await companyPayrollAccess();
+    return prisma.$transaction(async database => {
+      const period = await payrollRepository.findPayrollPeriodById(periodId, database, companyId);
+      if (!period) throw new NotFoundError('Payroll period not found');
+      const salaries = await payrollRepository.findAllEmployeeSalaries(period.companyId, undefined, database);
+      const inputs = await loadPayrollAttendance(database, period.companyId,
+        salaries.filter(salary => salary.isActive).map(salary => salary.employeeId), period.startDate, period.endDate);
+      const summary: Record<string, PayrollAttendanceSummary> = {};
+      for (const [employeeId, row] of inputs) {
+        summary[employeeId] = { workDays: row.workDays, present: row.present, absent: row.absent, leave: row.leave, overtime: row.overtime };
+      }
+      return { period, attendanceReviewedAt: period.attendanceReviewedAt, summary };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, maxWait: 10000, timeout: 60000 });
   }
 
   async confirmAttendanceReview(periodId: string, userId: string) {
+    const { companyId, actor } = await companyPayrollAccess(undefined, userId);
     const period = await this.findPayrollPeriodById(periodId);
     if (period.status === 'CLOSED') throw new BadRequestError('Period sudah ditutup');
-    return payrollRepository.confirmAttendanceReview(periodId, userId);
+    return payrollRepository.confirmAttendanceReview(periodId, actor.id, companyId);
   }
 
   async createPayrollRun(data: CreatePayrollRunDTO, userId?: string) {
     if (!userId) throw new BadRequestError('Authenticated payroll creator is required');
-    const run = await this.createPayrollRunTransaction(data, userId);
+    const { companyId, actor } = await companyPayrollAccess(data.companyId, userId);
+    data = { ...data, companyId };
+    const run = await this.createPayrollRunTransaction(data, actor.id);
     // No external side effects run until the payroll transaction has committed.
     try {
       await eventBus.publish({
@@ -301,7 +272,7 @@ export class PayrollService {
           // through a run, and requests for this company receive distinct numbers.
           const company = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM companies WHERE id = ${data.companyId} AND deleted_at IS NULL FOR UPDATE`;
           if (!company.length) throw new NotFoundError('Company not found');
-          const period = await payrollRepository.findPayrollPeriodById(data.periodId, tx);
+          const period = await payrollRepository.findPayrollPeriodById(data.periodId, tx, data.companyId);
           if (!period || period.companyId !== data.companyId) throw new NotFoundError('Payroll period not found in this company');
           if (period.status === 'CLOSED') throw new BadRequestError('Cannot create payroll run for a closed period');
           if (!period.attendanceReviewedAt) throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
@@ -320,14 +291,15 @@ export class PayrollService {
   }
 
   async approvePayrollRun(id: string, userId: string) {
+    const { companyId, actor } = await companyPayrollAccess(undefined, userId);
     const run = await this.findPayrollRunById(id);
     if (run.status !== 'COMPLETED') {
       throw new BadRequestError('Only completed payroll runs can be approved');
     }
 
     if (!run.createdBy) throw new ConflictError('Payroll creator is unknown; legacy payroll requires review before approval');
-    if (run.createdBy === userId) throw new ConflictError('Payroll creator cannot approve their own run');
-    const approved = await payrollRepository.approvePayrollRun(id, userId);
+    if (run.createdBy === actor.id) throw new ConflictError('Payroll creator cannot approve their own run');
+    const approved = await payrollRepository.approvePayrollRun(id, actor.id, companyId);
 
     await eventBus.publish({
       name: DomainEvents.PAYROLL_RUN_APPROVED,
@@ -362,7 +334,8 @@ export class PayrollService {
   // ==================== Payslips ====================
 
   async findPayslipById(id: string) {
-    const payslip = await payrollRepository.findPayslipById(id);
+    const { companyId, employeeWhere } = await payrollAccess();
+    const payslip = await payrollRepository.findPayslipById(id, companyId, employeeWhere);
     if (!payslip) throw new NotFoundError('Payslip not found');
     // B.5 Enrich: inject grouped breakdown (earnings/deductions + statutory summary)
     const breakdown = buildPayslipBreakdown({
@@ -370,22 +343,24 @@ export class PayrollService {
       totalEarnings: Number(payslip.totalEarnings) || 0,
       totalDeductions: Number(payslip.totalDeductions) || 0,
       netPay: Number(payslip.netPay) || 0,
-      components: (payslip.components ?? []).map((c: any) => ({
+      components: (payslip.components ?? []).map(c => ({
         id: c.id,
         name: c.name,
         type: c.type,
         amount: Number(c.amount) || 0,
         isTaxable: c.isTaxable,
         salaryComponent: c.salaryComponent
-          ? { code: (c.salaryComponent as any)?.code ?? null }
+          ? { code: c.salaryComponent.code }
           : null,
       })),
     });
-    return { ...(payslip as any), breakdown };
+    return { ...payslip, breakdown };
   }
 
   async findPayslipsByEmployee(employeeId: string) {
-    return payrollRepository.findPayslipsByEmployee(employeeId);
+    const { companyId, actor, employeeWhere } = await payrollAccess();
+    if (!actor.employeeId || actor.employeeId !== employeeId) throw new ForbiddenError('Self-service payslips require the authenticated employee');
+    return payrollRepository.findPayslipsByEmployee(employeeId, companyId, employeeWhere);
   }
 
   // ==================== Payroll Calculation ====================
@@ -417,23 +392,10 @@ export class PayrollService {
       return acc;
     }, {});
 
-    // Aggregate approved overtime hours per employee within the pay period
-    const approvedOvertimes = await database.overtimeRequest.findMany({
-      where: {
-        companyId: run.companyId,
-        status: 'APPROVED',
-        date: { gte: new Date(run.period.startDate), lte: new Date(run.period.endDate) },
-        deletedAt: null,
-      },
-      select: { employeeId: true, durationHours: true },
-    });
-    const overtimeHoursByEmployee = approvedOvertimes.reduce<Record<string, number>>((acc, ot) => {
-      acc[ot.employeeId] = (acc[ot.employeeId] || 0) + Number(ot.durationHours);
-      return acc;
-    }, {});
-
-    const periodStart = new Date(run.period.startDate);
-    const periodEnd = new Date(run.period.endDate);
+    const periodStart = payrollDate(run.period.startDate);
+    const periodEnd = payrollDate(run.period.endDate);
+    const attendanceInputs = await loadPayrollAttendance(database, run.companyId,
+      employeeSalaries.filter(salary => salary.isActive).map(salary => salary.employeeId), periodStart, periodEnd);
 
     const paidEWAsForPeriod = await ewaRepository.findPAIDByEmployeeAndPeriod(
       run.companyId, 'all', periodStart, periodEnd, database,
@@ -452,47 +414,8 @@ export class PayrollService {
       ewaDeductionByEmployee.set(row.employeeId, employee);
     }
 
-    // Batch attendance summary per employee for the pay period
-    const attendanceGroups = await database.attendance.groupBy({
-      by: ['employeeId', 'status'],
-      where: { companyId: run.companyId, date: { gte: periodStart, lte: periodEnd }, deletedAt: null },
-      _count: { id: true },
-    });
-    const attendanceByEmployee: Record<string, { present: number; absent: number }> = {};
-    for (const row of attendanceGroups) {
-      if (!attendanceByEmployee[row.employeeId]) attendanceByEmployee[row.employeeId] = { present: 0, absent: 0 };
-      if (row.status === 'PRESENT' || row.status === 'LATE') attendanceByEmployee[row.employeeId].present += row._count.id;
-      else if (row.status === 'ABSENT') attendanceByEmployee[row.employeeId].absent += row._count.id;
-    }
-
-    // Batch approved leave days per employee overlapping the pay period
-    const approvedLeaves = await database.leaveRequest.findMany({
-      where: {
-        companyId: run.companyId,
-        status: 'APPROVED',
-        deletedAt: null,
-        OR: [
-          { startDate: { gte: periodStart, lte: periodEnd } },
-          { endDate: { gte: periodStart, lte: periodEnd } },
-          { startDate: { lte: periodStart }, endDate: { gte: periodEnd } },
-        ],
-      },
-      select: { employeeId: true, totalDays: true },
-    });
-    const leaveByEmployee = approvedLeaves.reduce<Record<string, number>>((acc, lr) => {
-      acc[lr.employeeId] = (acc[lr.employeeId] || 0) + lr.totalDays;
-      return acc;
-    }, {});
-
-    // Working days in period from company-level calendar (shared across all employees)
-    const companyCalendar = await workCalendarRepository.findCalendarByContext({ companyId: run.companyId }, database);
-    const workDaysInPeriod = companyCalendar
-      ? await workCalendarRepository.countWorkingDays(companyCalendar.id, periodStart, periodEnd, database)
-      : 0;
-
     // Task 4.2 — Aggregate net LATE MINUTES per employee + per day key for daily cap deduction
     // Late minutes reduced by BranchAttendancePolicy.lateToleranceMinutes per attendance row
-    const netLateMinutesByEmployee: Record<string, number> = {};
     const perDayLateMinutesByEmployee: Record<string, Record<string, number>> = {};
     if (lateCfg.enabled) {
       const lateAttendanceRows = await database.attendance.findMany({
@@ -511,11 +434,11 @@ export class PayrollService {
         },
       });
       for (const row of lateAttendanceRows) {
+        const dayKey = payrollDateKey(row.date);
+        if (!attendanceInputs.get(row.employeeId)?.workingDates.has(dayKey)) continue;
         const tolerance = Number(row.attendancePolicy?.lateToleranceMinutes ?? 0);
         const netMinutes = Math.max(0, Number(row.lateMinutes ?? 0) - tolerance);
         if (netMinutes <= 0) continue;
-        netLateMinutesByEmployee[row.employeeId] = (netLateMinutesByEmployee[row.employeeId] || 0) + netMinutes;
-        const dayKey = new Date(row.date).toISOString().slice(0, 10);
         if (!perDayLateMinutesByEmployee[row.employeeId]) perDayLateMinutesByEmployee[row.employeeId] = {};
         perDayLateMinutesByEmployee[row.employeeId][dayKey] = (perDayLateMinutesByEmployee[row.employeeId][dayKey] || 0) + netMinutes;
       }
@@ -538,10 +461,12 @@ export class PayrollService {
       processedEmployees.add(salary.employeeId);
 
       const loanDeductionAmount = loanDeductionByEmployee[salary.employeeId]?.toNumber() ?? 0;
-      const overtimeHoursForEmployee = overtimeHoursByEmployee[salary.employeeId] || 0;
-      const attd = attendanceByEmployee[salary.employeeId] ?? { present: 0, absent: 0 };
-      const leaveDaysForEmployee = leaveByEmployee[salary.employeeId] ?? 0;
-      const absentDays = Math.max(0, workDaysInPeriod - attd.present - leaveDaysForEmployee);
+      const attd = attendanceInputs.get(salary.employeeId);
+      if (!attd) throw new BadRequestError('Payroll attendance inputs are unavailable for this employee');
+      const workDaysInPeriod = attd.workDays;
+      const overtimeHoursForEmployee = attd.overtime;
+      const leaveDaysForEmployee = attd.leave;
+      const absentDays = attd.absent;
       const overtimePayAmount = overtimeHoursForEmployee > 0
         ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: overtimeHoursForEmployee, dayType: 'WORKDAY' }).amount
         : 0;

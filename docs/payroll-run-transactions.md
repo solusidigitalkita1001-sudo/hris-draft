@@ -1,5 +1,7 @@
 # Transaksi pembuatan payroll — 9 September 2026
 
+Pembaruan akses 9 September 2026: run, period/review attendance dan seluruh endpoint payment batch memerlukan scope payroll seluruh company aktif, selain permission endpoint. Lihat [matriks scope run/payslip](payroll-run-payslip-access.md) untuk kontrak dan hasil verifikasi terbaru.
+
 `POST /api/v1/payroll/runs` kini menyimpan run, slip seluruh pegawai, komponen slip, snapshot formula/pinjaman, pencatatan potongan EWA, total dan status COMPLETED dalam **satu transaksi database**. Jika salah satu tahap gagal, seluruh penulisan transaksi dibatalkan. Perubahan ini tidak membuat correction run retroaktif.
 
 ## Kontrak pembuatan dan request ulang
@@ -40,7 +42,7 @@ Pelunasan cicilan tetap terjadi pada rekonsiliasi ledger pembayaran, sebagaimana
 
 Total run menggunakan Decimal untuk earnings, deductions, dan net pay, dengan validasi kapasitas Decimal(15,2). Tes mencakup penjumlahan `9999999999998.00 + 0.10 + 0.20 = 9999999999998.30` serta overflow yang membatalkan transaksi. Ini tidak berarti semua mesin finansial lama sudah bermigrasi dari number ke Decimal.
 
-Pemilihan gaji masih mengikuti alokasi aktif yang ada; pemilihan histori gaji berdasarkan effective date, cuti lintas periode, serta variasi kalender organisasi belum diperluas pada fase ini. Correction/retroactive adjustment run, transactional outbox, dan load test untuk company dengan jumlah pegawai besar masih terbuka. Transaksi panjang dapat timeout dan rollback; batas waktu ini bukan hasil benchmark kapasitas produksi.
+Pemilihan gaji masih mengikuti alokasi aktif yang ada; pemilihan histori gaji berdasarkan effective date belum tersedia. [Mutasi alokasi gaji](payroll-salary-allocations.md) kini memakai lock company yang sama dan menolak perubahan finansial jika alokasi sudah dipakai slip. Cuti lintas periode, kalender organisasi/tahun dan shift kini ditangani pada [fase input attendance](payroll-attendance-inputs.md), tetapi histori assignment dan pembekuan sumber saat review masih terbuka. Correction/retroactive adjustment run, transactional outbox, dan load test untuk company dengan jumlah pegawai besar masih terbuka. Transaksi panjang dapat timeout dan rollback; batas waktu ini bukan hasil benchmark kapasitas produksi.
 
 Tidak ada perubahan schema atau migration baru pada fase transaksi ini. Empat migration dari fase sebelumnya tetap diperlukan untuk schema formula dan ledger. Tidak ada migration atau perubahan data pada database aplikasi, push, maupun deployment.
 

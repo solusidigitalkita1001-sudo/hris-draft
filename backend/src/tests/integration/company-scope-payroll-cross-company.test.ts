@@ -242,17 +242,21 @@ describe('CompanyScope Cross-Tenant — Payroll & Benefit Module (Task 1.4)', ()
   });
 
   describe('SUPER_ADMIN / GROUP_ADMIN Bypass Payroll (payslip sensitive)', () => {
-    it('SUPER_ADMIN findPayslipById company B → sukses (bypass scope lintas company)', async () => {
-      jest.spyOn(prisma.payslip, 'findFirst').mockResolvedValue({
+    it('SUPER_ADMIN payslip lookup still queries the active company and permits an explicit assigned company switch', async () => {
+      const query = jest.spyOn(prisma.payslip, 'findFirst').mockResolvedValueOnce(null);
+      await expect(runAs(userSuperAdmin(), () => payrollService.findPayslipById(PS_B_ID))).rejects.toThrow(NotFoundError);
+      expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: PS_B_ID, companyId: COMPANY_A_ID }) }));
+      query.mockResolvedValueOnce({
         id: PS_B_ID, payrollRunId: PR_B_ID, employeeId: EMPLOYEE_A_ID,
         companyId: COMPANY_B_ID, baseSalary: 8000000, totalEarnings: 9000000,
         totalDeductions: 1000000, netPay: 8000000, status: 'FINALIZED',
       } as any);
       jest.spyOn(prisma.payslipComponent, 'findMany').mockResolvedValue([]);
       jest.spyOn(prisma.benefitDeduction, 'findMany').mockResolvedValue([]);
-      const res = await runAs(userSuperAdmin(), () => payrollService.findPayslipById(PS_B_ID));
+      const res = await runAs({ ...userSuperAdmin(), companyId: COMPANY_B_ID }, () => payrollService.findPayslipById(PS_B_ID));
       expect(res.id).toBe(PS_B_ID);
       expect(res.companyId).toBe(COMPANY_B_ID);
+      expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: PS_B_ID, companyId: COMPANY_B_ID }) }));
     });
 
     it('GROUP_ADMIN findSalaryComponentById company B → sukses', async () => {

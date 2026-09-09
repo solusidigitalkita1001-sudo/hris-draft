@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 
 // ==================== Salary Components ====================
 export const createSalaryComponentSchema = z.object({
@@ -18,29 +19,37 @@ export const createSalaryComponentSchema = z.object({
 export const updateSalaryComponentSchema = createSalaryComponentSchema.partial().omit({ companyId: true, code: true });
 
 // ==================== Employee Salaries ====================
+const salaryMoneySchema = z.number().finite().positive().max(9999999999999.99)
+  .refine(value => new Prisma.Decimal(value).decimalPlaces() <= 2, 'Amount must have at most two decimal places');
+const salaryDateSchema = z.string().datetime().refine(value => {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value.slice(0, 10);
+}, 'Invalid salary effective date');
 export const salaryComponentAllocationSchema = z.object({
   salaryComponentId: z.string().uuid(),
-  amount: z.number().positive(),
+  amount: salaryMoneySchema,
 });
+const salaryAllocationsSchema = z.array(salaryComponentAllocationSchema).max(512)
+  .refine(rows => new Set(rows.map(row => row.salaryComponentId)).size === rows.length, 'Salary components must be unique');
 
 export const createEmployeeSalarySchema = z.object({
   employeeId: z.string().uuid(),
-  companyId: z.string().uuid(),
-  effectiveDate: z.string().datetime(),
-  baseSalary: z.number().positive(),
-  currency: z.string().default('IDR'),
+  companyId: z.string().uuid().optional(),
+  effectiveDate: salaryDateSchema,
+  baseSalary: salaryMoneySchema,
+  currency: z.literal('IDR').default('IDR'),
   notes: z.string().optional(),
-  components: z.array(salaryComponentAllocationSchema).optional(),
+  components: salaryAllocationsSchema.optional(),
 });
 
 export const updateEmployeeSalarySchema = z.object({
-  baseSalary: z.number().positive().optional(),
-  currency: z.string().optional(),
+  baseSalary: salaryMoneySchema.optional(),
+  currency: z.literal('IDR').optional(),
   isActive: z.boolean().optional(),
   notes: z.string().optional(),
-  effectiveDate: z.string().datetime().optional(),
-  components: z.array(salaryComponentAllocationSchema).optional(),
-});
+  effectiveDate: salaryDateSchema.optional(),
+  components: salaryAllocationsSchema.optional(),
+}).refine(data => Object.values(data).some(value => value !== undefined), 'At least one salary field is required');
 
 // ==================== Payroll Periods ====================
 export const createPayrollPeriodSchema = z.object({

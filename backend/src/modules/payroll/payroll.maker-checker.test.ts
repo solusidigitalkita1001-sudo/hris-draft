@@ -14,15 +14,15 @@ describe('payroll maker-checker persistence', () => {
   });
   it('conditions approval on completed status, known creator, and a different checker', async () => {
     jest.mocked(prisma.payrollRun.updateMany).mockResolvedValue({ count: 1 });
-    await repository.approvePayrollRun('run', 'checker');
+    await repository.approvePayrollRun('run', 'checker', 'A');
     expect(prisma.payrollRun.updateMany).toHaveBeenCalledWith({
-      where: { id: 'run', status: 'COMPLETED', createdBy: { not: null }, AND: [{ createdBy: { not: 'checker' } }], deletedAt: null },
+      where: { id: 'run', companyId: 'A', period: { companyId: 'A', deletedAt: null }, status: 'COMPLETED', createdBy: { not: null }, AND: [{ createdBy: { not: 'checker' } }], deletedAt: null },
       data: { status: 'APPROVED', approvedBy: 'checker', approvedAt: expect.any(Date) },
     });
   });
   it('rejects a lost status race or maker violation without returning success', async () => {
     jest.mocked(prisma.payrollRun.updateMany).mockResolvedValue({ count: 0 });
-    await expect(repository.approvePayrollRun('run', 'maker')).rejects.toThrow(ConflictError);
+    await expect(repository.approvePayrollRun('run', 'maker', 'A')).rejects.toThrow(ConflictError);
     expect(prisma.payrollRun.findUniqueOrThrow).not.toHaveBeenCalled();
   });
 });

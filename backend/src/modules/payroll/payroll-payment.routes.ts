@@ -15,6 +15,7 @@ import {
   recordPaymentTransactionSchema,
 } from './payroll-payment.dto';
 import { payrollPaymentService, PayrollPaymentContext } from './payroll-payment.service';
+import { requireCompanyPayrollAccess } from './payroll-access';
 
 const router = Router();
 
@@ -27,6 +28,7 @@ router.use((_req, res, next) => {
 router.use(authenticate);
 router.use(requireCompanyAccess());
 router.use(authorize({ resource: 'payroll', action: 'process' }));
+router.use(requireCompanyPayrollAccess);
 
 function paymentContext(req: AuthenticatedRequest): PayrollPaymentContext {
   // requireCompanyAccess sets req.company only after validating access. Do not

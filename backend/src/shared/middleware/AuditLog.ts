@@ -13,6 +13,8 @@ interface AuditLogOptions {
   model?: string;
   getEntityId?: (req: AuthenticatedRequest) => string | undefined;
   getDescription?: (req: AuthenticatedRequest) => string;
+  /** Preserve which fields changed without storing sensitive values. */
+  redactFields?: readonly string[];
 }
 
 // Task 1.4 (SEC-017): PII that must never be logged in clear. Masked to last 4 chars.
@@ -42,12 +44,14 @@ function maskValue(key: string, value: unknown): unknown {
  */
 export function diffAuditFields(
   before: Record<string, unknown> | null,
-  after: Record<string, unknown> | null
+  after: Record<string, unknown> | null,
+  redactFields: readonly string[] = [],
 ): { oldValue?: string; newValue?: string } {
+  const mask = (key: string, value: unknown) => redactFields.includes(key) ? '[redacted]' : maskValue(key, value);
   if (before && !after) {
     const masked: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(before)) {
-      if (!IGNORED_FIELDS.has(k)) masked[k] = maskValue(k, v);
+      if (!IGNORED_FIELDS.has(k)) masked[k] = mask(k, v);
     }
     return { oldValue: JSON.stringify(masked) };
   }
@@ -60,8 +64,8 @@ export function diffAuditFields(
     const b = before?.[k];
     const a = after?.[k];
     if (JSON.stringify(b) === JSON.stringify(a)) continue;
-    if (before && k in before) oldValue[k] = maskValue(k, b);
-    if (after && k in after) newValue[k] = maskValue(k, a);
+    if (before && k in before) oldValue[k] = mask(k, b);
+    if (after && k in after) newValue[k] = mask(k, a);
   }
   const result: { oldValue?: string; newValue?: string } = {};
   if (Object.keys(oldValue).length) result.oldValue = JSON.stringify(oldValue);
@@ -167,14 +171,14 @@ export function auditLog(options: AuditLogOptions) {
         try {
           const after = req.method === 'DELETE' ? null : (responseBody?.data ?? null);
           const { oldValue, newValue } =
-            before || after ? diffAuditFields(before, after) : {};
+            before || after ? diffAuditFields(before, after, options.redactFields) : {};
 
           await appendAuditLogEntry({
             companyId: req.user.companyId ?? undefined,
             userId: req.user.id,
             action: options.action,
             entity: options.entity,
-            entityId,
+            entityId: entityId ?? (typeof after?.id === 'string' ? after.id : undefined),
             oldValue,
             newValue,
             ipAddress: req.ip,
