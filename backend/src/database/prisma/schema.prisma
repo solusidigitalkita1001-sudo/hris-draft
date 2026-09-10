@@ -3923,6 +3923,11 @@ model WorkflowTemplate {
   resource     String?  @db.VarChar(100)
   description  String?  @db.Text
   isActive     Boolean  @default(true) @map("is_active")
+  /// Copy-on-write revision: structural edits create version+1 and retire the old row.
+  version           Int       @default(1)
+  previousVersionId String?   @map("previous_version_id") @db.VarChar(36)
+  /// Template only resolves for new instances at/after this date (null = immediately).
+  effectiveFrom     DateTime? @map("effective_from")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

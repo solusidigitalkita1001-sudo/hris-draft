@@ -92,8 +92,9 @@ export class WorkflowEngineRepository {
         approvalType,
         resource,
         isActive: true,
+        OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: new Date() } }],
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
       include: {
         stages: {
           orderBy: { level: 'asc' },
@@ -140,47 +141,56 @@ export class WorkflowEngineRepository {
 
   async updateTemplate(id: string, data: UpdateWorkflowTemplateDTO) {
     return prisma.$transaction(async (tx) => {
-      if (data.stages) {
-        await tx.workflowConditionRule.deleteMany({
-          where: {
-            stage: {
-              templateId: id,
-            },
+      const current = await tx.workflowTemplate.findUnique({
+        where: { id },
+        include: { stages: { orderBy: { level: 'asc' }, include: { conditionRules: true } } },
+      });
+      if (!current) throw new NotFoundError('Workflow template not found');
+
+      // Metadata-only edits stay in place; structural (stage) edits are
+      // copy-on-write. The old delete-and-recreate nulled stageId on every
+      // in-flight instance step and rewrote history under running approvals.
+      if (!data.stages) {
+        return tx.workflowTemplate.update({
+          where: { id },
+          data: {
+            name: data.name,
+            description: data.description,
+            isActive: data.isActive,
           },
+          include: { stages: { orderBy: { level: 'asc' }, include: { conditionRules: true } } },
         });
-        await tx.workflowStage.deleteMany({ where: { templateId: id } });
       }
 
-      const updated = await tx.workflowTemplate.update({
-        where: { id },
+      const nextVersion = await tx.workflowTemplate.create({
         data: {
-          companyId: data.companyId,
-          name: data.name,
-          approvalType: data.approvalType,
-          resource: data.resource,
-          description: data.description,
-          isActive: data.isActive,
-          ...(data.stages
-            ? {
-                stages: {
-                  create: data.stages.map(mapStageCreate),
-                },
-              }
-            : {}),
+          companyId: current.companyId,
+          name: data.name ?? current.name,
+          approvalType: data.approvalType ?? current.approvalType,
+          resource: data.resource ?? current.resource,
+          description: data.description ?? current.description,
+          isActive: data.isActive ?? true,
+          version: current.version + 1,
+          previousVersionId: current.id,
+          stages: { create: data.stages.map(mapStageCreate) },
         },
-        include: {
-          stages: {
-            orderBy: { level: 'asc' },
-            include: { conditionRules: true },
-          },
-        },
+        include: { stages: { orderBy: { level: 'asc' }, include: { conditionRules: true } } },
       });
 
-      return updated;
+      // Retire the old version; its stages stay linked to in-flight steps.
+      await tx.workflowTemplate.update({ where: { id }, data: { isActive: false } });
+
+      return nextVersion;
     });
   }
 
   async deleteTemplate(id: string) {
+    // Templates with workflow history are retired, never destroyed: instances
+    // reference them (FK Restrict) and the audit trail must survive.
+    const instances = await prisma.workflowInstance.count({ where: { templateId: id } });
+    if (instances > 0) {
+      return prisma.workflowTemplate.update({ where: { id }, data: { isActive: false } });
+    }
     return prisma.workflowTemplate.delete({ where: { id } });
   }
 
