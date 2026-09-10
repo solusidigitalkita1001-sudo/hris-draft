@@ -5,7 +5,8 @@ import {
   CreateOvertimeDTO,
   CheckoutAttendanceDTO,
 } from './attendance.dto';
-import { NotFoundError, BadRequestError, ForbiddenError, ServiceUnavailableError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError, ForbiddenError, ServiceUnavailableError, ConflictError } from '@/shared/exceptions/AppError';
+import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { calculateOvertimePay, OvertimeDayType } from '@/shared/attendance/overtime';
 import { assessLiveness, LivenessVerdict } from '@/shared/attendance/liveness';
@@ -762,9 +763,41 @@ export class AttendanceService {
 
     const requesterId = currentUser?.id ?? undefined;
 
-    return prisma.$transaction(async (tx) => {
-      const overtime = await attendanceRepository.createOvertime(data);
+    // Duplicate guard: overtime has no unique(employeeId, date) constraint and
+    // payroll sums every APPROVED row, so a double submit doubled the pay.
+    // The advisory lock serializes same employee+date creates across instances.
+    const overtime = await withDatabaseAdvisoryLock(
+      'overtime-create',
+      `${data.employeeId}:${data.date}`,
+      async (tx) => {
+        const duplicate = await tx.overtimeRequest.findFirst({
+          where: {
+            employeeId: data.employeeId,
+            date: new Date(data.date),
+            status: { in: ['PENDING', 'APPROVED'] as never },
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new ConflictError('An overtime request for this date already exists');
+        }
+        return tx.overtimeRequest.create({
+          data: {
+            employeeId: data.employeeId,
+            companyId: data.companyId,
+            date: new Date(data.date),
+            startTime: new Date(data.startTime),
+            endTime: new Date(data.endTime),
+            durationHours: data.durationHours,
+            reason: data.reason,
+            multiplier: data.multiplier,
+          },
+          include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
+        });
+      },
+    );
 
+    {
       try {
         const template = await this.resolveDefaultOvertimeTemplate(data.companyId);
         if (template) {
@@ -789,10 +822,12 @@ export class AttendanceService {
           });
         }
       } catch (wfErr: any) {
-        logger.error('Failed to start workflow for overtime request', {
+        logger.error('Failed to start workflow for overtime request; rolling back request', {
           overtimeRequestId: overtime.id,
           error: wfErr?.message,
         });
+        await prisma.overtimeRequest.delete({ where: { id: overtime.id } }).catch(() => undefined);
+        throw new BadRequestError('Pengajuan lembur gagal: workflow approval tidak dapat dimulai. Coba lagi atau hubungi admin.');
       }
 
       logger.info('Overtime request created with workflow', {
@@ -800,7 +835,7 @@ export class AttendanceService {
         date: data.date,
       });
       return overtime;
-    });
+    }
   }
 
   async finalizeOvertimeApprovalEffects(id: string, approverUserId: string) {

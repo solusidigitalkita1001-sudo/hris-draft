@@ -1,5 +1,6 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
+import { ConflictError } from '@/shared/exceptions/AppError';
 import { CreateLeaveTypeDTO, CreateLeaveRequestDTO, CreateLeaveBalanceDTO } from './leave.dto';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 
@@ -77,10 +78,20 @@ export class LeaveRepository {
   }
 
   async updateLeaveStatus(id: string, status: string, approvedBy?: string, rejectionReason?: string) {
-    const update: Prisma.LeaveRequestUpdateInput = { status: status as any };
+    const update: Prisma.LeaveRequestUpdateManyMutationInput = { status: status as any };
     if (status === 'APPROVED') { update.approvedBy = approvedBy; update.approvedAt = new Date(); }
     if (status === 'REJECTED' && rejectionReason) update.rejectionReason = rejectionReason;
-    return prisma.leaveRequest.update({ where: { id }, data: update });
+    // Guarded transition: rejecting/cancelling an already-APPROVED request
+    // would leave the deducted balance stranded (no reversal path exists), so
+    // only PENDING requests may move to a terminal status here.
+    const guarded = await prisma.leaveRequest.updateMany({
+      where: status === 'APPROVED' ? { id } : { id, status: 'PENDING' },
+      data: update,
+    });
+    if (guarded.count !== 1) {
+      throw new ConflictError('Leave request is no longer pending');
+    }
+    return prisma.leaveRequest.findUniqueOrThrow({ where: { id } });
   }
 
   // Leave Balances
@@ -92,10 +103,23 @@ export class LeaveRepository {
   }
 
   async upsertLeaveBalance(data: CreateLeaveBalanceDTO) {
-    return prisma.leaveBalance.upsert({
-      where: { employeeId_leaveTypeId_year: { employeeId: data.employeeId, leaveTypeId: data.leaveTypeId, year: data.year } },
-      update: { totalDays: data.totalDays },
-      create: { ...data, remainingDays: data.totalDays },
+    // Keep the total/used/remaining invariant under concurrent deductions:
+    // lock the row, then recompute remaining from the locked usedDays.
+    return prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string; used_days: number }>>`
+        SELECT id, used_days FROM leave_balances
+        WHERE employee_id = ${data.employeeId} AND leave_type_id = ${data.leaveTypeId} AND year = ${data.year}
+        FOR UPDATE`;
+      if (locked.length) {
+        return tx.leaveBalance.update({
+          where: { id: locked[0].id },
+          data: {
+            totalDays: data.totalDays,
+            remainingDays: Math.max(0, data.totalDays - Number(locked[0].used_days)),
+          },
+        });
+      }
+      return tx.leaveBalance.create({ data: { ...data, remainingDays: data.totalDays } });
     });
   }
 
@@ -130,16 +154,13 @@ export class LeaveRepository {
     totalDays: number;
   }) {
     return prisma.$transaction(async (tx) => {
-      const existing = await tx.leaveBalance.findUnique({
-        where: {
-          employeeId_leaveTypeId_year: {
-            employeeId: data.employeeId,
-            leaveTypeId: data.leaveTypeId,
-            year: data.year,
-          },
-        },
-        select: { id: true, usedDays: true },
-      });
+      // FOR UPDATE: without the lock a concurrent approval's deduction between
+      // this read and the write below would be silently erased.
+      const locked = await tx.$queryRaw<Array<{ id: string; used_days: number }>>`
+        SELECT id, used_days FROM leave_balances
+        WHERE employee_id = ${data.employeeId} AND leave_type_id = ${data.leaveTypeId} AND year = ${data.year}
+        FOR UPDATE`;
+      const existing = locked.length ? { id: locked[0].id, usedDays: Number(locked[0].used_days) } : null;
 
       if (existing) {
         return tx.leaveBalance.update({

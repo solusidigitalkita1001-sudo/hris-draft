@@ -73,7 +73,10 @@ export class EmployeeLoanService {
 
     const requesterId = currentUser?.id ?? undefined;
 
-    return prisma.$transaction(async (tx) => {
+    // Compensating rollback instead of a fake transaction: startInstance
+    // commits independently, so a failed workflow start must delete the loan
+    // or it stays permanently unapprovable.
+    {
       const loan = await employeeLoanRepository.create(data);
 
       try {
@@ -96,10 +99,12 @@ export class EmployeeLoanService {
           },
         });
       } catch (wfErr: any) {
-        logger.error('Failed to start workflow for loan', {
+        logger.error('Failed to start workflow for loan; rolling back loan', {
           loanId: loan.id,
           error: wfErr?.message,
         });
+        await prisma.loan.delete({ where: { id: loan.id } }).catch(() => undefined);
+        throw new BadRequestError('Pengajuan pinjaman gagal: workflow approval tidak dapat dimulai. Coba lagi atau hubungi admin.');
       }
 
       logger.info('Employee loan created with workflow', {
@@ -108,7 +113,7 @@ export class EmployeeLoanService {
         amount: data.amount,
       });
       return loan;
-    });
+    }
   }
 
   async finalizeApprovalEffects(loanId: string, approverId: string) {
