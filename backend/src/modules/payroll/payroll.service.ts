@@ -21,6 +21,7 @@ import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.re
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { calculateBpjs } from '@/shared/payroll/bpjs';
 import { calculatePph21 } from '@/shared/payroll/pph21';
+import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 import { calculateThr } from '@/shared/payroll/thr';
 import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
 import { prisma } from '@/shared/database/prisma';
@@ -230,7 +231,10 @@ export class PayrollService {
         salaries.filter(salary => salary.isActive).map(salary => salary.employeeId), period.startDate, period.endDate);
       const summary: Record<string, PayrollAttendanceSummary> = {};
       for (const [employeeId, row] of inputs) {
-        summary[employeeId] = { workDays: row.workDays, present: row.present, absent: row.absent, leave: row.leave, overtime: row.overtime };
+        summary[employeeId] = {
+          workDays: row.workDays, present: row.present, absent: row.absent, leave: row.leave,
+          overtime: row.overtime, overtimeWorkday: row.overtimeWorkday, overtimeHoliday: row.overtimeHoliday,
+        };
       }
       return { period, attendanceReviewedAt: period.attendanceReviewedAt, summary };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, maxWait: 10000, timeout: 60000 });
@@ -382,6 +386,9 @@ export class PayrollService {
     const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId, database);
     const ewaDeductionComponent = await this.ensureEWADeductionComponent(run.companyId, database);
     const lateCfg = await companySettingsService.getLateDeductionConfig(run.companyId, database);
+    // Tax/BPJS reference tables (per company, per year); statutory code
+    // defaults apply when no rows exist for the period's year.
+    const payrollPolicy = await loadPayrollPolicyConfig(database, run.companyId, new Date(run.period.startDate).getUTCFullYear());
     const dueLoanInstallments = await employeeLoanRepository.findDueInstallmentsForPayroll(
       run.companyId,
       new Date(run.period.endDate), database
@@ -467,9 +474,15 @@ export class PayrollService {
       const overtimeHoursForEmployee = attd.overtime;
       const leaveDaysForEmployee = attd.leave;
       const absentDays = attd.absent;
-      const overtimePayAmount = overtimeHoursForEmployee > 0
-        ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: overtimeHoursForEmployee, dayType: 'WORKDAY' }).amount
-        : 0;
+      // Overtime on non-working days (per the employee's resolved calendar)
+      // is paid at the statutory holiday bands (2x/3x/4x), not workday bands.
+      const overtimePayAmount =
+        (attd.overtimeWorkday > 0
+          ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: attd.overtimeWorkday, dayType: 'WORKDAY' }).amount
+          : 0) +
+        (attd.overtimeHoliday > 0
+          ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: attd.overtimeHoliday, dayType: 'HOLIDAY' }).amount
+          : 0);
 
       // Task 4.2 — Hitung nominal potongan keterlambatan (dengan daily cap persentase gaji pokok)
       const baseMonthlyWage = Number(salary.baseSalary);
@@ -552,7 +565,7 @@ export class PayrollService {
         BASE_SALARY: salary.baseSalary.toString(), WORK_DAYS: String(workDaysInPeriod),
         PRESENT_DAYS: String(attd.present), LEAVE_DAYS: String(leaveDaysForEmployee),
         ABSENT_DAYS: String(absentDays), OVERTIME_HOURS: String(overtimeHoursForEmployee),
-      }, formulaVersions);
+      }, formulaVersions, payrollPolicy);
       const netPay = new Prisma.Decimal(earningsTotal).minus(deductionsTotal).toDecimalPlaces(2).toNumber();
       if (netPay < 0) throw new BadRequestError('Payroll deductions exceed earnings; review the calculation before approval');
 

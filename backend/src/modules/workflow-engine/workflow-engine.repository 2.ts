@@ -1,0 +1,647 @@
+import { prisma } from '@/shared/database/prisma';
+import type { Prisma } from '@prisma/client';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
+import { getCurrentCompanyId, getCurrentRoles, isSuperAdmin, getRequestContext } from '@/shared/context/RequestContext';
+import type {
+  CreateWorkflowTemplateDTO,
+  StartWorkflowInstanceDTO,
+  UpdateWorkflowTemplateDTO,
+  WorkflowActionDTO,
+  WorkflowRuleInput,
+  WorkflowStageInput,
+} from './workflow-engine.dto';
+
+type Payload = Record<string, any>;
+
+function compareRule(payloadValue: unknown, rule: WorkflowRuleInput) {
+  const normalizedValue = rule.value;
+
+  switch (rule.operator) {
+    case 'EQ':
+      return String(payloadValue ?? '') === normalizedValue;
+    case 'NEQ':
+      return String(payloadValue ?? '') !== normalizedValue;
+    case 'GT':
+      return Number(payloadValue ?? 0) > Number(normalizedValue);
+    case 'GTE':
+      return Number(payloadValue ?? 0) >= Number(normalizedValue);
+    case 'LT':
+      return Number(payloadValue ?? 0) < Number(normalizedValue);
+    case 'LTE':
+      return Number(payloadValue ?? 0) <= Number(normalizedValue);
+    case 'IN':
+      return normalizedValue
+        .split(',')
+        .map((value) => value.trim())
+        .includes(String(payloadValue ?? ''));
+    case 'CONTAINS':
+      return String(payloadValue ?? '').toLowerCase().includes(normalizedValue.toLowerCase());
+    default:
+      return false;
+  }
+}
+
+function isStageApplicable(stage: WorkflowStageInput, payload: Payload) {
+  if (!stage.conditionRules.length) {
+    return true;
+  }
+
+  return stage.conditionRules.every((rule) => compareRule(payload[rule.field], rule));
+}
+
+function mapStageCreate(stage: WorkflowStageInput) {
+  return {
+    name: stage.name,
+    level: stage.level,
+    approverType: stage.approverType,
+    approverRoleCode: stage.approverRoleCode,
+    approverId: stage.approverId,
+    backupApproverRoleCode: stage.backupApproverRoleCode,
+    backupApproverId: stage.backupApproverId,
+    slaHours: stage.slaHours,
+    allowEscalation: stage.allowEscalation,
+    conditionRules: {
+      create: stage.conditionRules.map((rule) => ({
+        field: rule.field,
+        operator: rule.operator,
+        value: rule.value,
+      })),
+    },
+  };
+}
+
+export class WorkflowEngineRepository {
+  async findTemplates(companyId: string) {
+    return prisma.workflowTemplate.findMany({
+      where: { companyId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        stages: {
+          orderBy: { level: 'asc' },
+          include: { conditionRules: true },
+        },
+        _count: { select: { instances: true } },
+      },
+    });
+  }
+
+  async findDefaultTemplate(companyId: string, approvalType: string, resource: string) {
+    return prisma.workflowTemplate.findFirst({
+      where: {
+        companyId,
+        approvalType,
+        resource,
+        isActive: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        stages: {
+          orderBy: { level: 'asc' },
+          include: { conditionRules: true },
+        },
+      },
+    });
+  }
+
+  async findTemplateById(id: string) {
+    return prisma.workflowTemplate.findUnique({
+      where: { id },
+      include: {
+        stages: {
+          orderBy: { level: 'asc' },
+          include: { conditionRules: true },
+        },
+        _count: { select: { instances: true } },
+      },
+    });
+  }
+
+  async createTemplate(data: CreateWorkflowTemplateDTO) {
+    return prisma.workflowTemplate.create({
+      data: {
+        companyId: data.companyId,
+        name: data.name,
+        approvalType: data.approvalType,
+        resource: data.resource,
+        description: data.description,
+        isActive: data.isActive ?? true,
+        stages: {
+          create: data.stages.map(mapStageCreate),
+        },
+      },
+      include: {
+        stages: {
+          orderBy: { level: 'asc' },
+          include: { conditionRules: true },
+        },
+      },
+    });
+  }
+
+  async updateTemplate(id: string, data: UpdateWorkflowTemplateDTO) {
+    return prisma.$transaction(async (tx) => {
+      if (data.stages) {
+        await tx.workflowConditionRule.deleteMany({
+          where: {
+            stage: {
+              templateId: id,
+            },
+          },
+        });
+        await tx.workflowStage.deleteMany({ where: { templateId: id } });
+      }
+
+      const updated = await tx.workflowTemplate.update({
+        where: { id },
+        data: {
+          companyId: data.companyId,
+          name: data.name,
+          approvalType: data.approvalType,
+          resource: data.resource,
+          description: data.description,
+          isActive: data.isActive,
+          ...(data.stages
+            ? {
+                stages: {
+                  create: data.stages.map(mapStageCreate),
+                },
+              }
+            : {}),
+        },
+        include: {
+          stages: {
+            orderBy: { level: 'asc' },
+            include: { conditionRules: true },
+          },
+        },
+      });
+
+      return updated;
+    });
+  }
+
+  async deleteTemplate(id: string) {
+    return prisma.workflowTemplate.delete({ where: { id } });
+  }
+
+  async findInstances(companyId: string, status?: string) {
+    return prisma.workflowInstance.findMany({
+      where: {
+        companyId,
+        ...(status ? { status: status as any } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        template: { select: { id: true, name: true, approvalType: true } },
+        steps: { orderBy: { level: 'asc' } },
+        logs: { orderBy: { createdAt: 'desc' }, take: 10 },
+      },
+    });
+  }
+
+  async findMyApprovals(companyId: string, userId: string, roles: string[]) {
+    return prisma.workflowInstanceStep.findMany({
+      where: {
+        instance: { companyId },
+        isCurrent: true,
+        status: 'PENDING',
+        OR: [
+          { approverId: userId },
+          { approverRoleCode: { in: roles } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        instance: {
+          include: {
+            template: { select: { id: true, name: true, approvalType: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async findInstanceById(id: string) {
+    const instance = await prisma.workflowInstance.findUnique({
+      where: { id },
+      include: {
+        template: {
+          include: {
+            stages: {
+              orderBy: { level: 'asc' },
+              include: { conditionRules: true },
+            },
+          },
+        },
+        steps: { orderBy: { level: 'asc' } },
+        logs: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+
+    if (instance) {
+      const currentCompanyId = getCurrentCompanyId();
+      const roles = getCurrentRoles();
+      const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+      if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+        throw new NotFoundError('Workflow instance not found');
+      }
+    }
+
+    return instance;
+  }
+
+  async startInstance(requesterId: string, data: StartWorkflowInstanceDTO) {
+    const template = await prisma.workflowTemplate.findUnique({
+      where: { id: data.templateId },
+      include: {
+        stages: {
+          orderBy: { level: 'asc' },
+          include: { conditionRules: true },
+        },
+      },
+    });
+
+    if (!template) {
+      throw new NotFoundError('Workflow template not found');
+    }
+
+    if (template.companyId !== data.companyId) {
+      throw new BadRequestError('Workflow template does not belong to the provided company');
+    }
+
+    const payload = (data.payload || {}) as Payload;
+    const requesterRoles = getCurrentRoles();
+    const hasElevatedRole = requesterRoles.some((r) =>
+      ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(r)
+    );
+    const currentUser = getRequestContext()?.user;
+
+    if (payload.employeeId && !hasElevatedRole && requesterRoles.includes('EMPLOYEE')) {
+      if (currentUser?.employeeId && payload.employeeId !== currentUser.employeeId) {
+        throw new ForbiddenError('IDOR: Employee cannot start workflow for other employees');
+      }
+    }
+
+    const applicableStages = template.stages.filter((stage: (typeof template.stages)[number]) =>
+      isStageApplicable(
+        {
+          name: stage.name,
+          level: stage.level,
+          approverType: stage.approverType as any,
+          approverRoleCode: stage.approverRoleCode || undefined,
+          approverId: stage.approverId || undefined,
+          backupApproverRoleCode: stage.backupApproverRoleCode || undefined,
+          backupApproverId: stage.backupApproverId || undefined,
+          slaHours: stage.slaHours,
+          allowEscalation: stage.allowEscalation,
+          conditionRules: stage.conditionRules.map((rule: (typeof stage.conditionRules)[number]) => ({
+            field: rule.field,
+            operator: rule.operator as any,
+            value: rule.value,
+          })),
+        },
+        payload
+      )
+    );
+
+    if (!applicableStages.length) {
+      throw new BadRequestError('No workflow stage matches the provided payload');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const instance = await tx.workflowInstance.create({
+        data: {
+          templateId: template.id,
+          companyId: data.companyId,
+          approvalType: data.approvalType || template.approvalType,
+          referenceType: data.referenceType,
+          referenceId: data.referenceId,
+          requesterId,
+          payload,
+          status: 'PENDING',
+          currentLevel: applicableStages[0].level,
+          steps: {
+            create: applicableStages.map((stage: (typeof applicableStages)[number], index: number) => ({
+              stageId: stage.id,
+              name: stage.name,
+              level: stage.level,
+              approverType: stage.approverType,
+              approverRoleCode: stage.approverRoleCode,
+              approverId: stage.approverId,
+              backupApproverRoleCode: stage.backupApproverRoleCode,
+              backupApproverId: stage.backupApproverId,
+              isCurrent: index === 0,
+              status: 'PENDING',
+            })),
+          },
+        },
+        include: {
+          steps: { orderBy: { level: 'asc' } },
+          template: { select: { id: true, name: true, approvalType: true } },
+        },
+      });
+
+      await tx.workflowInstanceLog.create({
+        data: {
+          instanceId: instance.id,
+          action: 'STARTED',
+          actorId: requesterId,
+          comment: 'Workflow instance started',
+        },
+      });
+
+      return instance;
+    });
+  }
+
+  async applyAction(instanceId: string, userId: string, roles: string[], action: WorkflowActionDTO) {
+    const instance = await prisma.workflowInstance.findUnique({
+      where: { id: instanceId },
+      include: {
+        steps: {
+          orderBy: { level: 'asc' },
+        },
+      },
+    });
+
+    if (!instance) {
+      throw new NotFoundError('Workflow instance not found');
+    }
+
+    if (!['PENDING', 'ESCALATED'].includes(instance.status)) {
+      throw new ConflictError('Workflow is no longer pending');
+    }
+    if (action.action === 'REJECT' && !action.comment?.trim()) {
+      throw new BadRequestError('A rejection reason is required');
+    }
+    if (action.action === 'APPROVE' || action.action === 'REJECT' || action.action === 'ESCALATE') {
+      if (instance.requesterId === userId) {
+        throw new ForbiddenError('Cannot approve/reject your own request via workflow');
+      }
+    }
+
+    const currentStep = instance.steps.find(
+      (step: (typeof instance.steps)[number]) => step.isCurrent && step.status === 'PENDING'
+    );
+    if (!currentStep) {
+      throw new BadRequestError('No pending approval step found');
+    }
+
+    const canAct =
+      currentStep.approverId === userId ||
+      (!!currentStep.approverRoleCode && roles.includes(currentStep.approverRoleCode)) ||
+      roles.includes('SUPER_ADMIN');
+
+    if (!canAct) {
+      throw new ForbiddenError('You are not allowed to act on this workflow step');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      // Lock and compare the instance snapshot before changing steps or logs.
+      const claimed = await tx.workflowInstance.updateMany({
+        where: { id: instanceId, status: instance.status, currentLevel: currentStep.level, updatedAt: instance.updatedAt },
+        data: { updatedAt: new Date() },
+      });
+      if (claimed.count !== 1) throw new ConflictError('Workflow changed; reload before taking action');
+
+      const transitionCurrentStep = async (data: Prisma.WorkflowInstanceStepUpdateManyMutationInput) => {
+        const result = await tx.workflowInstanceStep.updateMany({
+          where: {
+            id: currentStep.id, instanceId, status: 'PENDING', isCurrent: true,
+            approverId: currentStep.approverId, approverRoleCode: currentStep.approverRoleCode,
+            updatedAt: currentStep.updatedAt,
+          },
+          data,
+        });
+        if (result.count !== 1) throw new ConflictError('Approval step changed; reload before taking action');
+      };
+
+      if (action.action === 'APPROVE') {
+        const nextStep = instance.steps.find(
+          (step: (typeof instance.steps)[number]) => step.level > currentStep.level
+        );
+
+        await transitionCurrentStep({
+            status: 'APPROVED',
+            isCurrent: false,
+            actedBy: userId,
+            actedAt: new Date(),
+            comment: action.comment,
+          });
+
+        if (nextStep) {
+          await tx.workflowInstanceStep.update({
+            where: { id: nextStep.id },
+            data: { isCurrent: true },
+          });
+
+          await tx.workflowInstance.update({
+            where: { id: instanceId },
+            data: {
+              status: 'PENDING',
+              currentLevel: nextStep.level,
+            },
+          });
+        } else {
+          await tx.workflowInstance.update({
+            where: { id: instanceId },
+            data: {
+              status: 'APPROVED',
+              currentLevel: null,
+            },
+          });
+        }
+
+        await tx.workflowInstanceLog.create({
+          data: {
+            instanceId,
+            stepId: currentStep.id,
+            action: 'APPROVED',
+            actorId: userId,
+            comment: action.comment,
+          },
+        });
+      }
+
+      if (action.action === 'REJECT') {
+        await transitionCurrentStep({
+            status: 'REJECTED',
+            isCurrent: false,
+            actedBy: userId,
+            actedAt: new Date(),
+            comment: action.comment,
+          });
+
+        await tx.workflowInstance.update({
+          where: { id: instanceId },
+          data: {
+            status: 'REJECTED',
+            currentLevel: null,
+          },
+        });
+
+        await tx.workflowInstanceLog.create({
+          data: {
+            instanceId,
+            stepId: currentStep.id,
+            action: 'REJECTED',
+            actorId: userId,
+            comment: action.comment,
+          },
+        });
+      }
+
+      if (action.action === 'ESCALATE') {
+        if (!currentStep.backupApproverId && !currentStep.backupApproverRoleCode) {
+          const nextStep = instance.steps.find(
+            (step: (typeof instance.steps)[number]) => step.level > currentStep.level
+          );
+
+          if (!nextStep) {
+            throw new BadRequestError('No backup approver or next step available for escalation');
+          }
+
+          await transitionCurrentStep({
+              status: 'ESCALATED',
+              isCurrent: false,
+              actedBy: userId,
+              actedAt: new Date(),
+              comment: action.comment,
+            });
+
+          await tx.workflowInstanceStep.update({
+            where: { id: nextStep.id },
+            data: { isCurrent: true },
+          });
+
+          await tx.workflowInstance.update({
+            where: { id: instanceId },
+            data: {
+              status: 'ESCALATED',
+              currentLevel: nextStep.level,
+            },
+          });
+        } else {
+          if (currentStep.approverId === currentStep.backupApproverId && currentStep.approverRoleCode === currentStep.backupApproverRoleCode) {
+            throw new BadRequestError('Workflow is already assigned to its backup approver');
+          }
+          await transitionCurrentStep({
+              status: 'PENDING',
+              approverId: currentStep.backupApproverId,
+              approverRoleCode: currentStep.backupApproverRoleCode,
+              comment: action.comment,
+            });
+
+          await tx.workflowInstance.update({
+            where: { id: instanceId },
+            data: {
+              status: 'ESCALATED',
+              currentLevel: currentStep.level,
+            },
+          });
+        }
+
+        await tx.workflowInstanceLog.create({
+          data: {
+            instanceId,
+            stepId: currentStep.id,
+            action: 'ESCALATED',
+            actorId: userId,
+            comment: action.comment,
+          },
+        });
+      }
+
+      return tx.workflowInstance.findUnique({
+        where: { id: instanceId },
+        include: {
+          template: { select: { id: true, name: true, approvalType: true } },
+          steps: { orderBy: { level: 'asc' } },
+          logs: { orderBy: { createdAt: 'desc' } },
+        },
+      });
+    });
+  }
+
+  async bulkApplyAction(
+    instanceIds: string[],
+    userId: string,
+    roles: string[],
+    action: WorkflowActionDTO
+  ): Promise<{
+    total: number;
+    successful: number;
+    failed: number;
+    results: Array<{
+      instanceId: string;
+      success: boolean;
+      status?: string;
+      error?: string;
+    }>;
+  }> {
+    const currentCompanyId = getCurrentCompanyId();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+
+    const results: Array<{
+      instanceId: string;
+      success: boolean;
+      status?: string;
+      error?: string;
+    }> = [];
+    let successful = 0;
+    let failed = 0;
+
+    for (const instanceId of instanceIds) {
+      try {
+        const instance = await prisma.workflowInstance.findUnique({
+          where: { id: instanceId },
+          select: { companyId: true, status: true },
+        });
+
+        if (!instance) {
+          results.push({
+            instanceId,
+            success: false,
+            error: 'Workflow instance not found',
+          });
+          failed++;
+          continue;
+        }
+
+        if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+          results.push({
+            instanceId,
+            success: false,
+            error: 'Company scope mismatch: instance does not belong to current company',
+          });
+          failed++;
+          continue;
+        }
+
+        const updated = await this.applyAction(instanceId, userId, roles, action);
+        results.push({
+          instanceId,
+          success: true,
+          status: updated?.status ?? undefined,
+        });
+        successful++;
+      } catch (err: any) {
+        results.push({
+          instanceId,
+          success: false,
+          error: err?.message || 'Unknown error',
+        });
+        failed++;
+      }
+    }
+
+    return {
+      total: instanceIds.length,
+      successful,
+      failed,
+      results,
+    };
+  }
+}
+
+export const workflowEngineRepository = new WorkflowEngineRepository();

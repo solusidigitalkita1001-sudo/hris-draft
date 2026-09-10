@@ -1,8 +1,16 @@
 import { Prisma } from '@prisma/client';
 import { BadRequestError } from '@/shared/exceptions/AppError';
-import { countPayrollAttendance, payrollPeriodDates, resolvePayrollWorkingDates } from '@/shared/payroll/attendance-calendar';
+import { countPayrollAttendance, payrollDateKey, payrollPeriodDates, resolvePayrollWorkingDates } from '@/shared/payroll/attendance-calendar';
 
-export interface PayrollAttendanceSummary { workDays: number; present: number; absent: number; leave: number; overtime: number }
+export interface PayrollAttendanceSummary {
+  workDays: number; present: number; absent: number; leave: number;
+  /** Total approved overtime hours (workday + holiday). */
+  overtime: number;
+  /** Hours on the employee's working dates — paid at workday bands. */
+  overtimeWorkday: number;
+  /** Hours on non-working dates (weekend/holiday per resolved calendar) — paid at holiday bands. */
+  overtimeHoliday: number;
+}
 export interface PayrollAttendanceInput extends PayrollAttendanceSummary { workingDates: Set<string> }
 
 // Bounded batch reads, shared by review and actual payroll; no query per employee/day.
@@ -29,7 +37,7 @@ export async function loadPayrollAttendance(
     database.attendance.findMany({ where: { companyId, employeeId, date: range, deletedAt: null }, select: { employeeId: true, date: true, status: true } }),
     database.leaveRequest.findMany({ where: { companyId, employeeId, status: 'APPROVED', deletedAt: null,
       startDate: { lte: range.lte }, endDate: { gte: range.gte } }, select: { employeeId: true, startDate: true, endDate: true } }),
-    database.overtimeRequest.findMany({ where: { companyId, employeeId, status: 'APPROVED', date: range, deletedAt: null }, select: { employeeId: true, durationHours: true } }),
+    database.overtimeRequest.findMany({ where: { companyId, employeeId, status: 'APPROVED', date: range, deletedAt: null }, select: { employeeId: true, durationHours: true, date: true } }),
   ]);
   if (employees.length !== employeeId.in.length) throw new BadRequestError('Payroll salary references an unavailable employee in this company');
   function group<T extends { employeeId: string }>(rows: T[]) {
@@ -41,12 +49,26 @@ export async function loadPayrollAttendance(
   for (const employee of employees) {
     const workingDates = resolvePayrollWorkingDates(employee, dates, { calendars, shifts, overrides: overridesByEmployee.get(employee.id) ?? [] });
     const counts = countPayrollAttendance(workingDates, attendanceByEmployee.get(employee.id) ?? [], leavesByEmployee.get(employee.id) ?? []);
-    const overtime = (overtimeByEmployee.get(employee.id) ?? []).reduce((sum, row) => {
+    let overtimeWorkday = new Prisma.Decimal(0);
+    let overtimeHoliday = new Prisma.Decimal(0);
+    for (const row of overtimeByEmployee.get(employee.id) ?? []) {
       if (!row.durationHours.isFinite() || row.durationHours.isNegative()) throw new BadRequestError('Approved overtime has invalid hours');
-      return sum.plus(row.durationHours);
-    }, new Prisma.Decimal(0));
+      // A date outside the employee's resolved working dates is a weekend or
+      // holiday for THAT employee's calendar/shift → statutory holiday bands.
+      if (workingDates.has(payrollDateKey(row.date))) {
+        overtimeWorkday = overtimeWorkday.plus(row.durationHours);
+      } else {
+        overtimeHoliday = overtimeHoliday.plus(row.durationHours);
+      }
+    }
+    const overtime = overtimeWorkday.plus(overtimeHoliday);
     if (overtime.greaterThan(10000)) throw new BadRequestError('Payroll overtime exceeds supported hours');
-    results.set(employee.id, { ...counts, workingDates, overtime: overtime.toNumber() });
+    results.set(employee.id, {
+      ...counts, workingDates,
+      overtime: overtime.toNumber(),
+      overtimeWorkday: overtimeWorkday.toNumber(),
+      overtimeHoliday: overtimeHoliday.toNumber(),
+    });
   }
   return results;
 }

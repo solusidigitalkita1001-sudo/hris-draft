@@ -1,7 +1,7 @@
 import { Prisma, SalaryType } from '@prisma/client';
 import { BadRequestError } from '@/shared/exceptions/AppError';
-import { calculateBpjs } from './bpjs';
-import { calculatePph21 } from './pph21';
+import { calculateBpjs, BpjsConfig } from './bpjs';
+import { calculatePph21, Pph21Config } from './pph21';
 import { FormulaInputs, FormulaVersionInput, resolvePayrollComponents } from './formula';
 
 export interface PayComponent { salaryComponentId: string; name: string; type: SalaryType; amount: number; isTaxable: boolean }
@@ -14,7 +14,8 @@ export interface SalaryForCalculation {
 
 export function calculateEmployeePay(salary: SalaryForCalculation, extraComponents: PayComponent[],
   taxContext: { married: boolean; dependents: number; hasNpwp: boolean }, inputs: FormulaInputs,
-  versions: Map<string, FormulaVersionInput>) {
+  versions: Map<string, FormulaVersionInput>,
+  policy: { pph21?: Partial<Pph21Config>; bpjs?: Partial<BpjsConfig> } = {}) {
   const active = salary.components.filter(allocation => allocation.isActive);
   if (active.some(allocation => !allocation.salaryComponent.isActive || allocation.salaryComponent.deletedAt)) {
     throw new BadRequestError('An allocated salary component is inactive or deleted; review the salary allocation');
@@ -35,8 +36,11 @@ export function calculateEmployeePay(salary: SalaryForCalculation, extraComponen
   const wage = Number(salary.baseSalary);
   const taxableGross = resolved.filter(row => row.entry.type === 'ALLOWANCE' && row.entry.isTaxable)
     .reduce((sum, row) => sum.plus(row.entry.amount), new Prisma.Decimal(0)).toNumber();
-  const bpjs = calculateBpjs(wage);
-  const pph = calculatePph21({ monthlyGross: taxableGross, ...taxContext, monthlyPensionContribution: bpjs.employee.jht + bpjs.employee.jp });
+  const bpjs = calculateBpjs(wage, policy.bpjs ?? {});
+  const pph = calculatePph21(
+    { monthlyGross: taxableGross, ...taxContext, monthlyPensionContribution: bpjs.employee.jht + bpjs.employee.jp },
+    policy.pph21 ?? {},
+  );
   for (const row of resolved) {
     if (row.code === 'BPJS-TK') row.entry.amount = bpjs.employee.jht + bpjs.employee.jp;
     else if (row.code === 'BPJS-KES') row.entry.amount = bpjs.employee.jkn;
