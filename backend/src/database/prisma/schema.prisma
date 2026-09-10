@@ -4101,6 +4101,7 @@ enum WorkflowApproverType {
   ROLE
   USER
   AUTO
+  MANAGER
 }
 
 enum WorkflowOperator {

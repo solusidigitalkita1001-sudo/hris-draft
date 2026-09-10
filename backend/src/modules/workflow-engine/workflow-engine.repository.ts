@@ -308,6 +308,29 @@ export class WorkflowEngineRepository {
       throw new BadRequestError('No workflow stage matches the provided payload');
     }
 
+    // Resolve MANAGER stages against the subject employee's reporting line
+    // and refuse to start when any stage has no actionable approver — a step
+    // nobody can act on dead-locks the request forever.
+    const resolvedStages = [] as Array<(typeof applicableStages)[number] & { resolvedApproverId: string | null; resolvedBackupApproverId: string | null; resolvedApproverRoleCode: string | null }>;
+    for (const stage of applicableStages) {
+      let approverId = stage.approverId ?? null;
+      let approverRoleCode = stage.approverRoleCode ?? null;
+      let backupApproverId = stage.backupApproverId ?? null;
+      if (stage.approverType === 'MANAGER') {
+        const manager = await this.resolveManagerApprover(String(payload.employeeId ?? ''), data.companyId);
+        if (!manager) {
+          throw new BadRequestError(`Workflow stage "${stage.name}" requires a reporting-line manager, but none could be resolved for this employee. Check the position hierarchy.`);
+        }
+        approverId = manager.userId;
+        backupApproverId = backupApproverId ?? manager.backupUserId;
+        approverRoleCode = null;
+      }
+      if (!approverId && !approverRoleCode) {
+        throw new BadRequestError(`Workflow stage "${stage.name}" has no resolvable approver; fix the template before starting this workflow.`);
+      }
+      resolvedStages.push({ ...stage, resolvedApproverId: approverId, resolvedApproverRoleCode: approverRoleCode, resolvedBackupApproverId: backupApproverId });
+    }
+
     return prisma.$transaction(async (tx) => {
       const instance = await tx.workflowInstance.create({
         data: {
@@ -319,17 +342,17 @@ export class WorkflowEngineRepository {
           requesterId,
           payload,
           status: 'PENDING',
-          currentLevel: applicableStages[0].level,
+          currentLevel: resolvedStages[0].level,
           steps: {
-            create: applicableStages.map((stage: (typeof applicableStages)[number], index: number) => ({
+            create: resolvedStages.map((stage: (typeof resolvedStages)[number], index: number) => ({
               stageId: stage.id,
               name: stage.name,
               level: stage.level,
               approverType: stage.approverType,
-              approverRoleCode: stage.approverRoleCode,
-              approverId: stage.approverId,
+              approverRoleCode: stage.resolvedApproverRoleCode,
+              approverId: stage.resolvedApproverId,
               backupApproverRoleCode: stage.backupApproverRoleCode,
-              backupApproverId: stage.backupApproverId,
+              backupApproverId: stage.resolvedBackupApproverId,
               isCurrent: index === 0,
               status: 'PENDING',
             })),
@@ -352,6 +375,38 @@ export class WorkflowEngineRepository {
 
       return instance;
     });
+  }
+
+  /**
+   * Reporting line: employee -> position -> reportsTo position -> the active
+   * user(s) of whoever holds that position. First holder approves, second (if
+   * any) becomes the backup.
+   */
+  private async resolveManagerApprover(employeeId: string, companyId: string): Promise<{ userId: string; backupUserId: string | null } | null> {
+    if (!employeeId) return null;
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, companyId, deletedAt: null },
+      select: { positionId: true },
+    });
+    if (!employee?.positionId) return null;
+    const position = await prisma.position.findFirst({
+      where: { id: employee.positionId, deletedAt: null },
+      select: { reportsToId: true },
+    });
+    if (!position?.reportsToId) return null;
+    const managers = await prisma.employee.findMany({
+      where: { positionId: position.reportsToId, companyId, deletedAt: null, status: 'ACTIVE' },
+      select: { id: true },
+      take: 2,
+    });
+    if (!managers.length) return null;
+    const users = await prisma.user.findMany({
+      where: { employeeId: { in: managers.map((m) => m.id) }, deletedAt: null, status: 'ACTIVE' },
+      select: { id: true },
+      take: 2,
+    });
+    if (!users.length) return null;
+    return { userId: users[0].id, backupUserId: users[1]?.id ?? null };
   }
 
   async applyAction(

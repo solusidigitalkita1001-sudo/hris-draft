@@ -10,6 +10,7 @@ import { prisma, disconnectDatabase, testDatabaseConnection } from '@/shared/dat
 import { authRepository } from '@/modules/auth/auth.repository';
 import { performanceService } from '@/modules/performance/performance.service';
 import { LEAVE_YEARLY_ACCRUAL_JOB, runYearlyLeaveAccrual, scheduleYearlyLeaveAccrual } from '@/modules/leave/leave.scheduler';
+import { WORKFLOW_SLA_SWEEP_JOB, runWorkflowSlaSweep, scheduleWorkflowSlaSweep } from '@/modules/workflow-engine/workflow-sla.scheduler';
 import { runInSystemContext } from '@/shared/context/RequestContext';
 
 async function maybeCreateNotification(event: DomainEvent): Promise<void> {
@@ -121,6 +122,9 @@ async function bootstrapWorker(): Promise<void> {
   queueManager.createWorker<{ year: number }>(
     QueueNames.LEAVE_AUTOMATION,
     async (job) => {
+      if (job.name === WORKFLOW_SLA_SWEEP_JOB) {
+        return runInSystemContext('workflow-sla-worker', () => runWorkflowSlaSweep());
+      }
       const year = job.data.year ?? new Date().getFullYear();
       return runInSystemContext('leave-automation-worker', () => runYearlyLeaveAccrual(year));
     },
@@ -128,6 +132,7 @@ async function bootstrapWorker(): Promise<void> {
   );
 
   await runInSystemContext('leave-scheduler-bootstrap', () => scheduleYearlyLeaveAccrual());
+  await runInSystemContext('workflow-sla-scheduler-bootstrap', () => scheduleWorkflowSlaSweep());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,

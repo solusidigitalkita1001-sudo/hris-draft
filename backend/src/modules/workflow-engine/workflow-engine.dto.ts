@@ -9,7 +9,7 @@ const workflowRuleSchema = z.object({
 const workflowStageSchema = z.object({
   name: z.string().min(1).max(255),
   level: z.number().int().positive(),
-  approverType: z.enum(['ROLE', 'USER', 'AUTO']),
+  approverType: z.enum(['ROLE', 'USER', 'AUTO', 'MANAGER']),
   approverRoleCode: z.string().max(50).optional(),
   approverId: z.string().uuid().optional(),
   backupApproverRoleCode: z.string().max(50).optional(),
