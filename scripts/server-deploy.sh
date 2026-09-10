@@ -32,6 +32,8 @@ MAX_RETRY_WAIT_HEALTH="${MAX_RETRY_WAIT_HEALTH:-18}"
 MIGRATION_SCHEMA="src/database/prisma/schema.prisma"
 
 SPECIAL_MIGRATION="20260809120000_attendance_policy_company_default"
+FACE_MATCH_MIGRATION="20260903090000_face_match_rate_limit_index"
+FACE_MATCH_RECOVERY="$DEPLOY_DIR/scripts/migrations/recover-face-match-rate-limit-index.cjs"
 
 # =====================================================================
 # LOGGING
@@ -51,6 +53,10 @@ warn() {
 
 error_message() {
     printf "\033[1;31m❌ %s\033[0m\n" "$*"
+}
+
+recover_face_match_index() {
+    docker exec -i "$BACKEND_CONTAINER" node - "$MIGRATION_SCHEMA" < "$FACE_MATCH_RECOVERY"
 }
 
 cd "$DEPLOY_DIR"
@@ -141,6 +147,11 @@ fi
 
 if [ ! -f "backend/$MIGRATION_SCHEMA" ]; then
     error_message "Prisma schema tidak ditemukan: backend/$MIGRATION_SCHEMA"
+    exit 1
+fi
+
+if [ ! -f "$FACE_MATCH_RECOVERY" ]; then
+    error_message "Migration recovery script tidak ditemukan: $FACE_MATCH_RECOVERY"
     exit 1
 fi
 
@@ -427,6 +438,11 @@ EOSQL
 
 ok "Special migration sanitizer complete"
 
+# Recover a known failed single-index migration before Prisma's P3009 guard.
+# This checks the real index and preserves history using migrate resolve.
+log "Check failed face-match rate-limit index migration"
+recover_face_match_index
+
 # =====================================================================
 # STEP 6 — PRISMA MIGRATION
 # =====================================================================
@@ -457,7 +473,21 @@ else
 
     warn "Prisma migrate deploy gagal."
 
-    if grep -q "$SPECIAL_MIGRATION" "$MIGRATE_LOG"; then
+    if grep -Fq "$FACE_MATCH_MIGRATION" "$MIGRATE_LOG" && grep -Eq 'P3009|P3018' "$MIGRATE_LOG"; then
+
+        # A first attempt can fail with P3018 when the index was installed by
+        # an earlier hotfix. Verify it before resolving and retry only once.
+        warn "Detected failed face-match index migration: $FACE_MATCH_MIGRATION"
+        recover_face_match_index
+
+        log "Retry Prisma migrate deploy after verified index recovery"
+        docker exec -i "$BACKEND_CONTAINER" \
+            npx prisma migrate deploy \
+            --schema="$MIGRATION_SCHEMA"
+
+        ok "Face-match index migration recovered"
+
+    elif grep -q "$SPECIAL_MIGRATION" "$MIGRATE_LOG"; then
 
         warn "Detected failed special migration: $SPECIAL_MIGRATION"
 
@@ -493,7 +523,7 @@ COUNT=0
 
 while true; do
 
-    if docker exec "$BACKEND_CONTAINER" node - <<NODEEOF
+    if docker exec -i "$BACKEND_CONTAINER" node - <<NODEEOF
 const http = require('http');
 
 const request = http.get(
