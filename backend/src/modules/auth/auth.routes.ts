@@ -31,7 +31,7 @@ function redisStore(prefix: string): RedisStore | undefined {
   const client = redisCache.getClient();
   return new RedisStore({
     prefix: `ratelimit:${prefix}:`,
-    sendCommand: (...args: string[]) => client.call(...args) as never,
+    sendCommand: (command: string, ...args: string[]) => client.call(command, ...args) as never,
   });
 }
 
