@@ -1,10 +1,23 @@
 import type { Prisma } from '@prisma/client';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
 
+// `relation` may be a dot path when the company lives more than one hop away
+// (e.g. WorkflowConditionRule -> stage -> template.companyId).
 const PARENT_SCOPES: Record<string, { relation: string; foreignKey: string }> = {
   WorkflowInstanceStep: { relation: 'instance', foreignKey: 'instanceId' },
   WorkflowInstanceLog: { relation: 'instance', foreignKey: 'instanceId' },
   ExpenseApproval: { relation: 'claim', foreignKey: 'claimId' },
+  LoanInstallment: { relation: 'loan', foreignKey: 'loanId' },
+  WorkCalendarDay: { relation: 'calendar', foreignKey: 'calendarId' },
+  TrainingSession: { relation: 'course', foreignKey: 'courseId' },
+  ExitClearance: { relation: 'resignation', foreignKey: 'resignationId' },
+  InterviewFeedback: { relation: 'interview', foreignKey: 'interviewId' },
+  FeedbackResponse: { relation: 'feedbackRequest', foreignKey: 'requestId' },
+  PayslipComponent: { relation: 'payslip', foreignKey: 'payslipId' },
+  BenefitDeduction: { relation: 'payslip', foreignKey: 'payslipId' },
+  EmployeeSalaryComponent: { relation: 'employeeSalary', foreignKey: 'employeeSalaryId' },
+  WorkflowStage: { relation: 'template', foreignKey: 'templateId' },
+  WorkflowConditionRule: { relation: 'stage.template', foreignKey: 'stageId' },
 };
 
 type Data = Record<string, unknown>;
@@ -33,7 +46,9 @@ export async function enforceTenantScope(params: Prisma.MiddlewareParams, compan
   const parent = params.model ? PARENT_SCOPES[params.model] : undefined;
   const args: Data = params.args ?? {};
   params.args = args;
-  const tenant = parent ? { [parent.relation]: { companyId } } : { companyId };
+  const tenant = parent
+    ? parent.relation.split('.').reduceRight<Data>((acc, key) => ({ [key]: acc }), { companyId })
+    : { companyId };
   const filteredActions = new Set(['findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate', 'groupBy', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
   if (filteredActions.has(params.action)) {
     const where = args.where ? object(args.where) : {};
@@ -51,7 +66,7 @@ export async function enforceTenantScope(params: Prisma.MiddlewareParams, compan
     // Parent-owned inserts are validated by their owning service/transaction.
     // A separate client lookup here cannot see a parent just inserted in that
     // transaction. Existing rows cannot be moved to a different parent.
-    if (!creating && (parent.foreignKey in data || parent.relation in data)) {
+    if (!creating && (parent.foreignKey in data || parent.relation.split('.')[0] in data)) {
       throw new ForbiddenError('Reassigning a tenant-owned parent is not allowed');
     }
   };

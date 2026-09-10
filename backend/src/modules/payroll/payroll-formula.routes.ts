@@ -6,6 +6,7 @@ import { validate } from '@/shared/middleware/RequestValidator';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
 import { Result } from '@/shared/core/Result';
 import { payrollFormulaService, FormulaContext } from './payroll-formula.service';
+import { auditLog } from '@/shared/middleware/AuditLog';
 import { formulaComponentParams, formulaVersionParams, formulaDraftSchema, formulaPreviewSchema } from './payroll-formula.dto';
 
 const router = Router();
@@ -30,6 +31,6 @@ router.post('/:componentId/versions', authorize({ resource: 'payroll', action: '
   respond(req => payrollFormulaService.createDraft(context(req), req.params.componentId as string, req.body)));
 router.post('/:componentId/versions/:versionId/preview', authorizeSimulation, validate(formulaVersionParams, 'params'), validate(formulaPreviewSchema),
   respond(req => payrollFormulaService.preview(context(req), req.params.componentId as string, req.params.versionId as string, req.body)));
-router.post('/:componentId/versions/:versionId/publish', authorize({ resource: 'payroll', action: 'approve' }), validate(formulaVersionParams, 'params'),
+router.post('/:componentId/versions/:versionId/publish', authorize({ resource: 'payroll', action: 'approve' }), auditLog({ action: 'PUBLISH_PAYROLL_FORMULA', entity: 'PayrollFormulaVersion', getEntityId: (req) => req.params.versionId as string }), validate(formulaVersionParams, 'params'),
   respond(req => payrollFormulaService.publish(context(req), req.params.componentId as string, req.params.versionId as string)));
 export default router;

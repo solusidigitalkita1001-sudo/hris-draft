@@ -9,17 +9,29 @@ import {
   UpdateUserCompanyAccessDTO,
 } from './user.dto';
 import { authRepository } from '../auth/auth.repository';
+import {
+  assertCompanyAccessAuthority,
+  assertEmployeeWithinScope,
+  assertUserWithinScope,
+  requesterCompanyIds,
+} from './user-access-guard';
+import { ForbiddenError } from '@/shared/exceptions/AppError';
 
 const logger = new WinstonLogger('UserService');
 
 export class UserService {
   async findAll(page: number, limit: number, filters?: { companyId?: string; search?: string }) {
-    return userRepository.findAll(page, limit, filters);
+    const allowed = requesterCompanyIds();
+    if (allowed !== null && filters?.companyId && !allowed.includes(filters.companyId)) {
+      throw new ForbiddenError('Cannot list users outside your company scope');
+    }
+    return userRepository.findAll(page, limit, filters, allowed ?? undefined);
   }
 
   async findById(id: string) {
     const user = await userRepository.findById(id);
     if (!user) throw new NotFoundError('User not found');
+    assertUserWithinScope(user);
     return user;
   }
 
@@ -37,6 +49,7 @@ export class UserService {
       passwordHash,
     };
     if (dto.employeeId) {
+      await assertEmployeeWithinScope(dto.employeeId);
       createData.employee = { connect: { id: dto.employeeId } };
     }
     const user = await userRepository.create(createData);
@@ -61,6 +74,7 @@ export class UserService {
     };
 
     if (dto.employeeId !== undefined) {
+      if (dto.employeeId) await assertEmployeeWithinScope(dto.employeeId);
       updateData.employee = dto.employeeId
         ? { connect: { id: dto.employeeId } }
         : { disconnect: true };
@@ -82,6 +96,7 @@ export class UserService {
 
   async createCompanyAccess(userId: string, dto: CreateUserCompanyAccessDTO) {
     await this.findById(userId);
+    assertCompanyAccessAuthority(dto.companyId, { groupId: dto.groupId, accessScope: dto.accessScope });
 
     const existing = await userRepository.findCompanyAccessByUserAndCompany(userId, dto.companyId);
     if (existing) {
@@ -105,7 +120,13 @@ export class UserService {
       throw new NotFoundError('User company access not found');
     }
 
+    // Requester must control both the grant as it exists and as it will be.
+    assertCompanyAccessAuthority(current.companyId, { groupId: current.groupId, accessScope: current.accessScope });
     const nextCompanyId = dto.companyId || current.companyId;
+    assertCompanyAccessAuthority(nextCompanyId, {
+      groupId: dto.groupId !== undefined ? dto.groupId : current.groupId,
+      accessScope: dto.accessScope ?? current.accessScope,
+    });
     if (nextCompanyId !== current.companyId) {
       const existing = await userRepository.findCompanyAccessByUserAndCompany(userId, nextCompanyId);
       if (existing && existing.id !== accessId) {
@@ -128,6 +149,7 @@ export class UserService {
     if (!current || current.userId !== userId) {
       throw new NotFoundError('User company access not found');
     }
+    assertCompanyAccessAuthority(current.companyId, { groupId: current.groupId, accessScope: current.accessScope });
 
     await userRepository.deleteCompanyAccess(accessId);
   }

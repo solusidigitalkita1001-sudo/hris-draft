@@ -105,6 +105,10 @@ export class WorkCalendarController {
 
   async bulkUpdateDays(req: Request, res: Response, next: NextFunction) {
     try {
+      // Day upserts are parent-owned creates the tenant middleware cannot
+      // validate; the scoped calendar lookup 404s for a foreign calendar.
+      const calendar = await workCalendarRepository.findById(req.params.id as string);
+      if (!calendar) return res.status(404).json(Result.error('Calendar not found'));
       const data = await workCalendarRepository.bulkUpdateDays(req.params.id as string, req.body.days);
       res.json(Result.updated(data));
     } catch (error) { next(error); }

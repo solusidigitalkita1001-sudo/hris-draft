@@ -4,7 +4,7 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
-import { auditLog } from '@/shared/middleware/AuditLog';
+import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import { employeeController } from './employee.controller';
 import {
@@ -26,7 +26,7 @@ router.use(requireCompanyAccess());
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 router.get('/', authorize({ resource: 'employee', action: 'read' }), employeeController.findAll.bind(employeeController));
-router.get('/export', authorize({ resource: 'employee', action: 'read' }), employeeController.exportCsv.bind(employeeController));
+router.get('/export', authorize({ resource: 'employee', action: 'read' }), auditView({ action: 'EXPORT_EMPLOYEES', entity: 'Employee' }), employeeController.exportCsv.bind(employeeController));
 router.get('/:id', authorize({ resource: 'employee', action: 'read' }), employeeController.findById.bind(employeeController));
 router.get('/:id/face-profile', authorize({ resource: 'employee', action: 'read' }), employeeController.getFaceProfile.bind(employeeController));
 router.get('/:id/career-transactions', authorize({ resource: 'employee', action: 'read' }), employeeController.findCareerTransactions.bind(employeeController));
@@ -35,16 +35,18 @@ router.post('/', authorize({ resource: 'employee', action: 'create' }), validate
 router.post(
   '/:id/career-transactions',
   authorize({ resource: 'employee', action: 'update' }),
+  auditLog({ action: 'CAREER_TRANSACTION', entity: 'EmployeeCareerTransaction' }),
   validate(createCareerTransactionSchema),
   employeeController.createCareerTransaction.bind(employeeController)
 );
 router.post(
   '/:id/company-assignments',
   authorize({ resource: 'employee', action: 'update' }),
+  auditLog({ action: 'CREATE_COMPANY_ASSIGNMENT', entity: 'EmployeeCompanyAssignment' }),
   validate(createEmployeeCompanyAssignmentSchema),
   employeeController.createCompanyAssignment.bind(employeeController)
 );
-router.post('/import', authorize({ resource: 'employee', action: 'create' }), upload.single('file'), employeeController.importCsv.bind(employeeController));
+router.post('/import', authorize({ resource: 'employee', action: 'create' }), auditLog({ action: 'IMPORT_EMPLOYEES', entity: 'Employee' }), upload.single('file'), employeeController.importCsv.bind(employeeController));
 router.post(
   '/:id/face-profile',
   authorize({ resource: 'employee', action: 'update' }),
@@ -70,7 +72,7 @@ router.delete(
   authorize({ resource: 'employee', action: 'update' }),
   employeeController.deleteCompanyAssignment.bind(employeeController)
 );
-router.patch('/:id/status', authorize({ resource: 'employee', action: 'update' }), employeeController.updateStatus.bind(employeeController));
+router.patch('/:id/status', authorize({ resource: 'employee', action: 'update' }), auditLog({ action: 'UPDATE_STATUS', entity: 'Employee', model: 'employee' }), employeeController.updateStatus.bind(employeeController));
 
 // ============================================================
 // Employee Detail Sub-Entities

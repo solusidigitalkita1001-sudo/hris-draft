@@ -1,27 +1,34 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { groupService } from '../services/group.service';
 import { Result } from '@/shared/core/Result';
+import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
+
+// undefined = unrestricted (SUPER_ADMIN); otherwise only the requester's group.
+function allowedGroupIds(req: AuthenticatedRequest): string[] | undefined {
+  if (req.user?.roles?.includes('SUPER_ADMIN')) return undefined;
+  return req.user?.groupId ? [req.user.groupId] : [];
+}
 
 export class GroupController {
-  async findAll(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async findAll(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const groups = await groupService.findAll();
+      const groups = await groupService.findAll(allowedGroupIds(req));
       res.status(200).json(Result.success(groups));
     } catch (error) {
       next(error);
     }
   }
 
-  async findById(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async findById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const group = await groupService.findById(req.params.id as string);
+      const group = await groupService.findById(req.params.id as string, allowedGroupIds(req));
       res.status(200).json(Result.success(group));
     } catch (error) {
       next(error);
     }
   }
 
-  async create(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async create(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const group = await groupService.create(req.body);
       res.status(201).json(Result.created(group, 'Company group created successfully'));
@@ -30,18 +37,18 @@ export class GroupController {
     }
   }
 
-  async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const group = await groupService.update(req.params.id as string, req.body);
+      const group = await groupService.update(req.params.id as string, req.body, allowedGroupIds(req));
       res.status(200).json(Result.updated(group, 'Company group updated successfully'));
     } catch (error) {
       next(error);
     }
   }
 
-  async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      await groupService.delete(req.params.id as string);
+      await groupService.delete(req.params.id as string, allowedGroupIds(req));
       res.status(200).json(Result.deleted('Company group deleted successfully'));
     } catch (error) {
       next(error);

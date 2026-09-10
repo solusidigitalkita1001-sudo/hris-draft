@@ -55,6 +55,9 @@ export class TrainingService {
   }
 
   async createSession(data: CreateSessionDTO) {
+    // Tenant middleware does not validate parent ownership on create; the
+    // scoped course lookup 404s when the course belongs to another tenant.
+    await this.findCourseById(data.courseId);
     return trainingRepository.createSession(data);
   }
 

@@ -13,6 +13,7 @@ import {
 } from './reports.dto';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
+import { auditView } from '@/shared/middleware/AuditLog';
 
 const router = Router();
 router.use(authenticate);
@@ -22,7 +23,7 @@ router.get('/summary', validate(dashboardSummaryQuerySchema, 'query'), reportsCo
 router.get('/headcount', authorize({ resource: 'report', action: 'read' }), validate(headcountReportQuerySchema, 'query'), reportsController.headcount.bind(reportsController));
 router.get('/attendance', authorize({ resource: 'report', action: 'read' }), validate(attendanceReportQuerySchema, 'query'), reportsController.attendance.bind(reportsController));
 router.get('/leave', authorize({ resource: 'report', action: 'read' }), validate(leaveReportQuerySchema, 'query'), reportsController.leave.bind(reportsController));
-router.get('/payroll', authorize({ resource: 'report', action: 'read' }), validate(payrollReportQuerySchema, 'query'), reportsController.payroll.bind(reportsController));
+router.get('/payroll', authorize({ resource: 'report', action: 'read' }), validate(payrollReportQuerySchema, 'query'), auditView({ action: 'VIEW_PAYROLL_REPORT', entity: 'Report' }), reportsController.payroll.bind(reportsController));
 router.get('/turnover', authorize({ resource: 'report', action: 'read' }), validate(turnoverReportQuerySchema, 'query'), reportsController.turnover.bind(reportsController));
 router.get('/recruitment', authorize({ resource: 'report', action: 'read' }), validate(recruitmentReportQuerySchema, 'query'), reportsController.recruitment.bind(reportsController));
 

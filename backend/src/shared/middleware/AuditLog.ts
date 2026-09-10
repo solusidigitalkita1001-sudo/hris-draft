@@ -3,7 +3,7 @@ import { AuthenticatedRequest } from './Authenticate';
 import prisma from '@/shared/database/prisma';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { computeAuditHash } from '@/shared/security/audit-hash';
-import { runInRequestContext } from '@/shared/context/RequestContext';
+import { runInRequestContext, runInSystemContext } from '@/shared/context/RequestContext';
 import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
 
 interface AuditLogOptions {
@@ -92,7 +92,11 @@ interface AuditEntryInput {
  */
 export async function appendAuditLogEntry(params: AuditEntryInput): Promise<void> {
   const chainKey = params.companyId ?? 'global';
-  await withDatabaseAdvisoryLock('audit-chain', chainKey, async (tx) => {
+  // System context: the tenant middleware would otherwise reject appends from
+  // actors without a single-company context (SUPER_ADMIN/GROUP_ADMIN), which
+  // silently dropped exactly the highest-privilege audit rows. The write is
+  // trusted internal code and records params.companyId verbatim.
+  await runInSystemContext('audit-log-append', () => withDatabaseAdvisoryLock('audit-chain', chainKey, async (tx) => {
     const previous = await tx.auditLog.findFirst({
       where: { companyId: params.companyId ?? null },
       orderBy: { createdAt: 'desc' },
@@ -135,7 +139,7 @@ export async function appendAuditLogEntry(params: AuditEntryInput): Promise<void
         createdAt,
       },
     });
-  });
+  }));
 }
 
 /**
@@ -203,6 +207,32 @@ export async function createAuditLog(params: AuditEntryInput): Promise<void> {
   } catch (error) {
     logger.error('Failed to create audit log', { error });
   }
+}
+
+/**
+ * Sensitive-read access log (checklist §2/§4): records WHO viewed or exported
+ * salary/PII/report data. Logs only the path and entity id — never the
+ * response payload.
+ */
+export function auditView(options: { action: string; entity: string; getEntityId?: (req: AuthenticatedRequest) => string | undefined }) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    req.auditHandled = true;
+    res.on('finish', () => {
+      if (res.statusCode >= 200 && res.statusCode < 300 && req.user) {
+        void createAuditLog({
+          companyId: req.user.companyId ?? undefined,
+          userId: req.user.id,
+          action: options.action,
+          entity: options.entity,
+          entityId: options.getEntityId?.(req) ?? (typeof req.params?.id === 'string' ? req.params.id : undefined),
+          newValue: JSON.stringify({ path: req.baseUrl + req.path }),
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        });
+      }
+    });
+    next();
+  };
 }
 
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

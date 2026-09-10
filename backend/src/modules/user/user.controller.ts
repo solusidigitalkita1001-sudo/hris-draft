@@ -71,6 +71,8 @@ export class UserController {
 
   async getUserRoles(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      // Asserts the target user is inside the requester's company scope.
+      await userService.findById(req.params.id as string);
       const roles = await roleService.getUserRoles(req.params.id as string);
       res.status(200).json(Result.success(roles));
     } catch (error) {

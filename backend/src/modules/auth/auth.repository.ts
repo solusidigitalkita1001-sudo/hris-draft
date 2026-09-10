@@ -175,14 +175,22 @@ export class AuthRepository {
   }
 
   async updateUserLoginSuccess(userId: string) {
-    return prisma.user.update({
-      where: { id: userId },
-      data: {
-        lastLoginAt: new Date(),
-        failedAttempts: 0,
-        lockedUntil: null,
-      },
-    });
+    // An expired lockout must fully restore the account: reset the LOCKED
+    // status (it never healed before) and clear the stale failure rows that
+    // would otherwise re-trigger the lockout on the next single failure.
+    const [user] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: {
+          lastLoginAt: new Date(),
+          failedAttempts: 0,
+          lockedUntil: null,
+          status: 'ACTIVE',
+        },
+      }),
+      prisma.loginAttempt.deleteMany({ where: { userId } }),
+    ]);
+    return user;
   }
 
   async incrementFailedAttempts(userId: string) {

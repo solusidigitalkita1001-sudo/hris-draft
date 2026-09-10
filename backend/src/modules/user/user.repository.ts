@@ -5,18 +5,34 @@ export class UserRepository {
   async findAll(
     page: number = 1,
     limit: number = 20,
-    filters?: { companyId?: string; search?: string }
+    filters?: { companyId?: string; search?: string },
+    allowedCompanyIds?: string[]
   ) {
     const skip = (page - 1) * limit;
     const where: Prisma.UserWhereInput = { deletedAt: null };
+    const and: Prisma.UserWhereInput[] = [];
 
     if (filters?.companyId) {
-      where.OR = [
-        { employee: { companyId: filters.companyId } },
-        { userRoles: { some: { companyId: filters.companyId } } },
-        { companyAccesses: { some: { companyId: filters.companyId } } },
-      ];
+      and.push({
+        OR: [
+          { employee: { companyId: filters.companyId } },
+          { userRoles: { some: { companyId: filters.companyId } } },
+          { companyAccesses: { some: { companyId: filters.companyId } } },
+        ],
+      });
     }
+
+    // Non-super requesters only ever see users attached to their companies.
+    if (allowedCompanyIds) {
+      and.push({
+        OR: [
+          { employee: { companyId: { in: allowedCompanyIds } } },
+          { userRoles: { some: { companyId: { in: allowedCompanyIds } } } },
+          { companyAccesses: { some: { companyId: { in: allowedCompanyIds } } } },
+        ],
+      });
+    }
+    if (and.length) where.AND = and;
 
     if (filters?.search) {
       const existingAnd = Array.isArray(where.AND)

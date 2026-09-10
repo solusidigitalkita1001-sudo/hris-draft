@@ -28,7 +28,7 @@ router.post(
   '/',
   authorize({ resource: 'daily-activity', action: 'create' }),
   validate(createDailyActivitySchema),
-  auditLog({ action: 'create', entity: 'Daily_Activity', model: 'DailyActivity' }),
+  auditLog({ action: 'create', entity: 'Daily_Activity', model: 'dailyActivity' }),
   dailyActivityController.createRequest.bind(dailyActivityController),
 );
 router.get(
@@ -40,20 +40,20 @@ router.put(
   '/:id',
   authorize({ resource: 'daily-activity', action: 'update' }),
   validate(updateDailyActivitySchema),
-  auditLog({ action: 'update', entity: 'Daily_Activity', model: 'DailyActivity' }),
+  auditLog({ action: 'update', entity: 'Daily_Activity', model: 'dailyActivity' }),
   dailyActivityController.updateRequest.bind(dailyActivityController),
 );
 router.post(
   '/:id/complete',
   authorize({ resource: 'daily-activity', action: 'update' }),
   validate(completeDailyActivitySchema),
-  auditLog({ action: 'process', entity: 'Daily_Activity', model: 'DailyActivity' }),
+  auditLog({ action: 'process', entity: 'Daily_Activity', model: 'dailyActivity' }),
   dailyActivityController.completeRequest.bind(dailyActivityController),
 );
 router.delete(
   '/:id',
   authorize({ resource: 'daily-activity', action: 'delete' }),
-  auditLog({ action: 'delete', entity: 'Daily_Activity', model: 'DailyActivity' }),
+  auditLog({ action: 'delete', entity: 'Daily_Activity', model: 'dailyActivity' }),
   dailyActivityController.deleteRequest.bind(dailyActivityController),
 );
 router.get(

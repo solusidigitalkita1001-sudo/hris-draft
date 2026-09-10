@@ -5,6 +5,7 @@ import { authenticate, AuthenticatedRequest } from '@/shared/middleware/Authenti
 import { authorize } from '@/shared/middleware/Authorize';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { validate } from '@/shared/middleware/RequestValidator';
+import { auditLog } from '@/shared/middleware/AuditLog';
 import {
   createPaymentBatchSchema,
   emptyPaymentActionSchema,
@@ -61,6 +62,7 @@ function respond(operation: (req: AuthenticatedRequest) => Promise<unknown>) {
 
 router.post(
   '/',
+  auditLog({ action: 'CREATE_PAYMENT_BATCH', entity: 'PayrollPaymentBatch' }),
   validate(createPaymentBatchSchema),
   respond((req) => payrollPaymentService.createBatch(paymentContext(req), req.body, idempotencyKey(req)))
 );
@@ -79,6 +81,7 @@ router.get(
 
 router.post(
   '/:id/export',
+  auditLog({ action: 'EXPORT_PAYMENT_BATCH', entity: 'PayrollPaymentBatch' }),
   validate(paymentBatchParamsSchema, 'params'),
   validate(emptyPaymentActionSchema),
   respond((req) => payrollPaymentService.exportBatch(paymentContext(req), req.params.id as string))
@@ -87,6 +90,7 @@ router.post(
 router.patch(
   '/:id/transactions/:transactionId',
   authorize({ resource: 'payroll', action: 'disburse' }),
+  auditLog({ action: 'RECORD_PAYMENT_TRANSACTION', entity: 'PayrollPaymentTransaction', getEntityId: (req) => req.params.transactionId as string }),
   validate(paymentTransactionParamsSchema, 'params'),
   validate(recordPaymentTransactionSchema),
   respond((req) => payrollPaymentService.recordTransaction(
@@ -101,6 +105,7 @@ router.patch(
 router.post(
   '/:id/reconcile',
   authorize({ resource: 'payroll', action: 'disburse' }),
+  auditLog({ action: 'RECONCILE_PAYMENT_BATCH', entity: 'PayrollPaymentBatch' }),
   validate(paymentBatchParamsSchema, 'params'),
   validate(emptyPaymentActionSchema),
   respond((req) => payrollPaymentService.reconcileBatch(
@@ -110,6 +115,7 @@ router.post(
 
 router.post(
   '/:id/cancel',
+  auditLog({ action: 'CANCEL_PAYMENT_BATCH', entity: 'PayrollPaymentBatch' }),
   validate(paymentBatchParamsSchema, 'params'),
   validate(emptyPaymentActionSchema),
   respond((req) => payrollPaymentService.cancelBatch(

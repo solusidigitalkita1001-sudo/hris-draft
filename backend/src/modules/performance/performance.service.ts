@@ -3943,6 +3943,10 @@ export class PerformanceService {
   }
 
   async submitFeedback(data: CreateFeedbackResponseDTO) {
+    // FeedbackRequest is tenant-scoped by the Prisma middleware; a foreign
+    // request id resolves to null so responses cannot cross tenants.
+    const target = await performanceRepository.findFeedbackRequestById(data.requestId);
+    if (!target) throw new NotFoundError('Feedback request not found');
     const request = await performanceRepository.createFeedbackResponse(data);
     await performanceRepository.createFeedbackRequest({ ...data as any, requesterId: data.requestId, recipientId: data.requestId });
     return request;

@@ -22,15 +22,22 @@ import { cached, invalidateKeys, cacheKey, CACHE_TTL } from '@/shared/cache/cach
 const logger = new WinstonLogger('RBACService');
 
 // Task 2.1: role lists are invalidated by exact key on mutation.
-const rolesKey = (companyId?: string | null) => cacheKey(companyId ?? 'global', 'roles');
-const invalidateRoles = (companyId?: string | null) =>
-  invalidateKeys(rolesKey(companyId), rolesKey('global'));
+// Never cache without an explicit tenant key: the Prisma middleware still
+// filters the loader by the caller's tenant, so a shared key would serve one
+// tenant's roles to another.
+const rolesKey = (companyId?: string | null) => (companyId ? cacheKey(companyId, 'roles') : null);
+const invalidateRoles = (companyId?: string | null) => {
+  const key = rolesKey(companyId);
+  return key ? invalidateKeys(key) : Promise.resolve();
+};
 
 export class RoleService {
   async findAll(companyId?: string, groupId?: string) {
     // Only the common (company-scoped, no group filter) list is cached.
     if (groupId) return roleRepository.findAll(companyId, groupId);
-    return cached(rolesKey(companyId), CACHE_TTL.static, () => roleRepository.findAll(companyId));
+    const key = rolesKey(companyId);
+    if (!key) return roleRepository.findAll(companyId);
+    return cached(key, CACHE_TTL.static, () => roleRepository.findAll(companyId));
   }
 
   async findById(id: string) {

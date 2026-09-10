@@ -12,20 +12,29 @@ const logger = new WinstonLogger('AuthController');
 const ACCESS_COOKIE = 'at';
 const REFRESH_COOKIE = 'rt';
 
+// Cookie lifetimes must track the JWT lifetimes, or changing the env drifts
+// them apart (cookie outliving token or vice versa).
+function expiryToMs(expiry: string, fallbackMs: number): number {
+  const match = expiry.match(/^(\d+)([smhd])$/);
+  if (!match) return fallbackMs;
+  const factor = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[match[2] as 's' | 'm' | 'h' | 'd'];
+  return Number(match[1]) * factor;
+}
+
 const ACCESS_COOKIE_OPTS = {
   httpOnly: true,
   secure: config.cookies.secure,
   sameSite: 'lax' as const,
   path: '/',
-  maxAge: 15 * 60 * 1000,
+  maxAge: expiryToMs(config.jwt.accessExpiresIn, 15 * 60 * 1000),
 };
 
 const REFRESH_COOKIE_OPTS = {
   httpOnly: true,
   secure: config.cookies.secure,
   sameSite: 'lax' as const,
-  path: '/api/v1/auth',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: `${config.app.apiPrefix}/auth`,
+  maxAge: expiryToMs(config.jwt.refreshExpiresIn, 7 * 24 * 60 * 60 * 1000),
 };
 
 function setAccessCookie(res: Response, token: string) {
@@ -46,6 +55,16 @@ function clearRefreshCookie(res: Response) {
 
 function getRefreshToken(req: Request): string | undefined {
   return req.cookies?.[REFRESH_COOKIE] ?? req.body?.refreshToken;
+}
+
+/**
+ * Native/mobile clients cannot read httpOnly cookies. When a request declares
+ * `X-Client-Type: mobile`, tokens are returned in the response body instead
+ * and NO auth cookies are set — cookie-less requests also bypass the CSRF
+ * double-submit (see CsrfProtection), so mobile only needs the Bearer header.
+ */
+function isMobileClient(req: Request): boolean {
+  return (req.get('x-client-type') || '').toLowerCase() === 'mobile';
 }
 
 function extractAccessToken(req: Request): string | undefined {
@@ -81,6 +100,23 @@ export class AuthController {
       const userAgent = req.headers['user-agent'];
 
       const result = await authService.login(dto, ipAddress, userAgent);
+
+      if (isMobileClient(req)) {
+        res.status(200).json(
+          Result.success(
+            {
+              user: result.user,
+              tokens: {
+                accessToken: result.tokens.accessToken,
+                refreshToken: result.tokens.refreshToken,
+                expiresIn: result.tokens.expiresIn,
+              },
+            },
+            'Login successful'
+          )
+        );
+        return;
+      }
 
       setAccessCookie(res, result.tokens.accessToken);
       setRefreshCookie(res, result.tokens.refreshToken);
@@ -132,6 +168,23 @@ export class AuthController {
       if (!refreshToken) throw new Error('No refresh token');
       const result = await authService.refreshTokens(refreshToken, ipAddress, userAgent);
 
+      if (isMobileClient(req)) {
+        res.status(200).json(
+          Result.success(
+            {
+              user: result.user,
+              tokens: {
+                accessToken: result.tokens.accessToken,
+                refreshToken: result.tokens.refreshToken,
+                expiresIn: result.tokens.expiresIn,
+              },
+            },
+            'Token refreshed successfully'
+          )
+        );
+        return;
+      }
+
       setAccessCookie(res, result.tokens.accessToken);
       setRefreshCookie(res, result.tokens.refreshToken);
       const csrfToken = issueCsrfToken(res);
@@ -160,7 +213,13 @@ export class AuthController {
       const dto: ChangePasswordDTO = req.body;
       await authService.changePassword(req.user!.id, dto);
 
-      res.status(200).json(Result.success(null, 'Password changed successfully'));
+      // Every refresh token was just revoked; drop this session's cookies too
+      // so the still-valid access token cannot linger in the browser.
+      clearAccessCookie(res);
+      clearRefreshCookie(res);
+      clearCsrfToken(res);
+
+      res.status(200).json(Result.success(null, 'Password changed successfully. Please log in again.'));
     } catch (error) {
       next(error);
     }
