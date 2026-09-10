@@ -61,8 +61,8 @@ export class CompanyService {
     return company;
   }
 
-  async update(id: string, dto: UpdateCompanyDTO) {
-    const company = await companyRepository.findById(id);
+  async update(id: string, dto: UpdateCompanyDTO, allowedCompanyIds?: string[]) {
+    const company = await companyRepository.findById(id, allowedCompanyIds);
     if (!company) {
       throw new NotFoundError('Company not found');
     }
@@ -86,8 +86,8 @@ export class CompanyService {
     return updated;
   }
 
-  async delete(id: string) {
-    const company = await companyRepository.findById(id);
+  async delete(id: string, allowedCompanyIds?: string[]) {
+    const company = await companyRepository.findById(id, allowedCompanyIds);
     if (!company) {
       throw new NotFoundError('Company not found');
     }

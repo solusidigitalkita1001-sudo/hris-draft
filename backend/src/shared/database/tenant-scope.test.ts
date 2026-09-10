@@ -31,12 +31,25 @@ describe('tenant constraint enforcement', () => {
     await expect(enforceTenantScope(params('upsert', { where: { id: 'id' }, create: { companyId: 'B' }, update: {} }), 'A')).rejects.toThrow();
     await expect(enforceTenantScope(params('upsert', { where: { id: 'id' }, create: {}, update: { companyId: 'B' } }), 'A')).rejects.toThrow();
   });
-  it.each([['WorkflowInstanceStep', 'instance'], ['WorkflowInstanceLog', 'instance'], ['ExpenseApproval', 'claim']] as const)('scopes %s through its parent relation', async (model, relation) => {
+  it.each([
+    ['WorkflowInstanceStep', 'instance'], ['WorkflowInstanceLog', 'instance'], ['ExpenseApproval', 'claim'],
+    ['LoanInstallment', 'loan'], ['WorkCalendarDay', 'calendar'], ['TrainingSession', 'course'],
+    ['ExitClearance', 'resignation'], ['InterviewFeedback', 'interview'], ['FeedbackResponse', 'feedbackRequest'],
+    ['PayslipComponent', 'payslip'], ['BenefitDeduction', 'payslip'], ['EmployeeSalaryComponent', 'employeeSalary'],
+    ['WorkflowStage', 'template'],
+  ] as const)('scopes %s through its parent relation', async (model, relation) => {
     const request = params('findMany', { where: {} }, model);
     await enforceTenantScope(request, 'A');
     expect(request.args.where.AND).toEqual([{ [relation]: { companyId: 'A' } }]);
   });
+  it('scopes WorkflowConditionRule through a nested relation path', async () => {
+    const request = params('findMany', { where: {} }, 'WorkflowConditionRule');
+    await enforceTenantScope(request, 'A');
+    expect(request.args.where.AND).toEqual([{ stage: { template: { companyId: 'A' } } }]);
+  });
   it('rejects parent reassignment on existing records', async () => {
     await expect(enforceTenantScope(params('update', { where: { id: 'step' }, data: { instanceId: 'foreign' } }, 'WorkflowInstanceStep'), 'A')).rejects.toThrow();
+    await expect(enforceTenantScope(params('update', { where: { id: 'rule' }, data: { stageId: 'foreign' } }, 'WorkflowConditionRule'), 'A')).rejects.toThrow();
+    await expect(enforceTenantScope(params('update', { where: { id: 'day' }, data: { calendarId: 'foreign' } }, 'WorkCalendarDay'), 'A')).rejects.toThrow();
   });
 });

@@ -156,6 +156,10 @@ export class RecruitmentService {
   }
 
   async submitFeedback(interviewId: string, data: CreateInterviewFeedbackDTO) {
+    // Interview is tenant-scoped by the Prisma middleware; a foreign
+    // interview id resolves to null so feedback cannot cross tenants.
+    const interview = await recruitmentRepository.findInterviewById(interviewId);
+    if (!interview) throw new NotFoundError('Interview not found');
     return recruitmentRepository.createInterviewFeedback(interviewId, data);
   }
 }

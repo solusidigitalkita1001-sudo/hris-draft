@@ -4,6 +4,11 @@ import { branchRepository } from '../repositories/branch.repository';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 
+// undefined = unrestricted (SUPER_ADMIN); otherwise the requester's companies.
+function allowedIds(req: AuthenticatedRequest): string[] | undefined {
+  return req.user?.roles?.includes('SUPER_ADMIN') ? undefined : req.user?.companyScope || [];
+}
+
 export class CompanyController {
   async findAll(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -45,7 +50,7 @@ export class CompanyController {
 
   async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const company = await companyService.update(req.params.id as string, req.body);
+      const company = await companyService.update(req.params.id as string, req.body, allowedIds(req));
       res.status(200).json(Result.updated(company, 'Company updated successfully'));
     } catch (error) {
       next(error);
@@ -54,7 +59,7 @@ export class CompanyController {
 
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      await companyService.delete(req.params.id as string);
+      await companyService.delete(req.params.id as string, allowedIds(req));
       res.status(200).json(Result.deleted('Company deleted successfully'));
     } catch (error) {
       next(error);
@@ -63,18 +68,22 @@ export class CompanyController {
 
   async getDefaultAttendancePolicy(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      // BranchAttendancePolicy is not tenant-middleware scoped; assert company visibility first.
+      await companyService.findById(req.params.id as string, allowedIds(req));
       res.json(Result.success(await branchRepository.findCompanyDefaultPolicy(req.params.id as string)));
     } catch (error) { next(error); }
   }
 
   async upsertDefaultAttendancePolicy(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      await companyService.findById(req.params.id as string, allowedIds(req));
       res.json(Result.updated(await branchRepository.upsertCompanyDefaultPolicy(req.params.id as string, req.body)));
     } catch (error) { next(error); }
   }
 
   async deleteDefaultAttendancePolicy(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      await companyService.findById(req.params.id as string, allowedIds(req));
       await branchRepository.softDeleteCompanyDefaultPolicy(req.params.id as string);
       res.json(Result.deleted('Company default attendance policy deleted'));
     } catch (error) { next(error); }

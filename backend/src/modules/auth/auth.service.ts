@@ -4,6 +4,7 @@ import prisma from '@/shared/database/prisma';
 import { authRepository } from './auth.repository';
 import { jwtHandler } from '@/shared/security/JWTHandler';
 import { passwordHandler } from '@/shared/security/PasswordHandler';
+import { decryptSecret, encryptSecret } from '@/shared/security/secret-crypto';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
 import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
@@ -30,6 +31,9 @@ import {
 const logger = new WinstonLogger('AuthService');
 
 export class AuthService {
+  /** Lazily-built Argon2 hash of a random value, for timing-equalized compares. */
+  private dummyHash: string | null = null;
+
   private async buildAuthContext(user: any) {
     const roles: string[] = user.userRoles.map((ur: any) => ur.role.code);
     const permissions = Array.from(
@@ -125,6 +129,10 @@ export class AuthService {
     const user = await authRepository.findUserByEmail(email);
 
     if (!user) {
+      // Equalize timing with the existing-user path so response latency does
+      // not reveal whether the email is registered.
+      this.dummyHash ??= await passwordHandler.hash(uuidv4());
+      await passwordHandler.compare(password, this.dummyHash).catch(() => false);
       await this.logFailedAttempt(null, email, ipAddress, 'User not found');
       throw new AuthError('Invalid email or password');
     }
@@ -226,7 +234,9 @@ export class AuthService {
     const storedToken = await authRepository.findRefreshToken(tokenHash);
 
     if (storedToken) {
-      await authRepository.revokeRefreshToken(storedToken.id);
+      // Revoke the whole family: a rotated sibling of this token must not
+      // survive an explicit logout.
+      await authRepository.revokeRefreshTokenFamily(storedToken.family);
 
       await eventBus.publish({
         name: DomainEvents.USER_LOGGED_OUT,
@@ -249,7 +259,7 @@ export class AuthService {
     secret: string | null,
     code: string
   ): Promise<boolean> {
-    if (secret && verifyTotp(secret, code)) return true;
+    if (secret && verifyTotp(decryptSecret(secret), code)) return true;
 
     // Fall back to recovery codes (hashed, single-use).
     const user = await prisma.user.findUnique({
@@ -280,7 +290,9 @@ export class AuthService {
 
     const secret = generateTotpSecret();
     const otpauthUrl = totpAuthUrl(user.email, secret);
-    await prisma.user.update({ where: { id: userId }, data: { twoFactorSecret: secret } });
+    // At rest only the encrypted form is stored; the raw secret goes to the
+    // user's authenticator app once, via this response.
+    await prisma.user.update({ where: { id: userId }, data: { twoFactorSecret: encryptSecret(secret) } });
 
     return { secret, otpauthUrl, qrDataUrl: await totpQrDataUrl(otpauthUrl) };
   }
@@ -291,7 +303,7 @@ export class AuthService {
     if (!user) throw new NotFoundError('User not found');
     if (user.twoFactorEnabled) throw new BadRequestError('MFA is already enabled');
     if (!user.twoFactorSecret) throw new BadRequestError('Call MFA setup first');
-    if (!verifyTotp(user.twoFactorSecret, code)) throw new BadRequestError('Invalid MFA code');
+    if (!verifyTotp(decryptSecret(user.twoFactorSecret), code)) throw new BadRequestError('Invalid MFA code');
 
     const recoveryCodes = generateRecoveryCodes();
     const hashes = await Promise.all(recoveryCodes.map((c) => passwordHandler.hash(c)));

@@ -20,6 +20,9 @@ import { redisCache } from '@/infrastructure/cache/RedisCache';
 import { rabbitMQBroker } from '@/infrastructure/messaging/RabbitMQBroker';
 import { queueManager } from '@/infrastructure/queue/QueueManager';
 import { csrfProtection } from '@/shared/middleware/CsrfProtection';
+import listEndpoints from 'express-list-endpoints';
+import { authenticate } from '@/shared/middleware/Authenticate';
+import { authorize } from '@/shared/middleware/Authorize';
 import { auditMutationFallback } from '@/shared/middleware/AuditLog';
 
 // Route imports
@@ -231,6 +234,21 @@ app.use(`${apiPrefix}/administration`, administrationRoutes);
 app.use(`${apiPrefix}/company-settings`, companySettingsRoutes);
 app.use(`${apiPrefix}/ewa`, ewaRoutes);
 app.use(`${apiPrefix}/daily-activities`, dailyActivityRoutes);
+
+// ==================== API Inventory (for mobile/integration teams) ====================
+// Full route inventory (method + path + middleware names). Admin-gated: the
+// surface map should not be public.
+app.get(
+  `${apiPrefix}/meta/endpoints`,
+  authenticate,
+  authorize({ resource: 'rbac', action: 'read' }),
+  (_req: Request, res: Response) => {
+    const endpoints = listEndpoints(app as never)
+      .map((endpoint) => ({ path: endpoint.path, methods: endpoint.methods, middlewares: endpoint.middlewares }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+    res.json({ success: true, data: { count: endpoints.length, endpoints } });
+  }
+);
 
 // ==================== 404 Handler ====================
 app.use((_req, res) => {

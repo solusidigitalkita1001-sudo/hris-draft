@@ -27,6 +27,8 @@ import {
   FaceExtractionError,
 } from '@/shared/attendance/face-extractor';
 import { encryptFaceEmbedding } from '@/shared/security/biometric-crypto';
+import { employeeAccessWhere } from '@/shared/security/employee-data-scope';
+import { serializeEmployees } from './employee-pii';
 
 export class EmployeeService {
   private async findScopedEmployee(id: string) {
@@ -38,6 +40,19 @@ export class EmployeeService {
     });
     if (!employee) throw new NotFoundError('Employee not found');
     return employee;
+  }
+
+  /**
+   * Row-level data scope for sub-entities (families, educations, …): the
+   * parent employee must be visible under the requester's configured scope,
+   * not merely in the same company. 404s so existence is not leaked.
+   */
+  private async assertEmployeeVisible(employeeId: string) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, deletedAt: null, AND: [await employeeAccessWhere()] },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundError('Employee not found');
   }
 
   async getFaceProfile(id: string) {
@@ -401,10 +416,12 @@ export class EmployeeService {
   // Employee Family
   // ============================================================
   async findFamilies(employeeId: string) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.findFamilies(employeeId);
   }
 
   async createFamily(employeeId: string, data: CreateEmployeeFamilyDTO) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.createFamily(employeeId, data);
   }
 
@@ -421,6 +438,7 @@ export class EmployeeService {
     id: string,
     employeeId: string
   ) {
+    await this.assertEmployeeVisible(employeeId);
     const record = await (prisma as any)[model].findFirst({ where: { id, employeeId }, select: { id: true } });
     if (!record) throw new NotFoundError('Data tidak ditemukan');
   }
@@ -439,10 +457,12 @@ export class EmployeeService {
   // Employee Education
   // ============================================================
   async findEducations(employeeId: string) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.findEducations(employeeId);
   }
 
   async createEducation(employeeId: string, data: CreateEmployeeEducationDTO) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.createEducation(employeeId, data);
   }
 
@@ -460,10 +480,12 @@ export class EmployeeService {
   // Employee Emergency Contact
   // ============================================================
   async findEmergencyContacts(employeeId: string) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.findEmergencyContacts(employeeId);
   }
 
   async createEmergencyContact(employeeId: string, data: CreateEmployeeEmergencyContactDTO) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.createEmergencyContact(employeeId, data);
   }
 
@@ -481,10 +503,12 @@ export class EmployeeService {
   // Employee Training
   // ============================================================
   async findTrainings(employeeId: string) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.findTrainings(employeeId);
   }
 
   async createTraining(employeeId: string, data: CreateEmployeeTrainingDTO) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.createTraining(employeeId, data);
   }
 
@@ -502,10 +526,12 @@ export class EmployeeService {
   // Employee Skill
   // ============================================================
   async findSkills(employeeId: string) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.findSkills(employeeId);
   }
 
   async createSkill(employeeId: string, data: CreateEmployeeSkillDTO) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.createSkill(employeeId, data);
   }
 
@@ -523,10 +549,12 @@ export class EmployeeService {
   // Employee Experience
   // ============================================================
   async findExperiences(employeeId: string) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.findExperiences(employeeId);
   }
 
   async createExperience(employeeId: string, data: CreateEmployeeExperienceDTO) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.createExperience(employeeId, data);
   }
 
@@ -544,10 +572,12 @@ export class EmployeeService {
   // Employee Attachment
   // ============================================================
   async findAttachments(employeeId: string, category?: string) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.findAttachments(employeeId, category);
   }
 
   async createAttachment(employeeId: string, data: CreateEmployeeAttachmentDTO) {
+    await this.assertEmployeeVisible(employeeId);
     return employeeRepository.createAttachment(employeeId, data);
   }
 
@@ -693,12 +723,15 @@ export class EmployeeService {
     };
   }
 
-  async exportCsv(companyId: string) {
-    const { data: employees } = await this.findAll({
+  async exportCsv(companyId: string, options: { maskSensitive?: boolean } = {}) {
+    const { data: rawEmployees } = await this.findAll({
       companyId,
       page: 1,
       limit: 99999,
     });
+    // Field-level security: exports carry the full PII set, so requesters
+    // without sensitive-read authority only ever receive masked values.
+    const employees = options.maskSensitive ? serializeEmployees(rawEmployees as Record<string, unknown>[]) : rawEmployees;
 
     const headers = [
       'employeeNumber',

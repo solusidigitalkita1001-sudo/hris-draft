@@ -128,6 +128,19 @@ const COMPANY_SCOPED_MODELS = new Set([
   'Goal',
   'AuditLog',
   'CompanySetting',
+  'EmployeeFaceProfile',
+  // Parent-scoped (no own companyId; scoped via PARENT_SCOPES in tenant-scope.ts)
+  'LoanInstallment',
+  'WorkCalendarDay',
+  'TrainingSession',
+  'ExitClearance',
+  'InterviewFeedback',
+  'FeedbackResponse',
+  'PayslipComponent',
+  'BenefitDeduction',
+  'EmployeeSalaryComponent',
+  'WorkflowStage',
+  'WorkflowConditionRule',
 ]);
 
 function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {

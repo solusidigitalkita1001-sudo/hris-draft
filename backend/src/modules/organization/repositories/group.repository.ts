@@ -3,10 +3,14 @@ import { Prisma } from '@prisma/client';
 import { CreateGroupDTO, UpdateGroupDTO } from '../organization.dto';
 
 export class GroupRepository {
-  async findAll(includeDeleted: boolean = false) {
+  async findAll(includeDeleted: boolean = false, allowedGroupIds?: string[]) {
     const where: Prisma.CompanyGroupWhereInput = {};
     if (!includeDeleted) {
       where.deletedAt = null;
+    }
+    // CompanyGroup is not tenant-middleware scoped; restrict explicitly.
+    if (allowedGroupIds) {
+      where.id = { in: allowedGroupIds };
     }
 
     return prisma.companyGroup.findMany({

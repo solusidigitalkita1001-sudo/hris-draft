@@ -124,6 +124,10 @@ export class RecruitmentRepository {
     return prisma.interview.create({ data: { ...data, scheduledAt: new Date(data.scheduledAt) } });
   }
 
+  async findInterviewById(id: string) {
+    return prisma.interview.findFirst({ where: { id, deletedAt: null } });
+  }
+
   async createInterviewFeedback(interviewId: string, data: { rating?: number; strengths?: string; weaknesses?: string; decision?: string; notes?: string }) {
     return prisma.interviewFeedback.create({ data: { ...data, interviewId } });
   }

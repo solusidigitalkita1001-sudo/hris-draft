@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { employeeService } from './employee.service';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
+import { canReadSensitiveEmployeeData, serializeEmployee, serializeEmployees } from './employee-pii';
 
 export class EmployeeController {
   async getFaceProfile(req: Request, res: Response, next: NextFunction) {
@@ -53,7 +54,7 @@ export class EmployeeController {
       const result = await employeeService.findAll(query);
       res.json({
         success: true,
-        data: result.data,
+        data: serializeEmployees(result.data),
         meta: { page: result.page, limit: result.limit, total: result.total, totalPages: result.totalPages },
       });
     } catch (error) {
@@ -64,7 +65,7 @@ export class EmployeeController {
   async findById(req: Request, res: Response, next: NextFunction) {
     try {
       const employee = await employeeService.findById(req.params.id as string);
-      res.json(Result.success(employee));
+      res.json(Result.success(serializeEmployee(employee)));
     } catch (error) {
       next(error);
     }
@@ -173,7 +174,17 @@ export class EmployeeController {
 
   async importCsv(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const companyId = req.body.companyId || req.user?.companyId;
+      // Multipart bodies are parsed after requireCompanyAccess ran, so
+      // req.body.companyId was never validated — only accept it when it is
+      // inside the requester's scope.
+      const isSuperAdmin = req.user?.roles?.includes('SUPER_ADMIN');
+      const scope = req.user?.companyScope || [];
+      const requested = req.body.companyId as string | undefined;
+      if (requested && !isSuperAdmin && !scope.includes(requested) && requested !== req.user?.companyId) {
+        res.status(403).json({ success: false, message: 'companyId is outside your company scope' });
+        return;
+      }
+      const companyId = requested || req.user?.companyId;
       if (!companyId) {
         res.status(400).json({ success: false, message: 'companyId is required' });
         return;
@@ -196,7 +207,7 @@ export class EmployeeController {
         res.status(400).json({ success: false, message: 'companyId is required' });
         return;
       }
-      const csv = await employeeService.exportCsv(companyId);
+      const csv = await employeeService.exportCsv(companyId, { maskSensitive: !canReadSensitiveEmployeeData() });
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="employees.csv"');
       res.send(csv);
@@ -211,7 +222,8 @@ export class EmployeeController {
   async findFamilies(req: Request, res: Response, next: NextFunction) {
     try {
       const items = await employeeService.findFamilies(req.params.id as string);
-      res.json(Result.success(items));
+      // Family rows carry dependants' NIK — same masking policy as employees.
+      res.json(Result.success(serializeEmployees(items as Record<string, unknown>[])));
     } catch (error) { next(error); }
   }
 

@@ -30,7 +30,8 @@ export async function seedRolePermissions(): Promise<void> {
     .filter((p) =>
       [
         'user:create', 'user:read', 'user:update',
-        'employee:create', 'employee:read', 'employee:update', 'employee:delete', 'employee:export',
+        'audit-log:read',
+        'employee:create', 'employee:read', 'employee:update', 'employee:delete', 'employee:export', 'employee:read-sensitive',
         'org:create', 'org:read', 'org:update',
         'att:read', 'att:approve', 'att:export',
         'leave:read', 'leave:approve', 'leave:export',
@@ -57,7 +58,7 @@ export async function seedRolePermissions(): Promise<void> {
   const hrManagerPerms = permissions
     .filter((p) =>
       [
-        'employee:create', 'employee:read', 'employee:update', 'employee:export',
+        'employee:create', 'employee:read', 'employee:update', 'employee:export', 'employee:read-sensitive',
         'org:read',
         'att:read', 'att:approve', 'att:export',
         'leave:read', 'leave:approve', 'leave:export',

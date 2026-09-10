@@ -93,6 +93,7 @@ export class JWTHandler {
       const decoded = jwt.verify(token, config.jwt.accessSecret, {
         issuer: config.jwt.issuer,
         audience: 'hrms-api',
+        algorithms: ['HS256'],
       }) as jwt.JwtPayload & AccessTokenPayload;
 
       if (decoded.type !== 'access') {
@@ -125,6 +126,7 @@ export class JWTHandler {
       const decoded = jwt.verify(token, config.jwt.refreshSecret, {
         issuer: config.jwt.issuer,
         audience: 'hrms-api',
+        algorithms: ['HS256'],
       }) as jwt.JwtPayload & RefreshTokenPayload;
 
       if (decoded.type !== 'refresh') {

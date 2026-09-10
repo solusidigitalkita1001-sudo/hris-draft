@@ -3046,6 +3046,10 @@ export class PerformanceRepository {
     return prisma.feedbackRequest.create({ data });
   }
 
+  async findFeedbackRequestById(id: string) {
+    return prisma.feedbackRequest.findFirst({ where: { id } });
+  }
+
   async createFeedbackResponse(data: { requestId: string; rating?: number; strengths?: string; improvements?: string; notes?: string; isAnonymous: boolean }) {
     return prisma.feedbackResponse.create({ data });
   }

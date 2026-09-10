@@ -21,7 +21,7 @@ import {
   calculateJknSchema,
 } from './payroll.dto';
 import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema } from './payroll.validation';
-import { auditLog } from '@/shared/middleware/AuditLog';
+import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
 
 const router = Router();
@@ -84,6 +84,7 @@ router.get(
   '/employee-salaries',
   authorize({ resource: 'payroll', action: 'read' }),
   validate(employeeSalaryListQuerySchema, 'query'),
+  auditView({ action: 'VIEW_SALARY_LIST', entity: 'EmployeeSalary' }),
   payrollController.findAllEmployeeSalaries.bind(payrollController)
 );
 
@@ -91,6 +92,7 @@ router.get(
   '/employee-salaries/:id',
   authorize({ resource: 'payroll', action: 'read' }),
   validate(idParamSchema, 'params'),
+  auditView({ action: 'VIEW_SALARY', entity: 'EmployeeSalary' }),
   payrollController.findEmployeeSalaryById.bind(payrollController)
 );
 
@@ -251,6 +253,7 @@ router.get(
   '/payslips/:id',
   authorize({ resource: 'payroll', action: 'read' }),
   validate(payslipIdParamSchema, 'params'),
+  auditView({ action: 'VIEW_PAYSLIP', entity: 'Payslip' }),
   payrollController.findPayslipById.bind(payrollController)
 );
 

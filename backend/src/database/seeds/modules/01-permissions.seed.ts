@@ -82,6 +82,10 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'recruitment', action: 'update', name: 'Update Requisition', module: 'recruitment', code: 'rec:update' },
     { resource: 'recruitment', action: 'approve', name: 'Approve Requisition', module: 'recruitment', code: 'rec:approve' },
 
+    // Audit & Sensitive Data
+    { resource: 'audit-log', action: 'read', name: 'Read Audit Log', module: 'audit-log', code: 'audit-log:read' },
+    { resource: 'employee', action: 'read-sensitive', name: 'Read Employee Sensitive Data', module: 'employee', code: 'employee:read-sensitive' },
+
     // Dashboard & Reports
     { resource: 'dashboard', action: 'read', name: 'View Dashboard', module: 'dashboard', code: 'dash:read' },
     { resource: 'dashboard', action: 'export', name: 'Export Reports', module: 'dashboard', code: 'dash:export' },
