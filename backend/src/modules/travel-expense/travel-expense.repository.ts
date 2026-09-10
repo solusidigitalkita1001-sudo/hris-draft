@@ -8,7 +8,7 @@ import type {
   CreateTravelAdvanceDTO,
   ReimburseExpenseClaimDTO,
 } from './travel-expense.dto';
-import { BadRequestError } from '@/shared/exceptions/AppError';
+import { BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
 
 const EXPENSE_CATEGORIES = [
   { value: 'TRANSPORTATION', label: 'Transportasi' },
@@ -282,7 +282,22 @@ export class TravelExpenseRepository {
 
       const reimbursementAmount = data.amount ?? Number(existing?.amount ?? 0);
 
-      const reimbursement = await tx.reimbursement.create({
+      // Claim the APPROVED -> REIMBURSED transition FIRST, exclusively.
+      // Without this a double-click / client retry paid the claim twice:
+      // reimbursement rows have no unique on claimId and there was no status
+      // guard, so two full-amount payouts committed side by side.
+      const claimed = await tx.expenseClaim.updateMany({
+        where: { id, status: 'APPROVED' },
+        data: {
+          status: 'REIMBURSED',
+          notes: data.notes,
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictError('Expense claim is not in an approved, unpaid state');
+      }
+
+      return tx.reimbursement.create({
         data: {
           claimId: id,
           companyId: data.companyId,
@@ -293,16 +308,6 @@ export class TravelExpenseRepository {
           notes: data.notes,
         },
       });
-
-      await tx.expenseClaim.update({
-        where: { id },
-        data: {
-          status: 'REIMBURSED',
-          notes: data.notes,
-        },
-      });
-
-      return reimbursement;
     });
   }
 }

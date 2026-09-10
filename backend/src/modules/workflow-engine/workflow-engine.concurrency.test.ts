@@ -67,3 +67,57 @@ describe('workflow conditional transitions', () => {
     await expect(repository.applyAction('instance', 'approver', [], { action: 'APPROVE' })).resolves.toBeDefined();
   });
 });
+
+describe('subject-level self-approval and separation of duties', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(prisma.workflowInstance.updateMany).mockResolvedValue({ count: 1 });
+    jest.mocked(prisma.workflowInstanceStep.updateMany).mockResolvedValue({ count: 1 });
+  });
+
+  it('blocks the employee the request is about, even when filed by HR', async () => {
+    jest.mocked(prisma.workflowInstance.findUnique).mockResolvedValue(
+      instance({ requesterId: 'hr-user', payload: { employeeId: 'emp-1' } }),
+    );
+    await expect(
+      repository.applyAction('instance', 'approver', [], { action: 'APPROVE' }, { actorEmployeeId: 'emp-1' }),
+    ).rejects.toThrow('concerns yourself');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('blocks the target employee of a shift swap', async () => {
+    jest.mocked(prisma.workflowInstance.findUnique).mockResolvedValue(
+      instance({ payload: { employeeId: 'emp-1', targetEmployeeId: 'emp-2' } }),
+    );
+    await expect(
+      repository.applyAction('instance', 'approver', [], { action: 'APPROVE' }, { actorEmployeeId: 'emp-2' }),
+    ).rejects.toThrow('concerns yourself');
+  });
+
+  it('allows an unrelated approver when a subject employee id is present', async () => {
+    jest.mocked(prisma.workflowInstance.findUnique).mockResolvedValue(
+      instance({ payload: { employeeId: 'emp-1' } }),
+    );
+    await expect(
+      repository.applyAction('instance', 'approver', [], { action: 'APPROVE' }, { actorEmployeeId: 'emp-9' }),
+    ).resolves.toBeDefined();
+  });
+
+  it('enforces separation of duties across levels', async () => {
+    jest.mocked(prisma.workflowInstance.findUnique).mockResolvedValue(
+      instance({
+        currentLevel: 2,
+        steps: [
+          { id: 'step1', level: 1, instanceId: 'instance', isCurrent: false, status: 'APPROVED', actedBy: 'approver',
+            approverId: 'approver', approverRoleCode: null, backupApproverId: null, backupApproverRoleCode: null, updatedAt: now },
+          { id: 'step2', level: 2, instanceId: 'instance', isCurrent: true, status: 'PENDING', actedBy: null,
+            approverId: 'approver', approverRoleCode: null, backupApproverId: null, backupApproverRoleCode: null, updatedAt: now },
+        ],
+      }),
+    );
+    await expect(
+      repository.applyAction('instance', 'approver', ['SUPER_ADMIN'], { action: 'APPROVE' }),
+    ).rejects.toThrow('Separation of duties');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});

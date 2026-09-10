@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { workflowEngineController } from './workflow-engine.controller';
 import {
@@ -14,6 +15,9 @@ import {
 const router = Router();
 
 router.use(authenticate);
+// Validates any client-supplied companyId against the caller's scope before
+// templates/instances queries trust it.
+router.use(requireCompanyAccess());
 
 router.get('/templates', authorize({ resource: 'workflow', action: 'read' }), workflowEngineController.findTemplates.bind(workflowEngineController));
 router.get('/templates/:id', authorize({ resource: 'workflow', action: 'read' }), workflowEngineController.findTemplateById.bind(workflowEngineController));

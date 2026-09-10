@@ -83,7 +83,10 @@ export class LeaveService {
 
     const requesterId = currentUser?.id ?? undefined;
 
-    return prisma.$transaction(async (tx) => {
+    // Not a DB transaction: startInstance commits in its own transaction, so
+    // atomicity is achieved by compensating (deleting the fresh request) when
+    // the workflow cannot start — an approval-less request is unapprovable.
+    {
       const request = await leaveRepository.createLeaveRequest(data);
 
       try {
@@ -105,10 +108,12 @@ export class LeaveService {
           },
         });
       } catch (wfErr: any) {
-        logger.error('Failed to start workflow for leave request', {
+        logger.error('Failed to start workflow for leave request; rolling back request', {
           leaveRequestId: request.id,
           error: wfErr?.message,
         });
+        await prisma.leaveRequest.delete({ where: { id: request.id } }).catch(() => undefined);
+        throw new BadRequestError('Pengajuan cuti gagal: workflow approval tidak dapat dimulai. Coba lagi atau hubungi admin.');
       }
 
       logger.info('Leave request created with workflow', {
@@ -116,7 +121,7 @@ export class LeaveService {
         leaveTypeId: data.leaveTypeId,
       });
       return request;
-    });
+    }
   }
 
   async finalizeApprovalEffects(leaveRequestId: string) {

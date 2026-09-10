@@ -354,7 +354,13 @@ export class WorkflowEngineRepository {
     });
   }
 
-  async applyAction(instanceId: string, userId: string, roles: string[], action: WorkflowActionDTO) {
+  async applyAction(
+    instanceId: string,
+    userId: string,
+    roles: string[],
+    action: WorkflowActionDTO,
+    opts: { actorEmployeeId?: string | null } = {},
+  ) {
     const instance = await prisma.workflowInstance.findUnique({
       where: { id: instanceId },
       include: {
@@ -377,6 +383,19 @@ export class WorkflowEngineRepository {
     if (action.action === 'APPROVE' || action.action === 'REJECT' || action.action === 'ESCALATE') {
       if (instance.requesterId === userId) {
         throw new ForbiddenError('Cannot approve/reject your own request via workflow');
+      }
+      // Subject-level self-approval: the employee the request is ABOUT cannot
+      // act on it, even when HR filed it on their behalf (requesterId differs).
+      const payload = (instance.payload ?? {}) as Record<string, unknown>;
+      const subjectEmployeeIds = [payload.employeeId, payload.targetEmployeeId]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
+      const actorEmployeeId = opts.actorEmployeeId ?? getRequestContext()?.user?.employeeId ?? null;
+      if (actorEmployeeId && subjectEmployeeIds.includes(actorEmployeeId)) {
+        throw new ForbiddenError('Cannot act on a workflow that concerns yourself');
+      }
+      // Separation of duties: one user decides at most one level per instance.
+      if (instance.steps.some((step: (typeof instance.steps)[number]) => step.actedBy === userId && step.status !== 'PENDING')) {
+        throw new ForbiddenError('Separation of duties: you already acted on an earlier step of this workflow');
       }
     }
 

@@ -2,7 +2,7 @@ import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import type { CreateLoanDTO, ApproveLoanDTO } from './employee-loan.dto';
 import { generateAmortizationSchedule, AmortizationMethod } from '@/shared/payroll/amortization';
-import { BadRequestError } from '@/shared/exceptions/AppError';
+import { BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
 
 export class EmployeeLoanRepository {
   // ─── Loan Types ───────────────────────────────────────
@@ -85,14 +85,22 @@ export class EmployeeLoanRepository {
       const loan = await tx.loan.findUnique({ where: { id } });
       if (!loan) return null;
 
-      const updatedLoan = await tx.loan.update({
-        where: { id },
+      // Status-guarded claim: only a PENDING loan can activate. This both
+      // blocks resurrecting a REJECTED/CANCELLED loan and makes the claim
+      // exclusive — of two concurrent approvals only one wins, so the
+      // installment schedule below can never be generated twice.
+      const claimed = await tx.loan.updateMany({
+        where: { id, status: 'PENDING' },
         data: {
           status: 'ACTIVE',
           approverId,
           approvedAt: new Date(),
         },
       });
+      if (claimed.count !== 1) {
+        throw new ConflictError('Loan is no longer pending approval');
+      }
+      const updatedLoan = await tx.loan.findUniqueOrThrow({ where: { id } });
 
       const existingInstallments = await tx.loanInstallment.count({
         where: { loanId: id },
@@ -119,8 +127,10 @@ export class EmployeeLoanRepository {
   }
 
   async finalizeRejectEffects(id: string, approverId: string, rejectionReason?: string) {
-    return prisma.loan.update({
-      where: { id },
+    // Only a PENDING loan can be rejected; an ACTIVE loan already has an
+    // installment schedule and must go through cancellation/settlement.
+    const rejected = await prisma.loan.updateMany({
+      where: { id, status: 'PENDING' },
       data: {
         status: 'REJECTED',
         approverId,
@@ -128,6 +138,10 @@ export class EmployeeLoanRepository {
         notes: rejectionReason,
       },
     });
+    if (rejected.count !== 1) {
+      throw new ConflictError('Loan is no longer pending approval');
+    }
+    return prisma.loan.findUniqueOrThrow({ where: { id } });
   }
 
   async approve(
