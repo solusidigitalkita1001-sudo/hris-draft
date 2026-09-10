@@ -6,6 +6,7 @@ import { NotFoundError, ConflictError, ValidationError } from '@/shared/exceptio
 import { CreatePositionDTO, UpdatePositionDTO } from '../organization.dto';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
+import { assertNoActiveDependents, assertNoPositionCycle, assertOrgRefsInCompany } from '../org-integrity';
 
 const logger = new WinstonLogger('PositionService');
 
@@ -29,6 +30,7 @@ export class PositionService {
     const existing = await positionRepository.findByCode(code);
     if (existing) throw new ConflictError(`Position code "${code}" already exists`);
 
+    await assertOrgRefsInCompany(dto.companyId, { departmentId: dto.departmentId, reportsToId: dto.reportsToId });
     const position = await positionRepository.create({ ...dto, code });
 
     await eventBus.publish({
@@ -49,11 +51,18 @@ export class PositionService {
     }
     if (dto.code === current.code) delete dto.code;
 
+    await assertOrgRefsInCompany(current.companyId, { departmentId: dto.departmentId, reportsToId: dto.reportsToId });
+    if (dto.reportsToId) await assertNoPositionCycle(id, dto.reportsToId);
+
     return positionRepository.update(id, dto);
   }
 
   async delete(id: string) {
-    await this.findById(id);
+    const current = await this.findById(id);
+    await assertNoActiveDependents([
+      { model: 'employee', where: { positionId: id, companyId: current.companyId }, label: 'karyawan' },
+      { model: 'position', where: { reportsToId: id }, label: 'posisi bawahan' },
+    ]);
     await positionRepository.softDelete(id);
   }
 }

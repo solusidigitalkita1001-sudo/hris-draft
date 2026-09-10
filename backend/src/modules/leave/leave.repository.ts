@@ -40,24 +40,45 @@ export class LeaveRepository {
     });
   }
 
-  async createLeaveRequest(data: CreateLeaveRequestDTO) {
-    const start = new Date(data.startDate);
-    const end = new Date(data.endDate);
-    // [Finding #15] Hierarki: 1) Employee-specific calendar → 2) Company default calendar → 3) Raw days fallback
-    const employeeCalendar = await workCalendarRepository.findEmployeeCalendar(data.employeeId);
+  /**
+   * Working-day count for a leave span: employee calendar → company default
+   * calendar → weekday fallback (Mon-Fri minus national holidays). The old
+   * fallback counted raw calendar days including weekends and holidays,
+   * over-deducting balances whenever WorkCalendarDay rows were not generated.
+   */
+  async countLeaveDays(employeeId: string, companyId: string, start: Date, end: Date): Promise<number> {
+    const employeeCalendar = await workCalendarRepository.findEmployeeCalendar(employeeId);
     let workingDays = 0;
     if (employeeCalendar) {
       workingDays = await workCalendarRepository.countWorkingDays(employeeCalendar.id, start, end);
     }
     if (workingDays === 0) {
-      const companyCalendar = await workCalendarRepository.findCompanyDefaultCalendar(data.companyId);
+      const companyCalendar = await workCalendarRepository.findCompanyDefaultCalendar(companyId);
       if (companyCalendar) {
         workingDays = await workCalendarRepository.countWorkingDays(companyCalendar.id, start, end);
       }
     }
-    const totalDays = workingDays > 0
-      ? workingDays
-      : Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
+    if (workingDays > 0) return workingDays;
+
+    const holidays = await prisma.nationalHoliday.findMany({
+      where: { companyId, date: { gte: start, lte: end } },
+      select: { date: true },
+    });
+    const holidayKeys = new Set(holidays.map((row) => row.date.toISOString().slice(0, 10)));
+    let count = 0;
+    for (let cursor = new Date(start); cursor.getTime() <= end.getTime(); cursor.setDate(cursor.getDate() + 1)) {
+      const weekday = cursor.getDay();
+      if (weekday === 0 || weekday === 6) continue;
+      if (holidayKeys.has(cursor.toISOString().slice(0, 10))) continue;
+      count += 1;
+    }
+    return Math.max(1, count);
+  }
+
+  async createLeaveRequest(data: CreateLeaveRequestDTO) {
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    const totalDays = await this.countLeaveDays(data.employeeId, data.companyId, start, end);
 
     return prisma.leaveRequest.create({
       data: {

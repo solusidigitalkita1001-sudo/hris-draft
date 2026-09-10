@@ -7,6 +7,7 @@ import { CreateBranchDTO, UpdateBranchDTO, UpsertBranchAttendancePolicyDTO } fro
 import { AttendancePolicyMethod } from '@prisma/client';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
+import { assertNoActiveDependents } from '../org-integrity';
 
 const logger = new WinstonLogger('BranchService');
 
@@ -81,7 +82,10 @@ export class BranchService {
   }
 
   async delete(id: string) {
-    await this.findById(id);
+    const current = await this.findById(id);
+    await assertNoActiveDependents([
+      { model: 'employee', where: { branchId: id, companyId: current.companyId }, label: 'karyawan' },
+    ]);
     await branchRepository.softDelete(id);
   }
 

@@ -7,6 +7,7 @@ import {
 } from './attendance.dto';
 import { NotFoundError, BadRequestError, ForbiddenError, ServiceUnavailableError, ConflictError } from '@/shared/exceptions/AppError';
 import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
+import { assertPayrollDateOpen } from '@/shared/payroll/payroll-period-guard';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { calculateOvertimePay, OvertimeDayType } from '@/shared/attendance/overtime';
 import { assessLiveness, LivenessVerdict } from '@/shared/attendance/liveness';
@@ -304,6 +305,7 @@ export class AttendanceService {
   async create(data: CreateAttendanceDTO) {
     // Check for duplicate attendance on same date
     const attendanceDate = new Date(data.date);
+    await assertPayrollDateOpen(data.companyId, attendanceDate);
     const existing = await attendanceRepository.findByEmployeeAndDate(data.employeeId, attendanceDate);
     if (existing) throw new BadRequestError('Attendance record already exists for this date');
 
@@ -594,6 +596,7 @@ export class AttendanceService {
       throw new BadRequestError('Attendance record has already been checked out');
     }
 
+    await assertPayrollDateOpen(record.companyId, new Date(record.date));
     const context = await attendanceContextService.resolve(record.employeeId, new Date(record.date), record.companyId);
     const method = (data.method ?? record.method) as AttendanceCaptureMethod;
     const allowedMethods = resolveAllowedMethods(context.policy.attendanceMethod);
@@ -679,9 +682,19 @@ export class AttendanceService {
 
   async correction(id: string, data: { status: string; notes?: string }) {
     const record = await this.findById(id);
+    // Status flips move PRESENT_DAYS/ABSENT_DAYS in payroll: require a
+    // written reason, a known status, and an open payroll period.
+    const allowed = ['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', 'EXCUSED', 'SICK', 'LEAVE'];
+    if (!allowed.includes(data.status)) {
+      throw new BadRequestError(`Status koreksi tidak dikenal: ${data.status}`);
+    }
+    if (!data.notes?.trim()) {
+      throw new BadRequestError('Koreksi status absensi wajib menyertakan alasan (notes)');
+    }
+    await assertPayrollDateOpen(record.companyId, new Date(record.date));
     return attendanceRepository.update(record.id, {
       status: data.status as any,
-      notes: data.notes ?? record.notes ?? undefined,
+      notes: `[KOREKSI ${new Date().toISOString().slice(0, 10)}; sebelumnya: ${record.status}] ${data.notes}`,
     });
   }
 
@@ -702,7 +715,9 @@ export class AttendanceService {
   }
 
   async delete(id: string) {
-    await this.findById(id);
+    const record = await this.findById(id);
+    // Soft delete removes the row from payroll's view — same lock applies.
+    await assertPayrollDateOpen(record.companyId, new Date(record.date));
     await attendanceRepository.delete(id);
   }
 

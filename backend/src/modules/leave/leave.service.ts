@@ -1,6 +1,7 @@
 import { leaveRepository } from './leave.repository';
 import { CreateLeaveTypeDTO, CreateLeaveRequestDTO, CreateLeaveBalanceDTO } from './leave.dto';
-import { NotFoundError, BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError, ForbiddenError, ConflictError } from '@/shared/exceptions/AppError';
+import { assertPayrollRangeOpen } from '@/shared/payroll/payroll-period-guard';
 import { logger } from '@/shared/logger/WinstonLogger';
 import prisma from '@/shared/database/prisma';
 import { calculateOpeningBalance } from '@/shared/leave/accrual';
@@ -69,11 +70,40 @@ export class LeaveService {
 
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
-    const computedTotalDays =
-      Math.max(
-        1,
-        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-      );
+    if (end.getTime() < start.getTime()) {
+      throw new BadRequestError('Tanggal selesai cuti harus setelah atau sama dengan tanggal mulai');
+    }
+
+    // LeaveType rules (checklist §13): per-request cap and attachment flag.
+    const leaveType = await prisma.leaveType.findFirst({
+      where: { id: data.leaveTypeId, companyId: data.companyId, deletedAt: null },
+      select: { maxDays: true, requiresAttachment: true, name: true },
+    });
+    if (!leaveType) throw new NotFoundError('Leave type not found');
+    if (leaveType.requiresAttachment && !data.attachment) {
+      throw new BadRequestError(`Jenis cuti ${leaveType.name} wajib menyertakan lampiran dokumen`);
+    }
+    const computedTotalDays = await leaveRepository.countLeaveDays(data.employeeId, data.companyId, start, end);
+    if (leaveType.maxDays && computedTotalDays > leaveType.maxDays) {
+      throw new BadRequestError(`Jenis cuti ${leaveType.name} maksimal ${leaveType.maxDays} hari per pengajuan (diajukan ${computedTotalDays} hari kerja)`);
+    }
+
+    // Overlap: an employee cannot hold two pending/approved requests covering
+    // the same dates — both would deduct the balance while payroll counts the
+    // dates once.
+    const overlap = await prisma.leaveRequest.findFirst({
+      where: {
+        employeeId: data.employeeId,
+        deletedAt: null,
+        status: { in: ['PENDING', 'APPROVED'] },
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+      select: { id: true, startDate: true, endDate: true, status: true },
+    });
+    if (overlap) {
+      throw new ConflictError(`Sudah ada pengajuan cuti ${overlap.status} yang tumpang tindih pada rentang tanggal tersebut`);
+    }
 
     const balances = await leaveRepository.findLeaveBalances(data.employeeId);
     const balance = balances.find((b) => b.leaveTypeId === data.leaveTypeId);
@@ -124,7 +154,73 @@ export class LeaveService {
     }
   }
 
+  /**
+   * Cancellation with balance restoration (checklist §13): the requester may
+   * cancel their own request; managers need leave:approve. Cancelling an
+   * APPROVED request returns the deducted days under the same row locks the
+   * approval used, and is blocked once the period's payroll is locked.
+   */
+  async cancelLeave(id: string, userId: string, actorEmployeeId?: string | null) {
+    const request = await leaveRepository.findLeaveRequestById(id);
+    if (!request) throw new NotFoundError('Leave request not found');
+
+    const ctx = getRequestContext();
+    const permissions = ctx?.user?.permissions ?? [];
+    const roles = ctx?.user?.roles ?? [];
+    const isOwn = Boolean(actorEmployeeId && request.employeeId === actorEmployeeId);
+    const mayManage = roles.includes('SUPER_ADMIN')
+      || permissions.includes('leave:approve') || permissions.includes('leave:*');
+    if (!isOwn && !mayManage) {
+      throw new ForbiddenError('Hanya pemilik pengajuan atau approver yang dapat membatalkan cuti');
+    }
+
+    if (request.status === 'PENDING') {
+      const cancelled = await prisma.leaveRequest.updateMany({
+        where: { id, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      });
+      if (cancelled.count !== 1) throw new ConflictError('Pengajuan cuti sudah diproses; muat ulang lalu coba lagi');
+      await workflowEngineRepository.cancelInstanceByReference('LEAVE_REQUEST', id, userId, 'Cuti dibatalkan oleh pemohon/HR');
+      return leaveRepository.findLeaveRequestById(id);
+    }
+
+    if (request.status === 'APPROVED') {
+      await assertPayrollRangeOpen(request.companyId, request.startDate, request.endDate);
+      await prisma.$transaction(async (tx) => {
+        const [row] = await tx.$queryRaw<Array<{ id: string; status: string; total_days: number }>>`
+          SELECT id, status, total_days FROM leave_requests WHERE id = ${id} FOR UPDATE`;
+        if (!row || row.status !== 'APPROVED') throw new ConflictError('Pengajuan cuti berubah; muat ulang lalu coba lagi');
+        const year = new Date(request.startDate).getFullYear();
+        const [bal] = await tx.$queryRaw<Array<{ id: string; total_days: number; used_days: number }>>`
+          SELECT id, total_days, used_days FROM leave_balances
+          WHERE employee_id = ${request.employeeId} AND leave_type_id = ${request.leaveTypeId} AND year = ${year}
+          FOR UPDATE`;
+        if (bal) {
+          const usedDays = Math.max(0, Number(bal.used_days) - Number(row.total_days));
+          await tx.leaveBalance.update({
+            where: { id: bal.id },
+            data: { usedDays, remainingDays: Math.max(0, Number(bal.total_days) - usedDays) },
+          });
+        }
+        await tx.leaveRequest.update({ where: { id }, data: { status: 'CANCELLED' } });
+      });
+      logger.info('Approved leave cancelled with balance restored', { leaveRequestId: id, cancelledBy: userId });
+      return leaveRepository.findLeaveRequestById(id);
+    }
+
+    throw new BadRequestError(`Pengajuan cuti berstatus ${request.status} tidak dapat dibatalkan`);
+  }
+
   async finalizeApprovalEffects(leaveRequestId: string) {
+    // Payroll lock: approving leave inside a reviewed/closed period would
+    // change LEAVE_DAYS after the run consumed them.
+    const pending = await prisma.leaveRequest.findFirst({
+      where: { id: leaveRequestId, deletedAt: null },
+      select: { companyId: true, startDate: true, endDate: true },
+    });
+    if (pending) {
+      await assertPayrollRangeOpen(pending.companyId, pending.startDate, pending.endDate);
+    }
     return prisma.$transaction(async (tx) => {
       const [req] = await tx.$queryRaw<
         Array<{

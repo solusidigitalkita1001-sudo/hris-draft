@@ -1,6 +1,7 @@
 import { employeeAccessWhere, profileSalaryAccessWhere } from '@/shared/security/employee-data-scope';
 import { prisma } from '@/shared/database/prisma';
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
+import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
 import { Prisma } from '@prisma/client';
 import {
   CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO,
@@ -547,29 +548,36 @@ export class EmployeeRepository {
     createdBy: string | undefined,
     data: CreateCareerTransactionDTO
   ) {
-    const employee = await prisma.employee.findFirst({
-      where: { id: employeeId, deletedAt: null },
-      select: {
-        id: true,
-        companyId: true,
-        branchId: true,
-        departmentId: true,
-        positionId: true,
-        employmentType: true,
-      },
-    });
+    const effectiveDate = new Date(data.effectiveDate);
+    const isDue = effectiveDate.getTime() <= Date.now();
 
-    if (!employee) {
-      return null;
-    }
+    // Advisory lock per employee: the from-snapshot is read INSIDE the lock,
+    // so two concurrent movements can no longer both claim the same origin
+    // state and silently overwrite each other.
+    return withDatabaseAdvisoryLock('career-transaction', employeeId, async (tx) => {
+      const employee = await tx.employee.findFirst({
+        where: { id: employeeId, deletedAt: null },
+        select: {
+          id: true,
+          companyId: true,
+          branchId: true,
+          departmentId: true,
+          positionId: true,
+          employmentType: true,
+        },
+      });
 
-    return prisma.$transaction(async (tx) => {
+      if (!employee) {
+        return null;
+      }
+
       const transaction = await tx.employeeCareerTransaction.create({
         data: {
           employeeId,
           companyId: employee.companyId,
           transactionType: data.transactionType,
-          effectiveDate: new Date(data.effectiveDate),
+          effectiveDate,
+          appliedAt: isDue ? new Date() : null,
           fromBranchId: employee.branchId,
           toBranchId: data.toBranchId || null,
           fromDepartmentId: employee.departmentId,
@@ -594,30 +602,48 @@ export class EmployeeRepository {
         },
       });
 
-      const updateData: Prisma.EmployeeUpdateInput = {};
-
-      if (data.toBranchId !== undefined) {
-        updateData.branch = data.toBranchId ? { connect: { id: data.toBranchId } } : { disconnect: true };
-      }
-      if (data.toDepartmentId !== undefined) {
-        updateData.department = data.toDepartmentId ? { connect: { id: data.toDepartmentId } } : { disconnect: true };
-      }
-      if (data.toPositionId !== undefined) {
-        updateData.position = data.toPositionId ? { connect: { id: data.toPositionId } } : { disconnect: true };
-      }
-      if (data.toEmploymentType !== undefined && data.toEmploymentType !== null) {
-        updateData.employmentType = data.toEmploymentType;
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        await tx.employee.update({
-          where: { id: employeeId },
-          data: updateData,
+      // Effective dating (checklist §9): only a due movement mutates the live
+      // employee. Future-dated rows stay pending; the hourly scheduler
+      // applies them once their effective date arrives.
+      if (isDue) {
+        await this.applyCareerTransactionEffects(tx, employeeId, {
+          toBranchId: data.toBranchId,
+          toDepartmentId: data.toDepartmentId,
+          toPositionId: data.toPositionId,
+          toEmploymentType: data.toEmploymentType ?? undefined,
         });
       }
 
       return transaction;
     });
+  }
+
+  async applyCareerTransactionEffects(
+    tx: Prisma.TransactionClient,
+    employeeId: string,
+    move: { toBranchId?: string | null; toDepartmentId?: string | null; toPositionId?: string | null; toEmploymentType?: string | null },
+  ) {
+    const updateData: Prisma.EmployeeUpdateInput = {};
+
+    if (move.toBranchId !== undefined) {
+      updateData.branch = move.toBranchId ? { connect: { id: move.toBranchId } } : { disconnect: true };
+    }
+    if (move.toDepartmentId !== undefined) {
+      updateData.department = move.toDepartmentId ? { connect: { id: move.toDepartmentId } } : { disconnect: true };
+    }
+    if (move.toPositionId !== undefined) {
+      updateData.position = move.toPositionId ? { connect: { id: move.toPositionId } } : { disconnect: true };
+    }
+    if (move.toEmploymentType !== undefined && move.toEmploymentType !== null) {
+      updateData.employmentType = move.toEmploymentType as never;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await tx.employee.update({
+        where: { id: employeeId },
+        data: updateData,
+      });
+    }
   }
 }
 

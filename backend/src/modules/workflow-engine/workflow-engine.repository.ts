@@ -388,6 +388,34 @@ export class WorkflowEngineRepository {
   }
 
   /**
+   * Cancel the open workflow instance attached to a domain record, so a
+   * cancelled request stops sitting in approver queues forever (and cannot be
+   * approved afterwards). No-op when no open instance exists.
+   */
+  async cancelInstanceByReference(referenceType: string, referenceId: string, actorId: string, comment?: string) {
+    const instance = await prisma.workflowInstance.findFirst({
+      where: { referenceType, referenceId, status: { in: ['PENDING', 'ESCALATED'] } },
+      select: { id: true, status: true },
+    });
+    if (!instance) return null;
+    return prisma.$transaction(async (tx) => {
+      const claimed = await tx.workflowInstance.updateMany({
+        where: { id: instance.id, status: { in: ['PENDING', 'ESCALATED'] } },
+        data: { status: 'CANCELLED', currentLevel: null },
+      });
+      if (claimed.count !== 1) return null;
+      await tx.workflowInstanceStep.updateMany({
+        where: { instanceId: instance.id, status: 'PENDING' },
+        data: { status: 'SKIPPED', isCurrent: false },
+      });
+      await tx.workflowInstanceLog.create({
+        data: { instanceId: instance.id, action: 'COMMENTED', actorId, comment: comment ?? 'Request dibatalkan' },
+      });
+      return instance.id;
+    });
+  }
+
+  /**
    * Reporting line: employee -> position -> reportsTo position -> the active
    * user(s) of whoever holds that position. First holder approves, second (if
    * any) becomes the backup.

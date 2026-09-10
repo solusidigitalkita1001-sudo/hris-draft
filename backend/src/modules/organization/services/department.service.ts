@@ -6,6 +6,7 @@ import { NotFoundError, ConflictError, ValidationError } from '@/shared/exceptio
 import { CreateDepartmentDTO, UpdateDepartmentDTO } from '../organization.dto';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
+import { assertNoActiveDependents, assertNoDepartmentCycle, assertOrgRefsInCompany } from '../org-integrity';
 
 const logger = new WinstonLogger('DepartmentService');
 
@@ -29,6 +30,7 @@ export class DepartmentService {
     const existing = await departmentRepository.findByCode(code);
     if (existing) throw new ConflictError(`Department code "${code}" already exists`);
 
+    await assertOrgRefsInCompany(dto.companyId, { divisionId: dto.divisionId, parentId: dto.parentId, headId: dto.headId });
     const dept = await departmentRepository.create({ ...dto, code });
 
     await eventBus.publish({
@@ -49,11 +51,19 @@ export class DepartmentService {
     }
     if (dto.code === current.code) delete dto.code;
 
+    await assertOrgRefsInCompany(current.companyId, { divisionId: dto.divisionId, parentId: dto.parentId, headId: dto.headId });
+    if (dto.parentId) await assertNoDepartmentCycle(id, dto.parentId);
+
     return departmentRepository.update(id, dto);
   }
 
   async delete(id: string) {
-    await this.findById(id);
+    const current = await this.findById(id);
+    await assertNoActiveDependents([
+      { model: 'employee', where: { departmentId: id, companyId: current.companyId }, label: 'karyawan' },
+      { model: 'department', where: { parentId: id }, label: 'sub-departemen (child)' },
+      { model: 'position', where: { departmentId: id }, label: 'posisi' },
+    ]);
     await departmentRepository.softDelete(id);
   }
 

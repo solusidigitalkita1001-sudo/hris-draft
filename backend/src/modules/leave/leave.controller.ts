@@ -52,6 +52,13 @@ export class LeaveController {
     } catch (error) { next(error); }
   }
 
+  async cancel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await leaveService.cancelLeave(req.params.id as string, req.user!.id, req.user!.employeeId);
+      res.json(Result.updated(result, 'Pengajuan cuti dibatalkan'));
+    } catch (error) { next(error); }
+  }
+
   async getWorkflow(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       res.json(Result.success(await leaveService.getLeaveWorkflow(req.params.id as string)));

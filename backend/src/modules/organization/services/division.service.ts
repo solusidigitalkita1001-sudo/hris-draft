@@ -6,6 +6,7 @@ import { NotFoundError, ConflictError, ValidationError } from '@/shared/exceptio
 import { CreateDivisionDTO, UpdateDivisionDTO } from '../organization.dto';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
+import { assertNoActiveDependents } from '../org-integrity';
 
 const logger = new WinstonLogger('DivisionService');
 
@@ -54,6 +55,9 @@ export class DivisionService {
 
   async delete(id: string) {
     await this.findById(id);
+    await assertNoActiveDependents([
+      { model: 'department', where: { divisionId: id }, label: 'departemen' },
+    ]);
     await divisionRepository.softDelete(id);
   }
 }

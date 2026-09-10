@@ -22,6 +22,9 @@ router.get('/:id', authorize({ resource: 'leave', action: 'read' }), leaveContro
 router.post('/', authorize({ resource: 'leave', action: 'create' }), validate(createLeaveRequestSchema), leaveController.create.bind(leaveController));
 router.patch('/:id/approve', authorize({ resource: 'leave', action: 'approve' }), auditLog({ action: 'APPROVE', entity: 'LeaveRequest', model: 'leaveRequest' }), leaveController.approve.bind(leaveController));
 router.patch('/:id/reject', authorize({ resource: 'leave', action: 'approve' }), auditLog({ action: 'REJECT', entity: 'LeaveRequest', model: 'leaveRequest' }), leaveController.reject.bind(leaveController));
+// Self-service: ownership/permission is enforced in the service (own request
+// or leave:approve), so no route-level authorize that plain employees lack.
+router.patch('/:id/cancel', auditLog({ action: 'CANCEL', entity: 'LeaveRequest', model: 'leaveRequest' }), leaveController.cancel.bind(leaveController));
 
 // Workflow integration endpoints
 router.get('/:id/workflow', authorize({ resource: 'leave', action: 'read' }), leaveController.getWorkflow.bind(leaveController));

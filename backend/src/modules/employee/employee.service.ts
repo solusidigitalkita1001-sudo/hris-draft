@@ -21,7 +21,7 @@ import {
 import { logger } from '@/shared/logger/WinstonLogger';
 import { prisma } from '@/shared/database/prisma';
 import { generateSystemCode } from '@/shared/utils/system-code';
-import { getCurrentCompanyId } from '@/shared/context/RequestContext';
+import { getCurrentCompanyId, runInSystemContext } from '@/shared/context/RequestContext';
 import {
   extractFaceVectorFromImage,
   FaceExtractionError,
@@ -40,6 +40,34 @@ export class EmployeeService {
     });
     if (!employee) throw new NotFoundError('Employee not found');
     return employee;
+  }
+
+  /**
+   * Org referential rule (checklist §7/§9): any branch/department/
+   * sub-department/position an employee is attached to must exist in the SAME
+   * company and not be soft-deleted. Prisma FKs only guarantee existence —
+   * without this, a valid UUID from another tenant attaches silently.
+   */
+  private async assertOrgUnitsInCompany(
+    companyId: string,
+    refs: { branchId?: string | null; departmentId?: string | null; subDepartmentId?: string | null; positionId?: string | null },
+  ) {
+    const checks = [
+      ['branchId', 'branch', 'Branch'],
+      ['departmentId', 'department', 'Department'],
+      ['subDepartmentId', 'subDepartment', 'Sub-department'],
+      ['positionId', 'position', 'Position'],
+    ] as const;
+    for (const [key, model, label] of checks) {
+      const id = refs[key];
+      if (!id) continue;
+      const row = await runInSystemContext('employee-org-ref-validation', () =>
+        (prisma as unknown as Record<string, { findFirst: (args: unknown) => Promise<unknown> }>)[model]
+          .findFirst({ where: { id, companyId, deletedAt: null }, select: { id: true } }));
+      if (!row) {
+        throw new BadRequestError(`${label} tujuan tidak ditemukan di company ini (atau sudah dihapus)`);
+      }
+    }
   }
 
   /**
@@ -190,6 +218,7 @@ export class EmployeeService {
 
   async create(data: CreateEmployeeDTO) {
     this.validateEmployeeDates(data);
+    await this.assertOrgUnitsInCompany(data.companyId, data);
 
     const employeeNumber = await generateSystemCode({
       prefix: 'EMP',
@@ -240,6 +269,7 @@ export class EmployeeService {
     const existingEmployee = await this.findById(id);
 
     const rec = existingEmployee as Record<string, unknown>;
+    await this.assertOrgUnitsInCompany(rec.companyId as string, data);
     this.validateEmployeeDates({
       dateOfBirth: (data.dateOfBirth ?? (rec.dateOfBirth as string | Date | null)) ?? null,
       joinDate: (data.joinDate ?? (rec.joinDate as string | Date | null)) ?? null,
@@ -317,6 +347,14 @@ export class EmployeeService {
 
   async createCareerTransaction(employeeId: string, data: CreateCareerTransactionDTO, createdBy?: string) {
     const employee = await this.findById(employeeId);
+
+    // Target org units must belong to the employee's company and be active —
+    // the same rule shiftFormulaId already enforces below for create().
+    await this.assertOrgUnitsInCompany((employee as Record<string, unknown>).companyId as string, {
+      branchId: data.toBranchId,
+      departmentId: data.toDepartmentId,
+      positionId: data.toPositionId,
+    });
 
     if (data.toDepartmentId === employee.departmentId &&
         data.toPositionId === employee.positionId &&
@@ -688,6 +726,33 @@ export class EmployeeService {
         inserted: 0,
         errors,
       };
+    }
+
+    // Org refs in the file must belong to THIS company and be active — a
+    // valid UUID from another tenant would otherwise insert cleanly.
+    const orgRefChecks = [
+      ['branchId', 'branch', 'branch_id'],
+      ['departmentId', 'department', 'department_id'],
+      ['subDepartmentId', 'subDepartment', 'sub_department_id'],
+      ['positionId', 'position', 'position_id'],
+    ] as const;
+    for (const [field, model, column] of orgRefChecks) {
+      const ids = [...new Set(valid.map((dto) => (dto as Record<string, unknown>)[field] as string | undefined).filter((v): v is string => Boolean(v)))];
+      if (!ids.length) continue;
+      const rows = await runInSystemContext('employee-import-org-validation', () =>
+        (prisma as unknown as Record<string, { findMany: (args: unknown) => Promise<Array<{ id: string }>> }>)[model]
+          .findMany({ where: { id: { in: ids }, companyId, deletedAt: null }, select: { id: true } }));
+      const known = new Set(rows.map((row) => row.id));
+      const missing = ids.filter((id) => !known.has(id));
+      if (missing.length) {
+        return {
+          totalRows: records.length,
+          validCount: 0,
+          invalidCount: records.length,
+          inserted: 0,
+          errors: missing.map((value) => ({ row: -1, column, value, message: `${column} tidak ditemukan di company ini` })),
+        };
+      }
     }
 
     // All valid → one transaction.

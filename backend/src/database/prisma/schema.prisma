@@ -2387,6 +2387,9 @@ model EmployeeCareerTransaction {
   fromEmploymentType EmploymentType?       @map("from_employment_type")
   toEmploymentType   EmploymentType?       @map("to_employment_type")
   referenceNumber    String?               @map("reference_number") @db.VarChar(100)
+  /// When the movement was applied to the live employee row. Future-dated
+  /// transactions stay pending (null) until the scheduler applies them.
+  appliedAt          DateTime?             @map("applied_at")
   reason             String?               @db.Text
   notes              String?               @db.Text
   createdBy          String?               @map("created_by") @db.VarChar(36)
@@ -3122,6 +3125,10 @@ model AttendanceCorrection {
   requestedCheckIn  DateTime?                  @map("requested_check_in")
   requestedCheckOut DateTime?                  @map("requested_check_out")
   reason            String                     @db.Text
+  /// Pre-correction snapshot, captured at approval so the audit trail keeps what was overwritten.
+  beforeCheckIn     DateTime?                  @map("before_check_in")
+  beforeCheckOut    DateTime?                  @map("before_check_out")
+  beforeStatus      String?                    @map("before_status") @db.VarChar(20)
   status            AttendanceCorrectionStatus @default(PENDING)
   approvedBy        String?                    @map("approved_by") @db.VarChar(36)
   approvedAt        DateTime?                  @map("approved_at")
