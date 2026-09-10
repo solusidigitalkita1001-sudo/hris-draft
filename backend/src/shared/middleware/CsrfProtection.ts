@@ -41,7 +41,7 @@ export function issueCsrfToken(res: Response): string {
   res.cookie(CSRF_COOKIE, token, {
     httpOnly: false,
     maxAge: TOKEN_TTL_MS,
-    secure: config.app.env === 'production',
+    secure: config.cookies.secure,
     sameSite: 'lax',
     path: '/',
   });
@@ -51,7 +51,7 @@ export function issueCsrfToken(res: Response): string {
 export function clearCsrfToken(res: Response): void {
   res.clearCookie(CSRF_COOKIE, {
     httpOnly: false,
-    secure: config.app.env === 'production',
+    secure: config.cookies.secure,
     sameSite: 'lax',
     path: '/',
   });

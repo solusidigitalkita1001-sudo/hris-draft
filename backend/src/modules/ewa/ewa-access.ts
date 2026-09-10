@@ -10,15 +10,19 @@ export async function ewaAccess(options: { companyId?: string; actorId?: string;
   const actor = getCurrentUser(), companyId = getCurrentCompanyId();
   if (!actor?.id || !companyId) throw new ForbiddenError('EWA requires an authenticated company context');
   if (options.companyId !== undefined && options.companyId !== companyId) throw new ForbiddenError('EWA company must match the active company');
-  if (options.actorId !== undefined && options.actorId !== actor.id) throw new ForbiddenError('EWA actor must match the authenticated user');
+  if ('actorId' in options && options.actorId !== actor.id) throw new ForbiddenError('EWA actor must match the authenticated user');
   const staff = actor.roles?.some(role => EWA_HR_ROLES.includes(role) || EWA_FINANCE_ROLES.includes(role));
   const self = options.self || !staff;
-  if (self && !actor.employeeId) throw new ForbiddenError('EWA self-service requires an employee identity');
+  const ownership: Prisma.EmployeeWhereInput[] = [];
+  if (self) {
+    if (!actor.employeeId) throw new ForbiddenError('EWA self-service requires an employee identity');
+    ownership.push({ id: actor.employeeId });
+  }
   // EWA responses include salary-derived amounts. Both resource scopes apply;
   // EWA permissions authorize this purpose without requiring payroll:read.
   const scopes = await Promise.all([employeeAccessWhere('ewa'), employeeAccessWhere('payroll')]);
   const employeeWhere: Prisma.EmployeeWhereInput = {
-    companyId, deletedAt: null, AND: [...scopes, ...(self ? [{ id: actor.employeeId! }] : [])],
+    companyId, deletedAt: null, AND: [...scopes, ...ownership],
   };
   return { actor, companyId, employeeWhere };
 }

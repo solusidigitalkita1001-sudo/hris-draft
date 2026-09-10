@@ -13,6 +13,15 @@ import {
 
 const router = Router();
 
+// Auth responses rotate cookies and must always include a fresh body. Ignore
+// validators left by older deployments, including If-None-Match: *.
+router.use((req, res, next) => {
+  res.set({ 'Cache-Control': 'private, no-store', Pragma: 'no-cache', Expires: '0' });
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  next();
+});
+
 // Rate limiters
 const authLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,

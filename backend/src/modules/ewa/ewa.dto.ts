@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 
-const money = z.coerce.number().finite().min(0).max(9999999999999.99)
-  .refine(value => new Prisma.Decimal(value).decimalPlaces() <= 2, 'Amount must have at most two decimal places');
+const money = z.union([z.number(), z.string().trim().min(1)]).pipe(z.coerce.number().finite().min(0).max(9999999999999.99)
+  .refine(value => new Prisma.Decimal(value).decimalPlaces() <= 2, 'Amount must have at most two decimal places'));
 const positiveMoney = money.refine(value => value > 0, 'Amount must be greater than zero');
 export const ewaIdParamSchema = z.object({ id: z.string().uuid() });
 export const ewaLimitQuerySchema = z.object({

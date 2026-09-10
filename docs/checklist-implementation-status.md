@@ -1,6 +1,26 @@
-# Status implementasi checklist — 9 September 2026
+# Status implementasi checklist — 10 September 2026
 
 Status keseluruhan: **partial**. Perbaikan P0 dan lanjutan P1 di bawah sudah diimplementasikan dan diuji. Seluruh backlog belum selesai; aplikasi belum dinyatakan production-ready.
+
+## Hotfix: login server HTTP dan CSRF 304
+
+- Reproduksi read-only di server: build frontend port 8083 memakai API port 8084. Bootstrap API menghasilkan 304 ketika diberi ETag lama, dan mengirim cookie Secure melalui HTTP sehingga browser menolaknya.
+- Router auth kini no-store dan mengabaikan validator cache lama; bootstrap/login/refresh mengirim token CSRF melalui JSON. Frontend memakai token di memori, bootstrap unik, rotasi sesi, dan satu retry CSRF; 401 kredensial tidak lagi memicu refresh rekursif.
+- `COOKIE_SECURE=false` mendukung deployment HTTP secara eksplisit untuk seluruh cookie auth/CSRF. Default produksi tetap Secure. Header CORS wildcard tambahan di konfigurasi Nginx repository dihapus.
+- Tes auth/config/CSRF backend **28 passed / 5 suites**, seluruh frontend **30 passed / 6 suites**, dan isolated P0 lulus. Typecheck/build backend/frontend lulus; lint file yang berubah **0 error**, dengan 12 warning lama backend. Patch belum dideploy ke server; environment container dan build frontend perlu diperbarui.
+
+Temuan, pengaturan khusus port 8083/8084, langkah recreate container, dan batas verifikasi: [login-csrf-deployment.md](login-csrf-deployment.md).
+
+## Lanjutan P0: scope, input salary dan transisi EWA
+
+- Seluruh list/detail/self-list dan input limit EWA memakai company aktif, parent Employee yang belum dihapus, serta irisan scope EWA dan payroll di query database. HR/finance tetap dibatasi scope; pengguna nonstaf hanya employee session. Role admin tidak melewati company aktif. Parent period/run lintas company atau dihapus tidak membuka record.
+- Create atas nama pegawai lain hanya untuk role HR/admin dalam scope; role finance tanpa HR tetap self untuk create. Employee diverifikasi sebelum period/gaji dibaca dan diperiksa ulang dalam transaksi. Fallback ke salary nonaktif dihapus; beberapa salary aktif ditolak 409, salary invalid/non-IDR ditolak 422.
+- Aktor approve/reject/cancel/mark-paid harus cocok session, tanpa fallback system. Conditional update memeriksa ulang company, employee/parent scope dan status sebelumnya, sehingga approval versus cancellation atau dua pencatatan PAID hanya memiliki satu pemenang. Larangan self-approval berdasarkan employee pemilik tetap berlaku; creator user untuk pengajuan HR belum tersimpan terpisah.
+- Create mempertahankan reservasi PENDING/APPROVED/PAID dan advisory lock per company/employee, ditambah lock row employee sampai commit sebelum consistent read. Tes bersamaan membuktikan reservasi tidak melebihi limit yang sama.
+- Seluruh endpoint EWA memakai no-store, termasuk error. UUID, nominal finite/maximal dua desimal, batas nilai/text/referensi dan field hasil kalkulasi server divalidasi. Nominal, breakdown dan alasan pribadi dihapus dari log create/payment/rejection serta pesan penolakan limit yang dicatat error handler. Audit EWA meredaksi nilai finansial, notes, referensi dan nested employee; durable audit tetap backlog.
+- Ditambahkan **47 tes**: 18 MySQL nyata, 28 kontrak HTTP dan satu redaction audit. Enam tes EWA lama tetap lulus. Hasil gabungan final **881 passed / 91 suites**; typecheck/build lulus; lint **0 errors / 821 warnings** pada 353 file. Tidak ada perubahan frontend, schema, migration atau database aplikasi.
+
+Matriks endpoint, kebijakan role, bukti race, kompatibilitas dan batas lengkap: [ewa-access-and-transitions.md](ewa-access-and-transitions.md). Rumus/calendar/fallback EWA, snapshot input atomik, fee/payout/idempotency, histori salary serta scope kalkulasi lembur/final payroll dan laporan tetap perlu fase berikutnya.
 
 ## Lanjutan P0: scope payroll run, period, payslip dan pembayaran
 
@@ -9,7 +29,7 @@ Status keseluruhan: **partial**. Perbaikan P0 dan lanjutan P1 di bawah sudah dii
 - Run/period/review attendance/konfirmasi serta seluruh jalur payment batch/export kini memerlukan scope payroll seluruh company. Branch/department/sub-department/self mendapat 403 walaupun memiliki permission proses atau approval, karena model run/batch masih memproses seluruh perusahaan. Permission endpoint tetap wajib; konfigurasi tanpa pembatas masih mengikuti default company yang ada.
 - Creator/checker/actor konfirmasi harus cocok dengan session. Conditional approval mempertahankan maker-checker dan menambahkan company serta parent period; mutasi period menyertakan company/soft-delete. Guard HTTP run/period dijalankan sebelum middleware audit; service juga memeriksa konteks. Guard payment batch berada pada boundary HTTP sebelum service ledger dengan context internal terpercaya.
 - Run, period, payslip dan payment batch memakai no-store, termasuk error. ID run/slip serta endpoint attendance divalidasi UUID. Nilai snapshot run/slip, rumus, lifecycle pembayaran dan kebijakan status publikasi slip tidak diubah.
-- Ditambahkan **48 tes**: 18 MySQL nyata, 22 kontrak HTTP run/payslip dan delapan kontrak HTTP payment. Hasil gabungan **834 passed / 88 suites**; typecheck/build lulus; lint **0 errors / 823 warnings** pada 349 file. Tidak ada perubahan frontend, schema, migration atau database aplikasi.
+- Ditambahkan **48 tes**: 18 MySQL nyata, 22 kontrak HTTP run/payslip dan delapan kontrak HTTP payment. Pada fase run/payslip: **834 passed / 88 suites**; typecheck/build lulus; lint **0 errors / 823 warnings** pada 349 file. Tidak ada perubahan frontend, schema, migration atau database aplikasi.
 
 Matriks endpoint, dampak kompatibilitas, snapshot historis dan batas lengkap: [payroll-run-payslip-access.md](payroll-run-payslip-access.md). Audit konsumen gaji lain/laporan, kebijakan publikasi slip, histori effective date dan correction payroll tetap backlog.
 
@@ -137,12 +157,12 @@ Verifikasi dilakukan pada salinan source di `/tmp/hris-backend-verify` dan `/tmp
 | Command | Hasil |
 | --- | --- |
 | Backend `npm run check` | Passed |
-| Backend `npm test -- --runInBand` | **834 passed; 88 suites passed**, termasuk advisory lock, ledger, formula, kalkulasi atomik, input attendance, mutasi/scope gaji serta scope run/payslip MySQL nyata |
+| Backend `npm test -- --runInBand` | **881 passed; 91 suites passed**, termasuk advisory lock, ledger, formula, kalkulasi atomik, input attendance, mutasi/scope gaji, scope run/payslip serta scope/reservasi/transisi EWA MySQL nyata |
 | Backend `npm run build` | Passed |
 | Kalender dengan `TZ=America/Los_Angeles` | **18 passed**; hasil tanggal UTC tetap sama di zona waktu server berbeda. |
 | Frontend `npm test` | **18 passed; 5 suites passed** (8 September; frontend tidak berubah pada fase backend setelahnya) |
 | Frontend `npm run build` | Passed pada 8 September, termasuk TypeScript; masih ada peringatan ukuran bundle |
-| Backend `npm run lint` | Passed: **0 errors, 823 warnings** pada 349 file; helper akses dan dua suite scope run/payslip baru tanpa temuan. |
+| Backend `npm run lint` | Passed: **0 errors, 821 warnings** pada 353 file; helper akses dan tiga suite EWA baru tanpa temuan. |
 | Frontend `npm run lint` | **254 errors, 15 warnings**; gate keseluruhan belum lulus. Panel/service formula beserta UI test lulus lint tanpa warning. |
 | Migration baru dan rollback | Keempat migration diterapkan dan rollback diuji pada database test dengan fixture dibersihkan; schema hasil migration sama dengan schema Prisma (`No difference detected`). |
 | CORS aplikasi hasil build | Preflight origin aplikasi dengan `Idempotency-Key` berhasil (204). |
@@ -150,7 +170,9 @@ Verifikasi dilakukan pada salinan source di `/tmp/hris-backend-verify` dan `/tmp
 | `node scripts/checks/p0-isolated.cjs` | Passed; pelengkap untuk CSRF, ownership, upload spoofing, path containment, dan race session |
 | `git diff --check` | Passed |
 
-Suite final menjalankan advisory lock, tiga test ledger, tujuh test formula, sebelas test kalkulasi atomik, tujuh test input attendance, 13 test mutasi alokasi gaji, 11 test scope baca gaji/THR/profil dan 18 test scope run/period/payslip terhadap MySQL nyata. Test formula mencakup nomor revisi dan publikasi bersamaan, cycle mendatang, pembatasan company/aktor/tanggal, penghapusan dependensi, serta snapshot dari proses payroll; fixture kalender formula kini memakai database nyata, dengan konfigurasi potongan/EWA/event masih mock. Suite transaksi, input attendance dan alokasi gaji memakai repository/database nyata untuk sumber kalkulasi, dengan event bus/logger mock; tes alokasi serta scope salary/run/payslip juga memakai konfigurasi data scope nyata. Fixture kalkulasi/attendance/formula kini memakai request context aktor untuk pemanggilan service. Test cross-company lainnya masih banyak menggunakan mock; HTTP tests memakai Supertest lokal. Schema baseline disiapkan dari datamodel sebelum ledger, lalu migration baru diterapkan: ini belum verifikasi ulang seluruh rantai migration historis dari database kosong. Rollback diuji pada fixture kosong, belum restore drill data produksi. E2E aplikasi lengkap, readiness down/recovery nyata, DAST, load test, dan restore drill masih terbuka.
+Suite final menjalankan advisory lock, tiga test ledger, tujuh test formula, sebelas test kalkulasi atomik, tujuh test input attendance, 13 test mutasi alokasi gaji, 11 test scope baca gaji/THR/profil, 18 test scope run/period/payslip dan 18 test scope/reservasi/transisi EWA terhadap MySQL nyata. Test formula mencakup nomor revisi dan publikasi bersamaan, cycle mendatang, pembatasan company/aktor/tanggal, penghapusan dependensi, serta snapshot dari proses payroll; fixture kalender formula kini memakai database nyata, dengan konfigurasi potongan/EWA/event masih mock. Suite transaksi, input attendance dan alokasi gaji memakai repository/database nyata untuk sumber kalkulasi, dengan event bus/logger mock; tes alokasi serta scope salary/run/payslip/EWA juga memakai konfigurasi data scope nyata. Fixture kalkulasi/attendance/formula kini memakai request context aktor untuk pemanggilan service. Test cross-company lainnya masih banyak menggunakan mock; HTTP tests memakai Supertest lokal. Schema baseline disiapkan dari datamodel sebelum ledger, lalu migration baru diterapkan: ini belum verifikasi ulang seluruh rantai migration historis dari database kosong. Rollback diuji pada fixture kosong, belum restore drill data produksi. E2E aplikasi lengkap, readiness down/recovery nyata, DAST, load test, dan restore drill masih terbuka.
+
+Pada verifikasi EWA, percobaan penuh pertama menghasilkan 880 passed dan satu kegagalan koneksi HTTP `ECONNRESET` pada suite run/payslip lama. Pengulangan pada source final lulus seluruh 881 tes; penyebab koneksi sementara tersebut belum dipastikan. Hasil final di tabel memakai run terakhir.
 
 Dependency `node_modules` workspace memiliki file macOS `dataless` yang menyebabkan ETIMEDOUT/MODULE_NOT_FOUND. Install offline tidak memiliki cache lengkap; unduhan pertama timeout, lalu install ulang di folder sementara berhasil. Source dan node_modules workspace tidak diganti oleh proses verifikasi. Installer melaporkan advisories dependency yang masih perlu audit/tindak lanjut (backend: 3 moderate dan 1 high; frontend: 1 high).
 
@@ -171,13 +193,15 @@ Empat migration baru dan SQL rollback telah disiapkan serta diuji pada MySQL sem
 - List/detail salary dan THR kini mengikuti scope payroll di query database. Bagian gaji pada profil employee menjadi array kosong jika permission/scope payroll tidak mengizinkan. UUID/tanggal yang invalid ditolak dan endpoint baca salary/THR memakai no-store; matriks lengkap ada di [payroll-salary-read-access.md](payroll-salary-read-access.md).
 - Run/period dan payment batch/export sekarang memerlukan scope seluruh company (403 untuk scope pegawai/organisasi parsial). Payslip detail/self-list mengikuti scope employee dan tidak menyertakan total/notes perusahaan pada nested run. Actor harus cocok session; UUID dan no-store diperketat. Kontrak lengkap: [payroll-run-payslip-access.md](payroll-run-payslip-access.md).
 
+- EWA list/detail/limit/create dan transisi mengikuti company + irisan scope EWA/payroll serta ownership. Transisi usang ditolak 409, input invalid 422 dan semua respons no-store. Rincian role, default scope, gaji aktif dan batas keuangan tersedia di [ewa-access-and-transitions.md](ewa-access-and-transitions.md).
+
 ## Backlog prioritas berikutnya
 
 1. Selesaikan sumber reporting line pegawai, migration, direct/nested report dan cycle tests. MANAGER_TEAM saat ini aman dengan penolakan, belum fungsional.
-2. Lengkapi matriks endpoint/role/scope dan audit semua list/detail/export/mutasi. Salary/THR/profil dan payslip sudah memakai predicate server. Run/period serta boundary HTTP ledger/export memerlukan scope seluruh company. Konsumen gaji EWA/lembur/final payroll, konfigurasi/formula dan laporan masih perlu audit; kebijakan publikasi slip serta payroll parsial perlu kontrak tersendiri. Middleware lama masih menginjeksi filter ke query; pemaksaan filter pada repository seluruh modul belum terbukti.
+2. Lengkapi matriks endpoint/role/scope dan audit semua list/detail/export/mutasi. Salary/THR/profil dan payslip sudah memakai predicate server. Run/period serta boundary HTTP ledger/export memerlukan scope seluruh company. Akses EWA kini menggabungkan scope EWA/payroll dan ownership; kalkulasi lembur/final payroll, konfigurasi/formula dan laporan masih perlu audit; kebijakan publikasi slip serta payroll parsial perlu kontrak tersendiri. Middleware lama masih menginjeksi filter ke query; pemaksaan filter pada repository seluruh modul belum terbukti.
 3. Audit seluruh consumer file selain dokumen/kuitansi/planning evidence, termasuk upload gagal pada modul lain dan attachment performance-result. Akses raw ditolak, tetapi kesetaraan fungsi seluruh consumer belum diverifikasi.
 4. Lengkapi test client CSRF retry/rotation dan E2E auth browser; pastikan revocation/role changes di server berlaku sesuai kebijakan session, bukan hanya refresh profil frontend.
 5. Selesaikan 254 error/15 warning lint frontend dan warning backend, perluas MySQL integration/E2E ke critical journeys, audit advisories dependency dan seluruh quality gates.
-6. Lanjut P1: OpenAPI/kontrak seluruh modul, correction payroll retroaktif, histori gaji/assignment dan penjadwalan aktivasi salary, pembekuan serta snapshot sumber attendance, kebijakan unpaid/partial-day leave dan tarif lembur hari libur, audit data legacy payroll, batch pengganti/correction, typing finansial, audit atomik dan redaction lintas modul, transactional outbox, load test, CI/operasional. P2 UI polish menunggu P0 terverifikasi menyeluruh.
+6. Lanjut P1: OpenAPI/kontrak seluruh modul, correction payroll retroaktif, histori gaji/assignment dan penjadwalan aktivasi salary, pembekuan serta snapshot sumber attendance, kebijakan unpaid/partial-day leave dan tarif lembur hari libur, audit data legacy payroll, batch pengganti/correction, typing finansial, akurasi kalender/limit EWA, snapshot input atomik serta aturan fee/payout/idempotency EWA, audit atomik dan redaction lintas modul, transactional outbox, load test, CI/operasional. P2 UI polish menunggu P0 terverifikasi menyeluruh.
 
 Perubahan deployment yang sudah staged sebelum pengerjaan (`.github/workflows/deploy.yml`, `.gitignore`, `scripts/server-deploy.sh`) dipertahankan.

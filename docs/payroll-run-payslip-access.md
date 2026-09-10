@@ -2,6 +2,8 @@
 
 Fase lanjutan P0, 9 September 2026. Menutup jalur baca/mutasi payroll perusahaan serta akses payslip per pegawai. Ini melanjutkan [scope alokasi gaji dan THR](payroll-salary-read-access.md); seluruh audit payroll belum selesai.
 
+Akses EWA dilanjutkan pada 10 September dalam [scope dan transisi EWA](ewa-access-and-transitions.md). Batas perhitungan kalender/limit dan integritas finansial EWA tetap didokumentasikan terpisah.
+
 ## Kebijakan akses
 
 Satu `PayrollRun` menghitung seluruh company dan menyimpan total perusahaan. Period, konfirmasi attendance dan payment batch juga belum mempunyai batas branch/department tersendiri. Karena itu, endpoint tersebut memerlukan **scope payroll seluruh company aktif**. Scope branch, department, sub-department atau self mendapat **403**, termasuk ketika pengguna mempunyai permission process/approve/disburse. Mengambil sebagian slip lalu tetap menampilkan atau menyetujui total perusahaan tidak diizinkan.

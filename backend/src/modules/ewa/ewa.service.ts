@@ -192,8 +192,10 @@ export class EWAService {
 
         const assessment = assessEwaRequest(earnedGross, data.amountRequested, totalExistingReserved, DEFAULT_MAX_PERCENT);
         if (!assessment.isAllowed) {
+          // ErrorHandler also logs operational error messages. Keep financial
+          // breakdowns on the authorized limit endpoint, out of error text.
           throw new BadRequestError(
-            `EWA request tidak diizinkan: ${assessment.reason ?? `Maksimal ${assessment.maxAllowedPercent}% dari pendapatan periode ini (Rp ${assessment.maxAllowedAmount.toLocaleString('id-ID')}). Data aktual: ${grossCalc.presentDays}/${grossCalc.workDaysInPeriod} hari kerja, base salary Rp ${grossCalc.baseSalary.toLocaleString('id-ID')}`}`,
+            earnedGross <= 0 ? 'Pendapatan EWA belum tersedia pada periode ini.' : 'Nominal EWA melebihi sisa limit. Periksa limit EWA sebelum mengajukan kembali.',
           );
         }
 
@@ -331,7 +333,7 @@ export class EWAService {
     companyId: string,
     employeeId: string,
     overridePercent?: number,
-  ): Promise<{ max: number; remaining: number; totalApproved: number; totalReserved: number; earnedGrossToDate: number; breakdown: any }> {
+  ) {
     const access = await ewaAccess({ companyId, self: true });
     if (employeeId !== access.actor.employeeId) throw new ForbiddenError('EWA self-service requires the authenticated employee');
     parse(ewaLimitQuerySchema, { percent: overridePercent });

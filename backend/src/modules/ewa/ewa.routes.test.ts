@@ -83,6 +83,7 @@ describe('EWA HTTP boundary', () => {
     expect(service.createRequest).not.toHaveBeenCalled(); expect(service.markPaid).not.toHaveBeenCalled();
   });
   it('validates UUIDs, rejects structured employee filters, and checks reason/reference lengths', async () => {
+    for (const amountRequested of [true, null, [], [1], { amount: 1 }]) await request(app()).post(BASE).send({ amountRequested }).expect(422);
     await request(app()).get(`${BASE}/invalid`).expect(422);
     for (const action of ['approve', 'reject', 'cancel', 'mark-paid']) await request(app()).post(`${BASE}/invalid/${action}`).send({}).expect(422);
     await request(app()).get(`${BASE}?employeeId[not]=${EMPLOYEE}`).expect(422);

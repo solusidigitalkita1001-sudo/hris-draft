@@ -23,7 +23,7 @@ function load(relative, mocks) {
 (async () => {
   const exceptions = { ForbiddenError, NotFoundError, BadRequestError };
   const csrf = load('backend/src/shared/middleware/CsrfProtection.ts', {
-    '@/config': { csrf: { secret: 'isolated-test-only' }, app: { env: 'test' }, cors: { origins: ['https://hris.example'] } },
+    '@/config': { csrf: { secret: 'isolated-test-only' }, cookies: { secure: false }, app: { env: 'test' }, cors: { origins: ['https://hris.example'] } },
     '@/shared/exceptions/AppError': exceptions,
   });
   let token;

@@ -14,7 +14,7 @@ const REFRESH_COOKIE = 'rt';
 
 const ACCESS_COOKIE_OPTS = {
   httpOnly: true,
-  secure: config.app.env === 'production',
+  secure: config.cookies.secure,
   sameSite: 'lax' as const,
   path: '/',
   maxAge: 15 * 60 * 1000,
@@ -22,7 +22,7 @@ const ACCESS_COOKIE_OPTS = {
 
 const REFRESH_COOKIE_OPTS = {
   httpOnly: true,
-  secure: config.app.env === 'production',
+  secure: config.cookies.secure,
   sameSite: 'lax' as const,
   path: '/api/v1/auth',
   maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -66,8 +66,8 @@ function extractAccessToken(req: Request): string | undefined {
 export class AuthController {
   /** GET /api/v1/auth/csrf — bootstrap signed double-submit cookie. */
   csrfToken(_req: Request, res: Response): void {
-    issueCsrfToken(res);
-    res.status(200).json(Result.success(null, 'CSRF token issued'));
+    const csrfToken = issueCsrfToken(res);
+    res.status(200).json(Result.success({ csrfToken }, 'CSRF token issued'));
   }
 
   /**
@@ -84,13 +84,14 @@ export class AuthController {
 
       setAccessCookie(res, result.tokens.accessToken);
       setRefreshCookie(res, result.tokens.refreshToken);
-      issueCsrfToken(res);
+      const csrfToken = issueCsrfToken(res);
 
       res.status(200).json(
         Result.success(
           {
             user: result.user,
             tokens: { expiresIn: result.tokens.expiresIn },
+            csrfToken,
           },
           'Login successful'
         )
@@ -133,13 +134,14 @@ export class AuthController {
 
       setAccessCookie(res, result.tokens.accessToken);
       setRefreshCookie(res, result.tokens.refreshToken);
-      issueCsrfToken(res);
+      const csrfToken = issueCsrfToken(res);
 
       res.status(200).json(
         Result.success(
           {
             user: result.user,
             tokens: { expiresIn: result.tokens.expiresIn },
+            csrfToken,
           },
           'Token refreshed successfully'
         )

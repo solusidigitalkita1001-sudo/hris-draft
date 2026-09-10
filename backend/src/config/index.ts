@@ -16,6 +16,8 @@ const envSchema = z.object({
   APP_URL: z.string().default('http://localhost:3000'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PREFIX: z.string().default('/api/v1'),
+  // Explicit opt-in for HTTP installations; production defaults to HTTPS cookies.
+  COOKIE_SECURE: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
 
   // Database — required
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
@@ -107,7 +109,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   return result.data;
 }
 
-function buildConfig(env: Env) {
+export function buildConfig(env: Env) {
   return {
     app: {
       name: env.APP_NAME,
@@ -178,6 +180,7 @@ function buildConfig(env: Env) {
       uploadPath: env.UPLOAD_PATH,
     },
     logging: { level: env.LOG_LEVEL, dir: env.LOG_DIR },
+    cookies: { secure: env.COOKIE_SECURE ?? env.NODE_ENV === 'production' },
     session: { secret: env.SESSION_SECRET },
     csrf: { secret: env.CSRF_SECRET },
     encryption: { key: env.ENCRYPTION_KEY },

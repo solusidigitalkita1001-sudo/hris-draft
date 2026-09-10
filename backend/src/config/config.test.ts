@@ -1,4 +1,4 @@
-import { loadEnv } from './index';
+import { buildConfig, loadEnv } from './index';
 
 const validEnv: NodeJS.ProcessEnv = {
   DATABASE_URL: 'mysql://root:pw@localhost:3306/hris',
@@ -28,5 +28,18 @@ describe('loadEnv (Task 0.1 env validation)', () => {
   it('throws when JWT secrets are absent', () => {
     const { JWT_ACCESS_SECRET, ...missing } = validEnv;
     expect(() => loadEnv(missing)).toThrow(/JWT_ACCESS_SECRET/);
+  });
+
+  it('defaults to secure cookies in production, including an HTTP APP_URL', () => {
+    expect(buildConfig(loadEnv({ ...validEnv, NODE_ENV: 'production', APP_URL: 'http://example.test' })).cookies.secure).toBe(true);
+    expect(buildConfig(loadEnv({ ...validEnv, NODE_ENV: 'development' })).cookies.secure).toBe(false);
+  });
+
+  it.each(['true', 'false'])('parses explicit COOKIE_SECURE=%s without boolean coercion', (value) => {
+    expect(buildConfig(loadEnv({ ...validEnv, NODE_ENV: 'production', COOKIE_SECURE: value })).cookies.secure).toBe(value === 'true');
+  });
+
+  it.each(['', '0', 'no', 'FALSE'])('rejects an ambiguous COOKIE_SECURE value %s', (value) => {
+    expect(() => loadEnv({ ...validEnv, COOKIE_SECURE: value })).toThrow(/COOKIE_SECURE/);
   });
 });

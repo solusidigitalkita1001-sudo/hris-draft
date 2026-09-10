@@ -187,6 +187,8 @@ withDatabase('EWA access and transitions (isolated real MySQL)', () => {
     const result = await Promise.allSettled([create(f, 1500), create(f, 1500)]);
     expect(result.filter(row => row.status === 'fulfilled')).toHaveLength(1);
     expect(result.filter(row => row.status === 'rejected')).toHaveLength(1);
+    const rejected = result.find(row => row.status === 'rejected');
+    expect(rejected).toMatchObject({ status: 'rejected', reason: { message: 'Nominal EWA melebihi sisa limit. Periksa limit EWA sebelum mengajukan kembali.' } });
     const reserved = await mockDatabase.earnedWageAccess.findMany({ where: { employeeId: f.person.id } });
     expect(reserved.reduce((sum, row) => sum + row.amountRequested.toNumber(), 0)).toBe(1600.25);
   });
@@ -194,6 +196,7 @@ withDatabase('EWA access and transitions (isolated real MySQL)', () => {
   it('retains role checks, owner self-approval rejection and authenticated actor matching', async () => {
     const f = await fixture();
     await expect(asActor(f, () => service.approveRequest(f.own.id, randomUUID(), {}))).rejects.toMatchObject({ statusCode: 403 });
+    await expect(asActor(f, () => service.approveRequest(f.own.id, undefined as unknown as string, {}))).rejects.toMatchObject({ statusCode: 403 });
     await expect(asActor(f, () => service.cancelRequest(f.own.id, ''))).rejects.toMatchObject({ statusCode: 403 });
     await expect(asActor(f, () => service.approveRequest(f.own.id, f.actorId, {}))).rejects.toMatchObject({ statusCode: 403 });
     await expect(asActor(f, () => service.rejectRequest(f.own.id, f.actorId, { rejectReason: 'No' }))).rejects.toMatchObject({ statusCode: 422 });
