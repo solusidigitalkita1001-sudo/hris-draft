@@ -114,7 +114,9 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+// require.main is undefined when this file is streamed via `docker exec node -`,
+// so treat "no main module" as direct execution too.
+if (require.main === module || require.main === undefined) {
   main().catch((error) => {
     // Avoid dumping connection strings, query parameters, or database log text.
     const code = /^P\d{4}$/.test(error.code || '') ? ` (${error.code})` : '';

@@ -149,3 +149,14 @@ test('Prisma must actually resolve the failed record before reporting success', 
   const { run } = fixture({ leaveUnresolved: true });
   await assert.rejects(run(), /did not finish resolving/);
 });
+
+test('streaming the file via `node -` (stdin) actually executes main()', () => {
+  const { spawnSync } = require('node:child_process');
+  const os = require('node:os');
+  const source = readFileSync(path.join(__dirname, '../migrations/recover-face-match-rate-limit-index.cjs'), 'utf8');
+  // cwd without node_modules: @prisma/client cannot resolve, so a running
+  // main() must fail loudly with exit 1 — never a silent exit 0.
+  const result = spawnSync(process.execPath, ['-', 'schema.prisma'], { input: source, cwd: os.tmpdir(), encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /\[face-index recovery\]/);
+});
