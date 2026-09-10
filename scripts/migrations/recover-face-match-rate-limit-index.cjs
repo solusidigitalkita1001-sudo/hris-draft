@@ -4,6 +4,9 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const MIGRATION = '20260903090000_face_match_rate_limit_index';
+// Creates attendance_face_logs; the table was never covered by a migration
+// before the index migration referenced it.
+const PREREQ_MIGRATION = '20260903085000_attendance_face_logs_table';
 const INDEX = 'attendance_face_logs_rate_limit_idx';
 const COLUMNS = ['company_id', 'employee_id', 'is_face_match', 'created_at'];
 const EXPECTED_SQL = 'CREATE INDEX `attendance_face_logs_rate_limit_idx` ON `attendance_face_logs` (`company_id`, `employee_id`, `is_face_match`, `created_at`);';
@@ -40,7 +43,7 @@ async function indexDefinition(prisma) {
 const isFailed = (row) => row.finished_at === null && row.rolled_back_at === null;
 
 /** Complete only this single-index migration, then let Prisma repair its history. */
-async function recoverFaceMatchIndex({ prisma, migrationSql, resolveApplied, log = console.log }) {
+async function recoverFaceMatchIndex({ prisma, migrationSql, resolveApplied, resolveRolledBack, hasPrerequisiteMigration = false, log = console.log }) {
   const tables = await prisma.$queryRawUnsafe(`
     SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '_prisma_migrations'`);
@@ -72,7 +75,19 @@ async function recoverFaceMatchIndex({ prisma, migrationSql, resolveApplied, log
       SELECT COLUMN_NAME AS column_name FROM INFORMATION_SCHEMA.COLUMNS
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_face_logs'`);
     if (COLUMNS.some((column) => !columns.some((row) => row.column_name === column))) {
-      throw new RecoveryError('attendance_face_logs or its required columns are missing. Restore the prerequisite migration/schema before retrying.');
+      if (!hasPrerequisiteMigration || !resolveRolledBack) {
+        throw new RecoveryError('attendance_face_logs or its required columns are missing. Restore the prerequisite migration/schema before retrying.');
+      }
+      // The table itself was never migrated. Mark this migration rolled back
+      // so migrate deploy creates the table (prerequisite migration sorts
+      // first) and then re-applies this index migration in order.
+      log(`[face-index recovery] attendance_face_logs is missing; marking ${MIGRATION} rolled back so ${PREREQ_MIGRATION} can create it via migrate deploy.`);
+      await resolveRolledBack();
+      const rolled = await history(prisma);
+      if (rolled.some(isFailed)) {
+        throw new RecoveryError('Prisma did not finish rolling back the failed migration. Deployment remains blocked.');
+      }
+      return 'rolled-back';
     }
     log(`[face-index recovery] Creating missing index ${INDEX}.`);
     await prisma.$executeRawUnsafe(migrationSql);
@@ -98,16 +113,21 @@ async function main() {
   // When streamed with `docker exec ... node -`, require resolves from /app,
   // where the container already has the pinned Prisma client and CLI installed.
   const { PrismaClient } = require('@prisma/client');
+  const { existsSync } = require('node:fs');
   const schema = path.resolve(process.argv[2] || 'src/database/prisma/schema.prisma');
-  const migrationSql = readFileSync(path.join(path.dirname(schema), 'migrations', MIGRATION, 'migration.sql'), 'utf8');
+  const migrationsDir = path.join(path.dirname(schema), 'migrations');
+  const migrationSql = readFileSync(path.join(migrationsDir, MIGRATION, 'migration.sql'), 'utf8');
+  const resolveAs = (flag) => () => execFileSync(process.execPath, [
+    require.resolve('prisma/build/index.js'), 'migrate', 'resolve', flag, MIGRATION, '--schema', schema,
+  ], { stdio: 'inherit' });
   const prisma = new PrismaClient();
   try {
     await recoverFaceMatchIndex({
       prisma,
       migrationSql,
-      resolveApplied: () => execFileSync(process.execPath, [
-        require.resolve('prisma/build/index.js'), 'migrate', 'resolve', '--applied', MIGRATION, '--schema', schema,
-      ], { stdio: 'inherit' }),
+      hasPrerequisiteMigration: existsSync(path.join(migrationsDir, PREREQ_MIGRATION, 'migration.sql')),
+      resolveApplied: resolveAs('--applied'),
+      resolveRolledBack: resolveAs('--rolled-back'),
     });
   } finally {
     await prisma.$disconnect();
@@ -125,4 +145,4 @@ if (require.main === module || require.main === undefined) {
   });
 }
 
-module.exports = { MIGRATION, INDEX, COLUMNS, matchesIndex, recoverFaceMatchIndex };
+module.exports = { MIGRATION, PREREQ_MIGRATION, INDEX, COLUMNS, matchesIndex, recoverFaceMatchIndex };

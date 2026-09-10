@@ -38,12 +38,19 @@ function fixture(options = {}) {
   };
   const run = (overrides = {}) => recoverFaceMatchIndex({
     prisma, migrationSql, log: () => {},
+    hasPrerequisiteMigration: state.hasPrerequisiteMigration ?? true,
     resolveApplied: async () => {
       state.resolves++;
       if (state.resolveError) throw new Error('Prisma resolve failed');
       if (state.leaveUnresolved) return;
       state.records[0].rolled_back_at = new Date();
       state.records.push({ id: 'resolved', checksum, finished_at: new Date(), rolled_back_at: null });
+    },
+    resolveRolledBack: async () => {
+      state.rollbackResolves = (state.rollbackResolves || 0) + 1;
+      if (state.resolveError) throw new Error('Prisma resolve failed');
+      if (state.leaveUnresolved) return;
+      state.records[0].rolled_back_at = new Date();
     },
     ...overrides,
   });
@@ -102,9 +109,25 @@ for (const [name, mutate] of Object.entries({
   });
 }
 
-test('missing prerequisite table or columns does not get marked applied', async () => {
-  const { state, run } = fixture({ index: [], columns: [] });
+test('missing table without the prerequisite migration does not get marked applied', async () => {
+  const { state, run } = fixture({ index: [], columns: [], hasPrerequisiteMigration: false });
   await assert.rejects(run(), /required columns are missing/);
+  assert.deepEqual(state.writes, []);
+  assert.equal(state.resolves, 0);
+});
+
+test('missing table with the prerequisite migration is resolved rolled back, no DDL', async () => {
+  const { state, run } = fixture({ index: [], columns: [] });
+  assert.equal(await run(), 'rolled-back');
+  assert.deepEqual(state.writes, []);
+  assert.equal(state.resolves, 0);
+  assert.equal(state.rollbackResolves, 1);
+  assert.equal(await run(), 'skipped');
+});
+
+test('a rollback that does not stick keeps the deployment blocked', async () => {
+  const { state, run } = fixture({ index: [], columns: [], leaveUnresolved: true });
+  await assert.rejects(run(), /did not finish rolling back/);
   assert.deepEqual(state.writes, []);
   assert.equal(state.resolves, 0);
 });
