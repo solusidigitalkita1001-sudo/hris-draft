@@ -203,6 +203,15 @@ export class PayrollController {
     }
   }
 
+  async voidPayrollRun(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await payrollService.voidPayrollRun(req.params.id as string, req.user!.id, req.body?.reason);
+      res.json(Result.updated(data, 'Payroll run di-void; periode dapat dihitung ulang'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async approvePayrollRun(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;

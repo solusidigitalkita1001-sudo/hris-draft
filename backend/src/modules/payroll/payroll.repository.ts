@@ -114,6 +114,10 @@ export class PayrollRepository {
             employeeNumber: true,
             maritalStatus: true,
             taxId: true,
+            status: true,
+            employmentType: true,
+            department: { select: { id: true, name: true } },
+            position: { select: { id: true, name: true } },
             // dependents for PTKP (Task 2.6)
             _count: { select: { families: { where: { isDependent: true } } } },
           },
@@ -376,8 +380,8 @@ export class PayrollRepository {
     });
   }
 
-  async updatePayrollRunStatus(id: string, status: PayrollRunStatus, userId?: string, database: Prisma.TransactionClient = prisma) {
-    const updateData: Prisma.PayrollRunUpdateInput = {
+  async updatePayrollRunStatus(id: string, status: PayrollRunStatus, userId: string | undefined, database: Prisma.TransactionClient = prisma, expectedFrom: PayrollRunStatus[] = ['DRAFT', 'PROCESSING']) {
+    const updateData: Prisma.PayrollRunUpdateManyMutationInput = {
       status,
     };
 
@@ -390,10 +394,16 @@ export class PayrollRepository {
       updateData.disbursedAt = new Date();
     }
 
-    return database.payrollRun.update({
-      where: { id },
+    // Guarded transition — an unconditional update here would allow any
+    // state jump (e.g. resurrecting a DISBURSED run).
+    const result = await database.payrollRun.updateMany({
+      where: { id, status: { in: expectedFrom } },
       data: updateData,
     });
+    if (result.count !== 1) {
+      throw new ConflictError(`Payroll run is not in an expected state (${expectedFrom.join('/')})`);
+    }
+    return database.payrollRun.findUniqueOrThrow({ where: { id } });
   }
 
   async updatePayrollRunTotals(id: string, data: { totalEmployees: number; totalEarnings: Prisma.Decimal; totalDeductions: Prisma.Decimal; totalNetPay: Prisma.Decimal }, database: Prisma.TransactionClient = prisma) {
@@ -445,7 +455,9 @@ export class PayrollRepository {
 
   async findPayslipsByEmployee(employeeId: string, companyId: string, employeeWhere: Prisma.EmployeeWhereInput, limit = 20) {
     return prisma.payslip.findMany({
-      where: { employeeId, ...payslipAccessWhere(companyId, employeeWhere) },
+      // Self-service only sees finalized runs — provisional (COMPLETED) and
+      // VOIDED numbers stay internal.
+      where: { employeeId, ...payslipAccessWhere(companyId, employeeWhere), payrollRun: { status: { in: ['APPROVED', 'DISBURSED'] } } },
       include: {
         payrollRun: { select: payslipRunSelect },
         components: { where: { salaryComponent: { companyId } } },
@@ -464,20 +476,6 @@ export class PayrollRepository {
     await database.payslipComponent.createMany({ data });
   }
 
-  async deletePayslipsByRunId(payrollRunId: string) {
-    // Delete components first due to FK constraints
-    const payslips = await prisma.payslip.findMany({
-      where: { payrollRunId },
-      select: { id: true },
-    });
-    const payslipIds = payslips.map((p) => p.id);
-
-    if (payslipIds.length > 0) {
-      await prisma.benefitDeduction.deleteMany({ where: { payslipId: { in: payslipIds } } });
-      await prisma.payslipComponent.deleteMany({ where: { payslipId: { in: payslipIds } } });
-    }
-    await prisma.payslip.deleteMany({ where: { payrollRunId } });
-  }
 }
 
 export const payrollRepository = new PayrollRepository();

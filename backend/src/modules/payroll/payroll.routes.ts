@@ -225,6 +225,14 @@ router.post(
 );
 
 router.patch(
+  '/runs/:id/void',
+  authorize({ resource: 'payroll', action: 'approve' }),
+  auditLog({ action: 'VOID', entity: 'PayrollRun', model: 'payrollRun', getEntityId: (req) => req.params.id as string }),
+  validate(payrollRunIdParamSchema, 'params'),
+  payrollController.voidPayrollRun.bind(payrollController)
+);
+
+router.patch(
   '/runs/:id/approve',
   authorize({ resource: 'payroll', action: 'approve' }),
   auditLog({ action: 'APPROVE', entity: 'PayrollRun', model: 'payrollRun', getEntityId: (req) => req.params.id as string }),

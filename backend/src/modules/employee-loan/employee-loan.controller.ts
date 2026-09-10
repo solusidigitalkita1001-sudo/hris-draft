@@ -78,6 +78,15 @@ export class EmployeeLoanController {
     } catch (error) { next(error); }
   }
 
+  async cancel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await employeeLoanService.cancelLoan(req.params.id as string, req.user!.id, req.user!.employeeId);
+      res.json(Result.updated(result, 'Pengajuan pinjaman dibatalkan'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async reject(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const result = await employeeLoanService.rejectLoan(

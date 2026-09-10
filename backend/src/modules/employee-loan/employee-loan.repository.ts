@@ -82,8 +82,20 @@ export class EmployeeLoanRepository {
 
   async applyApprovalEffects(id: string, approverId: string) {
     return prisma.$transaction(async (tx) => {
-      const loan = await tx.loan.findUnique({ where: { id } });
+      const loan = await tx.loan.findUnique({ where: { id }, include: { loanType: { select: { interestRate: true } } } });
       if (!loan) return null;
+
+      // The schedule is DERIVED from the amortization engine — never from the
+      // client-supplied installmentAmount. A mismatched client value both
+      // skipped interest entirely and broke the payroll settlement invariant
+      // (sum of installments must equal remainingBalance), which hard-failed
+      // whole disbursement batches.
+      const schedule = generateAmortizationSchedule({
+        principal: Number(loan.amount),
+        annualRatePercent: Number(loan.loanType.interestRate),
+        tenorMonths: loan.totalInstallments,
+        method: 'FLAT',
+      });
 
       // Status-guarded claim: only a PENDING loan can activate. This both
       // blocks resurrecting a REJECTED/CANCELLED loan and makes the claim
@@ -95,6 +107,10 @@ export class EmployeeLoanRepository {
           status: 'ACTIVE',
           approverId,
           approvedAt: new Date(),
+          // Keep the loan aggregate consistent with the derived schedule:
+          // remainingBalance = principal + interest, matching Σ installments.
+          installmentAmount: schedule.rows[0]?.total ?? loan.installmentAmount,
+          remainingBalance: schedule.totalPayment,
         },
       });
       if (claimed.count !== 1) {
@@ -106,14 +122,13 @@ export class EmployeeLoanRepository {
         where: { loanId: id },
       });
 
-      if (existingInstallments === 0 && loan.totalInstallments > 0) {
-        const amount = Number(loan.installmentAmount);
-        const installments = Array.from({ length: loan.totalInstallments }, (_, i) => {
+      if (existingInstallments === 0 && schedule.rows.length > 0) {
+        const installments = schedule.rows.map((row) => {
           const dueDate = new Date();
-          dueDate.setMonth(dueDate.getMonth() + i + 1);
+          dueDate.setMonth(dueDate.getMonth() + row.month);
           return {
             loanId: id,
-            amount,
+            amount: row.total,
             dueDate,
             status: 'PENDING' as const,
           };
@@ -235,92 +250,6 @@ export class EmployeeLoanRepository {
         },
       },
       orderBy: { dueDate: 'asc' },
-    });
-  }
-
-  async applyPayrollDeductions(
-    companyId: string,
-    employeeIds: string[],
-    periodEndDate: Date,
-    paidDate: Date,
-    payrollRunNumber: number
-  ) {
-    if (employeeIds.length === 0) {
-      return { deductedInstallments: 0, affectedLoans: 0 };
-    }
-
-    return prisma.$transaction(async (tx) => {
-      const installments = await tx.loanInstallment.findMany({
-        where: {
-          status: { in: ['PENDING', 'OVERDUE'] },
-          dueDate: { lte: periodEndDate },
-          loan: {
-            companyId,
-            employeeId: { in: employeeIds },
-            status: 'ACTIVE',
-          },
-        },
-        include: {
-          loan: {
-            select: {
-              id: true,
-              remainingBalance: true,
-            },
-          },
-        },
-        orderBy: { dueDate: 'asc' },
-      });
-
-      if (installments.length === 0) {
-        return { deductedInstallments: 0, affectedLoans: 0 };
-      }
-
-      const note = `Deducted via payroll run #${payrollRunNumber}`;
-      const deductionByLoan = new Map<string, number>();
-
-      for (const installment of installments) {
-        deductionByLoan.set(
-          installment.loanId,
-          (deductionByLoan.get(installment.loanId) || 0) + Number(installment.amount)
-        );
-
-        await tx.loanInstallment.update({
-          where: { id: installment.id },
-          data: {
-            status: 'PAID',
-            paidDate,
-            notes: note,
-          },
-        });
-      }
-
-      for (const [loanId, totalDeducted] of deductionByLoan.entries()) {
-        const loan = await tx.loan.findUnique({
-          where: { id: loanId },
-          select: { remainingBalance: true },
-        });
-
-        const remainingBalance = Math.max(Number(loan?.remainingBalance || 0) - totalDeducted, 0);
-        const unpaidInstallmentCount = await tx.loanInstallment.count({
-          where: {
-            loanId,
-            status: { in: ['PENDING', 'OVERDUE'] },
-          },
-        });
-
-        await tx.loan.update({
-          where: { id: loanId },
-          data: {
-            remainingBalance,
-            status: remainingBalance <= 0 || unpaidInstallmentCount === 0 ? 'PAID' : 'ACTIVE',
-          },
-        });
-      }
-
-      return {
-        deductedInstallments: installments.length,
-        affectedLoans: deductionByLoan.size,
-      };
     });
   }
 }

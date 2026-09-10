@@ -9,6 +9,7 @@ import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, ValidationError } from '@/shared/exceptions/AppError';
+import prisma from '@/shared/database/prisma';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
 
@@ -83,6 +84,15 @@ export class BenefitService {
   }
 
   async createEnrollment(data: CreateBenefitEnrollmentDTO) {
+    // Plan and employee must belong to the enrolling company and be active —
+    // the tenant middleware pins the row's companyId but not these scalars.
+    const [plan, employee] = await Promise.all([
+      prisma.benefitPlan.findFirst({ where: { id: data.benefitPlanId, companyId: data.companyId, deletedAt: null, isActive: true }, select: { id: true } }),
+      prisma.employee.findFirst({ where: { id: data.employeeId, companyId: data.companyId, deletedAt: null, status: 'ACTIVE' }, select: { id: true } }),
+    ]);
+    if (!plan) throw new NotFoundError('Benefit plan not found or inactive in this company');
+    if (!employee) throw new NotFoundError('Employee not found or inactive in this company');
+
     // Check for duplicate active enrollment
     const existing = await benefitRepository.findActiveEnrollment(data.employeeId, data.benefitPlanId);
     if (existing) {
@@ -121,7 +131,16 @@ export class BenefitService {
 
   async cancelEnrollment(id: string) {
     await this.findEnrollmentById(id);
-    return benefitRepository.updateEnrollment(id, { status: 'CANCELLED' as any });
+    // Guarded transition: only an ACTIVE enrollment cancels, and the expiry
+    // date is stamped so payroll stops deducting from this period on.
+    const cancelled = await prisma.benefitEnrollment.updateMany({
+      where: { id, status: 'ACTIVE' },
+      data: { status: 'CANCELLED', expiryDate: new Date() },
+    });
+    if (cancelled.count !== 1) {
+      throw new ConflictError('Enrollment is not active; nothing to cancel');
+    }
+    return this.findEnrollmentById(id);
   }
 }
 

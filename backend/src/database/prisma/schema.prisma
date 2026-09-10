@@ -460,6 +460,9 @@ model PayrollRun {
   approvedAt      DateTime?        @map("approved_at")
   disbursedBy     String?          @map("disbursed_by") @db.VarChar(36)
   disbursedAt     DateTime?        @map("disbursed_at")
+  /// Frozen tax/BPJS/late-deduction configuration used by this run, so a
+  /// closed run's numbers stay re-derivable after reference tables change.
+  policySnapshot  Json?            @map("policy_snapshot")
   notes           String?          @db.Text
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
@@ -496,6 +499,12 @@ model Payslip {
   leaveDays        Int           @default(0) @map("leave_days")
   absentDays       Int           @default(0) @map("absent_days")
   overtimeHours    Decimal       @default(0) @map("overtime_hours") @db.Decimal(10, 2)
+  /// Workday/holiday split behind the overtime amount (different statutory bands).
+  overtimeWorkdayHours Decimal   @default(0) @map("overtime_workday_hours") @db.Decimal(10, 2)
+  overtimeHolidayHours Decimal   @default(0) @map("overtime_holiday_hours") @db.Decimal(10, 2)
+  /// Employee org context frozen at calculation (dept/position/status names),
+  /// so historical payslips stop re-reading the live employee row.
+  employeeSnapshot Json?         @map("employee_snapshot")
   status           PayslipStatus @default(DRAFT)
   notes            String?       @db.Text
   createdAt        DateTime      @default(now()) @map("created_at")
@@ -3471,6 +3480,7 @@ enum PayrollRunStatus {
   COMPLETED
   APPROVED
   DISBURSED
+  VOIDED
 }
 
 /// Payslip status

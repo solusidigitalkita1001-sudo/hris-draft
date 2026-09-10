@@ -19,6 +19,8 @@ router.get('/my', employeeLoanController.findMyLoans.bind(employeeLoanController
 router.get('/:id', authorize({ resource: 'employee-loan', action: 'read' }), employeeLoanController.findById.bind(employeeLoanController));
 router.post('/', validate(createLoanSchema), auditLog({ action: 'CREATE_LOAN', entity: 'Loan' }), employeeLoanController.create.bind(employeeLoanController));
 
+// Self-service: ownership/elevated-role check lives in the service.
+router.patch('/:id/cancel', auditLog({ action: 'CANCEL_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.cancel.bind(employeeLoanController));
 router.patch('/:id/approve', authorize({ resource: 'employee-loan', action: 'update' }), validate(approveLoanSchema), auditLog({ action: 'APPROVE_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.approve.bind(employeeLoanController));
 router.patch('/:id/reject', authorize({ resource: 'employee-loan', action: 'update' }), validate(approveLoanSchema), auditLog({ action: 'REJECT_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.reject.bind(employeeLoanController));
 

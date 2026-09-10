@@ -11,6 +11,7 @@ import {
 } from './benefit.dto';
 import { idParamSchema } from './benefit.validation';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
+import { auditLog } from '@/shared/middleware/AuditLog';
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.get(
 router.post(
   '/plans',
   authorize({ resource: 'benefit', action: 'create' }),
+  auditLog({ action: 'CREATE', entity: 'BenefitPlan' }),
   validate(createBenefitPlanSchema, 'body'),
   benefitController.createPlan.bind(benefitController)
 );
@@ -42,6 +44,7 @@ router.post(
 router.patch(
   '/plans/:id',
   authorize({ resource: 'benefit', action: 'update' }),
+  auditLog({ action: 'UPDATE', entity: 'BenefitPlan', model: 'benefitPlan' }),
   validate(idParamSchema, 'params'),
   validate(updateBenefitPlanSchema, 'body'),
   benefitController.updatePlan.bind(benefitController)
@@ -50,6 +53,7 @@ router.patch(
 router.delete(
   '/plans/:id',
   authorize({ resource: 'benefit', action: 'delete' }),
+  auditLog({ action: 'DELETE', entity: 'BenefitPlan', model: 'benefitPlan' }),
   validate(idParamSchema, 'params'),
   benefitController.deletePlan.bind(benefitController)
 );
@@ -71,6 +75,7 @@ router.get(
 router.post(
   '/enrollments',
   authorize({ resource: 'benefit', action: 'create' }),
+  auditLog({ action: 'CREATE', entity: 'BenefitEnrollment' }),
   validate(createBenefitEnrollmentSchema, 'body'),
   benefitController.createEnrollment.bind(benefitController)
 );
@@ -78,6 +83,7 @@ router.post(
 router.patch(
   '/enrollments/:id',
   authorize({ resource: 'benefit', action: 'update' }),
+  auditLog({ action: 'UPDATE', entity: 'BenefitEnrollment', model: 'benefitEnrollment' }),
   validate(idParamSchema, 'params'),
   validate(updateBenefitEnrollmentSchema, 'body'),
   benefitController.updateEnrollment.bind(benefitController)
@@ -86,6 +92,7 @@ router.patch(
 router.delete(
   '/enrollments/:id',
   authorize({ resource: 'benefit', action: 'delete' }),
+  auditLog({ action: 'DELETE', entity: 'BenefitEnrollment', model: 'benefitEnrollment' }),
   validate(idParamSchema, 'params'),
   benefitController.deleteEnrollment.bind(benefitController)
 );

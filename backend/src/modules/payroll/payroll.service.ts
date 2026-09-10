@@ -181,6 +181,21 @@ export class PayrollService {
         return periods.some((period) => period.code === candidate);
       },
     });
+    // Date-order + overlap validation: two overlapping periods each admit a
+    // run of their own, paying the same calendar days twice.
+    const startDate = new Date(data.startDate);
+    const endDate = new Date(data.endDate);
+    if (endDate.getTime() < startDate.getTime()) {
+      throw new BadRequestError('Tanggal akhir periode harus setelah tanggal mulai');
+    }
+    const overlapping = await prisma.payrollPeriod.findFirst({
+      where: { companyId: data.companyId, deletedAt: null, startDate: { lte: endDate }, endDate: { gte: startDate } },
+      select: { name: true },
+    });
+    if (overlapping) {
+      throw new ConflictError(`Rentang tanggal tumpang tindih dengan periode "${overlapping.name}"`);
+    }
+
     const period = await payrollRepository.createPayrollPeriod({ ...data, code });
 
     logger.info('Payroll period created', { periodId: period.id, code: period.code });
@@ -189,6 +204,15 @@ export class PayrollService {
 
   async closePayrollPeriod(id: string) {
     const existing = await this.findPayrollPeriodById(id);
+    // A period may only close when its run (if any) has finished the money
+    // path — closing over an unapproved run permanently locks it in limbo.
+    const run = await prisma.payrollRun.findFirst({
+      where: { periodId: id, companyId: existing.companyId, status: { notIn: ['VOIDED'] as never[] } },
+      select: { id: true, status: true },
+    });
+    if (run && !['APPROVED', 'DISBURSED'].includes(run.status)) {
+      throw new ConflictError(`Run payroll periode ini masih berstatus ${run.status}; approve/disburse atau void dulu sebelum menutup periode`);
+    }
     const period = await payrollRepository.closePayrollPeriod(id, existing.companyId);
 
     logger.info('Payroll period closed', { periodId: id });
@@ -280,8 +304,9 @@ export class PayrollService {
           if (!period || period.companyId !== data.companyId) throw new NotFoundError('Payroll period not found in this company');
           if (period.status === 'CLOSED') throw new BadRequestError('Cannot create payroll run for a closed period');
           if (!period.attendanceReviewedAt) throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
-          const existing = await tx.payrollRun.findFirst({ where: { companyId: data.companyId, periodId: period.id, deletedAt: null }, select: { id: true } });
-          if (existing) throw new ConflictError(`Payroll already exists for this period (${existing.id}); review the existing run before creating a correction`);
+          // VOIDED runs free the period for a fresh, corrected run.
+          const existing = await tx.payrollRun.findFirst({ where: { companyId: data.companyId, periodId: period.id, deletedAt: null, status: { not: 'VOIDED' } }, select: { id: true } });
+          if (existing) throw new ConflictError(`Payroll already exists for this period (${existing.id}); void the existing run first if it needs correction`);
           const runNumber = await payrollRepository.findLatestRunNumber(data.companyId, tx) + 1;
           const run = await payrollRepository.createPayrollRun(data, runNumber, userId, tx);
           await this.calculatePayroll(run.id, tx);
@@ -292,6 +317,31 @@ export class PayrollService {
         throw error;
       }
     }
+  }
+
+  /**
+   * Void a wrong, not-yet-approved run (checklist §16 remedy): the run and
+   * its payslips stay as historical evidence with status VOIDED, and the
+   * period is freed for a corrected run. Approved/disbursed money can never
+   * be voided here — that requires a real adjustment flow.
+   */
+  async voidPayrollRun(id: string, userId: string, reason?: string) {
+    const { companyId, actor } = await companyPayrollAccess(undefined, userId);
+    const run = await this.findPayrollRunById(id);
+    if (run.companyId !== companyId) throw new NotFoundError('Payroll run not found');
+
+    const voided = await prisma.payrollRun.updateMany({
+      where: { id, companyId, status: 'COMPLETED' },
+      data: {
+        status: 'VOIDED',
+        notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${run.notes ?? ''}`.trim(),
+      },
+    });
+    if (voided.count !== 1) {
+      throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
+    }
+    logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason });
+    return this.findPayrollRunById(id);
   }
 
   async approvePayrollRun(id: string, userId: string) {
@@ -373,8 +423,28 @@ export class PayrollService {
     const run = await payrollRepository.findPayrollRunById(runId, database);
     if (!run) throw new NotFoundError('Payroll run not found');
 
-    // Get all employees with active salary in this company
-    const employeeSalaries = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
+    // As-of salary selection (checklist §18): the run pays the LATEST salary
+    // row effective on or before the period end. Future-dated raises no
+    // longer leak into the current run. A row deactivated only because a
+    // future-dated row superseded it still pays; a deliberately paused
+    // employee (latest row inactive, nothing newer) is skipped.
+    const allSalaryRows = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
+    const periodEndTime = new Date(run.period.endDate).getTime();
+    const rowsByEmployee = new Map<string, typeof allSalaryRows>();
+    for (const row of allSalaryRows) {
+      const rows = rowsByEmployee.get(row.employeeId) ?? [];
+      rows.push(row);
+      rowsByEmployee.set(row.employeeId, rows);
+    }
+    const employeeSalaries: typeof allSalaryRows = [];
+    for (const rows of rowsByEmployee.values()) {
+      // rows already ordered effectiveDate desc by the repository
+      const asOf = rows.find((row) => new Date(row.effectiveDate).getTime() <= periodEndTime);
+      if (!asOf) continue; // only future-dated salaries exist — nothing payable this period
+      const hasNewerRow = rows.some((row) => new Date(row.effectiveDate).getTime() > periodEndTime);
+      if (!asOf.isActive && !hasNewerRow) continue; // deliberately deactivated
+      employeeSalaries.push(asOf.isActive || hasNewerRow ? { ...asOf, isActive: true } : asOf);
+    }
     // Read the published revision set once for the whole run. Later publications
     // never change the version used midway through employee calculations.
     const formulaVersions = selectFormulaVersions(await database.payrollFormulaVersion.findMany({
@@ -385,10 +455,63 @@ export class PayrollService {
     const lateDeductionComponent = await this.ensureLateDeductionComponent(run.companyId, database);
     const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId, database);
     const ewaDeductionComponent = await this.ensureEWADeductionComponent(run.companyId, database);
+    // Benefit contributions (checklist §19). Opt-in per company via the
+    // benefit_payroll_deduction_enabled setting: enabling it changes
+    // take-home pay, so it must be a deliberate tenant decision, not a deploy.
+    const benefitSetting = await database.companySetting.findUnique({
+      where: { companyId_key: { companyId: run.companyId, key: 'benefit_payroll_deduction_enabled' } },
+      select: { value: true },
+    });
+    const benefitDeductionEnabled = benefitSetting?.value === 'true';
+    const benefitDeductionComponent = benefitDeductionEnabled
+      ? await this.ensureBenefitDeductionComponent(run.companyId, database)
+      : null;
+    const benefitEnrollmentsByEmployee = new Map<string, Array<{ id: string; employeePercent: number; employerPercent: number }>>();
+    if (benefitDeductionEnabled) {
+      const enrollments = await database.benefitEnrollment.findMany({
+        where: {
+          companyId: run.companyId,
+          deletedAt: null,
+          status: 'ACTIVE',
+          effectiveDate: { lte: new Date(run.period.endDate) },
+          OR: [{ expiryDate: null }, { expiryDate: { gte: new Date(run.period.startDate) } }],
+        },
+        select: {
+          id: true,
+          employeeId: true,
+          benefitPlan: { select: { employeeContribution: true, employerContribution: true } },
+        },
+      });
+      for (const enrollment of enrollments) {
+        const rows = benefitEnrollmentsByEmployee.get(enrollment.employeeId) ?? [];
+        rows.push({
+          id: enrollment.id,
+          employeePercent: Number(enrollment.benefitPlan.employeeContribution),
+          employerPercent: Number(enrollment.benefitPlan.employerContribution),
+        });
+        benefitEnrollmentsByEmployee.set(enrollment.employeeId, rows);
+      }
+    }
     const lateCfg = await companySettingsService.getLateDeductionConfig(run.companyId, database);
     // Tax/BPJS reference tables (per company, per year); statutory code
     // defaults apply when no rows exist for the period's year.
     const payrollPolicy = await loadPayrollPolicyConfig(database, run.companyId, new Date(run.period.startDate).getUTCFullYear());
+    // Freeze the configuration this run used (checklist §15): tax brackets,
+    // PTKP, BPJS rates and late/absence settings are mutable reference data.
+    await database.payrollRun.update({
+      where: { id: runId },
+      data: {
+        policySnapshot: JSON.parse(JSON.stringify({
+          pph21: {
+            ...payrollPolicy.pph21,
+            brackets: payrollPolicy.pph21.brackets?.map(([upper, rate]) => [Number.isFinite(upper) ? upper : 'INF', rate]),
+            ptkpAmounts: payrollPolicy.pph21.ptkpAmounts ? Object.fromEntries(payrollPolicy.pph21.ptkpAmounts) : undefined,
+          },
+          bpjs: payrollPolicy.bpjs,
+          lateConfig: lateCfg,
+        })),
+      },
+    });
     const dueLoanInstallments = await employeeLoanRepository.findDueInstallmentsForPayroll(
       run.companyId,
       new Date(run.period.endDate), database
@@ -459,6 +582,9 @@ export class PayrollService {
 
     for (const salary of employeeSalaries) {
       if (!salary.isActive) continue;
+      // Terminated/resigned employees stop being paid; soft-deleted employees
+      // no longer abort the whole run via the attendance loader mismatch.
+      if (salary.employee.status !== 'ACTIVE') continue;
       if (salary.companyId !== run.companyId || salary.employee.companyId !== run.companyId || salary.components.some(allocation => allocation.salaryComponent.companyId !== run.companyId)) {
         throw new ConflictError('Salary allocation references a component outside the payroll company');
       }
@@ -504,7 +630,24 @@ export class PayrollService {
         absenceDeductionAmount = Math.round(perDayDeduction * absentDays);
       }
 
+      const benefitRows = benefitEnrollmentsByEmployee.get(salary.employeeId) ?? [];
+      const benefitDeductions = benefitRows.map((row) => {
+        const employeeAmount = Math.round((baseMonthlyWage * row.employeePercent) / 100);
+        const employerAmount = Math.round((baseMonthlyWage * row.employerPercent) / 100);
+        return { benefitEnrollmentId: row.id, employeeAmount, employerAmount, totalAmount: employeeAmount + employerAmount };
+      });
+      const benefitEmployeeTotal = benefitDeductions.reduce((sum, row) => sum + row.employeeAmount, 0);
+
       const extraComponents: PayComponent[] = [];
+      if (benefitDeductionComponent && benefitEmployeeTotal > 0) {
+        extraComponents.push({
+          salaryComponentId: benefitDeductionComponent.id,
+          name: 'Potongan Iuran Benefit',
+          type: 'DEDUCTION',
+          amount: benefitEmployeeTotal,
+          isTaxable: false,
+        });
+      }
       if (loanDeductionAmount > 0) {
         extraComponents.push({
           salaryComponentId: loanDeductionComponent.id,
@@ -584,7 +727,23 @@ export class PayrollService {
         leaveDays: leaveDaysForEmployee,
         absentDays,
         overtimeHours: overtimeHoursForEmployee,
+        overtimeWorkdayHours: attd.overtimeWorkday,
+        overtimeHolidayHours: attd.overtimeHoliday,
+        // Frozen org context (checklist §15): historical payslips must not
+        // re-render against the live employee row after a transfer.
+        employeeSnapshot: {
+          fullName: salary.employee.fullName,
+          employeeNumber: salary.employee.employeeNumber,
+          employmentType: salary.employee.employmentType,
+          departmentId: salary.employee.department?.id ?? null,
+          departmentName: salary.employee.department?.name ?? null,
+          positionId: salary.employee.position?.id ?? null,
+          positionName: salary.employee.position?.name ?? null,
+        },
         status: 'DRAFT',
+        ...(benefitDeductions.length
+          ? { benefitDeductions: { create: benefitDeductions } }
+          : {}),
         formulaCalculations: { create: formulaCalculations.map(calculation => ({
           companyId: run.companyId, runId, componentId: calculation.componentId,
           versionId: calculation.versionId, expression: calculation.expression, amount: calculation.amount,
@@ -714,6 +873,24 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated: automatic absence per day deduction based on basic salary / working days',
       sortOrder: 996,
+    }, database);
+  }
+
+  private async ensureBenefitDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'BENEFIT_DEDUCTION_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Potongan Iuran Benefit',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false,
+      description: 'System generated: employee contribution for active benefit enrollments (percent of base salary per plan).',
+      sortOrder: 994,
     }, database);
   }
 
