@@ -43,6 +43,14 @@ export class AttendanceCorrectionController {
       ));
     } catch (error) { next(error); }
   }
+
+  async applyWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.updated(
+        await attendanceCorrectionService.applyWorkflowAction(req.params.id as string, req.user!.id, req.user!.roles ?? [], req.body, req.user!.employeeId)
+      ));
+    } catch (error) { next(error); }
+  }
 }
 
 export const attendanceCorrectionController = new AttendanceCorrectionController();

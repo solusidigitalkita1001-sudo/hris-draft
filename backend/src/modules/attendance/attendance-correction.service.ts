@@ -5,6 +5,8 @@ import { attendanceCorrectionRepository } from './attendance-correction.reposito
 import { CreateAttendanceCorrectionDTO } from './attendance-correction.dto';
 import { assertPayrollDateOpen } from '@/shared/payroll/payroll-period-guard';
 import { attendanceContextService } from './attendance-context.service';
+import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
+import { getRequestContext } from '@/shared/context/RequestContext';
 
 class AttendanceCorrectionService {
   findAll(companyId: string, filters?: { employeeId?: string; status?: string }) {
@@ -23,8 +25,50 @@ class AttendanceCorrectionService {
     }
     await assertPayrollDateOpen(data.companyId, new Date(data.date));
     const correction = await attendanceCorrectionRepository.create(data);
+    // Route through the workflow engine when a template exists (unified inbox,
+    // delegation, SLA). Compensation on start failure keeps it approvable.
+    try {
+      const template = await workflowEngineRepository.findDefaultTemplate(data.companyId, 'ATTENDANCE_CORRECTION', 'attendance');
+      if (template) {
+        await workflowEngineRepository.startInstance(getRequestContext()?.user?.id ?? 'system', {
+          templateId: template.id,
+          companyId: data.companyId,
+          approvalType: 'ATTENDANCE_CORRECTION',
+          referenceType: 'ATTENDANCE_CORRECTION',
+          referenceId: correction.id,
+          payload: { employeeId: data.employeeId, date: data.date, companyId: data.companyId },
+        });
+      }
+    } catch (wfErr) {
+      await prisma.attendanceCorrection.delete({ where: { id: correction.id } }).catch(() => undefined);
+      throw new BadRequestError('Pengajuan koreksi gagal: workflow approval tidak dapat dimulai. Coba lagi atau hubungi admin.');
+    }
     logger.info('Attendance correction created', { id: correction.id, employeeId: data.employeeId });
     return correction;
+  }
+
+  /** Workflow-driven approve/reject (centralized approval). */
+  async applyWorkflowAction(
+    id: string,
+    userId: string,
+    roles: string[],
+    action: { action: 'APPROVE' | 'REJECT' | 'ESCALATE'; comment?: string },
+    approverEmployeeId?: string | null,
+  ) {
+    const correction = await this.findById(id);
+    const instance = await prisma.workflowInstance.findFirst({
+      where: { referenceType: 'ATTENDANCE_CORRECTION', referenceId: id },
+    });
+    if (!instance) throw new NotFoundError('Workflow instance not found for this correction');
+    const updated = await workflowEngineRepository.applyAction(instance.id, userId, roles, action);
+    if (!updated) throw new NotFoundError('Failed to update workflow instance');
+    if (updated.status === 'APPROVED') {
+      await this.approve(id, userId, approverEmployeeId);
+    }
+    if (action.action === 'REJECT') {
+      await this.reject(id, approverEmployeeId, action.comment);
+    }
+    return { correction: await this.findById(id), workflowInstance: updated };
   }
 
   async approve(id: string, approverUserId: string, approverEmployeeId?: string | null) {

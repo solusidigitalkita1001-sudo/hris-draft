@@ -5,6 +5,7 @@ import { validate } from '@/shared/middleware/RequestValidator';
 import { auditLog } from '@/shared/middleware/AuditLog';
 import { permissionRequestController } from './permission-request.controller';
 import { createPermissionSchema, approvePermissionSchema } from './permission-request.dto';
+import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 
 const router = Router();
 router.use(authenticate);
@@ -16,5 +17,6 @@ router.post('/', validate(createPermissionSchema), permissionRequestController.c
 router.patch('/:id/cancel', permissionRequestController.cancel.bind(permissionRequestController));
 router.patch('/:id/approve', authorize({ resource: 'permission-request', action: 'update' }), auditLog({ action: 'APPROVE', entity: 'PermissionRequest', model: 'permissionRequest' }), validate(approvePermissionSchema), permissionRequestController.approve.bind(permissionRequestController));
 router.patch('/:id/reject', authorize({ resource: 'permission-request', action: 'update' }), auditLog({ action: 'REJECT', entity: 'PermissionRequest', model: 'permissionRequest' }), validate(approvePermissionSchema), permissionRequestController.reject.bind(permissionRequestController));
+router.patch('/:id/workflow-action', authorize({ resource: 'permission-request', action: 'update' }), auditLog({ action: 'WORKFLOW_ACTION', entity: 'PermissionRequest', model: 'permissionRequest' }), validate(workflowActionSchema), permissionRequestController.applyWorkflowAction.bind(permissionRequestController));
 
 export default router;

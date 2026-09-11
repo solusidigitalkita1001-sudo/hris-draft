@@ -8,6 +8,8 @@ import { travelExpenseService } from '@/modules/travel-expense/travel-expense.se
 import { workCalendarService } from '@/modules/work-calendar/work-calendar.service';
 import { attendanceService } from '@/modules/attendance/attendance.service';
 import { employeeService } from '@/modules/employee/employee.service';
+import { permissionRequestRepository } from '@/modules/permission-request/permission-request.repository';
+import { attendanceCorrectionService } from '@/modules/attendance/attendance-correction.service';
 import { NotFoundError } from '@/shared/exceptions/AppError';
 
 interface EngineActionInput { action: 'APPROVE' | 'REJECT' | 'ESCALATE'; comment?: string }
@@ -41,6 +43,10 @@ const DOMAIN_HANDLERS: Record<string, DomainHandler> = {
     attendanceService.applyOvertimeWorkflowAction(id, userId, roles, { ...action, source: 'WORKFLOW' }),
   CAREER_MOVEMENT: (id, userId, roles, _employeeId, action) =>
     employeeService.applyCareerWorkflowAction(id, userId, roles, action),
+  PERMISSION_REQUEST: (id, userId, roles, employeeId, action) =>
+    permissionRequestRepository.applyWorkflowAction(id, userId, roles, action, employeeId),
+  ATTENDANCE_CORRECTION: (id, userId, roles, employeeId, action) =>
+    attendanceCorrectionService.applyWorkflowAction(id, userId, roles, action, employeeId),
 };
 
 async function dispatchInstanceAction(

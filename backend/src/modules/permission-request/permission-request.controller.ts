@@ -54,8 +54,17 @@ export class PermissionRequestController {
         ...req.body,
         companyId: req.user!.companyId,
         employeeId,
-      });
+      }, req.user!.id);
       res.status(201).json(Result.created(data));
+    } catch (error) { next(error); }
+  }
+
+  async applyWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await permissionRequestRepository.applyWorkflowAction(
+        req.params.id as string, req.user!.id, req.user!.roles ?? [], req.body, req.user!.employeeId,
+      );
+      res.json(Result.updated(data, 'Workflow action applied'));
     } catch (error) { next(error); }
   }
 
