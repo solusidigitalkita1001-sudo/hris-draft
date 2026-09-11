@@ -22,6 +22,7 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { prisma } from '@/shared/database/prisma';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { getCurrentCompanyId, runInSystemContext } from '@/shared/context/RequestContext';
+import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import {
   extractFaceVectorFromImage,
   FaceExtractionError,
@@ -363,19 +364,83 @@ export class EmployeeService {
       throw new BadRequestError('No actual career change detected');
     }
 
-    const transaction = await employeeRepository.createCareerTransaction(employeeId, createdBy, data);
+    // Approval routing (checklist §9): when a CAREER_MOVEMENT workflow
+    // template exists for the company, the movement is created PENDING and
+    // only applied on approval. Without a template it auto-applies (keeps
+    // existing tenants working) — same fallback overtime uses.
+    const companyId = (employee as Record<string, unknown>).companyId as string;
+    const template = await workflowEngineRepository.findDefaultTemplate(companyId, 'CAREER_MOVEMENT', 'employee');
+    const requiresApproval = Boolean(template);
 
+    const transaction = await employeeRepository.createCareerTransaction(employeeId, createdBy, data, requiresApproval);
     if (!transaction) {
       throw new NotFoundError('Employee not found');
     }
 
-    logger.info('Employee career transaction created', {
-      employeeId,
-      transactionType: data.transactionType,
-      createdBy,
-    });
+    if (requiresApproval && template) {
+      try {
+        await workflowEngineRepository.startInstance(createdBy ?? 'system', {
+          templateId: template.id,
+          companyId,
+          approvalType: 'CAREER_MOVEMENT',
+          referenceType: 'CAREER_MOVEMENT',
+          referenceId: transaction.id,
+          payload: {
+            employeeId,
+            transactionType: data.transactionType,
+            toPositionId: data.toPositionId,
+            toBaseSalary: data.toBaseSalary,
+            effectiveDate: data.effectiveDate,
+            companyId,
+          },
+        });
+      } catch (wfErr: any) {
+        logger.error('Failed to start workflow for career transaction; rolling back', { transactionId: transaction.id, error: wfErr?.message });
+        await prisma.employeeCareerTransaction.delete({ where: { id: transaction.id } }).catch(() => undefined);
+        throw new BadRequestError('Pengajuan mutasi/promosi gagal: workflow approval tidak dapat dimulai. Coba lagi atau hubungi admin.');
+      }
+    }
 
+    logger.info('Employee career transaction created', { employeeId, transactionType: data.transactionType, requiresApproval, createdBy });
     return transaction;
+  }
+
+  private async findCareerWorkflowInstance(transactionId: string) {
+    return prisma.workflowInstance.findFirst({
+      where: { referenceType: 'CAREER_MOVEMENT', referenceId: transactionId },
+    });
+  }
+
+  /** Workflow-driven approve/reject for a career movement (mirrors leave/loan). */
+  async applyCareerWorkflowAction(
+    transactionId: string,
+    userId: string,
+    roles: string[],
+    action: { action: 'APPROVE' | 'REJECT' | 'ESCALATE'; comment?: string },
+  ) {
+    const transaction = await employeeRepository.findCareerTransactionById(transactionId);
+    if (!transaction) throw new NotFoundError('Career transaction not found');
+    const instance = await this.findCareerWorkflowInstance(transactionId);
+    if (!instance) throw new NotFoundError('Workflow instance not found for this career transaction');
+
+    const currentCompanyId = getCurrentCompanyId();
+    const isAdmin = roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
+    if (!isAdmin && currentCompanyId && instance.companyId !== currentCompanyId) {
+      throw new NotFoundError('Workflow instance not found');
+    }
+
+    const updatedInstance = await workflowEngineRepository.applyAction(instance.id, userId, roles, action);
+    if (!updatedInstance) throw new NotFoundError('Failed to update workflow instance');
+
+    if (updatedInstance.status === 'APPROVED') {
+      await employeeRepository.approveCareerTransaction(transactionId, userId);
+    }
+    if (action.action === 'REJECT') {
+      await employeeRepository.rejectCareerTransaction(transactionId, userId);
+    }
+
+    const finalTransaction = await employeeRepository.findCareerTransactionById(transactionId);
+    return { careerTransaction: finalTransaction, workflowInstance: updatedInstance };
   }
 
   async findCompanyAssignments(employeeId: string) {

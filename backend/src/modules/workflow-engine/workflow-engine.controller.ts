@@ -7,6 +7,7 @@ import { employeeLoanService } from '@/modules/employee-loan/employee-loan.servi
 import { travelExpenseService } from '@/modules/travel-expense/travel-expense.service';
 import { workCalendarService } from '@/modules/work-calendar/work-calendar.service';
 import { attendanceService } from '@/modules/attendance/attendance.service';
+import { employeeService } from '@/modules/employee/employee.service';
 import { NotFoundError } from '@/shared/exceptions/AppError';
 
 interface EngineActionInput { action: 'APPROVE' | 'REJECT' | 'ESCALATE'; comment?: string }
@@ -38,6 +39,8 @@ const DOMAIN_HANDLERS: Record<string, DomainHandler> = {
     workCalendarService.applyShiftSwapWorkflowAction(id, userId, roles, employeeId, { ...action, source: 'WORKFLOW' }),
   OVERTIME_REQUEST: (id, userId, roles, _employeeId, action) =>
     attendanceService.applyOvertimeWorkflowAction(id, userId, roles, { ...action, source: 'WORKFLOW' }),
+  CAREER_MOVEMENT: (id, userId, roles, _employeeId, action) =>
+    employeeService.applyCareerWorkflowAction(id, userId, roles, action),
 };
 
 async function dispatchInstanceAction(

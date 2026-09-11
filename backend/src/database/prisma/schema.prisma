@@ -2402,6 +2402,11 @@ model EmployeeCareerTransaction {
   referenceNumber    String?               @map("reference_number") @db.VarChar(100)
   /// New base salary applied with the movement (null = compensation unchanged).
   toBaseSalary       Decimal?              @map("to_base_salary") @db.Decimal(15, 2)
+  /// Approval state (checklist §9 approval routing). PENDING movements do not
+  /// touch the employee until APPROVED; auto-APPROVED when no workflow template.
+  status             String                @default("APPROVED") @db.VarChar(20)
+  approvedBy         String?               @map("approved_by") @db.VarChar(36)
+  approvedAt         DateTime?             @map("approved_at")
   /// When the movement was applied to the live employee row. Future-dated
   /// transactions stay pending (null) until the scheduler applies them.
   appliedAt          DateTime?             @map("applied_at")

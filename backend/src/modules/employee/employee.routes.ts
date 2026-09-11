@@ -9,6 +9,7 @@ import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import { employeeController } from './employee.controller';
 import {
   createEmployeeSchema, updateEmployeeSchema, createCareerTransactionSchema,
+  // workflowActionSchema imported below
   createEmployeeCompanyAssignmentSchema, updateEmployeeCompanyAssignmentSchema,
   createEmployeeFamilySchema, updateEmployeeFamilySchema,
   createEmployeeEducationSchema, updateEmployeeEducationSchema,
@@ -18,6 +19,7 @@ import {
   createEmployeeExperienceSchema, updateEmployeeExperienceSchema,
   createEmployeeAttachmentSchema, updateEmployeeAttachmentSchema,
 } from './employee.dto';
+import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 
 const router = Router();
 router.use(authenticate);
@@ -38,6 +40,13 @@ router.post(
   auditLog({ action: 'CAREER_TRANSACTION', entity: 'EmployeeCareerTransaction' }),
   validate(createCareerTransactionSchema),
   employeeController.createCareerTransaction.bind(employeeController)
+);
+router.patch(
+  '/career-transactions/:transactionId/workflow-action',
+  authorize({ resource: 'employee', action: 'update' }),
+  auditLog({ action: 'CAREER_WORKFLOW_ACTION', entity: 'EmployeeCareerTransaction', getEntityId: (req) => req.params.transactionId as string }),
+  validate(workflowActionSchema),
+  employeeController.applyCareerWorkflowAction.bind(employeeController)
 );
 router.post(
   '/:id/company-assignments',

@@ -2,6 +2,7 @@ import { employeeAccessWhere, profileSalaryAccessWhere } from '@/shared/security
 import { prisma } from '@/shared/database/prisma';
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
+import { ConflictError, NotFoundError } from '@/shared/exceptions/AppError';
 import { Prisma } from '@prisma/client';
 import {
   CreateEmployeeDTO, UpdateEmployeeDTO, EmployeeQueryDTO, CreateCareerTransactionDTO,
@@ -546,10 +547,12 @@ export class EmployeeRepository {
   async createCareerTransaction(
     employeeId: string,
     createdBy: string | undefined,
-    data: CreateCareerTransactionDTO
+    data: CreateCareerTransactionDTO,
+    requiresApproval = false,
   ) {
     const effectiveDate = new Date(data.effectiveDate);
-    const isDue = effectiveDate.getTime() <= Date.now();
+    // A movement awaiting approval never touches the employee at create time.
+    const isDue = !requiresApproval && effectiveDate.getTime() <= Date.now();
 
     // Advisory lock per employee: the from-snapshot is read INSIDE the lock,
     // so two concurrent movements can no longer both claim the same origin
@@ -587,6 +590,7 @@ export class EmployeeRepository {
           fromEmploymentType: employee.employmentType,
           toEmploymentType: data.toEmploymentType || null,
           toBaseSalary: data.toBaseSalary ?? null,
+          status: requiresApproval ? 'PENDING' : 'APPROVED',
           referenceNumber: data.referenceNumber,
           reason: data.reason,
           notes: data.notes,
@@ -620,6 +624,50 @@ export class EmployeeRepository {
 
       return transaction;
     });
+  }
+
+  async findCareerTransactionById(id: string) {
+    return prisma.employeeCareerTransaction.findUnique({ where: { id } });
+  }
+
+  /**
+   * Approve a PENDING movement: marks it APPROVED, and applies effects
+   * immediately when the effective date is already due (otherwise the hourly
+   * scheduler applies it). Serialized per employee under the same lock create
+   * and the scheduler use.
+   */
+  async approveCareerTransaction(id: string, approverId: string) {
+    const row = await prisma.employeeCareerTransaction.findUnique({ where: { id } });
+    if (!row) throw new NotFoundError('Career transaction not found');
+    return withDatabaseAdvisoryLock('career-transaction', row.employeeId, async (tx) => {
+      const claimed = await tx.employeeCareerTransaction.updateMany({
+        where: { id, status: 'PENDING' },
+        data: { status: 'APPROVED', approvedBy: approverId, approvedAt: new Date() },
+      });
+      if (claimed.count !== 1) throw new ConflictError('Career transaction is no longer pending');
+      if (new Date(row.effectiveDate).getTime() <= Date.now()) {
+        await tx.employeeCareerTransaction.update({ where: { id }, data: { appliedAt: new Date() } });
+        await this.applyCareerTransactionEffects(tx, row.employeeId, {
+          companyId: row.companyId,
+          effectiveDate: row.effectiveDate,
+          toBranchId: row.toBranchId ?? undefined,
+          toDepartmentId: row.toDepartmentId ?? undefined,
+          toPositionId: row.toPositionId ?? undefined,
+          toEmploymentType: row.toEmploymentType ?? undefined,
+          toBaseSalary: row.toBaseSalary ? Number(row.toBaseSalary) : undefined,
+        });
+      }
+      return tx.employeeCareerTransaction.findUniqueOrThrow({ where: { id } });
+    });
+  }
+
+  async rejectCareerTransaction(id: string, approverId: string) {
+    const rejected = await prisma.employeeCareerTransaction.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'REJECTED', approvedBy: approverId, approvedAt: new Date() },
+    });
+    if (rejected.count !== 1) throw new ConflictError('Career transaction is no longer pending');
+    return prisma.employeeCareerTransaction.findUniqueOrThrow({ where: { id } });
   }
 
   async applyCareerTransactionEffects(

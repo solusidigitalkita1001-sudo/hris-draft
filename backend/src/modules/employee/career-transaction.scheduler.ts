@@ -14,7 +14,9 @@ export const CAREER_TRANSACTION_APPLY_JOB = 'career:apply-due-transactions';
  */
 export async function runCareerTransactionApply(): Promise<{ due: number; applied: number }> {
   const due = await prisma.employeeCareerTransaction.findMany({
-    where: { appliedAt: null, deletedAt: null, effectiveDate: { lte: new Date() } },
+    // Only APPROVED movements apply — a PENDING one awaiting workflow approval
+    // must never mutate the employee.
+    where: { appliedAt: null, deletedAt: null, status: 'APPROVED', effectiveDate: { lte: new Date() } },
     orderBy: [{ employeeId: 'asc' }, { effectiveDate: 'asc' }, { createdAt: 'asc' }],
     select: {
       id: true, employeeId: true, companyId: true, effectiveDate: true,

@@ -129,6 +129,20 @@ export class EmployeeController {
     }
   }
 
+  async applyCareerWorkflowAction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await employeeService.applyCareerWorkflowAction(
+        req.params.transactionId as string,
+        req.user!.id,
+        req.user!.roles ?? [],
+        req.body,
+      );
+      res.json(Result.updated(result, 'Career workflow action applied'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async findCompanyAssignments(req: Request, res: Response, next: NextFunction) {
     try {
       const items = await employeeService.findCompanyAssignments(req.params.id as string);
