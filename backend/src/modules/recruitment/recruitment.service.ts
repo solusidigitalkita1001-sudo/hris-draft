@@ -144,6 +144,87 @@ export class RecruitmentService {
     return recruitmentRepository.updateApplicationStatus(id, data.status as any, data.notes, [application.status]);
   }
 
+  // ==================== Offers (checklist §27) ====================
+
+  async findOffers(applicationId: string) {
+    const application = await recruitmentRepository.findApplicationWithCandidate(applicationId);
+    if (!application) throw new NotFoundError('Application not found');
+    return prisma.offer.findMany({ where: { applicationId }, orderBy: { version: 'desc' } });
+  }
+
+  /** Creates a new offer version; open prior versions are WITHDRAWN, never overwritten. */
+  async createOffer(
+    applicationId: string,
+    data: { baseSalary: number; allowance?: number; grade?: string; positionId?: string; employmentType?: string; probationMonths?: number; joinDate?: string; expiryDate?: string; notes?: string },
+    createdBy: string,
+  ) {
+    const application = await recruitmentRepository.findApplicationWithCandidate(applicationId);
+    if (!application) throw new NotFoundError('Application not found');
+    if (!['INTERVIEW', 'OFFER'].includes(application.status)) {
+      throw new BadRequestError(`Offer hanya dapat dibuat untuk lamaran INTERVIEW/OFFER (sekarang: ${application.status})`);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const latest = await tx.offer.findFirst({ where: { applicationId }, orderBy: { version: 'desc' }, select: { version: true } });
+      await tx.offer.updateMany({
+        where: { applicationId, status: { in: ['DRAFT', 'APPROVED'] } },
+        data: { status: 'WITHDRAWN' },
+      });
+      const offer = await tx.offer.create({
+        data: {
+          companyId: application.companyId,
+          applicationId,
+          version: (latest?.version ?? 0) + 1,
+          baseSalary: data.baseSalary,
+          allowance: data.allowance,
+          grade: data.grade,
+          positionId: data.positionId ?? application.jobPosting?.positionId ?? null,
+          employmentType: data.employmentType ?? 'PROBATION',
+          probationMonths: data.probationMonths,
+          joinDate: data.joinDate ? new Date(data.joinDate) : null,
+          expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
+          notes: data.notes,
+          createdBy,
+        },
+      });
+      if (application.status === 'INTERVIEW') {
+        await tx.jobApplication.updateMany({ where: { id: applicationId, status: 'INTERVIEW' }, data: { status: 'OFFER' } });
+      }
+      return offer;
+    });
+  }
+
+  /** Maker-checker: the offer's creator cannot approve their own offer. */
+  async approveOffer(id: string, userId: string) {
+    const offer = await prisma.offer.findFirst({ where: { id } });
+    if (!offer) throw new NotFoundError('Offer not found');
+    if (offer.createdBy && offer.createdBy === userId) {
+      throw new ConflictError('Pembuat offer tidak boleh menyetujui offer-nya sendiri');
+    }
+    const approved = await prisma.offer.updateMany({
+      where: { id, status: 'DRAFT' },
+      data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
+    });
+    if (approved.count !== 1) throw new ConflictError('Offer sudah diproses');
+    return prisma.offer.findFirstOrThrow({ where: { id } });
+  }
+
+  /** Candidate response, recorded by the recruiter. Expired offers auto-flip. */
+  async respondOffer(id: string, decision: 'ACCEPTED' | 'REJECTED', notes?: string) {
+    const offer = await prisma.offer.findFirst({ where: { id } });
+    if (!offer) throw new NotFoundError('Offer not found');
+    if (offer.expiryDate && offer.expiryDate.getTime() < Date.now()) {
+      await prisma.offer.updateMany({ where: { id, status: 'APPROVED' }, data: { status: 'EXPIRED' } });
+      throw new ConflictError('Offer sudah kedaluwarsa; buat versi offer baru');
+    }
+    const responded = await prisma.offer.updateMany({
+      where: { id, status: 'APPROVED' },
+      data: { status: decision, respondedAt: new Date(), ...(notes ? { notes } : {}) },
+    });
+    if (responded.count !== 1) throw new ConflictError('Hanya offer APPROVED yang dapat dijawab kandidat');
+    return prisma.offer.findFirstOrThrow({ where: { id } });
+  }
+
   /**
    * Hire transaction (checklist §28). Serialized per application by an
    * advisory lock; retry-safe via hiredEmployeeId; carries the posting's
@@ -160,6 +241,14 @@ export class RecruitmentService {
       if (application.status !== 'OFFER') {
         throw new BadRequestError('Hanya lamaran berstatus OFFER yang dapat di-hire (checklist state machine)');
       }
+      // The agreed compensation must exist and be ACCEPTED before hire.
+      const offer = await prisma.offer.findFirst({
+        where: { applicationId: id, status: 'ACCEPTED' },
+        orderBy: { version: 'desc' },
+      });
+      if (!offer) {
+        throw new BadRequestError('Hire membutuhkan offer yang sudah ACCEPTED oleh kandidat');
+      }
 
       const c = application.candidate;
       const posting = application.jobPosting;
@@ -171,9 +260,9 @@ export class RecruitmentService {
         email: c.email ?? undefined,
         phone: c.phone ?? undefined,
         departmentId: posting?.departmentId ?? undefined,
-        positionId: posting?.positionId ?? undefined,
-        joinDate: new Date().toISOString(),
-        employmentType: 'PROBATION',
+        positionId: offer.positionId ?? posting?.positionId ?? undefined,
+        joinDate: (offer.joinDate ?? new Date()).toISOString(),
+        employmentType: offer.employmentType ?? 'PROBATION',
         // ponytail: postings carry no employee category; OFFICE is the safe
         // default because FACTORY requires a shift formula the posting lacks.
         employeeCategory: 'OFFICE',
@@ -181,6 +270,17 @@ export class RecruitmentService {
       } as any);
 
       try {
+        // The hired salary is RECORDED at hire, from the accepted offer —
+        // previously new hires had no compensation row at all.
+        await prisma.employeeSalary.create({
+          data: {
+            employeeId: employee.id,
+            companyId: application.companyId,
+            baseSalary: offer.baseSalary,
+            effectiveDate: offer.joinDate ?? new Date(),
+            notes: `Dari offer v${offer.version} (${offer.id})`,
+          },
+        });
         await recruitmentRepository.generateOnboardingChecklists(application.companyId, employee.id);
         const updated = await prisma.jobApplication.updateMany({
           where: { id, status: 'OFFER', hiredEmployeeId: null },
@@ -197,6 +297,7 @@ export class RecruitmentService {
         // Compensation: an employee without a HIRED application is a duplicate
         // waiting to happen on retry — remove it and surface the error.
         await prisma.onboardingChecklist.deleteMany({ where: { employeeId: employee.id } }).catch(() => undefined);
+        await prisma.employeeSalary.deleteMany({ where: { employeeId: employee.id } }).catch(() => undefined);
         await prisma.employee.delete({ where: { id: employee.id } }).catch(() => undefined);
         throw err;
       }

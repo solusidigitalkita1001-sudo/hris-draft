@@ -129,6 +129,7 @@ const COMPANY_SCOPED_MODELS = new Set([
   'AuditLog',
   'CompanySetting',
   'EmployeeFaceProfile',
+  'Offer',
   // Parent-scoped (no own companyId; scoped via PARENT_SCOPES in tenant-scope.ts)
   'LoanInstallment',
   'WorkCalendarDay',

@@ -142,6 +142,7 @@ model Company {
   surveys                               Survey[]
   /// D.3 E-Signature wrapper transactions
   esignatureTransactions               ESignatureTransaction[]
+  offers                               Offer[]
   leaveTypes                            LeaveType[]
   leaveBalances                         LeaveBalance[]
   leaveRequests                         LeaveRequest[]
@@ -1923,6 +1924,7 @@ model JobApplication {
   candidate  Candidate   @relation(fields: [candidateId], references: [id], onDelete: Restrict)
   company    Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
   interviews Interview[]
+  offers     Offer[]
 
   @@index([jobPostingId])
   @@index([candidateId])
@@ -4729,6 +4731,49 @@ model Reimbursement {
   @@index([claimId])
   @@index([companyId])
   @@map("reimbursements")
+}
+
+/// Job offer for an application (checklist §27): versioned, approved, and
+/// answered by the candidate before hire. Never overwritten — a revised
+/// offer is a new row with version+1.
+model Offer {
+  id              String      @id @default(uuid()) @db.VarChar(36)
+  companyId       String      @map("company_id") @db.VarChar(36)
+  applicationId   String      @map("application_id") @db.VarChar(36)
+  version         Int         @default(1)
+  status          OfferStatus @default(DRAFT)
+  baseSalary      Decimal     @map("base_salary") @db.Decimal(15, 2)
+  allowance       Decimal?    @db.Decimal(15, 2)
+  grade           String?     @db.VarChar(50)
+  positionId      String?     @map("position_id") @db.VarChar(36)
+  employmentType  String      @default("PROBATION") @map("employment_type") @db.VarChar(50)
+  probationMonths Int?        @map("probation_months")
+  joinDate        DateTime?   @map("join_date")
+  expiryDate      DateTime?   @map("expiry_date")
+  approvedBy      String?     @map("approved_by") @db.VarChar(36)
+  approvedAt      DateTime?   @map("approved_at")
+  respondedAt     DateTime?   @map("responded_at")
+  notes           String?     @db.Text
+  createdBy       String?     @map("created_by") @db.VarChar(36)
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+
+  @@unique([applicationId, version])
+  @@index([companyId])
+  @@index([applicationId])
+  @@map("offers")
+}
+
+enum OfferStatus {
+  DRAFT
+  APPROVED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
 }
 
 enum BusinessTripStatus {

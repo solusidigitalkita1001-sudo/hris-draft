@@ -60,12 +60,12 @@ describe('payroll calendar and leave date arithmetic', () => {
       { date: new Date('2026-10-01'), status: 'PRESENT' }, { date: new Date('2026-10-01'), status: 'LATE' },
       { date: new Date('2026-10-04'), status: 'PRESENT' }, { date: new Date('2026-09-30'), status: 'PRESENT' },
     ], [{ startDate: new Date('2026-09-01'), endDate: new Date('2026-10-02') }, { startDate: new Date('2026-10-02'), endDate: new Date('2026-10-05') }]);
-    expect(result).toEqual({ workDays: 5, present: 1, leave: 2, absent: 2 });
+    expect(result).toEqual({ workDays: 5, present: 1, leave: 2, unpaidLeave: 0, absent: 2 });
   });
   it('intersects leave with a leap-day period and ignores the rest of a long request', () => {
     const work = new Set(payrollPeriodDates(new Date('2028-02-28'), new Date('2028-03-01')).map(payrollDateKey));
     expect(countPayrollAttendance(work, [], [{ startDate: new Date('2028-01-01'), endDate: new Date('2028-02-29') }]))
-      .toEqual({ workDays: 3, present: 0, leave: 2, absent: 1 });
+      .toEqual({ workDays: 3, present: 0, leave: 2, unpaidLeave: 0, absent: 1 });
   });
   it('rejects reversed or unbounded periods and invalid calendar configuration', () => {
     expect(() => payrollPeriodDates(new Date('2026-10-02'), new Date('2026-10-01'))).toThrow();
@@ -73,5 +73,25 @@ describe('payroll calendar and leave date arithmetic', () => {
     expect(() => payrollDateKey(new Date('invalid'))).toThrow();
     expect(() => resolve({ calendars: [{ ...calendar, workDays: { thu: { enabled: 'false' } } }] })).toThrow('Invalid working week');
     expect(() => countPayrollAttendance(new Set(resolve()), [], [{ startDate: new Date('2026-10-02'), endDate: new Date('2026-10-01') }])).toThrow('invalid date range');
+  });
+});
+
+describe('unpaid leave and trip/WFH presence (org policy decisions)', () => {
+  const work = new Set(['2026-10-01', '2026-10-02', '2026-10-05']);
+  it('counts unpaid leave days separately while leave totals stay unchanged', () => {
+    const result = countPayrollAttendance(work, [], [
+      { startDate: new Date('2026-10-01'), endDate: new Date('2026-10-01'), isPaid: false },
+      { startDate: new Date('2026-10-02'), endDate: new Date('2026-10-02'), isPaid: true },
+    ]);
+    expect(result).toEqual({ workDays: 3, present: 0, leave: 2, unpaidLeave: 1, absent: 1 });
+  });
+  it('counts approved trip/WFH ranges as PRESENT, beating overlapping leave', () => {
+    const result = countPayrollAttendance(work, [],
+      [{ startDate: new Date('2026-10-01'), endDate: new Date('2026-10-05'), isPaid: false }],
+      [{ startDate: new Date('2026-10-01'), endDate: new Date('2026-10-02') }]);
+    expect(result).toEqual({ workDays: 3, present: 2, leave: 1, unpaidLeave: 1, absent: 0 });
+  });
+  it('rejects reversed trip ranges', () => {
+    expect(() => countPayrollAttendance(work, [], [], [{ startDate: new Date('2026-10-02'), endDate: new Date('2026-10-01') }])).toThrow('invalid date range');
   });
 });

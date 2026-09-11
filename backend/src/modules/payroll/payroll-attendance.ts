@@ -4,6 +4,8 @@ import { countPayrollAttendance, payrollDateKey, payrollPeriodDates, resolvePayr
 
 export interface PayrollAttendanceSummary {
   workDays: number; present: number; absent: number; leave: number;
+  /** Approved leave days whose LeaveType.isPaid = false (deduction is company-config-gated). */
+  unpaidLeave: number;
   /** Total approved overtime hours (workday + holiday). */
   overtime: number;
   /** Hours on the employee's working dates — paid at workday bands. */
@@ -24,7 +26,7 @@ export async function loadPayrollAttendance(
   const dates = payrollPeriodDates(periodStart, periodEnd), results = new Map<string, PayrollAttendanceInput>();
   if (!employeeIds.length) return results;
   const employeeId = { in: [...new Set(employeeIds)] }, range = { gte: dates[0], lte: dates[dates.length - 1] };
-  const [employees, calendars, shifts, overrides, attendance, leaves, overtimes] = await Promise.all([
+  const [employees, calendars, shifts, overrides, attendance, leaves, overtimes, trips, permissions] = await Promise.all([
     database.employee.findMany({ where: { id: employeeId, companyId, deletedAt: null }, select: {
       id: true, companyId: true, branchId: true, departmentId: true, employeeCategory: true, shiftFormulaId: true, shiftStartDate: true,
     } }),
@@ -36,8 +38,14 @@ export async function loadPayrollAttendance(
       include: { shiftSwapRequest: { select: { companyId: true, status: true, deletedAt: true, shiftDate: true, requesterEmployeeId: true, targetEmployeeId: true } } } }),
     database.attendance.findMany({ where: { companyId, employeeId, date: range, deletedAt: null }, select: { employeeId: true, date: true, status: true } }),
     database.leaveRequest.findMany({ where: { companyId, employeeId, status: 'APPROVED', deletedAt: null,
-      startDate: { lte: range.lte }, endDate: { gte: range.gte } }, select: { employeeId: true, startDate: true, endDate: true } }),
+      startDate: { lte: range.lte }, endDate: { gte: range.gte } }, select: { employeeId: true, startDate: true, endDate: true, leaveType: { select: { isPaid: true } } } }),
     database.overtimeRequest.findMany({ where: { companyId, employeeId, status: 'APPROVED', date: range, deletedAt: null }, select: { employeeId: true, durationHours: true, date: true } }),
+    // Approved business trips and WFH count as PRESENT (policy decision):
+    // an employee on assignment is working, not absent.
+    database.businessTrip.findMany({ where: { companyId, employeeId, status: { in: ['APPROVED', 'COMPLETED'] },
+      startDate: { lte: range.lte }, endDate: { gte: range.gte } }, select: { employeeId: true, startDate: true, endDate: true } }),
+    database.permissionRequest.findMany({ where: { companyId, employeeId, status: 'APPROVED', type: { in: ['BUSINESS_TRIP', 'WORK_FROM_HOME'] },
+      startDate: { lte: range.lte }, endDate: { gte: range.gte } }, select: { employeeId: true, startDate: true, endDate: true } }),
   ]);
   if (employees.length !== employeeId.in.length) throw new BadRequestError('Payroll salary references an unavailable employee in this company');
   function group<T extends { employeeId: string }>(rows: T[]) {
@@ -46,9 +54,15 @@ export async function loadPayrollAttendance(
     return grouped;
   }
   const attendanceByEmployee = group(attendance), leavesByEmployee = group(leaves), overtimeByEmployee = group(overtimes), overridesByEmployee = group(overrides);
+  const presenceByEmployee = group([...trips, ...permissions]);
   for (const employee of employees) {
     const workingDates = resolvePayrollWorkingDates(employee, dates, { calendars, shifts, overrides: overridesByEmployee.get(employee.id) ?? [] });
-    const counts = countPayrollAttendance(workingDates, attendanceByEmployee.get(employee.id) ?? [], leavesByEmployee.get(employee.id) ?? []);
+    const counts = countPayrollAttendance(
+      workingDates,
+      attendanceByEmployee.get(employee.id) ?? [],
+      (leavesByEmployee.get(employee.id) ?? []).map((leave) => ({ ...leave, isPaid: leave.leaveType?.isPaid !== false })),
+      presenceByEmployee.get(employee.id) ?? [],
+    );
     let overtimeWorkday = new Prisma.Decimal(0);
     let overtimeHoliday = new Prisma.Decimal(0);
     for (const row of overtimeByEmployee.get(employee.id) ?? []) {

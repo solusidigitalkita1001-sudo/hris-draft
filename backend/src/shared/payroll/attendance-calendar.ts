@@ -93,15 +93,30 @@ export function resolvePayrollWorkingDates(employee: ScheduleEmployee, dates: Da
   return result;
 }
 
-export function countPayrollAttendance(workingDates: Set<string>, attendance: { date: Date; status: string }[], leaves: { startDate: Date; endDate: Date }[]) {
+export function countPayrollAttendance(
+  workingDates: Set<string>,
+  attendance: { date: Date; status: string }[],
+  leaves: { startDate: Date; endDate: Date; isPaid?: boolean }[],
+  /** Approved business-trip/WFH ranges — counted as PRESENT (policy decision). */
+  presenceRanges: { startDate: Date; endDate: Date }[] = [],
+) {
   const present = new Set(attendance.filter(row => row.status === 'PRESENT' || row.status === 'LATE').map(row => payrollDateKey(row.date)));
-  const ranges = leaves.map(leave => ({ start: payrollDateKey(leave.startDate), end: payrollDateKey(leave.endDate) }));
+  const ranges = leaves.map(leave => ({ start: payrollDateKey(leave.startDate), end: payrollDateKey(leave.endDate), isPaid: leave.isPaid !== false }));
   if (ranges.some(range => range.end < range.start)) throw new BadRequestError('Approved leave has an invalid date range');
-  let presentDays = 0, leaveDays = 0;
+  const presence = presenceRanges.map(range => ({ start: payrollDateKey(range.startDate), end: payrollDateKey(range.endDate) }));
+  if (presence.some(range => range.end < range.start)) throw new BadRequestError('Approved trip/WFH has an invalid date range');
+  let presentDays = 0, leaveDays = 0, unpaidLeaveDays = 0;
   for (const date of workingDates) {
     // A date is counted once. Actual presence takes precedence over overlapping leave.
-    if (present.has(date)) presentDays++;
-    else if (ranges.some(range => date >= range.start && date <= range.end)) leaveDays++;
+    if (present.has(date) || presence.some(range => date >= range.start && date <= range.end)) {
+      presentDays++;
+      continue;
+    }
+    const covering = ranges.find(range => date >= range.start && date <= range.end);
+    if (covering) {
+      leaveDays++;
+      if (!covering.isPaid) unpaidLeaveDays++;
+    }
   }
-  return { workDays: workingDates.size, present: presentDays, leave: leaveDays, absent: workingDates.size - presentDays - leaveDays };
+  return { workDays: workingDates.size, present: presentDays, leave: leaveDays, unpaidLeave: unpaidLeaveDays, absent: workingDates.size - presentDays - leaveDays };
 }

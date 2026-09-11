@@ -73,6 +73,26 @@ export const createInterviewFeedbackSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const createOfferSchema = z.object({
+  baseSalary: z.number().positive(),
+  allowance: z.number().nonnegative().optional(),
+  grade: z.string().max(50).optional(),
+  positionId: z.string().uuid().optional(),
+  employmentType: z.enum(['PROBATION', 'CONTRACT', 'PERMANENT', 'INTERNSHIP', 'FULL_TIME', 'PART_TIME']).optional(),
+  probationMonths: z.number().int().min(0).max(24).optional(),
+  joinDate: z.string().datetime().optional(),
+  expiryDate: z.string().datetime().optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+export const respondOfferSchema = z.object({
+  decision: z.enum(['ACCEPTED', 'REJECTED']),
+  notes: z.string().max(2000).optional(),
+});
+
+export type CreateOfferDTO = z.infer<typeof createOfferSchema>;
+export type RespondOfferDTO = z.infer<typeof respondOfferSchema>;
+
 export type CreateJobPostingDTO = z.infer<typeof createJobPostingSchema>;
 export type CreateCandidateDTO = z.infer<typeof createCandidateSchema>;
 export type CreateApplicationDTO = z.infer<typeof createApplicationSchema>;

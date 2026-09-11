@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { recruitmentService } from './recruitment.service';
 import { Result } from '@/shared/core/Result';
+import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 
 export class RecruitmentController {
   async findAllJobPostings(req: Request, res: Response, next: NextFunction) {
@@ -70,6 +71,26 @@ export class RecruitmentController {
 
   async submitFeedback(req: Request, res: Response, next: NextFunction) {
     try { const interviewId = req.params.id as string; res.status(201).json(Result.created(await recruitmentService.submitFeedback(interviewId, req.body))); }
+    catch (error) { next(error); }
+  }
+
+  async findOffers(req: Request, res: Response, next: NextFunction) {
+    try { res.json(Result.success(await recruitmentService.findOffers(req.params.id as string))); }
+    catch (error) { next(error); }
+  }
+
+  async createOffer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.status(201).json(Result.created(await recruitmentService.createOffer(req.params.id as string, req.body, req.user!.id))); }
+    catch (error) { next(error); }
+  }
+
+  async approveOffer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await recruitmentService.approveOffer(req.params.id as string, req.user!.id))); }
+    catch (error) { next(error); }
+  }
+
+  async respondOffer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await recruitmentService.respondOffer(req.params.id as string, req.body.decision, req.body.notes))); }
     catch (error) { next(error); }
   }
 }

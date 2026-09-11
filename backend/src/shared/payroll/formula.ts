@@ -8,7 +8,7 @@ export const FORMULA_VARIABLES = ['BASE_SALARY', 'WORK_DAYS', 'PRESENT_DAYS', 'L
 export type FormulaVariable = typeof FORMULA_VARIABLES[number];
 export type FormulaInputs = Record<FormulaVariable, string>;
 export const SYSTEM_PAYROLL_CODES = new Set(['BPJS-TK', 'BPJS-KES', 'PPH21', 'LOAN_DEDUCTION_AUTO',
-  'OVERTIME_EARNING_AUTO', 'LATE_DEDUCTION_AUTO', 'ABSENCE_DEDUCTION_AUTO', 'EWA-DEDUCT', 'BENEFIT_DEDUCTION_AUTO']);
+  'OVERTIME_EARNING_AUTO', 'LATE_DEDUCTION_AUTO', 'ABSENCE_DEDUCTION_AUTO', 'EWA-DEDUCT', 'BENEFIT_DEDUCTION_AUTO', 'UNPAID_LEAVE_DEDUCTION_AUTO']);
 type Node = { kind: 'literal'; value: string } | { kind: 'variable'; name: FormulaVariable }
   | { kind: 'reference'; code: string } | { kind: 'negate'; value: Node }
   | { kind: 'binary'; op: string; left: Node; right: Node }

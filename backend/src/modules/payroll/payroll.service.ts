@@ -257,6 +257,7 @@ export class PayrollService {
       for (const [employeeId, row] of inputs) {
         summary[employeeId] = {
           workDays: row.workDays, present: row.present, absent: row.absent, leave: row.leave,
+          unpaidLeave: row.unpaidLeave,
           overtime: row.overtime, overtimeWorkday: row.overtimeWorkday, overtimeHoliday: row.overtimeHoliday,
         };
       }
@@ -463,6 +464,16 @@ export class PayrollService {
       select: { value: true },
     });
     const benefitDeductionEnabled = benefitSetting?.value === 'true';
+    // Unpaid-leave deduction (org decision, dynamic per company): approved
+    // leave on an unpaid leave type deducts a daily wage when enabled.
+    const unpaidLeaveSetting = await database.companySetting.findUnique({
+      where: { companyId_key: { companyId: run.companyId, key: 'unpaid_leave_deduction_enabled' } },
+      select: { value: true },
+    });
+    const unpaidLeaveDeductionEnabled = unpaidLeaveSetting?.value === 'true';
+    const unpaidLeaveDeductionComponent = unpaidLeaveDeductionEnabled
+      ? await this.ensureUnpaidLeaveDeductionComponent(run.companyId, database)
+      : null;
     const benefitDeductionComponent = benefitDeductionEnabled
       ? await this.ensureBenefitDeductionComponent(run.companyId, database)
       : null;
@@ -639,6 +650,15 @@ export class PayrollService {
       const benefitEmployeeTotal = benefitDeductions.reduce((sum, row) => sum + row.employeeAmount, 0);
 
       const extraComponents: PayComponent[] = [];
+      if (unpaidLeaveDeductionComponent && attd.unpaidLeave > 0 && lateCfg.defaultWorkingDaysPerMonth > 0) {
+        extraComponents.push({
+          salaryComponentId: unpaidLeaveDeductionComponent.id,
+          name: 'Potongan Cuti Tidak Dibayar',
+          type: 'DEDUCTION',
+          amount: Math.round((baseMonthlyWage / lateCfg.defaultWorkingDaysPerMonth) * attd.unpaidLeave),
+          isTaxable: false,
+        });
+      }
       if (benefitDeductionComponent && benefitEmployeeTotal > 0) {
         extraComponents.push({
           salaryComponentId: benefitDeductionComponent.id,
@@ -873,6 +893,24 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated: automatic absence per day deduction based on basic salary / working days',
       sortOrder: 996,
+    }, database);
+  }
+
+  private async ensureUnpaidLeaveDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'UNPAID_LEAVE_DEDUCTION_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Potongan Cuti Tidak Dibayar',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false,
+      description: 'System generated: daily-wage deduction for approved leave whose leave type is unpaid (enabled per company via unpaid_leave_deduction_enabled).',
+      sortOrder: 993,
     }, database);
   }
 
