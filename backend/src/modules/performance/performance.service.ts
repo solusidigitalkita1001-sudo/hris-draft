@@ -3184,12 +3184,26 @@ export class PerformanceService {
     }
 
     const workspace = await performanceRepository.findPlanningWorkspace(periodId);
+    // Recalculation must never overwrite scores that already passed
+    // calibration/publication: assignments whose result is FINALIZED,
+    // PUBLISHED, or ACKNOWLEDGED are excluded (reopen is the only way back).
+    const existingResults = await performanceRepository.findResultsByPeriod(periodId);
+    const lockedAssignmentIds = new Set(
+      existingResults
+        .filter((result: { status: string; assignmentId: string }) =>
+          ['FINALIZED', 'PUBLISHED', 'ACKNOWLEDGED'].includes(result.status))
+        .map((result: { assignmentId: string }) => result.assignmentId),
+    );
     const eligibleAssignments = (workspace?.planningAssignments ?? []).filter((assignment) =>
-      ['APPROVED', 'COMPLETED'].includes(assignment.status)
+      ['APPROVED', 'COMPLETED'].includes(assignment.status) && !lockedAssignmentIds.has(assignment.id)
     );
 
     if (!eligibleAssignments.length) {
-      throw new BadRequestError('No approved or completed execution assignments are ready for calculation');
+      throw new BadRequestError(
+        lockedAssignmentIds.size
+          ? 'Semua hasil periode ini sudah difinalisasi/dipublish; gunakan alur reopen untuk menghitung ulang'
+          : 'No approved or completed execution assignments are ready for calculation',
+      );
     }
 
     // Task 2.2: batch-load all details up front instead of one query per assignment.

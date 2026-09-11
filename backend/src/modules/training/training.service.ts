@@ -66,6 +66,13 @@ export class TrainingService {
   }
 
   async createEnrollment(data: CreateEnrollmentDTO) {
+    // Same duplicate guard as the self-service path — the admin path
+    // previously allowed unlimited duplicate enrollments.
+    await this.findCourseById(data.courseId);
+    const existing = await trainingRepository.findActiveEnrollment(data.courseId, data.employeeId, data.companyId);
+    if (existing) {
+      throw new ConflictError('Employee is already enrolled in this course');
+    }
     return trainingRepository.createEnrollment(data);
   }
 

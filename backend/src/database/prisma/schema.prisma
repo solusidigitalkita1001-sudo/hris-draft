@@ -1912,6 +1912,8 @@ model JobApplication {
   coverLetter    String?           @map("cover_letter") @db.Text
   expectedSalary Decimal?          @map("expected_salary") @db.Decimal(15, 2)
   notes          String?           @db.Text
+  /// Employee created by the hire transaction — makes hire idempotent and auditable.
+  hiredEmployeeId String?          @map("hired_employee_id") @db.VarChar(36)
   appliedAt      DateTime          @default(now()) @map("applied_at")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
@@ -2957,6 +2959,8 @@ model Resignation {
   status           String    @default("SUBMITTED") @db.VarChar(20)
   approvedBy       String?   @map("approved_by") @db.VarChar(36)
   approvedAt       DateTime? @map("approved_at")
+  /// When offboarding effects (employee status, user deactivation) were applied.
+  effectsAppliedAt DateTime? @map("effects_applied_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 

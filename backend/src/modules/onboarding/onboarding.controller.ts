@@ -29,7 +29,7 @@ export class OnboardingController {
     catch (error) { next(error); }
   }
   async approveResignation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-    try { res.json(Result.updated(await onboardingService.approveResignation(req.params.id as string, req.user!.id))); }
+    try { res.json(Result.updated(await onboardingService.approveResignation(req.params.id as string, req.user!.id, req.user!.employeeId))); }
     catch (error) { next(error); }
   }
   async rejectResignation(req: Request, res: Response, next: NextFunction) {

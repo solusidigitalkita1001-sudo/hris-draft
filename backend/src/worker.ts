@@ -12,6 +12,7 @@ import { performanceService } from '@/modules/performance/performance.service';
 import { LEAVE_YEARLY_ACCRUAL_JOB, runYearlyLeaveAccrual, scheduleYearlyLeaveAccrual } from '@/modules/leave/leave.scheduler';
 import { WORKFLOW_SLA_SWEEP_JOB, runWorkflowSlaSweep, scheduleWorkflowSlaSweep } from '@/modules/workflow-engine/workflow-sla.scheduler';
 import { CAREER_TRANSACTION_APPLY_JOB, runCareerTransactionApply, scheduleCareerTransactionApply } from '@/modules/employee/career-transaction.scheduler';
+import { OFFBOARDING_APPLY_JOB, runOffboardingApply, scheduleOffboardingApply } from '@/modules/onboarding/offboarding.scheduler';
 import { runInSystemContext } from '@/shared/context/RequestContext';
 
 async function maybeCreateNotification(event: DomainEvent): Promise<void> {
@@ -129,6 +130,9 @@ async function bootstrapWorker(): Promise<void> {
       if (job.name === CAREER_TRANSACTION_APPLY_JOB) {
         return runInSystemContext('career-transaction-worker', () => runCareerTransactionApply());
       }
+      if (job.name === OFFBOARDING_APPLY_JOB) {
+        return runInSystemContext('offboarding-worker', () => runOffboardingApply());
+      }
       const year = job.data.year ?? new Date().getFullYear();
       return runInSystemContext('leave-automation-worker', () => runYearlyLeaveAccrual(year));
     },
@@ -138,6 +142,7 @@ async function bootstrapWorker(): Promise<void> {
   await runInSystemContext('leave-scheduler-bootstrap', () => scheduleYearlyLeaveAccrual());
   await runInSystemContext('workflow-sla-scheduler-bootstrap', () => scheduleWorkflowSlaSweep());
   await runInSystemContext('career-scheduler-bootstrap', () => scheduleCareerTransactionApply());
+  await runInSystemContext('offboarding-scheduler-bootstrap', () => scheduleOffboardingApply());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,

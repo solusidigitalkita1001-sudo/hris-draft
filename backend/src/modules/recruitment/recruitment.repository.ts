@@ -1,6 +1,7 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import { CreateJobPostingDTO, CreateCandidateDTO, CreateApplicationDTO, CreateInterviewDTO } from './recruitment.dto';
+import { ConflictError } from '@/shared/exceptions/AppError';
 
 export class RecruitmentRepository {
   async findAllJobPostings(companyId: string, status?: string) {
@@ -85,10 +86,22 @@ export class RecruitmentRepository {
     });
   }
 
-  async updateApplicationStatus(id: string, status: any, notes?: string) {
-    const data: Prisma.JobApplicationUpdateInput = { status: status as any };
-    if (notes) data.notes = notes;
-    return prisma.jobApplication.update({ where: { id }, data });
+  async updateApplicationStatus(id: string, status: any, notes?: string, expectedFrom?: string[]) {
+    const data: Prisma.JobApplicationUpdateManyMutationInput = { status: status as any };
+    // Preserve the transition trail instead of overwriting the note.
+    if (notes !== undefined || expectedFrom) {
+      const current = await prisma.jobApplication.findFirst({ where: { id }, select: { status: true, notes: true } });
+      const stamp = `[${new Date().toISOString().slice(0, 10)} ${current?.status ?? '?'} -> ${status}]`;
+      data.notes = [current?.notes, `${stamp}${notes ? ` ${notes}` : ''}`].filter(Boolean).join('\n');
+    }
+    const result = await prisma.jobApplication.updateMany({
+      where: { id, ...(expectedFrom ? { status: { in: expectedFrom as never[] } } : {}) },
+      data,
+    });
+    if (result.count !== 1) {
+      throw new ConflictError('Application status changed; reload before retrying');
+    }
+    return prisma.jobApplication.findFirstOrThrow({ where: { id } });
   }
 
   async findApplicationWithCandidate(id: string) {
@@ -96,7 +109,7 @@ export class RecruitmentRepository {
       where: { id, deletedAt: null },
       include: {
         candidate: true,
-        jobPosting: { select: { id: true, title: true } },
+        jobPosting: { select: { id: true, title: true, departmentId: true, positionId: true, employmentType: true } },
       },
     });
   }
