@@ -2,7 +2,7 @@ import { enforceTenantScope } from './tenant-scope';
 import { PrismaClient } from '@prisma/client';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
-import { getCurrentCompanyId, isSystemContext } from '@/shared/context/RequestContext';
+import { getCurrentCompanyId, isSystemContext, isSuperAdmin } from '@/shared/context/RequestContext';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -149,7 +149,12 @@ function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {
     if (!params.model || !COMPANY_SCOPED_MODELS.has(params.model)) return next(params);
     const companyId = getCurrentCompanyId();
     if (!companyId) {
-      if (isSystemContext()) return next(params);
+      // System jobs and the SUPER_ADMIN platform account operate across tenants.
+      // SUPER_ADMIN has no company rows of its own, so without this a superadmin
+      // with no company selected would 500 on every scoped-model query. When a
+      // superadmin DOES select a company, getCurrentCompanyId() returns it and
+      // the normal per-tenant scoping below applies.
+      if (isSystemContext() || isSuperAdmin()) return next(params);
       throw new Error(`Tenant context is required for ${params.model}.${params.action}`);
     }
     await enforceTenantScope(params, companyId);

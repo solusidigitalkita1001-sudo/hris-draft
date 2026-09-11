@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { administrationService } from '@/modules/administration/administration.service';
-import { getCurrentCompanyId, getCurrentUser, isSystemContext, runInSystemContext } from '@/shared/context/RequestContext';
+import { getCurrentCompanyId, getCurrentUser, isSystemContext, isSuperAdmin, runInSystemContext } from '@/shared/context/RequestContext';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
 import prisma from '@/shared/database/prisma';
 
@@ -9,6 +9,10 @@ export async function employeeAccessWhere(resource = 'employee'): Promise<Prisma
   const actor = getCurrentUser();
   if (!actor && isSystemContext()) return {};
   const companyId = getCurrentCompanyId();
+  // SUPER_ADMIN platform account reads across tenants; with no company selected
+  // it has no tenant filter (returns all), consistent with the Prisma tenant
+  // middleware bypass. A selected company still scopes normally (companyId set).
+  if (actor && !companyId && isSuperAdmin()) return {};
   if (!actor || !companyId) throw new ForbiddenError('Employee access requires an active company context');
   const user: {
     id: string; roles?: string[]; companyId: string; employeeId?: string; companyScope?: string[]; groupId?: string;
