@@ -13,6 +13,7 @@ import { LEAVE_YEARLY_ACCRUAL_JOB, runYearlyLeaveAccrual, scheduleYearlyLeaveAcc
 import { WORKFLOW_SLA_SWEEP_JOB, runWorkflowSlaSweep, scheduleWorkflowSlaSweep } from '@/modules/workflow-engine/workflow-sla.scheduler';
 import { CAREER_TRANSACTION_APPLY_JOB, runCareerTransactionApply, scheduleCareerTransactionApply } from '@/modules/employee/career-transaction.scheduler';
 import { OFFBOARDING_APPLY_JOB, runOffboardingApply, scheduleOffboardingApply } from '@/modules/onboarding/offboarding.scheduler';
+import { RETENTION_SWEEP_JOB, runRetentionSweep, scheduleRetentionSweep } from '@/shared/retention/retention.scheduler';
 import { runInSystemContext } from '@/shared/context/RequestContext';
 
 async function maybeCreateNotification(event: DomainEvent): Promise<void> {
@@ -104,6 +105,17 @@ async function bootstrapWorker(): Promise<void> {
     QueueNames.DOMAIN_EVENTS,
     async (job) => {
       const event = job.data;
+      // Inbox dedupe (checklist §46): a BullMQ retry after a stall re-delivers
+      // the same event; without this claim the notification doubles.
+      if (config.redis.enabled && event.metadata?.eventId) {
+        const claimed = await redisCache.getClient().set(
+          `${config.redis.keyPrefix}ops:events:inbox:${event.metadata.eventId}`,
+          '1', 'EX', 7 * 24 * 3600, 'NX',
+        );
+        if (claimed === null) {
+          return { processed: false, duplicate: true, eventName: event.name };
+        }
+      }
       await recordProcessedEvent(event, 'bullmq');
       await runInSystemContext('domain-event-notification', () => maybeCreateNotification(event));
       return { processed: true, eventName: event.name };
@@ -133,6 +145,9 @@ async function bootstrapWorker(): Promise<void> {
       if (job.name === OFFBOARDING_APPLY_JOB) {
         return runInSystemContext('offboarding-worker', () => runOffboardingApply());
       }
+      if (job.name === RETENTION_SWEEP_JOB) {
+        return runInSystemContext('retention-worker', () => runRetentionSweep());
+      }
       const year = job.data.year ?? new Date().getFullYear();
       return runInSystemContext('leave-automation-worker', () => runYearlyLeaveAccrual(year));
     },
@@ -143,6 +158,7 @@ async function bootstrapWorker(): Promise<void> {
   await runInSystemContext('workflow-sla-scheduler-bootstrap', () => scheduleWorkflowSlaSweep());
   await runInSystemContext('career-scheduler-bootstrap', () => scheduleCareerTransactionApply());
   await runInSystemContext('offboarding-scheduler-bootstrap', () => scheduleOffboardingApply());
+  await runInSystemContext('retention-scheduler-bootstrap', () => scheduleRetentionSweep());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,
