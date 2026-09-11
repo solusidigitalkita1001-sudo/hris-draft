@@ -67,3 +67,32 @@ describe('requireCompanyAccess (multi-tenant isolation)', () => {
     expect(next).toHaveBeenCalled();
   });
 });
+
+describe('requireCompanyAccess — SUPER_ADMIN platform account (no company rows)', () => {
+  it('does not 403 a super admin with empty scope and no requested company', async () => {
+    const req = makeReq({ user: { id: 'sa', roles: ['SUPER_ADMIN'], companyScope: [] } });
+    const next = await run(req);
+    expect(next).toHaveBeenCalled();
+    expect(next.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it('lets a super admin target any company explicitly', async () => {
+    const req = makeReq({ user: { id: 'sa', roles: ['SUPER_ADMIN'], companyScope: [] }, query: { companyId: 'company-X' } });
+    const next = await run(req);
+    expect(next.mock.calls[0][0]).toBeUndefined();
+    expect(req.company.id).toBe('company-X');
+    expect(req.user.companyId).toBe('company-X');
+  });
+
+  it('still 403s a regular user with no scope at all', async () => {
+    const req = makeReq({ user: { id: 'u', roles: ['EMPLOYEE'], companyScope: [] } });
+    const next = await run(req);
+    expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+  });
+
+  it('still 403s a GROUP_ADMIN requesting outside their scope', async () => {
+    const req = makeReq({ user: { id: 'ga', roles: ['GROUP_ADMIN'], companyScope: ['A', 'B'] }, query: { companyId: 'C' } });
+    const next = await run(req);
+    expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+  });
+});

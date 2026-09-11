@@ -92,6 +92,7 @@ export function requireCompanyAccess() {
       const isSuperOrGroupAdmin = req.user.roles?.some((r) =>
         ['SUPER_ADMIN', 'GROUP_ADMIN'].includes(r)
       );
+      const isSuperAdminRole = req.user.roles?.includes('SUPER_ADMIN') ?? false;
 
       const allowedCompanyIds =
         req.user.companyScope && req.user.companyScope.length > 0
@@ -105,23 +106,39 @@ export function requireCompanyAccess() {
         (req.query.companyId as string) ||
         req.body?.companyId;
 
-      if (requestedCompanyId && !allowedCompanyIds.includes(requestedCompanyId)) {
+      // SUPER_ADMIN is a platform account with no company rows of its own —
+      // the membership check and the "must have a company" rule below would
+      // otherwise 403 every request it makes.
+      if (requestedCompanyId && !allowedCompanyIds.includes(requestedCompanyId) && !isSuperAdminRole) {
         throw new ForbiddenError('You do not have access to this company data');
       }
 
       const effectiveCompanyId =
         requestedCompanyId || req.user.companyId || allowedCompanyIds[0];
-      if (!effectiveCompanyId) {
+      if (!effectiveCompanyId && !isSuperAdminRole) {
         throw new ForbiddenError(
           'No accessible company scope found for this request'
         );
       }
-      req.company = { id: effectiveCompanyId, groupId: req.user.groupId };
+      if (effectiveCompanyId) {
+        req.company = { id: effectiveCompanyId, groupId: req.user.groupId };
+        // Propagate the VALIDATED company into the request context so the
+        // Prisma tenant middleware can scope queries for multi-company
+        // admins and SUPER_ADMIN (whose JWT carries no single companyId).
+        const ctx = getRequestContext();
+        if (ctx?.user && !ctx.user.companyId) {
+          ctx.user.companyId = effectiveCompanyId;
+        }
+        if (req.user && !req.user.companyId) {
+          req.user.companyId = effectiveCompanyId;
+        }
+      }
 
-      if (req.query && typeof req.query === 'object') {
+      if (effectiveCompanyId && req.query && typeof req.query === 'object') {
         (req.query as Record<string, unknown>).companyId = effectiveCompanyId;
       }
       if (
+        effectiveCompanyId &&
         req.body &&
         typeof req.body === 'object' &&
         'companyId' in req.body
