@@ -34,7 +34,9 @@ export class EWAController {
   async getMyRequests(req: Request<any, any, any, ListEWARequestsDTO>, res: Response, next: NextFunction) {
     try {
       const ctx = getRequestContext()?.user as UserContextLite | undefined;
-      if (!ctx?.employeeId) return res.status(400).json({ success: false, message: 'employeeId context tidak ada' });
+      // A platform account (e.g. SUPER_ADMIN) has no employee profile, so its
+      // "my EWA requests" set is legitimately empty rather than a 400 error.
+      if (!ctx?.employeeId) return res.json({ success: true, data: [] });
       const result = await ewaService.findMyRequests(ctx.employeeId, req.query.status);
       res.json({ success: true, data: result });
     } catch (e) {

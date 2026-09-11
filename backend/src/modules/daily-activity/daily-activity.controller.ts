@@ -31,7 +31,9 @@ export class DailyActivityController {
   async getMyActivities(req: Request<any, any, any, { startDate?: string; endDate?: string }>, res: Response, next: NextFunction) {
     try {
       const ctx = getRequestContext()?.user as UserContextLite | undefined;
-      if (!ctx?.employeeId) return res.status(400).json({ success: false, message: 'employeeId context tidak ada' });
+      // A platform account (e.g. SUPER_ADMIN) has no employee profile, so its
+      // "my activities" set is legitimately empty rather than a 400 error.
+      if (!ctx?.employeeId) return res.json({ success: true, data: [] });
       const start = req.query.startDate ? new Date(req.query.startDate) : undefined;
       const end = req.query.endDate ? new Date(req.query.endDate) : undefined;
       const result = await dailyActivityService.findMyActivities(ctx.employeeId, start, end);
