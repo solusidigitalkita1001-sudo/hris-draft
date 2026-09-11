@@ -24,15 +24,16 @@ router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); ne
 router.use(authenticate);
 router.use(requireCompanyAccess());
 
+// Self-service: any authenticated employee reads their OWN EWA. The controller
+// scopes strictly to the caller's employeeId, so no admin-level 'ewa:read'
+// permission is required (that permission is for reading others' records).
 router.get(
   '/my',
-  authorize({ resource: 'ewa', action: 'read' }),
   validate(listEWARequestsSchema, 'query'),
   ewaController.getMyRequests.bind(ewaController),
 );
 router.get(
   '/my/limit',
-  authorize({ resource: 'ewa', action: 'read' }),
   validate(ewaLimitQuerySchema, 'query'),
   ewaController.getMyLimit.bind(ewaController),
 );

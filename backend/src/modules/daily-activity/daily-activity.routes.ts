@@ -19,9 +19,12 @@ const router = Router();
 router.use(authenticate);
 router.use(requireCompanyAccess());
 
+// Self-service: any authenticated employee reads their OWN activities. The
+// controller scopes strictly to the caller's employeeId, so no admin-level
+// 'daily-activity:read' permission is required (that permission is for reading
+// other people's records).
 router.get(
   '/my',
-  authorize({ resource: 'daily-activity', action: 'read' }),
   dailyActivityController.getMyActivities.bind(dailyActivityController),
 );
 router.post(
