@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import * as Dialog from '@radix-ui/react-dialog';
 import { employeeService, type Employee } from '@/services/employee.service';
 import { organizationService, type Department } from '@/services/organization.service';
+import { useCompanyStore } from '@/stores/company.store';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -163,6 +164,10 @@ function ImportModal({
 
 export function EmployeeListPage() {
   const navigate = useNavigate();
+  // Reactive active company: the list must re-fetch when the company is
+  // selected/switched (e.g. SUPER_ADMIN picking a tenant), not read a stale
+  // localStorage value once on mount.
+  const activeCompanyId = useCompanyStore((s) => s.activeCompany?.id);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,7 +181,7 @@ export function EmployeeListPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
+      const companyId = activeCompanyId || localStorage.getItem('companyId') || '';
 
       const [empResult, deptData] = await Promise.all([
         employeeService.getEmployees({
@@ -198,7 +203,7 @@ export function EmployeeListPage() {
     } finally {
       setLoading(false);
     }
-  }, [deptFilter, statusFilter, search, page]);
+  }, [deptFilter, statusFilter, search, page, activeCompanyId]);
 
   useEffect(() => {
     fetchData();
