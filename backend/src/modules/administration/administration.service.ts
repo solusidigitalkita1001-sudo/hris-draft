@@ -13,6 +13,10 @@ interface UserContext {
   companyId?: string;
   employeeId?: string;
   companyScope?: string[];
+  /** Requester's current org unit — populated for OWN_* dynamic scopes. */
+  branchId?: string | null;
+  departmentId?: string | null;
+  subDepartmentId?: string | null;
 }
 
 export class AdministrationService {
@@ -172,6 +176,25 @@ export class AdministrationService {
     if (['BRANCH_ONLY', 'DEPARTMENT_ONLY', 'SUB_DEPARTMENT_ONLY'].includes(scopeType)
       && !scopeValue?.split(',').some((id) => id.trim())) {
       throw new ForbiddenError('Data scope has no permitted identifiers');
+    }
+
+    // OWN_* dynamic scopes: resolve from the requester's current org unit so
+    // access follows them on a transfer. Fail closed (empty set) when the
+    // requester has no such unit, rather than leaking company-wide.
+    const ownField = (
+      field: 'branchId' | 'departmentId' | 'subDepartmentId',
+      value: string | null | undefined,
+    ): Record<string, unknown> => {
+      if (!value) return { [resource === 'employee' ? 'id' : 'employeeId']: { in: [] as string[] } };
+      return { [field]: value };
+    };
+    switch (scopeType) {
+      case 'OWN_BRANCH':
+        return ownField('branchId', user.branchId);
+      case 'OWN_DEPARTMENT':
+        return ownField('departmentId', user.departmentId);
+      case 'OWN_SUB_DEPARTMENT':
+        return ownField('subDepartmentId', user.subDepartmentId);
     }
 
     switch (scopeType) {

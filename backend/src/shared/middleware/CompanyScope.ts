@@ -1,4 +1,5 @@
-import { getRequestContext, runInRequestContext } from '@/shared/context/RequestContext';
+import { getRequestContext, runInRequestContext, runInSystemContext } from '@/shared/context/RequestContext';
+import prisma from '@/shared/database/prisma';
 import { Response, NextFunction } from 'express';
 import config from '@/config';
 import { AuthenticatedRequest } from './Authenticate';
@@ -171,18 +172,26 @@ export function requireCompanyAccess() {
             scope.scopeType !== 'ALL' &&
             scope.scopeType !== 'COMPANY_ONLY'
           ) {
+            const scopeUser: {
+              id: string; roles?: string[]; companyId?: string; employeeId?: string; companyScope?: string[];
+              branchId?: string | null; departmentId?: string | null; subDepartmentId?: string | null;
+            } = {
+              id: req.user.id,
+              roles: req.user.roles,
+              companyId: req.user.companyId,
+              employeeId: req.user.employeeId,
+              companyScope: req.user.companyScope,
+            };
+            // OWN_* dynamic scopes need the requester's current org unit.
+            if (req.user.employeeId && typeof scope.scopeType === 'string' && scope.scopeType.startsWith('OWN_')) {
+              const self = await runInSystemContext('own-scope-org-lookup', () =>
+                prisma.employee.findFirst({ where: { id: req.user!.employeeId!, companyId: effectiveCompanyId, deletedAt: null }, select: { branchId: true, departmentId: true, subDepartmentId: true } }));
+              scopeUser.branchId = self?.branchId ?? null;
+              scopeUser.departmentId = self?.departmentId ?? null;
+              scopeUser.subDepartmentId = self?.subDepartmentId ?? null;
+            }
             const parsedFilter =
-              administrationService.resolveEmployeeFilterForCurrentUser(
-                scope,
-                {
-                  id: req.user.id,
-                  roles: req.user.roles,
-                  companyId: req.user.companyId,
-                  employeeId: req.user.employeeId,
-                  companyScope: req.user.companyScope,
-                },
-                targetResource
-              );
+              administrationService.resolveEmployeeFilterForCurrentUser(scope, scopeUser, targetResource);
 
             if (Object.keys(parsedFilter).length > 0 && req.query) {
               applyParsedFilterToQuery(

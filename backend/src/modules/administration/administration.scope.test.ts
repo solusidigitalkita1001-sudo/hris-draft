@@ -33,3 +33,21 @@ describe('data scope fail-closed', () => {
     expect(administrationRepository.findMyDataScopeByUser).toHaveBeenCalledWith('B', ['MANAGER'], 'ALL');
   });
 });
+
+describe('dynamic OWN_* data scopes (follow the employee on transfer)', () => {
+  const mgr = { id: 'u', companyId: 'A', employeeId: 'e', roles: ['MANAGER'], branchId: 'branch-2', departmentId: 'dept-9', subDepartmentId: 'sub-3' };
+  it('resolves OWN_BRANCH to the requester current branch (employee resource → branchId)', () => {
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'OWN_BRANCH' }, mgr)).toEqual({ branchId: 'branch-2' });
+  });
+  it('resolves OWN_DEPARTMENT / OWN_SUB_DEPARTMENT dynamically', () => {
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'OWN_DEPARTMENT' }, mgr)).toEqual({ departmentId: 'dept-9' });
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'OWN_SUB_DEPARTMENT' }, mgr)).toEqual({ subDepartmentId: 'sub-3' });
+  });
+  it('follows a transfer: a new branch id produces a new filter automatically', () => {
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'OWN_BRANCH' }, { ...mgr, branchId: 'branch-NEW' })).toEqual({ branchId: 'branch-NEW' });
+  });
+  it('fails closed (empty set) when the requester has no such org unit', () => {
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'OWN_BRANCH' }, { ...mgr, branchId: null })).toEqual({ id: { in: [] } });
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'OWN_BRANCH' }, { ...mgr, branchId: null }, 'leave')).toEqual({ employeeId: { in: [] } });
+  });
+});

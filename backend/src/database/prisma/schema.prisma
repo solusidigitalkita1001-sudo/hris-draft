@@ -4133,6 +4133,11 @@ enum DataScopeType {
   SUB_DEPARTMENT_ONLY
   EMPLOYEE_SELF
   MANAGER_TEAM
+  /// Dynamic scopes: resolve from the REQUESTER's own current org unit, so
+  /// access follows the employee on a transfer instead of a static id list.
+  OWN_BRANCH
+  OWN_DEPARTMENT
+  OWN_SUB_DEPARTMENT
 }
 
 enum WorkflowApproverType {
