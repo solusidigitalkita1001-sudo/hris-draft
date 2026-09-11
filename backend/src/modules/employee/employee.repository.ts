@@ -586,6 +586,7 @@ export class EmployeeRepository {
           toPositionId: data.toPositionId || null,
           fromEmploymentType: employee.employmentType,
           toEmploymentType: data.toEmploymentType || null,
+          toBaseSalary: data.toBaseSalary ?? null,
           referenceNumber: data.referenceNumber,
           reason: data.reason,
           notes: data.notes,
@@ -607,10 +608,13 @@ export class EmployeeRepository {
       // applies them once their effective date arrives.
       if (isDue) {
         await this.applyCareerTransactionEffects(tx, employeeId, {
+          companyId: employee.companyId,
+          effectiveDate,
           toBranchId: data.toBranchId,
           toDepartmentId: data.toDepartmentId,
           toPositionId: data.toPositionId,
           toEmploymentType: data.toEmploymentType ?? undefined,
+          toBaseSalary: data.toBaseSalary ?? undefined,
         });
       }
 
@@ -621,8 +625,24 @@ export class EmployeeRepository {
   async applyCareerTransactionEffects(
     tx: Prisma.TransactionClient,
     employeeId: string,
-    move: { toBranchId?: string | null; toDepartmentId?: string | null; toPositionId?: string | null; toEmploymentType?: string | null },
+    move: { companyId?: string; effectiveDate?: Date; toBranchId?: string | null; toDepartmentId?: string | null; toPositionId?: string | null; toEmploymentType?: string | null; toBaseSalary?: number | null },
   ) {
+    // Salary propagation (checklist §9): a movement carrying a new base salary
+    // deactivates the current salary and inserts a new effective-dated row —
+    // a promotion no longer silently leaves the old pay in place.
+    if (move.toBaseSalary && move.companyId) {
+      await tx.employeeSalary.updateMany({ where: { employeeId, isActive: true }, data: { isActive: false } });
+      await tx.employeeSalary.create({
+        data: {
+          employeeId,
+          companyId: move.companyId,
+          baseSalary: move.toBaseSalary,
+          effectiveDate: move.effectiveDate ?? new Date(),
+          notes: 'Dari career transaction',
+        },
+      });
+    }
+
     const updateData: Prisma.EmployeeUpdateInput = {};
 
     if (move.toBranchId !== undefined) {

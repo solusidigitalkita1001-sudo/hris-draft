@@ -118,6 +118,8 @@ export const createCareerTransactionSchema = z.object({
   toDepartmentId: z.string().uuid().optional().nullable(),
   toPositionId: z.string().uuid().optional().nullable(),
   toEmploymentType: z.enum(['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREELANCE', 'OUTSOURCING']).optional().nullable(),
+  /** New base salary that takes effect with the movement (checklist §9 downstream: compensation). */
+  toBaseSalary: z.number().positive().optional().nullable(),
   referenceNumber: z.string().max(100).optional(),
   reason: z.string().optional(),
   notes: z.string().optional(),

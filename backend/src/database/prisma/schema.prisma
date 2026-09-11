@@ -2400,6 +2400,8 @@ model EmployeeCareerTransaction {
   fromEmploymentType EmploymentType?       @map("from_employment_type")
   toEmploymentType   EmploymentType?       @map("to_employment_type")
   referenceNumber    String?               @map("reference_number") @db.VarChar(100)
+  /// New base salary applied with the movement (null = compensation unchanged).
+  toBaseSalary       Decimal?              @map("to_base_salary") @db.Decimal(15, 2)
   /// When the movement was applied to the live employee row. Future-dated
   /// transactions stay pending (null) until the scheduler applies them.
   appliedAt          DateTime?             @map("applied_at")

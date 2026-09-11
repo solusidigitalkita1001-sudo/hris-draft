@@ -17,8 +17,8 @@ export async function runCareerTransactionApply(): Promise<{ due: number; applie
     where: { appliedAt: null, deletedAt: null, effectiveDate: { lte: new Date() } },
     orderBy: [{ employeeId: 'asc' }, { effectiveDate: 'asc' }, { createdAt: 'asc' }],
     select: {
-      id: true, employeeId: true,
-      toBranchId: true, toDepartmentId: true, toPositionId: true, toEmploymentType: true,
+      id: true, employeeId: true, companyId: true, effectiveDate: true,
+      toBranchId: true, toDepartmentId: true, toPositionId: true, toEmploymentType: true, toBaseSalary: true,
     },
   });
 
@@ -33,10 +33,13 @@ export async function runCareerTransactionApply(): Promise<{ due: number; applie
         });
         if (claimed.count !== 1) return;
         await employeeRepository.applyCareerTransactionEffects(tx, row.employeeId, {
+          companyId: row.companyId,
+          effectiveDate: row.effectiveDate,
           toBranchId: row.toBranchId ?? undefined,
           toDepartmentId: row.toDepartmentId ?? undefined,
           toPositionId: row.toPositionId ?? undefined,
           toEmploymentType: row.toEmploymentType ?? undefined,
+          toBaseSalary: row.toBaseSalary ? Number(row.toBaseSalary) : undefined,
         });
         applied += 1;
       });
