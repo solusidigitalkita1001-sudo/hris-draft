@@ -61,3 +61,11 @@ export type UpdateWorkflowTemplateDTO = z.infer<typeof updateWorkflowTemplateSch
 export type StartWorkflowInstanceDTO = z.infer<typeof startWorkflowInstanceSchema>;
 export type WorkflowActionDTO = z.infer<typeof workflowActionSchema>;
 export type BulkApprovalDTO = z.infer<typeof bulkApprovalSchema>;
+
+export const createDelegationSchema = z.object({
+  delegateId: z.string().uuid(),
+  startDate: z.string().datetime(),
+  endDate: z.string().datetime(),
+  reason: z.string().max(1000).optional(),
+});
+export type CreateDelegationDTO = z.infer<typeof createDelegationSchema>;

@@ -143,6 +143,7 @@ model Company {
   /// D.3 E-Signature wrapper transactions
   esignatureTransactions               ESignatureTransaction[]
   offers                               Offer[]
+  approvalDelegations                  ApprovalDelegation[]
   leaveTypes                            LeaveType[]
   leaveBalances                         LeaveBalance[]
   leaveRequests                         LeaveRequest[]
@@ -2193,6 +2194,8 @@ model User {
   surveyResponses              SurveyResponse[]
   /// D.3 E-Signature: dokumen user sebagai signer (wrapper transaction)
   esignatureAsSigner        ESignatureTransaction[]
+  delegationsAsDelegator    ApprovalDelegation[]        @relation("DelegationDelegator")
+  delegationsAsDelegate     ApprovalDelegation[]        @relation("DelegationDelegate")
 
   @@index([email])
   @@index([status])
@@ -4772,6 +4775,30 @@ model Offer {
   @@index([companyId])
   @@index([applicationId])
   @@map("offers")
+}
+
+/// Out-of-office approval delegation (checklist §6): while active, the
+/// delegate may act on any workflow step the delegator could act on.
+model ApprovalDelegation {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  companyId   String   @map("company_id") @db.VarChar(36)
+  delegatorId String   @map("delegator_id") @db.VarChar(36)
+  delegateId  String   @map("delegate_id") @db.VarChar(36)
+  startDate   DateTime @map("start_date")
+  endDate     DateTime @map("end_date")
+  reason      String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  delegator User    @relation("DelegationDelegator", fields: [delegatorId], references: [id], onDelete: Cascade)
+  delegate  User    @relation("DelegationDelegate", fields: [delegateId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([delegateId, isActive])
+  @@index([delegatorId, isActive])
+  @@map("approval_delegations")
 }
 
 enum OfferStatus {

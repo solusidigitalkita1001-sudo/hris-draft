@@ -209,14 +209,60 @@ export class WorkflowEngineRepository {
     });
   }
 
+  async listDelegations(companyId: string, delegatorId?: string) {
+    return prisma.approvalDelegation.findMany({
+      where: { companyId, ...(delegatorId ? { delegatorId } : {}) },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        delegator: { select: { id: true, email: true } },
+        delegate: { select: { id: true, email: true } },
+      },
+    });
+  }
+
+  async createDelegation(data: { companyId: string; delegatorId: string; delegateId: string; startDate: Date; endDate: Date; reason?: string }) {
+    if (data.delegateId === data.delegatorId) {
+      throw new BadRequestError('Tidak dapat mendelegasikan approval ke diri sendiri');
+    }
+    if (data.endDate.getTime() < data.startDate.getTime()) {
+      throw new BadRequestError('Tanggal akhir delegasi harus setelah tanggal mulai');
+    }
+    const delegate = await prisma.user.findFirst({
+      where: { id: data.delegateId, deletedAt: null, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!delegate) throw new NotFoundError('Delegate user tidak ditemukan atau tidak aktif');
+    return prisma.approvalDelegation.create({ data });
+  }
+
+  async revokeDelegation(id: string, delegatorId: string) {
+    const revoked = await prisma.approvalDelegation.updateMany({
+      where: { id, delegatorId, isActive: true },
+      data: { isActive: false },
+    });
+    if (revoked.count !== 1) throw new ConflictError('Delegasi tidak ditemukan atau sudah dicabut');
+    return prisma.approvalDelegation.findFirstOrThrow({ where: { id } });
+  }
+
+  /** User ids the given user may act as right now: themselves + active delegators. */
+  async resolveDelegatedApproverIds(userId: string): Promise<string[]> {
+    const now = new Date();
+    const delegations = await prisma.approvalDelegation.findMany({
+      where: { delegateId: userId, isActive: true, startDate: { lte: now }, endDate: { gte: now } },
+      select: { delegatorId: true },
+    });
+    return [userId, ...delegations.map((d) => d.delegatorId)];
+  }
+
   async findMyApprovals(companyId: string, userId: string, roles: string[]) {
+    const actorIds = await this.resolveDelegatedApproverIds(userId);
     return prisma.workflowInstanceStep.findMany({
       where: {
         instance: { companyId },
         isCurrent: true,
         status: 'PENDING',
         OR: [
-          { approverId: userId },
+          { approverId: { in: actorIds } },
           { approverRoleCode: { in: roles } },
         ],
       },
@@ -499,10 +545,17 @@ export class WorkflowEngineRepository {
       throw new BadRequestError('No pending approval step found');
     }
 
-    const canAct =
+    // Delegation (checklist §6): an active delegate may act as the assigned
+    // approver. Resolved only when the direct/role checks miss, to avoid the
+    // query on the common path.
+    let canAct =
       currentStep.approverId === userId ||
       (!!currentStep.approverRoleCode && roles.includes(currentStep.approverRoleCode)) ||
       roles.includes('SUPER_ADMIN');
+    if (!canAct && currentStep.approverId) {
+      const actorIds = await this.resolveDelegatedApproverIds(userId);
+      canAct = actorIds.includes(currentStep.approverId);
+    }
 
     if (!canAct) {
       throw new ForbiddenError('You are not allowed to act on this workflow step');

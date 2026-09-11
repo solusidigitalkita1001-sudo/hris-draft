@@ -6,6 +6,7 @@ import { validate } from '@/shared/middleware/RequestValidator';
 import { workflowEngineController } from './workflow-engine.controller';
 import {
   bulkApprovalSchema,
+  createDelegationSchema,
   createWorkflowTemplateSchema,
   startWorkflowInstanceSchema,
   updateWorkflowTemplateSchema,
@@ -31,5 +32,10 @@ router.get('/instances/:id', authorize({ resource: 'workflow', action: 'read' })
 router.post('/instances/start', authorize({ resource: 'workflow', action: 'create' }), validate(startWorkflowInstanceSchema), workflowEngineController.startInstance.bind(workflowEngineController));
 router.post('/instances/:id/actions', authorize({ resource: 'workflow', action: 'approve' }), validate(workflowActionSchema), workflowEngineController.applyAction.bind(workflowEngineController));
 router.post('/instances/bulk-approve', authorize({ resource: 'workflow', action: 'approve' }), validate(bulkApprovalSchema), workflowEngineController.bulkApproval.bind(workflowEngineController));
+
+// Approval delegation (checklist §6) — self-service: the delegator is the caller.
+router.get('/delegations', workflowEngineController.listDelegations.bind(workflowEngineController));
+router.post('/delegations', validate(createDelegationSchema), workflowEngineController.createDelegation.bind(workflowEngineController));
+router.patch('/delegations/:id/revoke', workflowEngineController.revokeDelegation.bind(workflowEngineController));
 
 export default router;

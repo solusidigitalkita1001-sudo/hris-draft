@@ -61,6 +61,37 @@ async function dispatchInstanceAction(
 }
 
 export class WorkflowEngineController {
+  // ==================== Approval Delegation (checklist §6) ====================
+
+  async listDelegations(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workflowEngineRepository.listDelegations(req.user!.companyId!, req.query.mine === 'true' ? req.user!.id : undefined);
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async createDelegation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { delegateId, startDate, endDate, reason } = req.body;
+      const data = await workflowEngineRepository.createDelegation({
+        companyId: req.user!.companyId!,
+        delegatorId: req.user!.id,
+        delegateId,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        reason,
+      });
+      res.status(201).json(Result.created(data, 'Delegation created'));
+    } catch (error) { next(error); }
+  }
+
+  async revokeDelegation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await workflowEngineRepository.revokeDelegation(req.params.id as string, req.user!.id);
+      res.json(Result.updated(data, 'Delegation revoked'));
+    } catch (error) { next(error); }
+  }
+
   async findTemplates(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = (req.query.companyId as string) || req.user?.companyId;
