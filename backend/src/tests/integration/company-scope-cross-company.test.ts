@@ -638,6 +638,12 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
         { leaveTypeId: 'lt-1', remainingDays: 10 } as any,
       ]);
       jest.spyOn(prisma.workflowTemplate, 'findFirst').mockResolvedValue(null);
+      // Complete the create path so it reaches (and passes) the IDOR guard.
+      jest.spyOn(prisma.leaveType, 'findFirst').mockResolvedValue({
+        id: 'lt-1', companyId: COMPANY_A_ID, name: 'Annual', requiresAttachment: false, maxDays: 12, deletedAt: null,
+      } as any);
+      jest.spyOn(prisma.leaveRequest, 'findFirst').mockResolvedValue(null); // no overlap
+      jest.spyOn(prisma.leaveRequest, 'create').mockResolvedValue({ id: 'new-leave' } as any);
 
       const result = await runAs(userEmployeeA(), () =>
         leaveService.createLeaveRequest({
@@ -670,8 +676,17 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
     });
 
     it('createOvertime EMPLOYEE dengan employeeId emp-A (diri) → bukan IDOR Forbidden', async () => {
-      jest.spyOn(prisma.overtimeRequest, 'create').mockResolvedValue({ id: 'ot-new' } as any);
       jest.spyOn(prisma.workflowTemplate, 'findFirst').mockResolvedValue(null);
+      // createOvertime runs its duplicate-check + insert inside
+      // withDatabaseAdvisoryLock → prisma.$transaction. Provide a mock tx so the
+      // path completes without a real INSERT (which would hit FK on the empty DB).
+      jest.spyOn(prisma, '$transaction').mockImplementation((async (fn: any) => fn({
+        $queryRaw: async () => [{ acquired: 1 }],
+        overtimeRequest: {
+          findFirst: async () => null,
+          create: async () => ({ id: 'ot-new' }),
+        },
+      })) as any);
 
       const result = await runAs(userEmployeeA(), () =>
         attendanceService.createOvertime({
