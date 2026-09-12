@@ -2,7 +2,6 @@ import express, { NextFunction, Response } from 'express';
 import type { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { AppError } from '@/shared/exceptions/AppError';
 
-jest.mock('@/config', () => ({ __esModule: true, default: { app: { apiPrefix: '/api/v1' } } }));
 jest.mock('@/shared/logger/WinstonLogger', () => ({
   WinstonLogger: jest.fn().mockImplementation(() => ({ warn: jest.fn() })),
 }));

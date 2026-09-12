@@ -3,7 +3,6 @@ import type { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { AppError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 
-jest.mock('@/config', () => ({ __esModule: true, default: { app: { apiPrefix: '/api/v1' } } }));
 jest.mock('@/shared/logger/WinstonLogger', () => ({ WinstonLogger: jest.fn().mockImplementation(() => ({ warn: jest.fn() })) }));
 jest.mock('@/shared/middleware/Authenticate', () => ({ authenticate: (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
   if (!req.user) return next(Object.assign(new Error('Authentication required'), { statusCode: 401 }));
