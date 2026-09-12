@@ -15,6 +15,7 @@ import { documentManagementService } from '@/services/document-management.servic
 import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { AlertCircle, BellRing, Calculator, CheckCircle2, Gauge, RefreshCw, RotateCcw, Send, Trophy } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 const RESULT_STATUS_STYLES: Record<string, string> = {
   CALCULATED: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
@@ -195,9 +196,9 @@ export function PerformanceResultsPage() {
       setSelectedDisputeId(nextDisputeId);
       const nextRecommendationId = resultData.find((result) => result.id === nextResultId)?.developmentRecommendations?.[0]?.id || '';
       setSelectedRecommendationId(nextRecommendationId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memuat result workspace');
+      toast.error(apiErrorMessage(error, 'Gagal memuat result workspace'));
     } finally {
       setWorkspaceLoading(false);
     }
@@ -233,9 +234,9 @@ export function PerformanceResultsPage() {
           ? selectedPeriodId
           : readyPeriods[0]?.id || '';
       setSelectedPeriodId(nextPeriodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memuat data performance result');
+      toast.error(apiErrorMessage(error, 'Gagal memuat data performance result'));
     } finally {
       setLoading(false);
     }
@@ -337,9 +338,9 @@ export function PerformanceResultsPage() {
       setSelectedResultId(data[0]?.id || '');
       toast.success('Performance result berhasil dihitung');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menghitung performance result');
+      toast.error(apiErrorMessage(error, 'Gagal menghitung performance result'));
     } finally {
       setCalculating(false);
     }
@@ -378,9 +379,9 @@ export function PerformanceResultsPage() {
       setSelectedSessionId(created.id);
       toast.success('Calibration session berhasil dibuat');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat calibration session');
+      toast.error(apiErrorMessage(error, 'Gagal membuat calibration session'));
     } finally {
       setCreatingSession(false);
     }
@@ -407,9 +408,9 @@ export function PerformanceResultsPage() {
       setSelectedResultId(data[0]?.id || '');
       toast.success('Performance result berhasil dipublish');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal publish performance result');
+      toast.error(apiErrorMessage(error, 'Gagal publish performance result'));
     } finally {
       setPublishing(false);
     }
@@ -430,9 +431,9 @@ export function PerformanceResultsPage() {
       setSelectedResultId(data[0]?.id || '');
       toast.success('Performance result berhasil final approved');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal final approve performance result');
+      toast.error(apiErrorMessage(error, 'Gagal final approve performance result'));
     } finally {
       setApproving(false);
     }
@@ -451,9 +452,9 @@ export function PerformanceResultsPage() {
       if (action === 'finalize') await performanceService.finalizeCalibrationSession(selectedSession.id);
       toast.success(`Calibration session berhasil di-${action}`);
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memproses calibration session');
+      toast.error(apiErrorMessage(error, 'Gagal memproses calibration session'));
     } finally {
       setActingSession(false);
     }
@@ -478,9 +479,9 @@ export function PerformanceResultsPage() {
       });
       toast.success('Calibration decision berhasil disimpan');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan calibration decision');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan calibration decision'));
     } finally {
       setSavingDecision(false);
     }
@@ -505,9 +506,9 @@ export function PerformanceResultsPage() {
       });
       toast.success('Response dispute berhasil disimpan');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan response dispute');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan response dispute'));
     } finally {
       setRespondingDispute(false);
     }
@@ -532,9 +533,9 @@ export function PerformanceResultsPage() {
       toast.success('Performance result berhasil dibuka ulang');
       setReopenReason('');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal reopen performance result');
+      toast.error(apiErrorMessage(error, 'Gagal reopen performance result'));
     } finally {
       setReopening(false);
     }
@@ -554,9 +555,9 @@ export function PerformanceResultsPage() {
       });
       toast.success(`Reminder terkirim ke ${summary.notificationCount} notifikasi`);
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal mengirim reminder');
+      toast.error(apiErrorMessage(error, 'Gagal mengirim reminder'));
     } finally {
       setSendingReminders(false);
     }
@@ -575,9 +576,9 @@ export function PerformanceResultsPage() {
       });
       toast.success('Development recommendation berhasil disinkronkan');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal sinkronisasi recommendation');
+      toast.error(apiErrorMessage(error, 'Gagal sinkronisasi recommendation'));
     } finally {
       setSyncingRecommendations(false);
     }
@@ -602,9 +603,9 @@ export function PerformanceResultsPage() {
       });
       toast.success('Recommendation berhasil di-assign ke training');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal assign recommendation');
+      toast.error(apiErrorMessage(error, 'Gagal assign recommendation'));
     } finally {
       setAssigningRecommendation(false);
     }
@@ -630,9 +631,9 @@ export function PerformanceResultsPage() {
       setResultAttachmentFile(null);
       toast.success('Attachment result berhasil diupload');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal upload attachment result');
+      toast.error(apiErrorMessage(error, 'Gagal upload attachment result'));
     } finally {
       setUploadingResultAttachment(false);
     }
@@ -658,9 +659,9 @@ export function PerformanceResultsPage() {
       setDisputeAttachmentFile(null);
       toast.success('Attachment dispute berhasil diupload');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal upload attachment dispute');
+      toast.error(apiErrorMessage(error, 'Gagal upload attachment dispute'));
     } finally {
       setUploadingDisputeAttachment(false);
     }
@@ -693,9 +694,9 @@ export function PerformanceResultsPage() {
       });
       toast.success('Automation schedule berhasil dibuat');
       await refreshWorkspace();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat automation schedule');
+      toast.error(apiErrorMessage(error, 'Gagal membuat automation schedule'));
     } finally {
       setCreatingSchedule(false);
     }
@@ -704,9 +705,9 @@ export function PerformanceResultsPage() {
   const handleDownloadAttachment = useCallback(async (documentId: string, fileName: string) => {
     try {
       await documentManagementService.download(documentId, fileName);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal download attachment');
+      toast.error(apiErrorMessage(error, 'Gagal download attachment'));
     }
   }, []);
 

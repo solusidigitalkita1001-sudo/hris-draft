@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   Plus, RefreshCw, Banknote, Eye,
 } from 'lucide-react';
@@ -79,8 +80,8 @@ function LoanForm({ onClose }: { onClose: () => void }) {
       });
       toast.success('Pengajuan pinjaman berhasil dikirim');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal mengajukan pinjaman');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal mengajukan pinjaman'));
     } finally {
       setSaving(false);
     }

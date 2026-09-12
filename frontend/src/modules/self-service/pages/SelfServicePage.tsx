@@ -17,6 +17,7 @@ import {
   Send, Repeat, Users,
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 const DAY_TYPE_LABELS: Record<string, string> = {
   WD: 'Kerja',
@@ -138,8 +139,8 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
       } as any);
       toast.success('Pengajuan berhasil dikirim');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal mengirim pengajuan');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal mengirim pengajuan'));
     } finally {
       setSaving(false);
     }
@@ -213,8 +214,8 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
       const data = await workCalendarService.getMyShiftSwapCandidates(date);
       setCandidateData(data);
       setTargetEmployeeId((current) => data.candidates.some((candidate) => candidate.id === current) ? current : '');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat kandidat tukar shift');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat kandidat tukar shift'));
       setCandidateData(null);
     } finally {
       setLoadingCandidates(false);
@@ -250,8 +251,8 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
       });
       toast.success('Request tukar shift berhasil dikirim ke kepala regu');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal mengirim request tukar shift');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal mengirim request tukar shift'));
     } finally {
       setSaving(false);
     }
@@ -633,8 +634,8 @@ function MyWorkCalendarTabView() {
     try {
       const data = await workCalendarService.getMyResolvedCalendar(target.year(), target.month() + 1);
       setCalendar(data);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal memuat kalender kerja');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal memuat kalender kerja'));
       setCalendar(null);
     } finally {
       setLoading(false);
@@ -865,8 +866,8 @@ function ShiftSwapTabView({
       ]);
       setRequests(myRequests);
       setApprovals(myApprovals);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat request tukar shift');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat request tukar shift'));
     } finally {
       setLoading(false);
     }
@@ -891,8 +892,8 @@ function ShiftSwapTabView({
       await workCalendarService.cancelShiftSwapRequest(id);
       toast.success('Request tukar shift dibatalkan');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal membatalkan request');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal membatalkan request'));
     }
   };
 
@@ -913,8 +914,8 @@ function ShiftSwapTabView({
         toast.success('Request tukar shift ditolak');
       }
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memproses request');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memproses request'));
     }
   };
 

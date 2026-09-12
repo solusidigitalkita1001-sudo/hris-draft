@@ -27,6 +27,7 @@ import {
 import { formatDate } from '@/utils/format';
 import { cn } from '@/utils/cn';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 type FormMode = 'create' | 'edit';
 
@@ -189,9 +190,9 @@ export function AdminUsersPage() {
       resetForm();
       setFormOpen(false);
       await fetchData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan user');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan user'));
     } finally {
       setSubmitting(false);
     }
@@ -209,9 +210,9 @@ export function AdminUsersPage() {
         setFormOpen(false);
       }
       await fetchData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menghapus user');
+      toast.error(apiErrorMessage(error, 'Gagal menghapus user'));
     }
   };
 

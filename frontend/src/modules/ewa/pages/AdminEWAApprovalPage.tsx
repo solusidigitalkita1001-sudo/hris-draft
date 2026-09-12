@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select2 } from '@/components/ui/select2';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   RefreshCw, CheckCircle, XCircle, Wallet, Eye, UserRound, Send,
 } from 'lucide-react';
@@ -70,8 +71,8 @@ export function AdminEWAApprovalPage() {
         status: statusFilter === 'ALL' ? undefined : statusFilter,
       });
       setRequests(data);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat daftar EWA');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat daftar EWA'));
     } finally {
       setLoading(false);
     }
@@ -107,8 +108,8 @@ export function AdminEWAApprovalPage() {
     try {
       const detail = await ewaService.findById(id);
       setDetailModal({ id, open: true, data: detail });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat detail');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat detail'));
     }
   };
 
@@ -123,8 +124,8 @@ export function AdminEWAApprovalPage() {
       setApproveModal({ id: '', open: false });
       setApproveNotes('');
       void fetchRequests();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal approve EWA');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal approve EWA'));
     } finally {
       setActionLoading(false);
     }
@@ -142,8 +143,8 @@ export function AdminEWAApprovalPage() {
       setRejectModal({ id: '', open: false });
       setRejectReason('');
       void fetchRequests();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal reject EWA');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal reject EWA'));
     } finally {
       setActionLoading(false);
     }
@@ -162,8 +163,8 @@ export function AdminEWAApprovalPage() {
       setPaidAmount('');
       setPaidRef('');
       void fetchRequests();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menandai PAID');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menandai PAID'));
     } finally {
       setActionLoading(false);
     }

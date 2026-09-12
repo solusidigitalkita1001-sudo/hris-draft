@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Heart, Users, Pencil } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 // ─── Modal ────────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -168,8 +169,8 @@ export function BenefitPlanList() {
       toast.success('Benefit plan created');
       setShowCreate(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create plan');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create plan'));
       throw err;
     }
   };
@@ -181,8 +182,8 @@ export function BenefitPlanList() {
       toast.success('Benefit plan updated');
       setEditing(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update plan');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update plan'));
       throw err;
     }
   };

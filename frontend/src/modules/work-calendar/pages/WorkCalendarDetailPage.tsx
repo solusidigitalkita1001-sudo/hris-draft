@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   ChevronLeft, ChevronRight, RefreshCw, ArrowLeft, CalendarDays,
   Sparkles, Save, Copy, Upload, LayoutGrid, TableProperties,
@@ -450,8 +451,8 @@ export function WorkCalendarDetailPage() {
       setEditingEnds({});
       setHasEdits(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to save changes');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to save changes'));
     } finally {
       setSaving(false);
     }
@@ -473,8 +474,8 @@ export function WorkCalendarDetailPage() {
       await workCalendarService.generateDefaultDays(id);
       toast.success('Default days generated');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to generate defaults');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to generate defaults'));
     } finally {
       setSaving(false);
     }
@@ -487,8 +488,8 @@ export function WorkCalendarDetailPage() {
       const newCal = await workCalendarService.copyCalendar(id, targetYear, name);
       toast.success(`Calendar copied to ${targetYear}`);
       navigate(`/work-calendar/${newCal.id}?year=${targetYear}&month=1`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to copy calendar');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to copy calendar'));
       throw err;
     }
   };
@@ -524,8 +525,8 @@ export function WorkCalendarDetailPage() {
       setEditingEnds({});
       setHasEdits(false);
       await fetchData();
-    } catch (error: any) {
-      toast.error(error?.message || 'Gagal import CSV');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal import CSV'));
     } finally {
       setImportingCsv(false);
     }

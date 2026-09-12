@@ -16,6 +16,7 @@ import {
 import { useCompanyStore } from '@/stores/company.store';
 import { Braces, Calculator, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const FORMULA_STRATEGY_OPTIONS = [
   'ACHIEVEMENT_PERCENTAGE',
@@ -189,9 +190,9 @@ export function PerformanceLibrariesPage() {
         isActive: true,
       });
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat formula');
+      toast.error(apiErrorMessage(error, 'Gagal membuat formula'));
     } finally {
       setSavingFormula(false);
     }
@@ -250,9 +251,9 @@ export function PerformanceLibrariesPage() {
         isActive: true,
       });
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat indicator');
+      toast.error(apiErrorMessage(error, 'Gagal membuat indicator'));
     } finally {
       setSavingIndicator(false);
     }
@@ -336,9 +337,9 @@ export function PerformanceLibrariesPage() {
         ranges: [buildEmptyRange(1), buildEmptyRange(2)],
       });
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat grade rule');
+      toast.error(apiErrorMessage(error, 'Gagal membuat grade rule'));
     } finally {
       setSavingGradeRule(false);
     }

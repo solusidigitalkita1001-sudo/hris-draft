@@ -1,9 +1,9 @@
-import axios from 'axios';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SalaryComponent } from '@/services/payroll.service';
 import { payrollFormulaService as service, type FormulaInputs, type FormulaPreview, type PayrollFormulaVersion } from '@/services/payroll-formula.service';
+import { apiErrorMessage } from '@/lib/errors';
 
 const fields: { key: keyof FormulaInputs; label: string; step: string }[] = [
   { key: 'BASE_SALARY', label: 'Gaji pokok (IDR)', step: '0.01' }, { key: 'WORK_DAYS', label: 'Hari kerja', step: '1' },
@@ -13,8 +13,7 @@ const fields: { key: keyof FormulaInputs; label: string; step: string }[] = [
 const inputClass = 'mt-1 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60';
 const money = (value: string) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 2 }).format(Number(value));
 function message(error: unknown) {
-  return axios.isAxiosError(error) && typeof error.response?.data?.message === 'string'
-    ? error.response.data.message : 'Formula belum berhasil diproses. Periksa koneksi lalu coba lagi.';
+  return apiErrorMessage(error, 'Formula belum berhasil diproses. Periksa koneksi lalu coba lagi.');
 }
 
 export function PayrollFormulaPanel({ component, components, onClose, onChanged }: {

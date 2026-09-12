@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select2 } from '@/components/ui/select2';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   RefreshCw, Eye, MapPin, Clock, CheckCircle2, AlertTriangle, XCircle, UserRound,
 } from 'lucide-react';
@@ -69,8 +70,8 @@ export function AdminDailyActivityApprovalPage() {
         endDate: dateRange.end,
       });
       setActivities(data);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat daftar aktivitas');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat daftar aktivitas'));
     } finally {
       setLoading(false);
     }
@@ -103,8 +104,8 @@ export function AdminDailyActivityApprovalPage() {
     try {
       const d = await dailyActivityService.findById(id);
       setDetailModal({ id, open: true, data: d });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat detail');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat detail'));
     }
   };
 
@@ -115,8 +116,8 @@ export function AdminDailyActivityApprovalPage() {
       await dailyActivityService.deleteRequest(id);
       toast.success('Aktivitas dihapus');
       void fetch();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menghapus');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menghapus'));
     } finally {
       setDeletingId(null);
     }

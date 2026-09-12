@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { ArrowLeft, Loader2, Play } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 export function PayrollRunCreate() {
   const navigate = useNavigate();
@@ -32,8 +33,8 @@ export function PayrollRunCreate() {
     try {
       const data = await payrollService.getPayrollPeriods(companyId);
       setPeriods(data);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat payroll periods');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat payroll periods'));
     } finally {
       setLoadingPeriods(false);
     }
@@ -81,8 +82,8 @@ export function PayrollRunCreate() {
 
       toast.success('Payroll run berhasil dibuat');
       navigate(`/payroll/runs/${created.id}`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal membuat payroll run');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal membuat payroll run'));
     } finally {
       setSubmitting(false);
     }

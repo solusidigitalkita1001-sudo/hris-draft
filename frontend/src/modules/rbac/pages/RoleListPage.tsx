@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { useCompanyStore } from '@/stores/company.store';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   Shield, Plus, RefreshCw, Pencil, Trash2, Search,
   Users, CheckCircle, XCircle, Globe,
@@ -193,8 +194,8 @@ function PermissionManager({ role, open, onClose }: {
       await rbacService.assignPermissions(role.id, Array.from(rolePermissions));
       toast.success('Permissions updated');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update permissions');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update permissions'));
     } finally {
       setSaving(false);
     }
@@ -328,8 +329,8 @@ export function RoleListPage() {
       toast.success('Role created');
       setShowCreate(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create role');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create role'));
       throw err;
     }
   };
@@ -341,8 +342,8 @@ export function RoleListPage() {
       toast.success('Role updated');
       setEditingRole(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update role');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update role'));
       throw err;
     }
   };
@@ -354,8 +355,8 @@ export function RoleListPage() {
       toast.success('Role deleted');
       setDeletingRole(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete role');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete role'));
     }
   };
 

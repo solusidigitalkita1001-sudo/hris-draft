@@ -7,6 +7,7 @@ import { useCompanyStore } from '@/stores/company.store';
 import { recruitmentService, type CandidatePayload } from '@/services/recruitment.service';
 import toast from 'react-hot-toast';
 import { ArrowLeft } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 export function CandidateFormPage() {
   const navigate = useNavigate();
@@ -50,9 +51,9 @@ export function CandidateFormPage() {
       });
       toast.success('Candidate berhasil dibuat');
       navigate('/recruitment/candidates');
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat candidate');
+      toast.error(apiErrorMessage(error, 'Gagal membuat candidate'));
     } finally {
       setLoading(false);
     }
