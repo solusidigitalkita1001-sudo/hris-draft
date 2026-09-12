@@ -62,6 +62,13 @@ jest.mock('@/shared/database/prisma', () => {
   };
 });
 
+// Run advisory-lock operations directly against the mocked prisma (the Proxy's
+// $queryRaw returns [] so the real GET_LOCK check would falsely time out).
+jest.mock('@/shared/database/advisory-lock', () => ({
+  withDatabaseAdvisoryLock: (_ns: string, _key: string, op: (tx: any) => any) =>
+    op(require('@/shared/database/prisma').default),
+}));
+
 import { leaveService } from '@/modules/leave/leave.service';
 import { employeeLoanService } from '@/modules/employee-loan/employee-loan.service';
 import { travelExpenseService } from '@/modules/travel-expense/travel-expense.service';
@@ -637,7 +644,15 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
       jest.spyOn(prisma.leaveBalance, 'findMany').mockResolvedValue([
         { leaveTypeId: 'lt-1', remainingDays: 10 } as any,
       ]);
-      jest.spyOn(prisma.workflowTemplate, 'findFirst').mockResolvedValue(null);
+      // Complete the create path so it reaches (and passes) the IDOR guard.
+      jest.spyOn(prisma.leaveType, 'findFirst').mockResolvedValue({
+        id: 'lt-1', companyId: COMPANY_A_ID, name: 'Annual', requiresAttachment: false, maxDays: 12, deletedAt: null,
+      } as any);
+      jest.spyOn(prisma.leaveRequest, 'findFirst').mockResolvedValue(null); // no overlap
+      jest.spyOn(prisma.leaveRequest, 'create').mockResolvedValue({ id: 'new-leave' } as any);
+      // Leave create mandates a workflow template + a successful startInstance.
+      jest.spyOn(workflowEngineRepository, 'findDefaultTemplate').mockResolvedValue({ id: 'wf-tpl-1' } as any);
+      jest.spyOn(workflowEngineRepository, 'startInstance').mockResolvedValue({} as any);
 
       const result = await runAs(userEmployeeA(), () =>
         leaveService.createLeaveRequest({
@@ -670,8 +685,12 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
     });
 
     it('createOvertime EMPLOYEE dengan employeeId emp-A (diri) → bukan IDOR Forbidden', async () => {
-      jest.spyOn(prisma.overtimeRequest, 'create').mockResolvedValue({ id: 'ot-new' } as any);
       jest.spyOn(prisma.workflowTemplate, 'findFirst').mockResolvedValue(null);
+      jest.spyOn(prisma.overtimeRequest, 'findFirst').mockResolvedValue(null); // no duplicate
+      jest.spyOn(prisma.overtimeRequest, 'create').mockResolvedValue({ id: 'ot-new' } as any);
+      // createOvertime runs inside withDatabaseAdvisoryLock; the file-level mock
+      // of that module (see top) runs the operation directly against the mocked
+      // prisma, so overtimeRequest.findFirst→null (default) and create→spy apply.
 
       const result = await runAs(userEmployeeA(), () =>
         attendanceService.createOvertime({

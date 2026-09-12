@@ -24,6 +24,7 @@ import {
   Download, RefreshCw, BarChart3, PieChart as PieChartIcon,
 } from 'lucide-react';
 import { formatCurrency, formatNumber } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 // ─── Types ──────────────────────────────────────────────
 type ReportTab = 'headcount' | 'attendance' | 'leave' | 'payroll' | 'turnover' | 'recruitment';
@@ -180,8 +181,8 @@ export function ReportsPage() {
 
       setReportData((prev) => ({ ...prev, [tab]: data }));
       setLastFetchKeyByTab((prev) => ({ ...prev, [tab]: fetchKey }));
-    } catch (e: any) {
-      setError(e?.response?.data?.message || 'Failed to load reports');
+    } catch (e) {
+      setError(apiErrorMessage(e, 'Failed to load reports'));
     } finally {
       setLoading(false);
     }

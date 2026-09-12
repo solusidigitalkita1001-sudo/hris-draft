@@ -1,7 +1,7 @@
-import axios from 'axios';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';
+import { apiErrorMessage } from '@/lib/errors';
 import { payrollPaymentService as service, paymentRequestKey, type PaymentBatch, type PaymentBatchStatus,
   type PaymentExport, type PaymentTransaction, type RecordPayment } from '@/services/payroll-payment.service';
 
@@ -13,8 +13,7 @@ const money = (value: string) => new Intl.NumberFormat('id-ID', {
   style: 'currency', currency: 'IDR', minimumFractionDigits: 2,
 }).format(Number(value));
 function errorMessage(error: unknown) {
-  return axios.isAxiosError(error) && typeof error.response?.data?.message === 'string'
-    ? error.response.data.message : 'Data pembayaran belum berhasil diperbarui. Periksa koneksi lalu coba lagi.';
+  return apiErrorMessage(error, 'Data pembayaran belum berhasil diperbarui. Periksa koneksi lalu coba lagi.');
 }
 
 export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {

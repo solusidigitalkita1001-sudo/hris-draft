@@ -10,6 +10,7 @@ import {
   Clock, Gauge, AlertTriangle,
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 function getStepIcon(status: string, isCurrent: boolean) {
   if (status === 'APPROVED') {
@@ -134,9 +135,9 @@ export function LeaveDetail() {
       ]);
       setRequest(reqData);
       setWorkflow(wfData);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to fetch leave request:', error);
-      toast.error(error?.response?.data?.message || 'Failed to load data');
+      toast.error(apiErrorMessage(error, 'Failed to load data'));
     } finally {
       setLoading(false);
     }
@@ -163,8 +164,8 @@ export function LeaveDetail() {
       setShowApproveModal(false);
       setApproveComment('');
       await fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to approve request');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to approve request'));
     } finally {
       setActionLoading('');
     }
@@ -179,8 +180,8 @@ export function LeaveDetail() {
       setShowRejectModal(false);
       setRejectReason('');
       await fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to reject request');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to reject request'));
     } finally {
       setActionLoading('');
     }

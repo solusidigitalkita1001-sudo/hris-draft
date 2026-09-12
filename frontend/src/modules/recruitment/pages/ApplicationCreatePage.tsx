@@ -8,6 +8,7 @@ import { useCompanyStore } from '@/stores/company.store';
 import { recruitmentService, type Candidate, type JobPosting } from '@/services/recruitment.service';
 import toast from 'react-hot-toast';
 import { ArrowLeft } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 export function ApplicationCreatePage() {
   const navigate = useNavigate();
@@ -71,9 +72,9 @@ export function ApplicationCreatePage() {
       });
       toast.success('Application berhasil dibuat');
       navigate(`/recruitment/postings/${id}`);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat application');
+      toast.error(apiErrorMessage(error, 'Gagal membuat application'));
     } finally {
       setSubmitting(false);
     }

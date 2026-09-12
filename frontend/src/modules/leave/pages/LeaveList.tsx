@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, RefreshCw, Plus, CalendarDays, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PENDING: <Clock size={14} className="text-amber-500" />,
@@ -71,8 +72,8 @@ export function LeaveList() {
       setApprovAction(null);
       setActionComment('');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || `Failed to ${approvAction.type.toLowerCase()} request`);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, `Failed to ${approvAction.type.toLowerCase()} request`));
     } finally {
       setActionLoading(false);
     }

@@ -10,6 +10,7 @@ import {
   Plus, RefreshCw, Pencil, Trash2, Search, CalendarDays,
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 // ─── Modal ──────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -152,8 +153,8 @@ export function WorkCalendarHolidaysPage() {
       await workCalendarService.createHoliday({ ...data, companyId });
       toast.success('Holiday created');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create holiday');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create holiday'));
       throw err;
     }
   };
@@ -165,8 +166,8 @@ export function WorkCalendarHolidaysPage() {
       toast.success('Holiday updated');
       setEditingHoliday(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update holiday');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update holiday'));
       throw err;
     }
   };
@@ -178,8 +179,8 @@ export function WorkCalendarHolidaysPage() {
       toast.success('Holiday deleted');
       setDeletingHoliday(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete holiday');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete holiday'));
     }
   };
 

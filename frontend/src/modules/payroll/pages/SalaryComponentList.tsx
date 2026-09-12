@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { PayrollFormulaPanel } from '../components/PayrollFormulaPanel';
 import { useCompanyStore } from '@/stores/company.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -10,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Wallet, Percent, Pencil, Trash2 } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null;
@@ -281,7 +281,7 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
       setShowCreate(false);
       fetchData();
     } catch (err) {
-      toast.error(axios.isAxiosError(err) && typeof err.response?.data?.message === 'string' ? err.response.data.message : 'Gagal membuat salary component');
+      toast.error(apiErrorMessage(err, 'Gagal membuat salary component'));
       throw err;
     }
   };
@@ -294,7 +294,7 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
       setEditing(null);
       fetchData();
     } catch (err) {
-      toast.error(axios.isAxiosError(err) && typeof err.response?.data?.message === 'string' ? err.response.data.message : 'Gagal update salary component');
+      toast.error(apiErrorMessage(err, 'Gagal update salary component'));
       throw err;
     }
   };
@@ -307,7 +307,7 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
       setDeleting(null);
       fetchData();
     } catch (err) {
-      toast.error(axios.isAxiosError(err) && typeof err.response?.data?.message === 'string' ? err.response.data.message : 'Gagal delete salary component');
+      toast.error(apiErrorMessage(err, 'Gagal delete salary component'));
     }
   };
 

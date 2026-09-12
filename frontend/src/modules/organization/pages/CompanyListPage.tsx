@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Building, Pencil, Trash2 } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null;
@@ -118,17 +119,17 @@ export function CompanyListPage() {
 
   const handleCreate = async (data: any) => {
     try { await organizationService.createCompany(data); toast.success('Company created'); setShowCreate(false); fetchData(); }
-    catch (err: any) { toast.error(err?.response?.data?.message || 'Failed to create'); throw err; }
+    catch (err) { toast.error(apiErrorMessage(err, 'Failed to create')); throw err; }
   };
   const handleUpdate = async (data: any) => {
     if (!editing) return;
     try { await organizationService.updateCompany(editing.id, data); toast.success('Company updated'); setEditing(null); fetchData(); }
-    catch (err: any) { toast.error(err?.response?.data?.message || 'Failed to update'); throw err; }
+    catch (err) { toast.error(apiErrorMessage(err, 'Failed to update')); throw err; }
   };
   const handleDelete = async () => {
     if (!deleting) return;
     try { await organizationService.deleteCompany(deleting.id); toast.success('Company deleted'); setDeleting(null); fetchData(); }
-    catch (err: any) { toast.error(err?.response?.data?.message || 'Failed to delete'); }
+    catch (err) { toast.error(apiErrorMessage(err, 'Failed to delete')); }
   };
 
   const filtered = companies.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.code.toLowerCase().includes(search.toLowerCase()));

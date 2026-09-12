@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select2 } from '@/components/ui/select2';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   MapPin, Plus, RefreshCw, XCircle, Send, CheckCircle2, Clock, Camera, Navigation, AlertTriangle,
 } from 'lucide-react';
@@ -74,8 +75,8 @@ function GPSCaptureButton({
         accuracyMeters: pos.coords.accuracy,
       });
       toast.success(`GPS berhasil di-capture (akurasi ${Math.round(pos.coords.accuracy)}m)`);
-    } catch (err: any) {
-      toast.error(`Gagal capture GPS: ${err?.message || 'Izin lokasi ditolak user'}`);
+    } catch (err) {
+      toast.error(`Gagal capture GPS: ${apiErrorMessage(err, 'Izin lokasi ditolak user')}`);
     } finally {
       setCapturing(false);
     }
@@ -178,8 +179,8 @@ function CreateActivityForm({ onClose, onSubmitted }: { onClose: () => void; onS
       toast.success('Laporan aktivitas berhasil dikirim');
       onSubmitted();
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal mengirim aktivitas');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal mengirim aktivitas'));
     } finally {
       setLoading(false);
     }
@@ -306,8 +307,8 @@ export function EmployeeDailyActivityPage() {
     try {
       const data = await dailyActivityService.getMyActivities(dateRange);
       setActivities(data);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat daftar aktivitas');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat daftar aktivitas'));
     } finally {
       setLoading(false);
     }
@@ -332,8 +333,8 @@ export function EmployeeDailyActivityPage() {
       await dailyActivityService.deleteRequest(id);
       toast.success('Aktivitas dihapus');
       void fetch();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menghapus');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menghapus'));
     } finally {
       setDeletingId(null);
     }
@@ -346,8 +347,8 @@ export function EmployeeDailyActivityPage() {
       await dailyActivityService.completeRequest(id);
       toast.success('Aktivitas ditandai selesai');
       void fetch();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menandai selesai');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menandai selesai'));
     } finally {
       setCompletingId(null);
     }

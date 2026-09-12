@@ -6,6 +6,7 @@ import { workCalendarService, normalizeWorkDaysConfig, type WorkCalendar, type W
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   CalendarDays, Plus, RefreshCw, Copy, Pencil, Trash2,
   Search, ChevronRight,
@@ -271,8 +272,8 @@ export function WorkCalendarListPage() {
       await workCalendarService.create({ ...data, companyId });
       toast.success('Calendar created');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create calendar');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create calendar'));
       throw err;
     }
   };
@@ -283,8 +284,8 @@ export function WorkCalendarListPage() {
       await workCalendarService.update(editingCalendar.id, data);
       toast.success('Calendar updated');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update calendar');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update calendar'));
       throw err;
     }
   };
@@ -296,8 +297,8 @@ export function WorkCalendarListPage() {
       toast.success('Calendar deleted');
       setDeletingCalendar(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete calendar');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete calendar'));
     }
   };
 
@@ -308,8 +309,8 @@ export function WorkCalendarListPage() {
       toast.success(`Calendar copied to ${targetYear}`);
       setCopyingCalendar(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to copy calendar');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to copy calendar'));
       throw err;
     }
   };

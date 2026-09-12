@@ -15,6 +15,7 @@ import { useCompanyStore } from '@/stores/company.store';
 import { formatDate } from '@/utils/format';
 import { AlertCircle, CalendarRange, RefreshCw, Rocket } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const PERIOD_STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -454,9 +455,9 @@ export function PerformancePeriodsPage() {
         description: '',
       }));
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat performance period');
+      toast.error(apiErrorMessage(error, 'Gagal membuat performance period'));
     } finally {
       setSaving(false);
     }
@@ -468,9 +469,9 @@ export function PerformancePeriodsPage() {
       const summary = await performanceService.getPeriodReadiness(periodId);
       setReadinessMap((prev) => ({ ...prev, [periodId]: summary }));
       toast.success(summary.isReady ? 'Period ready untuk publish' : 'Readiness summary berhasil dimuat');
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal mengecek readiness period');
+      toast.error(apiErrorMessage(error, 'Gagal mengecek readiness period'));
     } finally {
       setReadinessLoadingId('');
     }
@@ -484,9 +485,9 @@ export function PerformancePeriodsPage() {
       const readiness = await performanceService.getPeriodReadiness(periodId);
       setReadinessMap((prev) => ({ ...prev, [periodId]: readiness }));
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal publish period');
+      toast.error(apiErrorMessage(error, 'Gagal publish period'));
     } finally {
       setPublishingId('');
     }

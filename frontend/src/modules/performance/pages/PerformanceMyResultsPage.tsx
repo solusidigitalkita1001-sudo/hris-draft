@@ -10,6 +10,7 @@ import { documentManagementService } from '@/services/document-management.servic
 import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { AlertCircle, CheckCircle2, MessageSquare, RefreshCw, Trophy } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 const RESULT_STATUS_STYLES: Record<string, string> = {
   PUBLISHED: 'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-400',
@@ -69,9 +70,9 @@ export function PerformanceMyResultsPage() {
       const data = await performanceService.getMyPublishedResults(companyId);
       setResults(data);
       setSelectedResultId((current) => (current && data.some((result) => result.id === current) ? current : data[0]?.id || ''));
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memuat published result');
+      toast.error(apiErrorMessage(error, 'Gagal memuat published result'));
     } finally {
       setLoading(false);
     }
@@ -95,9 +96,9 @@ export function PerformanceMyResultsPage() {
       toast.success('Hasil performance berhasil di-acknowledge');
       setAcknowledgeNotes('');
       await fetchData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal acknowledge result');
+      toast.error(apiErrorMessage(error, 'Gagal acknowledge result'));
     } finally {
       setAcknowledging(false);
     }
@@ -123,9 +124,9 @@ export function PerformanceMyResultsPage() {
       toast.success('Dispute berhasil dikirim');
       setDisputeForm({ title: '', message: '' });
       await fetchData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal mengirim dispute');
+      toast.error(apiErrorMessage(error, 'Gagal mengirim dispute'));
     } finally {
       setSubmittingDispute(false);
     }
@@ -148,9 +149,9 @@ export function PerformanceMyResultsPage() {
       setDisputeAttachmentFiles((prev) => ({ ...prev, [disputeId]: null }));
       toast.success('Attachment dispute berhasil diupload');
       await fetchData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal upload attachment dispute');
+      toast.error(apiErrorMessage(error, 'Gagal upload attachment dispute'));
     } finally {
       setUploadingDisputeAttachment(false);
     }
@@ -159,9 +160,9 @@ export function PerformanceMyResultsPage() {
   const handleDownloadAttachment = useCallback(async (documentId: string, fileName: string) => {
     try {
       await documentManagementService.download(documentId, fileName);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal download attachment');
+      toast.error(apiErrorMessage(error, 'Gagal download attachment'));
     }
   }, []);
 

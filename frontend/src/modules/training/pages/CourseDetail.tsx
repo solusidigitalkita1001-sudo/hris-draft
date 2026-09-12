@@ -10,6 +10,7 @@ import {
   UserPlus, CheckSquare,
 } from 'lucide-react';
 import { formatDateTime } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 const SESSION_STYLES: Record<string, string> = {
   SCHEDULED: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
@@ -62,8 +63,8 @@ export function CourseDetail() {
       await trainingService.enroll(id);
       toast.success('Successfully enrolled in course');
       fetchData();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to enroll');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Failed to enroll'));
     } finally {
       setEnrolling(false);
     }
@@ -76,8 +77,8 @@ export function CourseDetail() {
       await trainingService.complete(id);
       toast.success('Course marked as completed');
       fetchData();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to complete course');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Failed to complete course'));
     } finally {
       setCompleting(false);
     }

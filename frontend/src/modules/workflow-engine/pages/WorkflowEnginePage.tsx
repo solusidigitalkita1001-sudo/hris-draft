@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   workflowEngineService,
   type WorkflowActionType,
@@ -253,8 +254,8 @@ function TemplateForm({
 
       await onSaved();
       onClose();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan template workflow');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan template workflow'));
     } finally {
       setSaving(false);
     }
@@ -482,8 +483,8 @@ function StartInstanceForm({
       toast.success('Workflow instance berhasil dimulai');
       await onSaved();
       onClose();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Gagal memulai workflow instance');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal memulai workflow instance'));
     } finally {
       setSaving(false);
     }
@@ -593,8 +594,8 @@ export function WorkflowEnginePage() {
       toast.success('Template workflow dihapus');
       setDeletingTemplate(null);
       await refresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal menghapus template workflow');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal menghapus template workflow'));
     }
   };
 
@@ -610,8 +611,8 @@ export function WorkflowEnginePage() {
       await workflowEngineService.applyAction(instanceId, action, comment);
       toast.success(`Aksi ${action.toLowerCase()} berhasil diproses`);
       await refresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal memproses aksi workflow');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal memproses aksi workflow'));
     }
   };
 

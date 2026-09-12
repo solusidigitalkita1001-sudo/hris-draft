@@ -31,6 +31,7 @@ import {
   type WorkflowTemplate,
 } from '@/services/workflow.service';
 import { workflowEngineService, type WorkflowActionType } from '@/services/workflow-engine.service';
+import { apiErrorMessage } from '@/lib/errors';
 
 const APPROVAL_TYPES = [
   'LEAVE_REQUEST',
@@ -368,8 +369,8 @@ function TemplateForm({
       }
       await onSaved();
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menyimpan template');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menyimpan template'));
     } finally {
       setSaving(false);
     }
@@ -760,8 +761,8 @@ export function WorkflowAdminPage() {
       await workflowService.createTemplate(payload);
       toast.success('Template berhasil diduplikasi');
       await loadTemplates();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menduplikasi template');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menduplikasi template'));
     }
   };
 
@@ -772,8 +773,8 @@ export function WorkflowAdminPage() {
       toast.success('Template dihapus');
       setDeletingTemplate(null);
       await loadTemplates();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menghapus template');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menghapus template'));
     }
   };
 
@@ -824,8 +825,8 @@ export function WorkflowAdminPage() {
       );
       setSelectedIds([]);
       await loadApprovals();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Bulk action gagal');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Bulk action gagal'));
     } finally {
       setBulkAction(null);
     }
@@ -841,8 +842,8 @@ export function WorkflowAdminPage() {
       );
       toast.success(`Aksi ${individualAction.action.toLowerCase()} berhasil`);
       await loadApprovals();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memproses aksi');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memproses aksi'));
     } finally {
       setIndividualAction(null);
     }

@@ -14,6 +14,7 @@ import {
 import { useCompanyStore } from '@/stores/company.store';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const DURATION_UNIT_OPTIONS = [
   { value: 'HOUR', label: 'Hour' },
@@ -166,9 +167,9 @@ export function CourseFormPage() {
       const created = await trainingService.createCourse(payload);
       toast.success('Course berhasil dibuat');
       navigate(`/lms/courses/${created.id}`);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan course');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan course'));
     } finally {
       setSaving(false);
     }

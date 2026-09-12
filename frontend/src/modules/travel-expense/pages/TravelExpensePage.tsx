@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   BUSINESS_TRIP_STATUS_LABELS,
   EXPENSE_CLAIM_STATUS_LABELS,
@@ -131,8 +132,8 @@ function TripForm({
       toast.success('Travel request berhasil dibuat');
       onSuccess();
       onClose();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal membuat travel request');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal membuat travel request'));
     } finally {
       setSaving(false);
     }
@@ -261,8 +262,8 @@ function ClaimForm({
       toast.success('Expense claim berhasil dikirim');
       onSuccess();
       onClose();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal membuat expense claim');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal membuat expense claim'));
     } finally {
       setSaving(false);
     }
@@ -440,8 +441,8 @@ export function TravelExpensePage() {
         toast.success('Travel request ditolak via workflow');
       }
       await refresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Aksi gagal diproses');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Aksi gagal diproses'));
     }
   };
 
@@ -459,8 +460,8 @@ export function TravelExpensePage() {
       await travelExpenseService.createAdvance(tripId, { companyId, amount: Number(amount) });
       toast.success('Cash advance berhasil dicatat');
       await refresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal mencatat cash advance');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal mencatat cash advance'));
     }
   };
 
@@ -504,8 +505,8 @@ export function TravelExpensePage() {
         toast.success('Reimbursement berhasil dicatat');
       }
       await refresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Aksi gagal diproses');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Aksi gagal diproses'));
     }
   };
 

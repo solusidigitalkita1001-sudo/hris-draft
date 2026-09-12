@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, RefreshCw, Building2, Pencil, Trash2 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 // ─── Modal ──────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -115,8 +116,8 @@ export function GroupListPage() {
       toast.success('Group created');
       setShowCreate(false);
       fetchGroups();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create group');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create group'));
       throw err;
     }
   };
@@ -128,8 +129,8 @@ export function GroupListPage() {
       toast.success('Group updated');
       setEditing(null);
       fetchGroups();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update group');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update group'));
       throw err;
     }
   };
@@ -141,8 +142,8 @@ export function GroupListPage() {
       toast.success('Group deleted');
       setDeleting(null);
       fetchGroups();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete group');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete group'));
     }
   };
 
