@@ -106,9 +106,8 @@ jobs:
           --shadow-database-url mysql://root:root@127.0.0.1:3306/hris_ci_shadow
           --exit-code
         continue-on-error: true
-      - name: Backend tests against migrated DB (soft — flip to blocking after #4)
+      - name: Backend tests against migrated DB (blocking)
         run: npm test
-        continue-on-error: true
 
   frontend:
     name: Frontend (build [blocking], lint [soft])
