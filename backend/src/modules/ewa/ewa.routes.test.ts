@@ -3,7 +3,7 @@ import type { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { AppError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId, getCurrentUser } from '@/shared/context/RequestContext';
 
-jest.mock('@/shared/logger/WinstonLogger', () => ({ WinstonLogger: jest.fn().mockImplementation(() => ({ warn: jest.fn() })) }));
+jest.mock('@/shared/logger/WinstonLogger', () => ({ WinstonLogger: jest.fn().mockImplementation(() => ({ warn: jest.fn() })), logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
 jest.mock('@/shared/middleware/Authenticate', () => ({ authenticate: (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
   if (!req.user) return next(Object.assign(new Error('Authentication required'), { statusCode: 401 }));
   next();
