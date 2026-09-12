@@ -1,0 +1,161 @@
+name: CI
+
+# Quality gate for pull requests and feature branches.
+# Does NOT deploy — deployment stays in deploy.yml (push to main).
+# Blocking steps: filename hygiene, backend type-check + build, migration
+# apply-from-empty, frontend build. Soft steps (report only, flip to blocking
+# once the backlog is cleared): backend lint + test, frontend lint, npm audit,
+# secret scan.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main]   # main is covered by deploy.yml; avoid double runs
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    name: Repo hygiene (filename guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject stray duplicate/backup filenames
+        run: |
+          set -euo pipefail
+          # macOS Finder / "Save a Copy" duplicates produce "foo 2.ts" etc.
+          bad="$(git ls-files | grep -E ' [0-9]+\.(ts|tsx|js|jsx|json)$' || true)"
+          copies="$(git ls-files | grep -iE '(^|/)[^/]*copy[^/]*\.(ts|tsx|js|jsx)$' || true)"
+          if [ -n "$bad$copies" ]; then
+            echo "::error::Suspicious duplicate/backup filenames committed:"
+            printf '%s\n' "$bad" "$copies"
+            exit 1
+          fi
+          echo "OK: no '* 2.ts' / '*copy*' files."
+
+  backend:
+    name: Backend (type-check + build [blocking], lint + test [soft])
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Type-check (blocking)
+        run: npm run check
+      - name: Build (blocking)
+        run: npm run build
+      - name: Lint (soft — flip to blocking after #5)
+        run: npm run lint
+        continue-on-error: true
+      - name: Test (soft — flip to blocking after #4)
+        run: npm test
+        continue-on-error: true
+
+  migrations:
+    name: Migration validation (apply from empty DB [blocking])
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: hris_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/hris_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Create shadow database
+        run: mysql -h 127.0.0.1 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS hris_ci_shadow;"
+      - name: Apply full migration chain to empty DB (blocking)
+        run: npx prisma migrate deploy
+      - name: Schema-vs-migrations drift check (soft)
+        run: >-
+          npx prisma migrate diff
+          --from-migrations src/database/prisma/migrations
+          --to-schema-datamodel src/database/prisma/schema.prisma
+          --shadow-database-url mysql://root:root@127.0.0.1:3306/hris_ci_shadow
+          --exit-code
+        continue-on-error: true
+
+  frontend:
+    name: Frontend (build [blocking], lint [soft])
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Build (blocking)
+        run: npm run build
+      - name: Lint (soft — flip to blocking after #5)
+        run: npm run lint
+        continue-on-error: true
+
+  audit:
+    name: Dependency audit (soft)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Backend npm audit (soft)
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+      - name: Frontend npm audit (soft)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+  secret-scan:
+    name: Secret scan (soft)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
