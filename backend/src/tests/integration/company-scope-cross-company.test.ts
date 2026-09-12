@@ -686,6 +686,7 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
 
     it('createOvertime EMPLOYEE dengan employeeId emp-A (diri) → bukan IDOR Forbidden', async () => {
       jest.spyOn(prisma.workflowTemplate, 'findFirst').mockResolvedValue(null);
+      jest.spyOn(prisma.overtimeRequest, 'findFirst').mockResolvedValue(null); // no duplicate
       jest.spyOn(prisma.overtimeRequest, 'create').mockResolvedValue({ id: 'ot-new' } as any);
       // createOvertime runs inside withDatabaseAdvisoryLock; the file-level mock
       // of that module (see top) runs the operation directly against the mocked
