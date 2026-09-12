@@ -36,8 +36,11 @@ function app(options: { authenticated?: boolean; permissions?: string[]; employe
 }
 describe('EWA HTTP boundary', () => {
   beforeEach(() => jest.resetAllMocks());
+  // Admin/approver routes require a matching permission. The self-service
+  // '/my' and '/my/limit' routes are intentionally NOT here — they only need
+  // authentication (covered separately below).
   it.each([
-    ['get', ''], ['get', '/my'], ['get', '/my/limit'], ['get', `/${EWA}`], ['post', ''], ['post', `/${EWA}/cancel`],
+    ['get', ''], ['get', `/${EWA}`], ['post', ''], ['post', `/${EWA}/cancel`],
     ['post', `/${EWA}/approve`], ['post', `/${EWA}/reject`], ['post', `/${EWA}/mark-paid`],
   ])('requires authentication and matching permission for %s %s with no-store on errors', async (method, path) => {
     for (const authenticated of [false, true]) {
@@ -45,6 +48,14 @@ describe('EWA HTTP boundary', () => {
       expect(response.headers['cache-control']).toBe('no-store');
     }
     for (const operation of Object.values(service)) expect(operation).not.toHaveBeenCalled();
+  });
+  it.each(['/my', '/my/limit'])('self-service %s needs authentication but not an admin permission', async (path) => {
+    service.findMyRequests.mockResolvedValueOnce([]);
+    service.getMyLimitServer.mockResolvedValueOnce({ max: 0 } as never);
+    // Unauthenticated → 401.
+    await request(app({ authenticated: false })).get(`${BASE}${path}`).expect(401);
+    // Authenticated employee WITHOUT any admin ewa permission → allowed (200).
+    await request(app({ permissions: [] })).get(`${BASE}${path}`).expect(200);
   });
   it('propagates an authorized company switch into the service and rejects an inaccessible company', async () => {
     let company: string | undefined;
@@ -62,7 +73,9 @@ describe('EWA HTTP boundary', () => {
     expect(service.findMyRequests).toHaveBeenCalledWith(EMPLOYEE, 'APPROVED');
     await request(app()).get(`${BASE}/my/limit?employeeId=${ACTOR}&percent=40`).expect(200);
     expect(service.getMyLimitServer).toHaveBeenCalledWith(COMPANY, EMPLOYEE, 40);
-    await request(app({ employee: false })).get(`${BASE}/my`).expect(400);
+    // No employee profile (e.g. platform account): "my requests" is legitimately
+    // empty (200), while "my limit" cannot be computed without an employee (400).
+    await request(app({ employee: false })).get(`${BASE}/my`).expect(200);
     await request(app({ employee: false })).get(`${BASE}/my/limit`).expect(400);
     expect(service.findMyRequests).toHaveBeenCalledTimes(1); expect(service.getMyLimitServer).toHaveBeenCalledTimes(1);
   });
