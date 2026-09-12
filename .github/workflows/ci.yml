@@ -62,12 +62,9 @@ jobs:
       - name: Lint (soft — flip to blocking after #5)
         run: npm run lint
         continue-on-error: true
-      - name: Test (soft — flip to blocking after #4)
-        run: npm test
-        continue-on-error: true
 
   migrations:
-    name: Migration validation (apply from empty DB [blocking])
+    name: Migration validation + tests (migrate [blocking], test [soft])
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -108,6 +105,9 @@ jobs:
           --to-schema-datamodel src/database/prisma/schema.prisma
           --shadow-database-url mysql://root:root@127.0.0.1:3306/hris_ci_shadow
           --exit-code
+        continue-on-error: true
+      - name: Backend tests against migrated DB (soft — flip to blocking after #4)
+        run: npm test
         continue-on-error: true
 
   frontend:
