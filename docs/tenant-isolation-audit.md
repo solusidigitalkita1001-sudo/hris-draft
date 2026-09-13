@@ -84,6 +84,10 @@ enrollment (foreign employee), daily-activity (foreign employee), approval deleg
   explicit `company_id` predicate and `finalizeApprovalEffects` requires its scoped fetch to
   resolve before mutating; the org cycle-walk is scoped by `companyId`. All verified green in CI
   (type-check + build + 863-test suite + migrations).
-- **Tier 3 — OPEN.** Requires a product decision on the intended data-scope model (should
-  fetch-by-path enforce OWN_*? is cross-scope colleague read acceptable for payroll roles?)
-  before changing behavior. Not started.
+- **Tier 3 — DONE** (this branch; product decision: enforce the fine-grained scope on all
+  accesses). `assertEmployeeInScope()` enforces the caller's DataAccessScope on fetch-by-path/
+  by-id reads (payroll THR, work-calendar employee calendar); `getTeamCalendar` requires the
+  requested manager to be in scope; attendance clock-in and overtime creation switched from a
+  "pure EMPLOYEE" denylist to a positive elevated-capability gate so custom roles can no longer
+  set an arbitrary employeeId. The enforcement is a no-op for SUPER_ADMIN/system and for
+  ALL/COMPANY_ONLY scopes — only already-restricted users are tightened. Verified green in CI.

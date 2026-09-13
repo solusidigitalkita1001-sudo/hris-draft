@@ -54,9 +54,10 @@ import prisma from '@/shared/database/prisma';
 import { assetService } from '@/modules/asset/asset.service';
 import { trainingService } from '@/modules/training/training.service';
 import { dailyActivityService } from '@/modules/daily-activity/daily-activity.service';
+import { attendanceService } from '@/modules/attendance/attendance.service';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
-import { NotFoundError } from '@/shared/exceptions/AppError';
-import { runAs, userCompanyA, COMPANY_A_ID, EMPLOYEE_B_ID, USER_B_ID, clearAllPrismaMocks } from '../helpers/setupTestApp';
+import { NotFoundError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { runAs, userCompanyA, makeUserContext, COMPANY_A_ID, EMPLOYEE_A_ID, EMPLOYEE_B_ID, USER_B_ID, clearAllPrismaMocks } from '../helpers/setupTestApp';
 
 describe('CompanyScope Sprint 2 #8 — cross-tenant FK validation', () => {
   beforeEach(() => clearAllPrismaMocks());
@@ -115,5 +116,20 @@ describe('CompanyScope Sprint 2 #8 — cross-tenant FK validation', () => {
           endDate: new Date('2026-02-01T00:00:00Z'),
         }))
     ).rejects.toThrow(NotFoundError);
+  });
+
+  it('createOvertime by a custom non-elevated role for another employee → ForbiddenError (T3.3)', async () => {
+    // A role carrying neither EMPLOYEE nor an elevated role must be confined to
+    // itself — the positive-capability gate no longer lets it through.
+    const customUser = makeUserContext({ roles: ['CUSTOM_VIEWER'], employeeId: EMPLOYEE_A_ID, companyId: COMPANY_A_ID });
+    await expect(
+      runAs(customUser, () => attendanceService.createOvertime({
+        employeeId: EMPLOYEE_B_ID,
+        date: '2026-01-05',
+        startTime: '18:00',
+        endTime: '20:00',
+        reason: 'x',
+      } as any))
+    ).rejects.toThrow(ForbiddenError);
   });
 });
