@@ -125,9 +125,8 @@ jobs:
       - run: npm ci
       - name: Build (blocking)
         run: npm run build
-      - name: Lint (soft — flip to blocking after #5)
+      - name: Lint (blocking)
         run: npm run lint
-        continue-on-error: true
 
   audit:
     name: Dependency audit (soft)
