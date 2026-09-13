@@ -104,7 +104,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 function BranchForm({ initial, companies, onSave, onClose }: {
   initial?: Partial<BranchExtended>;
   companies: Company[];
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<BranchExtended>) => Promise<void>;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -474,7 +474,7 @@ export function BranchListPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<BranchExtended>) => {
     try {
       await organizationService.createBranch(data);
       toast.success(t('organization.branches.toast.createSuccess'));
@@ -486,7 +486,7 @@ export function BranchListPage() {
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<BranchExtended>) => {
     if (!editing) return;
     try {
       await organizationService.updateBranch(editing.id, data);
@@ -511,7 +511,7 @@ export function BranchListPage() {
     }
   };
 
-  const handlePolicySave = async (data: any) => {
+  const handlePolicySave = async (data: Record<string, unknown>) => {
     if (!policyTarget) return;
     try {
       await organizationService.upsertBranchAttendancePolicy(policyTarget.id, data);

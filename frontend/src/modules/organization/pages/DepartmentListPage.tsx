@@ -36,7 +36,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
   );
 }
 function DeptForm({ initial, onSave, onClose }: {
-  initial?: Partial<Department>; onSave: (data: any) => Promise<void>; onClose: () => void;
+  initial?: Partial<Department>; onSave: (data: Partial<Department>) => Promise<void>; onClose: () => void;
 }) {
   const companyId = localStorage.getItem('companyId') || '';
   const [name, setName] = useState(initial?.name || '');
@@ -81,8 +81,8 @@ export function DepartmentListPage() {
 
   useEffect(() => { if (companyId) fetchData(); }, [fetchData, companyId]);
 
-  const handleCreate = async (data: any) => { try { await organizationService.createDepartment(data); toast.success('Department created'); setShowCreate(false); fetchData(); } catch (err) { toast.error(apiErrorMessage(err, 'Failed to create')); throw err; } };
-  const handleUpdate = async (data: any) => { if (!editing) return; try { await organizationService.updateDepartment(editing.id, data); toast.success('Updated'); setEditing(null); fetchData(); } catch (err) { toast.error(apiErrorMessage(err, 'Failed to update')); throw err; } };
+  const handleCreate = async (data: Partial<Department>) => { try { await organizationService.createDepartment(data); toast.success('Department created'); setShowCreate(false); fetchData(); } catch (err) { toast.error(apiErrorMessage(err, 'Failed to create')); throw err; } };
+  const handleUpdate = async (data: Partial<Department>) => { if (!editing) return; try { await organizationService.updateDepartment(editing.id, data); toast.success('Updated'); setEditing(null); fetchData(); } catch (err) { toast.error(apiErrorMessage(err, 'Failed to update')); throw err; } };
   const handleDelete = async () => { if (!deleting) return; try { await organizationService.deleteDepartment(deleting.id); toast.success('Deleted'); setDeleting(null); fetchData(); } catch { toast.error('Failed to delete'); } };
 
   const filtered = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()) || i.code.toLowerCase().includes(search.toLowerCase()));

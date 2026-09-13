@@ -71,7 +71,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 // ─── Calendar Form ──────────────────────────────────────
 function CalendarForm({ initial, onSave, onClose }: {
   initial?: Partial<WorkCalendar>;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<WorkCalendar>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
@@ -267,7 +267,7 @@ export function WorkCalendarListPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<WorkCalendar>) => {
     try {
       await workCalendarService.create({ ...data, companyId });
       toast.success('Calendar created');
@@ -278,7 +278,7 @@ export function WorkCalendarListPage() {
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<WorkCalendar>) => {
     if (!editingCalendar) return;
     try {
       await workCalendarService.update(editingCalendar.id, data);

@@ -56,7 +56,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 // ─── Role Form ──────────────────────────────────────────
 function RoleForm({ initial, onSave, onClose }: {
   initial?: Partial<Role>;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<Role>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
@@ -323,7 +323,7 @@ export function RoleListPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<Role>) => {
     try {
       await rbacService.create(data);
       toast.success('Role created');
@@ -335,7 +335,7 @@ export function RoleListPage() {
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<Role>) => {
     if (!editingRole) return;
     try {
       await rbacService.update(editingRole.id, data);

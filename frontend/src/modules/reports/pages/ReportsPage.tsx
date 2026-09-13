@@ -340,7 +340,7 @@ export function ReportsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label="Total Employees" value={formatNumber(headcountData.total)} />
                 <StatCard label="Departments" value={formatNumber(headcountData.byDepartment.length)} />
-                {headcountData.byStatus.map((s: any) => (
+                {headcountData.byStatus.map((s) => (
                   <StatCard key={s.status} label={`Status: ${s.status}`} value={formatNumber(s.count)} />
                 ))}
               </div>
@@ -386,7 +386,7 @@ export function ReportsPage() {
                           outerRadius={100}
                           label={({ status, count }) => `${STATUS_LABELS[status] || status}: ${count}`}
                         >
-                          {attendanceData.byStatus.map((_: any, i: number) => (
+                          {attendanceData.byStatus.map((_, i: number) => (
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                         </Pie>
@@ -397,7 +397,7 @@ export function ReportsPage() {
                   <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
                     <h3 className="text-sm font-medium mb-4">Status Breakdown</h3>
                     <div className="space-y-3">
-                      {attendanceData.byStatus.map((s: any, i: number) => (
+                      {attendanceData.byStatus.map((s, i: number) => (
                         <div key={s.status} className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
@@ -468,7 +468,7 @@ export function ReportsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {payrollData.runs.map((r: any) => (
+                        {payrollData.runs.map((r) => (
                           <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30">
                             <td className="py-2 px-3">{r.name}</td>
                             <td className="py-2 px-3 text-right">{formatNumber(r.totalEmployees)}</td>
@@ -504,7 +504,7 @@ export function ReportsPage() {
                   <h3 className="text-sm font-medium mb-4">Monthly Hires vs Resignations</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart
-                      data={turnoverData.monthly.map((m: any) => ({
+                      data={turnoverData.monthly.map((m) => ({
                         month: `${m.year}-${String(m.month).padStart(2, '0')}`,
                         hires: m.hires,
                         resigns: m.resigns,

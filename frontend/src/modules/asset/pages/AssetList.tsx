@@ -46,7 +46,7 @@ function Modal({ open, onClose, title, children }: {
 
 // ─── Asset Form ────────────────────────────────────────────
 function AssetForm({ onSave, onClose }: {
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState('');
@@ -134,7 +134,7 @@ export function AssetList() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Record<string, unknown>) => {
     try {
       const cid = localStorage.getItem('companyId') || '';
       await assetService.create({ ...data, companyId: cid });

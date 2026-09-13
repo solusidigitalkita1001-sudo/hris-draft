@@ -55,7 +55,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 // ─── Holiday Form ───────────────────────────────────────
 function HolidayForm({ initial, onSave, onClose }: {
   initial?: Partial<Holiday>;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<Holiday>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
@@ -148,7 +148,7 @@ export function WorkCalendarHolidaysPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<Holiday>) => {
     try {
       await workCalendarService.createHoliday({ ...data, companyId });
       toast.success('Holiday created');
@@ -159,7 +159,7 @@ export function WorkCalendarHolidaysPage() {
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<Holiday>) => {
     if (!editingHoliday) return;
     try {
       await workCalendarService.updateHoliday(editingHoliday.id, data);

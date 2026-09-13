@@ -43,7 +43,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 
 function CompanyForm({ initial, groups, onSave, onClose }: {
   initial?: Partial<Company>; groups: { id: string; name: string }[];
-  onSave: (data: any) => Promise<void>; onClose: () => void;
+  onSave: (data: Partial<Company>) => Promise<void>; onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
   const [groupId, setGroupId] = useState(initial?.groupId || (groups[0]?.id || ''));
@@ -117,11 +117,11 @@ export function CompanyListPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<Company>) => {
     try { await organizationService.createCompany(data); toast.success('Company created'); setShowCreate(false); fetchData(); }
     catch (err) { toast.error(apiErrorMessage(err, 'Failed to create')); throw err; }
   };
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<Company>) => {
     if (!editing) return;
     try { await organizationService.updateCompany(editing.id, data); toast.success('Company updated'); setEditing(null); fetchData(); }
     catch (err) { toast.error(apiErrorMessage(err, 'Failed to update')); throw err; }

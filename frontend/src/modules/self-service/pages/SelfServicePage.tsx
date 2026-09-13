@@ -136,7 +136,7 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
         duration,
         reason: reason.trim(),
         employeeId,
-      } as any);
+      } as Partial<PermissionRequest>);
       toast.success('Pengajuan berhasil dikirim');
       onClose();
     } catch (err) {
@@ -1045,7 +1045,7 @@ function ShiftSwapTabView({
 
 // ─── Leave Tab ──────────────────────────────────────────
 function LeaveTabView({ companyId }: { companyId: string }) {
-  const [leaves, setLeaves] = useState<any[]>([]);
+  const [leaves, setLeaves] = useState<Awaited<ReturnType<typeof leaveService.getRequests>>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1091,7 +1091,7 @@ function LeaveTabView({ companyId }: { companyId: string }) {
 
 // ─── Overtime Tab ───────────────────────────────────────
 function OvertimeTabView({ companyId }: { companyId: string }) {
-  const [overtimes, setOvertimes] = useState<any[]>([]);
+  const [overtimes, setOvertimes] = useState<Awaited<ReturnType<typeof attendanceService.getOvertime>>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1127,7 +1127,7 @@ function OvertimeTabView({ companyId }: { companyId: string }) {
           </div>
           <p className="text-sm mt-1">{o.reason}</p>
           <div className="text-xs text-muted-foreground mt-2">
-            {o.durationHours || o.hours || 0} jam
+            {o.durationHours || 0} jam
           </div>
         </div>
       ))}

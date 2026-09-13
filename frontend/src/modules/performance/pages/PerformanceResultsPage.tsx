@@ -359,7 +359,7 @@ export function PerformanceResultsPage() {
     setCreatingSession(true);
     try {
       const rawForcedDistribution = sessionForm.forcedDistribution.trim();
-      let forcedDistribution: any = undefined;
+      let forcedDistribution: Record<string, unknown> | undefined = undefined;
       if (rawForcedDistribution) {
         try {
           forcedDistribution = JSON.parse(rawForcedDistribution);
@@ -832,7 +832,7 @@ export function PerformanceResultsPage() {
               </Button>
               <Select2
                 value={reminderTarget}
-                onValueChange={(value) => setReminderTarget(value as any)}
+                onValueChange={(value) => setReminderTarget(value as 'UNACKNOWLEDGED_RESULTS' | 'OPEN_DISPUTES' | 'ALL')}
                 options={[
                   { value: 'ALL', label: 'All Pending' },
                   { value: 'UNACKNOWLEDGED_RESULTS', label: 'Unacknowledged Results' },
@@ -870,7 +870,7 @@ export function PerformanceResultsPage() {
               />
               <Select2
                 value={scheduleForm.reminderTarget}
-                onValueChange={(value) => setScheduleForm((prev) => ({ ...prev, reminderTarget: value as any }))}
+                onValueChange={(value) => setScheduleForm((prev) => ({ ...prev, reminderTarget: value as 'UNACKNOWLEDGED_RESULTS' | 'OPEN_DISPUTES' | 'ALL' }))}
                 options={[
                   { value: 'ALL', label: 'All Pending' },
                   { value: 'UNACKNOWLEDGED_RESULTS', label: 'Unacknowledged Results' },
@@ -1462,7 +1462,7 @@ export function PerformanceResultsPage() {
                         <div className="mt-4 space-y-3">
                           <Select2
                             value={disputeResponseForm.status}
-                            onValueChange={(value) => setDisputeResponseForm((prev) => ({ ...prev, status: value as any }))}
+                            onValueChange={(value) => setDisputeResponseForm((prev) => ({ ...prev, status: value as 'RESPONDED' | 'RESOLVED' | 'REJECTED' | 'CLOSED' }))}
                             options={[
                               { value: 'RESPONDED', label: 'Responded' },
                               { value: 'RESOLVED', label: 'Resolved' },

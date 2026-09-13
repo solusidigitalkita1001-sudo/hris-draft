@@ -43,7 +43,7 @@ const PLAN_TYPES = [
 
 function BenefitPlanForm({ initial, onSave, onClose }: {
   initial?: Partial<BenefitPlan>;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<BenefitPlan>) => Promise<void>;
   onClose: () => void;
 }) {
   const companyId = localStorage.getItem('companyId') || '';
@@ -163,7 +163,7 @@ export function BenefitPlanList() {
     fetchData();
   }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<BenefitPlan>) => {
     try {
       await benefitService.createPlan(data);
       toast.success('Benefit plan created');
@@ -175,7 +175,7 @@ export function BenefitPlanList() {
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<BenefitPlan>) => {
     if (!editing) return;
     try {
       await benefitService.updatePlan(editing.id, data);

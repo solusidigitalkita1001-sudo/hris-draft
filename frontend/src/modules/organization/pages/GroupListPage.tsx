@@ -49,7 +49,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 
 function GroupForm({ initial, onSave, onClose }: {
   initial?: Partial<CompanyGroup>;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<CompanyGroup>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
@@ -110,7 +110,7 @@ export function GroupListPage() {
 
   useEffect(() => { fetchGroups(); }, [fetchGroups]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<CompanyGroup>) => {
     try {
       await organizationService.createGroup(data);
       toast.success('Group created');
@@ -122,7 +122,7 @@ export function GroupListPage() {
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<CompanyGroup>) => {
     if (!editing) return;
     try {
       await organizationService.updateGroup(editing.id, data);

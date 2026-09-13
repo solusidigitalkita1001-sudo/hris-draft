@@ -56,7 +56,12 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
     remaining: number;
     earnedGrossToDate: number;
     totalReserved: number;
-    breakdown: any;
+    breakdown: {
+      baseSalary: number;
+      presentDays: number;
+      workDaysInPeriod: number;
+      overtimePay: number;
+    } | null;
   } | null>(null);
   const [limitError, setLimitError] = useState<string | null>(null);
 

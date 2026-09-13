@@ -29,9 +29,13 @@ import {
   type WorkflowOperator,
   type WorkflowStageInput,
   type WorkflowTemplate,
+  type WorkflowInstance,
 } from '@/services/workflow.service';
 import { workflowEngineService, type WorkflowActionType } from '@/services/workflow-engine.service';
 import { apiErrorMessage } from '@/lib/errors';
+
+// my-approvals items carry legacy instanceId/instance fields alongside the WorkflowInstance shape
+type PendingApproval = WorkflowInstance & { instanceId?: string; instance?: { id?: string } };
 
 const APPROVAL_TYPES = [
   'LEAVE_REQUEST',
@@ -680,7 +684,7 @@ export function WorkflowAdminPage() {
   const [templatesLoading, setTemplatesLoading] = useState(true);
 
   // Tab 2 - My Approvals state
-  const [approvals, setApprovals] = useState<any[]>([]);
+  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [approvalsLoading, setApprovalsLoading] = useState(true);
   const [filterApprovalType2, setFilterApprovalType2] = useState('');
   const [filterStatus, setFilterStatus] = useState('PENDING');
@@ -780,7 +784,7 @@ export function WorkflowAdminPage() {
 
   // ----- Approvals actions -----
   const filteredApprovals = useMemo(() => {
-    return approvals.filter((a: any) => {
+    return approvals.filter((a: PendingApproval) => {
       if (filterApprovalType2) {
         const at = a.instance?.approvalType || a.approvalType;
         if (at !== filterApprovalType2) return false;
@@ -799,7 +803,7 @@ export function WorkflowAdminPage() {
   };
 
   const toggleSelectAll = () => {
-    const allIds = filteredApprovals.map((a: any) => a.instanceId || a.instance?.id);
+    const allIds = filteredApprovals.map((a: PendingApproval) => a.instanceId || a.instance?.id);
     if (selectedIds.length >= allIds.length && allIds.length > 0) {
       setSelectedIds([]);
     } else {
@@ -807,7 +811,7 @@ export function WorkflowAdminPage() {
     }
   };
 
-  const allSelected = filteredApprovals.length > 0 && selectedIds.length === filteredApprovals.map((a: any) => a.instanceId || a.instance?.id).filter((v: string) => v).length;
+  const allSelected = filteredApprovals.length > 0 && selectedIds.length === filteredApprovals.map((a: PendingApproval) => a.instanceId || a.instance?.id).filter((v: string) => v).length;
 
   const handleBulkSubmit = async (comment?: string) => {
     if (!bulkAction || selectedIds.length === 0) return;
@@ -849,7 +853,7 @@ export function WorkflowAdminPage() {
     }
   };
 
-  const handleRowClick = (approval: any) => {
+  const handleRowClick = (approval: PendingApproval) => {
     const refType = approval.instance?.referenceType;
     const refId = approval.instance?.referenceId;
     const link = getReferenceLink(refType, refId);
@@ -923,7 +927,7 @@ export function WorkflowAdminPage() {
                   </label>
                   <Select2
                     value={filterIsActive}
-                    onValueChange={(v) => setFilterIsActive(v as any)}
+                    onValueChange={(v) => setFilterIsActive(v as '' | 'true' | 'false')}
                     options={[
                       { value: '', label: 'Semua' },
                       { value: 'true', label: 'Aktif' },
@@ -1138,7 +1142,7 @@ export function WorkflowAdminPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filteredApprovals.map((approval: any) => {
+                  {filteredApprovals.map((approval: PendingApproval) => {
                     const instanceId = approval.instanceId || approval.instance?.id;
                     const isChecked = instanceId ? selectedIds.includes(instanceId) : false;
                     const refType = approval.instance?.referenceType;
