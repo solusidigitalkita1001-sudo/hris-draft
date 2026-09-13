@@ -764,14 +764,14 @@ export class AttendanceService {
     const ctx = getRequestContext();
     const currentUser = ctx?.user;
     const roles = currentUser?.roles ?? [];
-    const hasElevatedRole = roles.some((r) =>
+    // Positive capability gate (#8 T3.3): only elevated roles may file overtime
+    // for another employee; every other role — including custom roles carrying
+    // neither EMPLOYEE nor an elevated role — is confined to itself.
+    const canManageOthersOvertime = roles.some((r) =>
       ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(r)
     );
-
-    if (currentUser?.employeeId && roles.includes('EMPLOYEE') && !hasElevatedRole) {
-      if (data.employeeId !== currentUser.employeeId) {
-        throw new ForbiddenError('IDOR: Employee cannot create overtime request for other employees');
-      }
+    if (!canManageOthersOvertime && data.employeeId !== currentUser?.employeeId) {
+      throw new ForbiddenError('IDOR: Employee cannot create overtime request for other employees');
     }
 
     const requesterId = currentUser?.id ?? undefined;

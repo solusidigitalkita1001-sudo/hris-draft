@@ -24,18 +24,21 @@ export class AttendanceController {
 
   async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      // [Finding #10] Strict ownership guard: EMPLOYEE role self-service TIDAK BOLEH clock-in atas nama karyawan lain
-      const isPureEmployee = req.user?.roles?.includes('EMPLOYEE') &&
-        !req.user?.roles?.some((r: string) =>
-          ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'BRANCH_MANAGER', 'MANAGER'].includes(r)
-        );
-      if (isPureEmployee && req.body.employeeId && req.body.employeeId !== req.user?.employeeId) {
-        throw new ForbiddenError('Anda tidak boleh clock-in atas nama karyawan lain sebagai role EMPLOYEE');
-      }
-      // Elevated roles (HR/Admin/Manager) tetap bisa override employeeId untuk create attendance manual;
-      // Employee-linked user tanpa elevated role: silent override ke user sendiri (existing pattern)
-      if (req.user?.employeeId && isPureEmployee) {
-        req.body.employeeId = req.user.employeeId;
+      // [Finding #10 / #8 T3.3] Ownership guard as a POSITIVE capability gate:
+      // only explicitly elevated roles may clock-in on behalf of another
+      // employee. Any other role — including custom roles that carry neither the
+      // EMPLOYEE role nor an elevated one — is forced to self, closing the gap
+      // where a non-listed role could set an arbitrary employeeId.
+      const canManageOthersAttendance = req.user?.roles?.some((r: string) =>
+        ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'BRANCH_MANAGER', 'MANAGER'].includes(r)
+      ) ?? false;
+      if (!canManageOthersAttendance) {
+        if (req.body.employeeId && req.body.employeeId !== req.user?.employeeId) {
+          throw new ForbiddenError('Anda tidak boleh clock-in atas nama karyawan lain');
+        }
+        if (req.user?.employeeId) {
+          req.body.employeeId = req.user.employeeId;
+        }
       }
       res.status(201).json(Result.created(await attendanceService.create(req.body)));
     } catch (error) { next(error); }
