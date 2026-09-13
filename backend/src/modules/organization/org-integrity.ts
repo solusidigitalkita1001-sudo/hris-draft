@@ -47,6 +47,7 @@ async function assertAcyclic(
   parentField: 'parentId' | 'reportsToId',
   startId: string,
   parentId: string,
+  companyId: string,
 ): Promise<void> {
   if (startId === parentId) {
     throw new BadRequestError('Hierarki tidak boleh menunjuk ke dirinya sendiri');
@@ -56,18 +57,20 @@ async function assertAcyclic(
     if (cursor === startId) {
       throw new BadRequestError('Perubahan ini membentuk siklus dalam hierarki organisasi');
     }
+    // Scope the walk to the target row's company (consistent with findScoped
+    // above); a parent pointer into another tenant simply ends the chain.
     const row: Record<string, string | null> | null = await runInSystemContext('org-cycle-walk', () =>
-      (prisma as unknown as Record<string, { findUnique: (args: unknown) => Promise<Record<string, string | null> | null> }>)[model]
-        .findUnique({ where: { id: cursor }, select: { [parentField]: true } }));
+      (prisma as unknown as Record<string, { findFirst: (args: unknown) => Promise<Record<string, string | null> | null> }>)[model]
+        .findFirst({ where: { id: cursor, companyId }, select: { [parentField]: true } }));
     cursor = row?.[parentField] ?? null;
   }
 }
 
-export const assertNoDepartmentCycle = (departmentId: string, parentId: string) =>
-  assertAcyclic('department', 'parentId', departmentId, parentId);
+export const assertNoDepartmentCycle = (departmentId: string, parentId: string, companyId: string) =>
+  assertAcyclic('department', 'parentId', departmentId, parentId, companyId);
 
-export const assertNoPositionCycle = (positionId: string, reportsToId: string) =>
-  assertAcyclic('position', 'reportsToId', positionId, reportsToId);
+export const assertNoPositionCycle = (positionId: string, reportsToId: string, companyId: string) =>
+  assertAcyclic('position', 'reportsToId', positionId, reportsToId, companyId);
 
 /** Block delete while active rows still reference the master. */
 export async function assertNoActiveDependents(

@@ -86,6 +86,14 @@ export class DailyActivityService {
     const finalCompanyId = user?.companyId ?? getCurrentCompanyId();
     if (!finalCompanyId) throw new BadRequestError('companyId tidak ditemukan dalam context');
 
+    // Elevated roles may pass an explicit employeeId; validate it belongs to
+    // this company (branch is already checked below, the employee was not).
+    const activityEmployee = await prisma.employee.findFirst({
+      where: { id: employeeId, companyId: finalCompanyId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!activityEmployee) throw new NotFoundError('Karyawan tidak ditemukan di company Anda');
+
     if (data.endTime.getTime() <= data.startTime.getTime()) {
       throw new ValidationError('Waktu selesai harus lebih besar dari waktu mulai');
     }

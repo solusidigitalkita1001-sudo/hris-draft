@@ -130,6 +130,7 @@ export class LeaveRepository {
       const locked = await tx.$queryRaw<Array<{ id: string; used_days: number }>>`
         SELECT id, used_days FROM leave_balances
         WHERE employee_id = ${data.employeeId} AND leave_type_id = ${data.leaveTypeId} AND year = ${data.year}
+        AND company_id = ${data.companyId}
         FOR UPDATE`;
       if (locked.length) {
         return tx.leaveBalance.update({
@@ -180,6 +181,7 @@ export class LeaveRepository {
       const locked = await tx.$queryRaw<Array<{ id: string; used_days: number }>>`
         SELECT id, used_days FROM leave_balances
         WHERE employee_id = ${data.employeeId} AND leave_type_id = ${data.leaveTypeId} AND year = ${data.year}
+        AND company_id = ${data.companyId}
         FOR UPDATE`;
       const existing = locked.length ? { id: locked[0].id, usedDays: Number(locked[0].used_days) } : null;
 

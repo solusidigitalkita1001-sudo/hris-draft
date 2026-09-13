@@ -1,3 +1,4 @@
+import prisma from '@/shared/database/prisma';
 import { assetRepository } from './asset.repository';
 import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO } from './asset.dto';
 import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
@@ -41,6 +42,14 @@ export class AssetService {
   async assign(assetId: string, data: AssignAssetDTO, userId: string) {
     const asset = await this.findById(assetId);
     if (asset.status !== 'AVAILABLE') throw new BadRequestError('Asset is not available for assignment');
+    // Tenant middleware pins the assignment's companyId but trusts the client
+    // employeeId; validate it belongs to this company (Employee is scoped, so a
+    // foreign employee resolves to null) to avoid attaching another tenant's PII.
+    const employee = await prisma.employee.findFirst({
+      where: { id: data.employeeId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundError('Employee not found');
     return assetRepository.assign(assetId, data, userId);
   }
 

@@ -49,7 +49,7 @@ export class PositionService {
     if (dto.code === current.code) delete dto.code;
 
     await assertOrgRefsInCompany(current.companyId, { departmentId: dto.departmentId, reportsToId: dto.reportsToId });
-    if (dto.reportsToId) await assertNoPositionCycle(id, dto.reportsToId);
+    if (dto.reportsToId) await assertNoPositionCycle(id, dto.reportsToId, current.companyId);
 
     return positionRepository.update(id, dto);
   }

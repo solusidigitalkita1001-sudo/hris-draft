@@ -1,3 +1,4 @@
+import prisma from '@/shared/database/prisma';
 import { trainingRepository } from './training.repository';
 import { CreateCategoryDTO, CreateCourseDTO, UpdateCourseDTO, CreateSessionDTO, CreateEnrollmentDTO } from './training.dto';
 import { NotFoundError, ConflictError } from '@/shared/exceptions/AppError';
@@ -68,6 +69,14 @@ export class TrainingService {
     // Same duplicate guard as the self-service path — the admin path
     // previously allowed unlimited duplicate enrollments.
     await this.findCourseById(data.courseId);
+    // Validate the target employee is in this tenant (Employee is scoped, so a
+    // foreign employeeId resolves to null) — otherwise findAllEnrollments would
+    // leak the foreign employee's name/number back through its include.
+    const employee = await prisma.employee.findFirst({
+      where: { id: data.employeeId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundError('Employee not found');
     const existing = await trainingRepository.findActiveEnrollment(data.courseId, data.employeeId, data.companyId);
     if (existing) {
       throw new ConflictError('Employee is already enrolled in this course');
