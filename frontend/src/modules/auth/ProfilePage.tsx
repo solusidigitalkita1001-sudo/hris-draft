@@ -5,6 +5,7 @@ import { authService, type AuthUser, type UserSession } from '@/services/auth.se
 import { useAuthStore } from '@/stores/auth.store';
 import toast from 'react-hot-toast';
 import { RefreshCw, ShieldCheck, UserCircle2, KeyRound, Building2, IdCard } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -38,8 +39,8 @@ export function ProfilePage() {
       setProfile(profileData);
       setUser(profileData);
       setSessions(sessionData);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal memuat profil');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal memuat profil'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -56,8 +57,8 @@ export function ProfilePage() {
       await authService.revokeSession(sessionId);
       toast.success('Session berhasil dicabut');
       await loadData(true);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal mencabut session');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal mencabut session'));
     } finally {
       setRevokingId(null);
     }

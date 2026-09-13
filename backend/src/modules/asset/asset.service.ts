@@ -1,7 +1,6 @@
 import { assetRepository } from './asset.repository';
 import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO } from './asset.dto';
 import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
-import { logger } from '@/shared/logger/WinstonLogger';
 import { generateSystemCode } from '@/shared/utils/system-code';
 
 export class AssetService {

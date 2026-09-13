@@ -66,6 +66,7 @@ import prisma from '@/shared/database/prisma';
 import { NotFoundError } from '@/shared/exceptions/AppError';
 import { attendanceService } from '@/modules/attendance/attendance.service';
 import { attendanceCorrectionService } from '@/modules/attendance/attendance-correction.service';
+import { attendanceContextService } from '@/modules/attendance/attendance-context.service';
 import {
   runAs,
   userCompanyA,
@@ -87,7 +88,6 @@ const CORR_A_ID = 'att-corr-a-001';
 const CORR_B_ID = 'att-corr-b-001';
 const FACE_A_ID = 'att-face-a-001';
 const FACE_B_ID = 'att-face-b-001';
-const OT_A_ID = 'ot-req-a-001';
 const OT_B_ID = 'ot-req-b-001';
 
 const mockAttendanceA = {
@@ -119,14 +119,6 @@ const mockCorrectionApprovedB = {
   status: 'APPROVED',
   approvedBy: USER_SUPERADMIN_ID,
   approvedAt: new Date(),
-} as any;
-
-const mockOvertimeB = {
-  id: OT_B_ID,
-  employeeId: EMPLOYEE_B_ID,
-  companyId: COMPANY_B_ID,
-  date: new Date(),
-  status: 'PENDING',
 } as any;
 
 describe('CompanyScope Cross-Tenant — Attendance Module (Task 1.2)', () => {
@@ -193,7 +185,13 @@ describe('CompanyScope Cross-Tenant — Attendance Module (Task 1.2)', () => {
         date: new Date(),
       } as any);
       jest.spyOn(prisma.attendance, 'update').mockResolvedValue({ id: ATT_A_ID } as any);
+      jest.spyOn(prisma.attendance, 'findUnique').mockResolvedValue({ checkIn: null, checkOut: null, status: 'PRESENT' } as any);
       jest.spyOn(prisma.attendanceCorrection, 'update').mockResolvedValue(mockCorrectionApprovedB as any);
+      // approve() resolves calendar context (real employee lookup) then applies
+      // inside a $transaction — which the prisma Proxy runs as cb(prismaMock), so
+      // the attendance/correction spies above cover the tx writes. Only the
+      // context lookup still needs stubbing.
+      jest.spyOn(attendanceContextService, 'resolve').mockResolvedValue({ schedule: { isWorkingDay: true } } as any);
       jest.spyOn(prisma.attendanceCorrection, 'findFirst').mockResolvedValueOnce({
         id: CORR_A_ID,
         employeeId: EMPLOYEE_B_ID,

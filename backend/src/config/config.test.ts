@@ -17,7 +17,8 @@ describe('loadEnv (Task 0.1 env validation)', () => {
   });
 
   it('throws listing the missing required secret', () => {
-    const { ENCRYPTION_KEY, ...missing } = validEnv;
+    const missing: NodeJS.ProcessEnv = { ...validEnv };
+    delete missing.ENCRYPTION_KEY;
     expect(() => loadEnv(missing)).toThrow(/ENCRYPTION_KEY/);
   });
 
@@ -26,7 +27,8 @@ describe('loadEnv (Task 0.1 env validation)', () => {
   });
 
   it('throws when JWT secrets are absent', () => {
-    const { JWT_ACCESS_SECRET, ...missing } = validEnv;
+    const missing: NodeJS.ProcessEnv = { ...validEnv };
+    delete missing.JWT_ACCESS_SECRET;
     expect(() => loadEnv(missing)).toThrow(/JWT_ACCESS_SECRET/);
   });
 

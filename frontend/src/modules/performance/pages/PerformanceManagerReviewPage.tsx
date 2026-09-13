@@ -7,6 +7,7 @@ import { performanceService, type PerformancePlanningAssignment } from '@/servic
 import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { CheckCircle2, Clock3, RefreshCw, Save, Send, XCircle } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -83,9 +84,9 @@ export function PerformanceManagerReviewPage() {
       setSelectedAssignmentId(nextId);
       const nextPeriod = data.find((item) => item.id === nextId)?.periodId || '';
       setFilterPeriodId((prev) => (prev && data.some((item) => item.periodId === prev) ? prev : nextPeriod));
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memuat approval queue');
+      toast.error(apiErrorMessage(error, 'Gagal memuat approval queue'));
     } finally {
       setLoading(false);
     }
@@ -109,10 +110,10 @@ export function PerformanceManagerReviewPage() {
       }
       setDraftComments(nextDraft);
       setDecisionNotes(data.decisionNotes || '');
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
       setDetail(null);
-      toast.error(error?.response?.data?.message || 'Gagal memuat detail assignment');
+      toast.error(apiErrorMessage(error, 'Gagal memuat detail assignment'));
     } finally {
       setDetailLoading(false);
     }
@@ -133,9 +134,9 @@ export function PerformanceManagerReviewPage() {
       await performanceService.updateExecutionTargetComment(targetId, comment || null);
       toast.success('Reviewer comment tersimpan');
       await loadDetail();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan comment');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan comment'));
     } finally {
       setActing(false);
     }
@@ -157,9 +158,9 @@ export function PerformanceManagerReviewPage() {
       setDecisionNotes('');
       await loadQueue();
       await loadDetail();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memproses decision');
+      toast.error(apiErrorMessage(error, 'Gagal memproses decision'));
     } finally {
       setActing(false);
     }

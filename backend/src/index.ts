@@ -79,25 +79,25 @@ async function bootstrap(): Promise<void> {
 
       try {
         await disconnectDatabase();
-      } catch (e) {
+      } catch {
         // ignore
       }
 
       try {
         await redisCache.disconnect();
-      } catch (e) {
+      } catch {
         // ignore
       }
 
       try {
         await rabbitMQBroker.disconnect();
-      } catch (e) {
+      } catch {
         // ignore
       }
 
       try {
         await queueManager.disconnect();
-      } catch (e) {
+      } catch {
         // ignore
       }
 

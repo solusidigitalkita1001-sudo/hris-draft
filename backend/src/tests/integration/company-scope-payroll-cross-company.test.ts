@@ -80,7 +80,6 @@ import {
 
 const SC_A_ID = 'sc-a-uuid-001';
 const SC_B_ID = 'sc-b-uuid-001';
-const ESAL_A_ID = 'esal-a-uuid-001';
 const ESAL_B_ID = 'esal-b-uuid-001';
 const PP_A_ID = 'pp-a-uuid-001';
 const PP_B_ID = 'pp-b-uuid-001';

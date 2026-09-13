@@ -9,7 +9,7 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { prisma, disconnectDatabase, testDatabaseConnection } from '@/shared/database/prisma';
 import { authRepository } from '@/modules/auth/auth.repository';
 import { performanceService } from '@/modules/performance/performance.service';
-import { LEAVE_YEARLY_ACCRUAL_JOB, runYearlyLeaveAccrual, scheduleYearlyLeaveAccrual } from '@/modules/leave/leave.scheduler';
+import { runYearlyLeaveAccrual, scheduleYearlyLeaveAccrual } from '@/modules/leave/leave.scheduler';
 import { WORKFLOW_SLA_SWEEP_JOB, runWorkflowSlaSweep, scheduleWorkflowSlaSweep } from '@/modules/workflow-engine/workflow-sla.scheduler';
 import { CAREER_TRANSACTION_APPLY_JOB, runCareerTransactionApply, scheduleCareerTransactionApply } from '@/modules/employee/career-transaction.scheduler';
 import { OFFBOARDING_APPLY_JOB, runOffboardingApply, scheduleOffboardingApply } from '@/modules/onboarding/offboarding.scheduler';

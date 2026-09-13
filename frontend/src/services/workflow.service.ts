@@ -47,11 +47,11 @@ export interface WorkflowInstance {
   referenceType: string;
   referenceId: string;
   requesterId: string;
-  payload?: any;
+  payload?: Record<string, unknown>;
   status: WorkflowInstanceStatus;
   currentLevel: number | null;
-  steps: any[];
-  logs: any[];
+  steps: Array<Record<string, unknown>>;
+  logs: Array<Record<string, unknown>>;
   template?: { id: string; name: string; approvalType: string };
 }
 
@@ -122,7 +122,7 @@ class WorkflowService {
     return r.data.data;
   }
 
-  async getMyApprovals(companyId: string): Promise<any[]> {
+  async getMyApprovals(companyId: string): Promise<WorkflowInstance[]> {
     const r = await api.get('/workflow-engine/instances/my-approvals', { params: { companyId } });
     return r.data.data;
   }

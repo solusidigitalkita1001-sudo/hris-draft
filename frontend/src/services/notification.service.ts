@@ -17,7 +17,7 @@ export interface Notification {
 
 class NotificationService {
   async findAll(unreadOnly = false, limit = 50) {
-    const params: Record<string, any> = { limit };
+    const params: Record<string, unknown> = { limit };
     if (unreadOnly) params.unreadOnly = true;
     const r = await api.get('/notifications', { params });
     return r.data.data as Notification[];

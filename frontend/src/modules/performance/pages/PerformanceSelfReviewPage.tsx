@@ -7,6 +7,7 @@ import { performanceService, type PerformanceExecutionAssignmentSummary, type Pe
 import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { CheckCircle2, RefreshCw, Save, Send } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -87,9 +88,9 @@ export function PerformanceSelfReviewPage() {
       setSelectedAssignmentId(nextId);
       const nextPeriod = data.find((item) => item.id === nextId)?.periodId || '';
       setFilterPeriodId((prev) => (prev && data.some((item) => item.periodId === prev) ? prev : nextPeriod));
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memuat assignment self review');
+      toast.error(apiErrorMessage(error, 'Gagal memuat assignment self review'));
     } finally {
       setLoading(false);
     }
@@ -111,10 +112,10 @@ export function PerformanceSelfReviewPage() {
         nextDraft[target.id] = target.selfComment || '';
       }
       setDraftComments(nextDraft);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
       setDetail(null);
-      toast.error(error?.response?.data?.message || 'Gagal memuat detail assignment');
+      toast.error(apiErrorMessage(error, 'Gagal memuat detail assignment'));
     } finally {
       setDetailLoading(false);
     }
@@ -135,9 +136,9 @@ export function PerformanceSelfReviewPage() {
       await performanceService.updateExecutionTargetComment(targetId, comment || null);
       toast.success('Self comment tersimpan');
       await loadDetail();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan comment');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan comment'));
     } finally {
       setActing(false);
     }
@@ -155,9 +156,9 @@ export function PerformanceSelfReviewPage() {
       setSubmitNotes('');
       await loadAssignments();
       await loadDetail();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal submit self review');
+      toast.error(apiErrorMessage(error, 'Gagal submit self review'));
     } finally {
       setActing(false);
     }

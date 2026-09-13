@@ -12,6 +12,7 @@ import {
 import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { CheckCircle2, Clock3, RefreshCw, Send, Target, Upload, Users, XCircle } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -107,9 +108,9 @@ export function PerformanceExecutionPage() {
     try {
       const data = await performanceService.getExecutionApprovalQueue(companyId);
       setApprovalQueue(data);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memuat approval queue');
+      toast.error(apiErrorMessage(error, 'Gagal memuat approval queue'));
     } finally {
       setQueueLoading(false);
     }
@@ -138,10 +139,10 @@ export function PerformanceExecutionPage() {
           ? selectedTargetId
           : nextAssignment?.targets[0]?.id || '';
       setSelectedTargetId(nextTargetId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
       setWorkspace(null);
-      toast.error(error?.response?.data?.message || 'Gagal memuat execution workspace');
+      toast.error(apiErrorMessage(error, 'Gagal memuat execution workspace'));
     } finally {
       setWorkspaceLoading(false);
     }
@@ -177,9 +178,9 @@ export function PerformanceExecutionPage() {
           ? selectedPeriodId
           : executionPeriods[0]?.id || '';
       setSelectedPeriodId(nextPeriodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memuat data execution performance');
+      toast.error(apiErrorMessage(error, 'Gagal memuat data execution performance'));
     } finally {
       setLoading(false);
     }
@@ -251,9 +252,9 @@ export function PerformanceExecutionPage() {
       });
       toast.success('Progress execution berhasil disimpan');
       await refreshAll();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan progress');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan progress'));
     } finally {
       setSavingProgress(false);
     }
@@ -277,9 +278,9 @@ export function PerformanceExecutionPage() {
       setEvidenceFile(null);
       setEvidenceNotes('');
       await refreshAll();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal upload evidence');
+      toast.error(apiErrorMessage(error, 'Gagal upload evidence'));
     } finally {
       setUploadingEvidence(false);
     }
@@ -305,9 +306,9 @@ export function PerformanceExecutionPage() {
       toast.success(successMessage);
       setActionNotes('');
       await refreshAll();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Aksi execution gagal diproses');
+      toast.error(apiErrorMessage(error, 'Aksi execution gagal diproses'));
     } finally {
       setActing(false);
     }

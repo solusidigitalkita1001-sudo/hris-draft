@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, CalendarDays, Pencil, Lock, X } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null;
@@ -106,6 +107,7 @@ function PeriodForm({
       });
       onClose();
     } catch {
+      /* toast handled by the caller/service; close+reset still run in finally */
     } finally {
       setSaving(false);
     }
@@ -220,8 +222,8 @@ export function PayrollPeriodList() {
       toast.success('Payroll period created');
       setShowCreate(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal membuat payroll period');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal membuat payroll period'));
       throw err;
     }
   };
@@ -233,8 +235,8 @@ export function PayrollPeriodList() {
       toast.success('Payroll period updated');
       setEditing(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal update payroll period');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal update payroll period'));
       throw err;
     }
   };
@@ -246,8 +248,8 @@ export function PayrollPeriodList() {
       toast.success('Payroll period closed');
       setClosing(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal close payroll period');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal close payroll period'));
     }
   };
 

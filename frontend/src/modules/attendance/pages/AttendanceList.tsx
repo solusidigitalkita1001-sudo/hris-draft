@@ -22,6 +22,7 @@ import { Select2 } from '@/components/ui/select2';
 import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, Clock, CheckCircle2, XCircle, AlertTriangle, LogIn, LogOut, Clock9, MapPin, Camera, RotateCcw, X } from 'lucide-react';
 import { formatDate, formatTime } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PRESENT: <CheckCircle2 size={14} className="text-emerald-500" />,
@@ -127,9 +128,9 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
         });
         setContext(nextContext);
         setMethod((current) => (nextContext.allowedMethods.includes(current) ? current : nextContext.allowedMethods[0] || 'MANUAL'));
-      } catch (error: any) {
+      } catch (error) {
         setContext(null);
-        toast.error(error?.response?.data?.message || 'Gagal memuat policy attendance');
+        toast.error(apiErrorMessage(error, 'Gagal memuat policy attendance'));
       } finally {
         setLoadingContext(false);
       }
@@ -273,9 +274,9 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
           setVerifyingChallenge(false);
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       stopWebcamStream();
-      setLivenessError(e?.message || 'Gagal mengakses kamera. Pastikan izin kamera diizinkan.');
+      setLivenessError(apiErrorMessage(e, 'Gagal mengakses kamera. Pastikan izin kamera diizinkan.'));
     }
   }, [captureSelfieImage, challengeSession.challenge, companyId, context?.policy.requiresLocation, date, employeeId, method, notes, onClose, onSave, stopWebcamStream, time]);
 
@@ -662,8 +663,8 @@ export function AttendanceList() {
       await attendanceService.createRecord(data);
       toast.success('Check-in recorded');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to check in');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to check in'));
     }
   };
 
@@ -685,8 +686,8 @@ export function AttendanceList() {
       });
       toast.success('Check-out recorded');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to check out');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to check out'));
     }
   };
 
@@ -703,8 +704,8 @@ export function AttendanceList() {
       });
       toast.success('Overtime created');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create overtime');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create overtime'));
     }
   };
 

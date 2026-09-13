@@ -429,7 +429,7 @@ export function Sidebar() {
         if (!cancelled) {
           setDeniedMenuPaths(new Set(res.deniedMenuPaths || []));
         }
-      } catch (e) {
+      } catch {
         if (!cancelled) {
           setDeniedMenuPaths(new Set());
         }

@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   Building2,
   Clock3,
@@ -103,7 +104,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 function BranchForm({ initial, companies, onSave, onClose }: {
   initial?: Partial<BranchExtended>;
   companies: Company[];
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<BranchExtended>) => Promise<void>;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -473,27 +474,27 @@ export function BranchListPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<BranchExtended>) => {
     try {
       await organizationService.createBranch(data);
       toast.success(t('organization.branches.toast.createSuccess'));
       setShowCreate(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || t('organization.branches.toast.createFailed'));
+    } catch (err) {
+      toast.error(apiErrorMessage(err, t('organization.branches.toast.createFailed')));
       throw err;
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<BranchExtended>) => {
     if (!editing) return;
     try {
       await organizationService.updateBranch(editing.id, data);
       toast.success(t('organization.branches.toast.updateSuccess'));
       setEditing(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || t('organization.branches.toast.updateFailed'));
+    } catch (err) {
+      toast.error(apiErrorMessage(err, t('organization.branches.toast.updateFailed')));
       throw err;
     }
   };
@@ -505,20 +506,20 @@ export function BranchListPage() {
       toast.success(t('organization.branches.toast.deleteSuccess'));
       setDeleting(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || t('organization.branches.toast.deleteFailed'));
+    } catch (err) {
+      toast.error(apiErrorMessage(err, t('organization.branches.toast.deleteFailed')));
     }
   };
 
-  const handlePolicySave = async (data: any) => {
+  const handlePolicySave = async (data: Parameters<typeof organizationService.upsertBranchAttendancePolicy>[1]) => {
     if (!policyTarget) return;
     try {
       await organizationService.upsertBranchAttendancePolicy(policyTarget.id, data);
       toast.success(t('organization.branches.toast.policySaved'));
       setPolicyTarget(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || t('organization.branches.toast.policySaveFailed'));
+    } catch (err) {
+      toast.error(apiErrorMessage(err, t('organization.branches.toast.policySaveFailed')));
       throw err;
     }
   };
@@ -530,8 +531,8 @@ export function BranchListPage() {
       toast.success(t('organization.branches.toast.policyDeleted'));
       setPolicyTarget(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || t('organization.branches.toast.policyDeleteFailed'));
+    } catch (err) {
+      toast.error(apiErrorMessage(err, t('organization.branches.toast.policyDeleteFailed')));
       throw err;
     }
   };

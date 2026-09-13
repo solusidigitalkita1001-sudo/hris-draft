@@ -17,6 +17,7 @@ import {
   Send, Repeat, Users,
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 const DAY_TYPE_LABELS: Record<string, string> = {
   WD: 'Kerja',
@@ -135,11 +136,11 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
         duration,
         reason: reason.trim(),
         employeeId,
-      } as any);
+      } as Partial<PermissionRequest>);
       toast.success('Pengajuan berhasil dikirim');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal mengirim pengajuan');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal mengirim pengajuan'));
     } finally {
       setSaving(false);
     }
@@ -213,8 +214,8 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
       const data = await workCalendarService.getMyShiftSwapCandidates(date);
       setCandidateData(data);
       setTargetEmployeeId((current) => data.candidates.some((candidate) => candidate.id === current) ? current : '');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat kandidat tukar shift');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat kandidat tukar shift'));
       setCandidateData(null);
     } finally {
       setLoadingCandidates(false);
@@ -250,8 +251,8 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
       });
       toast.success('Request tukar shift berhasil dikirim ke kepala regu');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal mengirim request tukar shift');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal mengirim request tukar shift'));
     } finally {
       setSaving(false);
     }
@@ -633,8 +634,8 @@ function MyWorkCalendarTabView() {
     try {
       const data = await workCalendarService.getMyResolvedCalendar(target.year(), target.month() + 1);
       setCalendar(data);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal memuat kalender kerja');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal memuat kalender kerja'));
       setCalendar(null);
     } finally {
       setLoading(false);
@@ -865,8 +866,8 @@ function ShiftSwapTabView({
       ]);
       setRequests(myRequests);
       setApprovals(myApprovals);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat request tukar shift');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat request tukar shift'));
     } finally {
       setLoading(false);
     }
@@ -891,8 +892,8 @@ function ShiftSwapTabView({
       await workCalendarService.cancelShiftSwapRequest(id);
       toast.success('Request tukar shift dibatalkan');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal membatalkan request');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal membatalkan request'));
     }
   };
 
@@ -913,8 +914,8 @@ function ShiftSwapTabView({
         toast.success('Request tukar shift ditolak');
       }
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memproses request');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memproses request'));
     }
   };
 
@@ -1044,7 +1045,7 @@ function ShiftSwapTabView({
 
 // ─── Leave Tab ──────────────────────────────────────────
 function LeaveTabView({ companyId }: { companyId: string }) {
-  const [leaves, setLeaves] = useState<any[]>([]);
+  const [leaves, setLeaves] = useState<Awaited<ReturnType<typeof leaveService.getRequests>>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1055,7 +1056,7 @@ function LeaveTabView({ companyId }: { companyId: string }) {
       } catch { /* ignore */ }
       finally { setLoading(false); }
     })();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data cuti...</div></div>;
 
@@ -1090,7 +1091,7 @@ function LeaveTabView({ companyId }: { companyId: string }) {
 
 // ─── Overtime Tab ───────────────────────────────────────
 function OvertimeTabView({ companyId }: { companyId: string }) {
-  const [overtimes, setOvertimes] = useState<any[]>([]);
+  const [overtimes, setOvertimes] = useState<Awaited<ReturnType<typeof attendanceService.getOvertime>>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1101,7 +1102,7 @@ function OvertimeTabView({ companyId }: { companyId: string }) {
       } catch { /* ignore */ }
       finally { setLoading(false); }
     })();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data lembur...</div></div>;
 
@@ -1126,7 +1127,7 @@ function OvertimeTabView({ companyId }: { companyId: string }) {
           </div>
           <p className="text-sm mt-1">{o.reason}</p>
           <div className="text-xs text-muted-foreground mt-2">
-            {o.durationHours || o.hours || 0} jam
+            {o.durationHours || 0} jam
           </div>
         </div>
       ))}

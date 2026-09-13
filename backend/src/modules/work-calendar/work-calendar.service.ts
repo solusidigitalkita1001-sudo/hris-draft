@@ -3,7 +3,7 @@ import { CreateShiftSwapRequestDTO } from './work-calendar.dto';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
-import { NotFoundError, ForbiddenError, BadRequestError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
 import prisma from '@/shared/database/prisma';
 import { logger } from '@/shared/logger/WinstonLogger';
 
@@ -50,7 +50,7 @@ export class WorkCalendarService {
 
     const requesterId = currentUser?.id ?? requesterUserId;
 
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (_tx) => {
       const request = await workCalendarRepository.createShiftSwapRequest(requesterUserId, {
         targetEmployeeId: data.targetEmployeeId,
         shiftDate: data.shiftDate,

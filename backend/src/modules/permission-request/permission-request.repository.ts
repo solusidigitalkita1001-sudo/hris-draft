@@ -55,7 +55,7 @@ export class PermissionRequestRepository {
     // start, so it isn't left unapprovable.
     try {
       await this.startWorkflow({ id: request.id, companyId: data.companyId, employeeId: data.employeeId, type: (data as { type?: string }).type ?? 'OTHER' }, requesterId ?? 'system');
-    } catch (err) {
+    } catch {
       await prisma.permissionRequest.delete({ where: { id: request.id } }).catch(() => undefined);
       throw new BadRequestError('Pengajuan izin gagal: workflow approval tidak dapat dimulai. Coba lagi atau hubungi admin.');
     }

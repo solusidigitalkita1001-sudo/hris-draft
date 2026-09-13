@@ -1,14 +1,11 @@
 import { divisionRepository } from '../repositories/division.repository';
 import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
-import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, ValidationError } from '@/shared/exceptions/AppError';
 import { CreateDivisionDTO, UpdateDivisionDTO } from '../organization.dto';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { assertNoActiveDependents } from '../org-integrity';
-
-const logger = new WinstonLogger('DivisionService');
 
 export class DivisionService {
   async findAll(companyId: string) {

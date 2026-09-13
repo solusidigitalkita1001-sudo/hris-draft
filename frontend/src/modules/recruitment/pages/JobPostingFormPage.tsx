@@ -9,6 +9,7 @@ import { organizationService, type Department, type Position } from '@/services/
 import { recruitmentService, type JobPostingPayload } from '@/services/recruitment.service';
 import toast from 'react-hot-toast';
 import { ArrowLeft } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 const EMPLOYMENT_TYPE_OPTIONS = [
   { value: 'FULL_TIME', label: 'FULL_TIME' },
@@ -100,9 +101,9 @@ export function JobPostingFormPage() {
       const created = await recruitmentService.createJobPosting(payload);
       toast.success('Job posting berhasil dibuat');
       navigate(`/recruitment/postings/${created.id}`);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat job posting');
+      toast.error(apiErrorMessage(error, 'Gagal membuat job posting'));
     } finally {
       setLoading(false);
     }

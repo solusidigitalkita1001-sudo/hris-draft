@@ -7,6 +7,9 @@ const config: Config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+  // Central test env bootstrap: sets required config vars before any module
+  // imports @/config, so its fail-fast validation does not process.exit(1).
+  setupFiles: ['<rootDir>/src/test/jest-env.setup.ts'],
   testMatch: [
     '**/__tests__/**/*.ts',
     '**/*.test.ts',

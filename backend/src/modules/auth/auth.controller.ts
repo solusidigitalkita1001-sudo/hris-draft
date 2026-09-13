@@ -2,12 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { authService } from './auth.service';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { Result } from '@/shared/core/Result';
-import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { LoginDTO, ChangePasswordDTO, MfaCodeDTO } from './auth.dto';
 import config from '@/config';
 import { clearCsrfToken, issueCsrfToken } from '@/shared/middleware/CsrfProtection';
-
-const logger = new WinstonLogger('AuthController');
 
 const ACCESS_COOKIE = 'at';
 const REFRESH_COOKIE = 'rt';
@@ -65,17 +62,6 @@ function getRefreshToken(req: Request): string | undefined {
  */
 function isMobileClient(req: Request): boolean {
   return (req.get('x-client-type') || '').toLowerCase() === 'mobile';
-}
-
-function extractAccessToken(req: Request): string | undefined {
-  if (req.cookies?.[ACCESS_COOKIE]) {
-    return req.cookies[ACCESS_COOKIE];
-  }
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7);
-  }
-  return undefined;
 }
 
 /**

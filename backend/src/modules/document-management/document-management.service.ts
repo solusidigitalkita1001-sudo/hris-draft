@@ -91,7 +91,8 @@ export class DocumentManagementService {
     }
 
     await documentManagementRepository.logAccess(document.id, user.id, 'VIEW');
-    const { filePath: _filePath, ...metadata } = document;
+    // strip the internal storage filePath from the returned metadata
+    const metadata = (({ filePath: _filePath, ...rest }) => rest)(document);
     return metadata;
   }
 
@@ -162,7 +163,8 @@ export class DocumentManagementService {
       mimeType: file.mimetype,
       fileSize: file.size,
     });
-    const { filePath: _filePath, ...metadata } = created;
+    // strip the internal storage filePath from the returned metadata
+    const metadata = (({ filePath: _filePath, ...rest }) => rest)(created);
     return metadata;
   }
 

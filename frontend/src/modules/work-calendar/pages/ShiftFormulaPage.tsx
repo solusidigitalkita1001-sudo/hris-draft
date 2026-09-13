@@ -11,6 +11,7 @@ import {
   type DayType,
 } from '@/services/work-calendar.service';
 import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 const DAY_TYPES: DayType[] = ['WD', 'WS', 'WE', 'NH', 'JL', 'CH', 'RH', 'OT'];
 
@@ -309,8 +310,8 @@ export function ShiftFormulaPage() {
       await workCalendarService.createShiftFormula(payload);
       toast.success('Shift formula created');
       fetchData();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to create shift formula');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Failed to create shift formula'));
       throw error;
     }
   };
@@ -328,8 +329,8 @@ export function ShiftFormulaPage() {
       await workCalendarService.updateShiftFormula(editingFormula.id, payload);
       toast.success('Shift formula updated');
       fetchData();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to update shift formula');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Failed to update shift formula'));
       throw error;
     }
   };
@@ -341,8 +342,8 @@ export function ShiftFormulaPage() {
       toast.success('Shift formula deleted');
       setDeletingFormula(null);
       fetchData();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to delete shift formula');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Failed to delete shift formula'));
     }
   };
 

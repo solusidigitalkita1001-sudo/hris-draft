@@ -39,7 +39,7 @@ class AttendanceCorrectionService {
           payload: { employeeId: data.employeeId, date: data.date, companyId: data.companyId },
         });
       }
-    } catch (wfErr) {
+    } catch {
       await prisma.attendanceCorrection.delete({ where: { id: correction.id } }).catch(() => undefined);
       throw new BadRequestError('Pengajuan koreksi gagal: workflow approval tidak dapat dimulai. Coba lagi atau hubungi admin.');
     }
@@ -55,7 +55,7 @@ class AttendanceCorrectionService {
     action: { action: 'APPROVE' | 'REJECT' | 'ESCALATE'; comment?: string },
     approverEmployeeId?: string | null,
   ) {
-    const correction = await this.findById(id);
+    await this.findById(id);
     const instance = await prisma.workflowInstance.findFirst({
       where: { referenceType: 'ATTENDANCE_CORRECTION', referenceId: id },
     });

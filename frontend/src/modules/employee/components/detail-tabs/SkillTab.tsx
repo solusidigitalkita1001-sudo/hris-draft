@@ -68,7 +68,7 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
 
   useEffect(() => {
     fetchData();
-  }, [employeeId]);
+  }, [employeeId]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   async function fetchData() {
     setLoading(true);

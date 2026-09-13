@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n/provider';
 import { reportsService, type DashboardSummary } from '@/services/reports.service';
 import { Users, Building2, Clock, CalendarDays, RefreshCw, Activity, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { apiErrorMessage } from '@/lib/errors';
 
 export function DashboardPage() {
   const { user } = useAuthStore();
@@ -31,8 +32,8 @@ export function DashboardPage() {
     try {
       const data = await reportsService.getDashboardSummary(companyId);
       setSummary(data);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Gagal memuat dashboard');
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Gagal memuat dashboard'));
     } finally {
       setLoading(false);
     }

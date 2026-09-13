@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select2 } from '@/components/ui/select2';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   Wallet, ArrowDownToLine, RefreshCw, XCircle, Send, CheckCircle2, Clock,
 } from 'lucide-react';
@@ -55,7 +56,12 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
     remaining: number;
     earnedGrossToDate: number;
     totalReserved: number;
-    breakdown: any;
+    breakdown: {
+      baseSalary: number;
+      presentDays: number;
+      workDaysInPeriod: number;
+      overtimePay: number;
+    } | null;
   } | null>(null);
   const [limitError, setLimitError] = useState<string | null>(null);
 
@@ -75,8 +81,8 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
           : (typeof info.totalApproved === 'number' ? info.totalApproved : (info.existingApproved ?? 0)),
         breakdown: info.breakdown ?? null,
       });
-    } catch (e: any) {
-      setLimitError(e?.response?.data?.message || 'Gagal memuat limit EWA dari server');
+    } catch (e) {
+      setLimitError(apiErrorMessage(e, 'Gagal memuat limit EWA dari server'));
       setLimitInfo(null);
     } finally {
       setFetchingLimit(false);
@@ -104,8 +110,8 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
       toast.success('Pengajuan Tarik Gaji Awal berhasil dikirim');
       onSubmitted();
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal mengajukan EWA');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal mengajukan EWA'));
     } finally {
       setLoading(false);
     }
@@ -211,14 +217,14 @@ export function EmployeeEWADashboardPage() {
     try {
       const data = await ewaService.getMyRequests(statusFilter === 'ALL' ? undefined : statusFilter);
       setRequests(data);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memuat daftar request EWA');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat daftar request EWA'));
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { void fetchRequests(); }, [statusFilter]);
+  useEffect(() => { void fetchRequests(); }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   const handleCancel = async (id: string) => {
     if (!confirm('Batalkan request EWA ini?')) return;
@@ -227,8 +233,8 @@ export function EmployeeEWADashboardPage() {
       await ewaService.cancel(id);
       toast.success('Request EWA dibatalkan');
       void fetchRequests();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal membatalkan');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal membatalkan'));
     } finally {
       setCancellingId(null);
     }

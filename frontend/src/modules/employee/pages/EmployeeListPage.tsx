@@ -13,6 +13,7 @@ import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Users, ChevronLeft, ChevronRight, UserRound, Upload, Download, Loader2, X } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import { cn } from '@/utils/cn';
+import { apiErrorMessage } from '@/lib/errors';
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
@@ -85,8 +86,8 @@ function ImportModal({
       if (fileInputRef.current) fileInputRef.current.value = '';
       onOpenChange(false);
       onSuccess();
-    } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || 'Import failed';
+    } catch (err) {
+      const message = apiErrorMessage(err, 'Import failed');
       toast.error(message);
     } finally {
       setImporting(false);
@@ -233,8 +234,8 @@ export function EmployeeListPage() {
       window.URL.revokeObjectURL(url);
 
       toast.success('Employees exported successfully');
-    } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || 'Export failed';
+    } catch (err) {
+      const message = apiErrorMessage(err, 'Export failed');
       toast.error(message);
     }
   };

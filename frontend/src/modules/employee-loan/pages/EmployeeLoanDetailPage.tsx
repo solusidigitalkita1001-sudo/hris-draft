@@ -13,6 +13,7 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   ArrowLeft,
   RefreshCw,
@@ -191,8 +192,8 @@ export function EmployeeLoanDetailPage() {
       setShowApproveModal(false);
       setApproveComment('');
       await fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menyetujui pinjaman');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menyetujui pinjaman'));
     } finally {
       setActionLoading('');
     }
@@ -207,8 +208,8 @@ export function EmployeeLoanDetailPage() {
       setShowRejectModal(false);
       setRejectReason('');
       await fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menolak pinjaman');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menolak pinjaman'));
     } finally {
       setActionLoading('');
     }

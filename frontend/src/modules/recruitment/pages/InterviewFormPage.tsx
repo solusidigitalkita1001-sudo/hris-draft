@@ -13,6 +13,7 @@ import { employeeService, type Employee } from '@/services/employee.service';
 import { useCompanyStore } from '@/stores/company.store';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const INTERVIEW_TYPE_OPTIONS = [
   { value: 'ONLINE', label: 'Online' },
@@ -143,9 +144,9 @@ export function InterviewFormPage() {
       await recruitmentService.createInterview(payload);
       toast.success('Interview berhasil dijadwalkan');
       navigate('/recruitment/interviews');
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat interview');
+      toast.error(apiErrorMessage(error, 'Gagal membuat interview'));
     } finally {
       setSaving(false);
     }

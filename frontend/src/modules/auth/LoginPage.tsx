@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useI18n } from '@/i18n/provider';
 import { Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -36,11 +37,9 @@ export function LoginPage() {
       await login(email.trim(), password);
       toast.success(t('auth.login.success'));
       navigate('/dashboard', { replace: true });
-    } catch (err: any) {
+    } catch (err) {
       const message =
-        err?.response?.data?.message ||
-        err?.message ||
-        t('auth.login.failed');
+        apiErrorMessage(err, t('auth.login.failed'));
       setError(message);
     }
   };

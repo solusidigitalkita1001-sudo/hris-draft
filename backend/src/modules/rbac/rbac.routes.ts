@@ -10,7 +10,6 @@ import {
   updateRoleSchema,
   assignPermissionsSchema,
 } from './rbac.dto';
-import { validateLogin } from '../auth/auth.validation';
 
 const router = Router();
 

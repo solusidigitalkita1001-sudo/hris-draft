@@ -19,6 +19,7 @@ import { useCompanyStore } from '@/stores/company.store';
 import { formatDate } from '@/utils/format';
 import { Layers3, Plus, RefreshCw, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const VERSION_STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -240,9 +241,9 @@ export function PerformanceMethodsPage() {
       setMethodForm({ name: '', code: '', description: '' });
       await loadMethods();
       setSelectedMethodId(created.id);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat performance method');
+      toast.error(apiErrorMessage(error, 'Gagal membuat performance method'));
     } finally {
       setSavingMethod(false);
     }
@@ -274,9 +275,9 @@ export function PerformanceMethodsPage() {
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
       setSelectedVersionId(created.id);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat version method');
+      toast.error(apiErrorMessage(error, 'Gagal membuat version method'));
     } finally {
       setSavingVersion(false);
     }
@@ -287,9 +288,9 @@ export function PerformanceMethodsPage() {
     try {
       const data = await performanceService.getMethodVersionReadiness(versionId);
       setVersionReadiness(data);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memuat readiness version');
+      toast.error(apiErrorMessage(error, 'Gagal memuat readiness version'));
     } finally {
       setReadinessLoadingId('');
     }
@@ -327,9 +328,9 @@ export function PerformanceMethodsPage() {
         isRequired: true,
       });
       await loadMethodDetail(selectedMethodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menambah component');
+      toast.error(apiErrorMessage(error, 'Gagal menambah component'));
     } finally {
       setSavingComponent(false);
     }
@@ -342,9 +343,9 @@ export function PerformanceMethodsPage() {
       toast.success(`Version v${version.versionNumber} berhasil dipublish`);
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal publish version');
+      toast.error(apiErrorMessage(error, 'Gagal publish version'));
     } finally {
       setPublishingVersionId('');
     }
@@ -364,9 +365,9 @@ export function PerformanceMethodsPage() {
       toast.success('Grade rule berhasil di-assign ke version');
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal assign grade rule');
+      toast.error(apiErrorMessage(error, 'Gagal assign grade rule'));
     } finally {
       setSavingGradeRuleId('');
     }
@@ -386,9 +387,9 @@ export function PerformanceMethodsPage() {
       toast.success('Review workflow berhasil di-assign ke version');
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal assign review workflow');
+      toast.error(apiErrorMessage(error, 'Gagal assign review workflow'));
     } finally {
       setSavingReviewWorkflowId('');
     }
@@ -408,9 +409,9 @@ export function PerformanceMethodsPage() {
       toast.success('Approval workflow berhasil di-assign ke version');
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal assign approval workflow');
+      toast.error(apiErrorMessage(error, 'Gagal assign approval workflow'));
     } finally {
       setSavingApprovalWorkflowId('');
     }

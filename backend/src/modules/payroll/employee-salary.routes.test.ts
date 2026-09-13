@@ -3,13 +3,12 @@ import type { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { AppError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 
-jest.mock('@/config', () => ({ __esModule: true, default: { app: { apiPrefix: '/api/v1' } } }));
-jest.mock('@/shared/logger/WinstonLogger', () => ({ WinstonLogger: jest.fn().mockImplementation(() => ({ warn: jest.fn() })) }));
+jest.mock('@/shared/logger/WinstonLogger', () => ({ WinstonLogger: jest.fn().mockImplementation(() => ({ warn: jest.fn() })), logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
 jest.mock('@/shared/middleware/Authenticate', () => ({ authenticate: (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
   if (!req.user) return next(Object.assign(new Error('Authentication required'), { statusCode: 401 }));
   next();
 } }));
-jest.mock('@/shared/middleware/AuditLog', () => ({ auditLog: () => (_req: unknown, _res: unknown, next: NextFunction) => next() }));
+jest.mock('@/shared/middleware/AuditLog', () => ({ auditLog: () => (_req: unknown, _res: unknown, next: NextFunction) => next(), auditView: () => (_req: unknown, _res: unknown, next: NextFunction) => next(), appendAuditLogEntry: jest.fn() }));
 jest.mock('./payroll-payment.routes', () => ({ __esModule: true, default: (_req: unknown, _res: unknown, next: NextFunction) => next() }));
 jest.mock('./payroll-formula.routes', () => ({ __esModule: true, default: (_req: unknown, _res: unknown, next: NextFunction) => next() }));
 jest.mock('@/shared/security/employee-data-scope', () => ({ employeeAccessWhere: jest.fn() }));

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Heart, Users, Pencil } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 // ─── Modal ────────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -42,7 +43,7 @@ const PLAN_TYPES = [
 
 function BenefitPlanForm({ initial, onSave, onClose }: {
   initial?: Partial<BenefitPlan>;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<BenefitPlan>) => Promise<void>;
   onClose: () => void;
 }) {
   const companyId = localStorage.getItem('companyId') || '';
@@ -162,27 +163,27 @@ export function BenefitPlanList() {
     fetchData();
   }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<BenefitPlan>) => {
     try {
       await benefitService.createPlan(data);
       toast.success('Benefit plan created');
       setShowCreate(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create plan');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create plan'));
       throw err;
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<BenefitPlan>) => {
     if (!editing) return;
     try {
       await benefitService.updatePlan(editing.id, data);
       toast.success('Benefit plan updated');
       setEditing(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update plan');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update plan'));
       throw err;
     }
   };

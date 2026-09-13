@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, RefreshCw, Building2, Pencil, Trash2 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 
 // ─── Modal ──────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -48,7 +49,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 
 function GroupForm({ initial, onSave, onClose }: {
   initial?: Partial<CompanyGroup>;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<CompanyGroup>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
@@ -109,27 +110,27 @@ export function GroupListPage() {
 
   useEffect(() => { fetchGroups(); }, [fetchGroups]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<CompanyGroup>) => {
     try {
       await organizationService.createGroup(data);
       toast.success('Group created');
       setShowCreate(false);
       fetchGroups();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create group');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create group'));
       throw err;
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<CompanyGroup>) => {
     if (!editing) return;
     try {
       await organizationService.updateGroup(editing.id, data);
       toast.success('Group updated');
       setEditing(null);
       fetchGroups();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update group');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update group'));
       throw err;
     }
   };
@@ -141,8 +142,8 @@ export function GroupListPage() {
       toast.success('Group deleted');
       setDeleting(null);
       fetchGroups();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete group');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete group'));
     }
   };
 

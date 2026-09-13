@@ -31,6 +31,27 @@ import {
   type WorkflowTemplate,
 } from '@/services/workflow.service';
 import { workflowEngineService, type WorkflowActionType } from '@/services/workflow-engine.service';
+import { apiErrorMessage } from '@/lib/errors';
+
+// my-approvals items are approval tasks: top-level task fields plus a nested workflow instance
+type PendingApproval = {
+  id?: string;
+  instanceId?: string;
+  name?: string;
+  level?: number;
+  createdAt?: string;
+  approvalType?: string;
+  status?: string;
+  instance?: {
+    id?: string;
+    approvalType?: string;
+    status?: string;
+    referenceType?: string;
+    referenceId?: string;
+    requesterId?: string;
+    createdAt?: string;
+  };
+};
 
 const APPROVAL_TYPES = [
   'LEAVE_REQUEST',
@@ -368,8 +389,8 @@ function TemplateForm({
       }
       await onSaved();
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menyimpan template');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menyimpan template'));
     } finally {
       setSaving(false);
     }
@@ -642,7 +663,8 @@ function TemplateForm({
   );
 }
 
-function getReferenceLink(referenceType: string, referenceId: string) {
+function getReferenceLink(referenceType: string | undefined, referenceId: string | undefined) {
+  if (!referenceType || !referenceId) return null;
   switch (referenceType) {
     case 'LEAVE_REQUEST':
       return `/leave/${referenceId}`;
@@ -679,7 +701,7 @@ export function WorkflowAdminPage() {
   const [templatesLoading, setTemplatesLoading] = useState(true);
 
   // Tab 2 - My Approvals state
-  const [approvals, setApprovals] = useState<any[]>([]);
+  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [approvalsLoading, setApprovalsLoading] = useState(true);
   const [filterApprovalType2, setFilterApprovalType2] = useState('');
   const [filterStatus, setFilterStatus] = useState('PENDING');
@@ -760,8 +782,8 @@ export function WorkflowAdminPage() {
       await workflowService.createTemplate(payload);
       toast.success('Template berhasil diduplikasi');
       await loadTemplates();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menduplikasi template');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menduplikasi template'));
     }
   };
 
@@ -772,14 +794,14 @@ export function WorkflowAdminPage() {
       toast.success('Template dihapus');
       setDeletingTemplate(null);
       await loadTemplates();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal menghapus template');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal menghapus template'));
     }
   };
 
   // ----- Approvals actions -----
   const filteredApprovals = useMemo(() => {
-    return approvals.filter((a: any) => {
+    return approvals.filter((a: PendingApproval) => {
       if (filterApprovalType2) {
         const at = a.instance?.approvalType || a.approvalType;
         if (at !== filterApprovalType2) return false;
@@ -798,7 +820,9 @@ export function WorkflowAdminPage() {
   };
 
   const toggleSelectAll = () => {
-    const allIds = filteredApprovals.map((a: any) => a.instanceId || a.instance?.id);
+    const allIds = filteredApprovals
+      .map((a: PendingApproval) => a.instanceId || a.instance?.id)
+      .filter((v): v is string => Boolean(v));
     if (selectedIds.length >= allIds.length && allIds.length > 0) {
       setSelectedIds([]);
     } else {
@@ -806,7 +830,7 @@ export function WorkflowAdminPage() {
     }
   };
 
-  const allSelected = filteredApprovals.length > 0 && selectedIds.length === filteredApprovals.map((a: any) => a.instanceId || a.instance?.id).filter((v: string) => v).length;
+  const allSelected = filteredApprovals.length > 0 && selectedIds.length === filteredApprovals.map((a: PendingApproval) => a.instanceId || a.instance?.id).filter((v): v is string => Boolean(v)).length;
 
   const handleBulkSubmit = async (comment?: string) => {
     if (!bulkAction || selectedIds.length === 0) return;
@@ -824,8 +848,8 @@ export function WorkflowAdminPage() {
       );
       setSelectedIds([]);
       await loadApprovals();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Bulk action gagal');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Bulk action gagal'));
     } finally {
       setBulkAction(null);
     }
@@ -841,14 +865,14 @@ export function WorkflowAdminPage() {
       );
       toast.success(`Aksi ${individualAction.action.toLowerCase()} berhasil`);
       await loadApprovals();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Gagal memproses aksi');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memproses aksi'));
     } finally {
       setIndividualAction(null);
     }
   };
 
-  const handleRowClick = (approval: any) => {
+  const handleRowClick = (approval: PendingApproval) => {
     const refType = approval.instance?.referenceType;
     const refId = approval.instance?.referenceId;
     const link = getReferenceLink(refType, refId);
@@ -922,7 +946,7 @@ export function WorkflowAdminPage() {
                   </label>
                   <Select2
                     value={filterIsActive}
-                    onValueChange={(v) => setFilterIsActive(v as any)}
+                    onValueChange={(v) => setFilterIsActive(v as '' | 'true' | 'false')}
                     options={[
                       { value: '', label: 'Semua' },
                       { value: 'true', label: 'Aktif' },
@@ -1137,7 +1161,7 @@ export function WorkflowAdminPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filteredApprovals.map((approval: any) => {
+                  {filteredApprovals.map((approval: PendingApproval) => {
                     const instanceId = approval.instanceId || approval.instance?.id;
                     const isChecked = instanceId ? selectedIds.includes(instanceId) : false;
                     const refType = approval.instance?.referenceType;

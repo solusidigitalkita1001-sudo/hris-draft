@@ -13,6 +13,7 @@ import {
 import { useCompanyStore } from '@/stores/company.store';
 import { GitBranch, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const APPROVER_TYPE_OPTIONS = ['ROLE', 'USER', 'AUTO'] as const;
 const RULE_OPERATOR_OPTIONS = ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'IN', 'CONTAINS'] as const;
@@ -175,9 +176,9 @@ export function PerformanceWorkflowsPage() {
       }
 
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan workflow template');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan workflow template'));
     } finally {
       setSavingMode('');
     }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { useCompanyStore } from '@/stores/company.store';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   Shield, Plus, RefreshCw, Pencil, Trash2, Search,
   Users, CheckCircle, XCircle, Globe,
@@ -55,7 +56,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 // ─── Role Form ──────────────────────────────────────────
 function RoleForm({ initial, onSave, onClose }: {
   initial?: Partial<Role>;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Partial<Role>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial?.name || '');
@@ -193,8 +194,8 @@ function PermissionManager({ role, open, onClose }: {
       await rbacService.assignPermissions(role.id, Array.from(rolePermissions));
       toast.success('Permissions updated');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update permissions');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update permissions'));
     } finally {
       setSaving(false);
     }
@@ -322,27 +323,27 @@ export function RoleListPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Partial<Role>) => {
     try {
       await rbacService.create(data);
       toast.success('Role created');
       setShowCreate(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create role');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create role'));
       throw err;
     }
   };
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: Partial<Role>) => {
     if (!editingRole) return;
     try {
       await rbacService.update(editingRole.id, data);
       toast.success('Role updated');
       setEditingRole(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update role');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to update role'));
       throw err;
     }
   };
@@ -354,8 +355,8 @@ export function RoleListPage() {
       toast.success('Role deleted');
       setDeletingRole(null);
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete role');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete role'));
     }
   };
 

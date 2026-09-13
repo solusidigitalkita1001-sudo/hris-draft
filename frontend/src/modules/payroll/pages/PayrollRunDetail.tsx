@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { useAuthStore } from '@/stores/auth.store';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -7,6 +6,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { PayrollPaymentPanel } from '../components/PayrollPaymentPanel';
+import { apiErrorMessage } from '@/lib/errors';
 
 export function PayrollRunDetail() {
   const { id } = useParams<{ id: string }>();
@@ -24,7 +24,7 @@ export function PayrollRunDetail() {
       const data = await payrollService.getPayrollRun(id);
       setRun(data);
     } catch (error) {
-      setActionError(axios.isAxiosError(error) && typeof error.response?.data?.message === 'string' ? error.response.data.message : 'Payroll gagal dimuat. Coba lagi.');
+      setActionError(apiErrorMessage(error, 'Payroll gagal dimuat. Coba lagi.'));
     } finally {
       setLoading(false);
     }
@@ -42,7 +42,7 @@ export function PayrollRunDetail() {
       await payrollService.approvePayrollRun(id);
       await fetchData();
     } catch (error) {
-      setActionError(axios.isAxiosError(error) && typeof error.response?.data?.message === 'string' ? error.response.data.message : 'Persetujuan payroll gagal. Coba muat ulang.');
+      setActionError(apiErrorMessage(error, 'Persetujuan payroll gagal. Coba muat ulang.'));
     } finally {
       setActionLoading(false);
     }

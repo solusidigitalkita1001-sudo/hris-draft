@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      rollback_ref:
+        description: "Commit SHA or tag to deploy instead of origin/main (manual rollback). Leave empty for a normal deploy."
+        required: false
+        default: ""
 
 concurrency:
   group: hris-production-deploy
@@ -14,11 +19,14 @@ jobs:
   deploy:
     name: Deploy Production
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
 
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.2
+
+        env:
+          ROLLBACK_REF: ${{ github.event.inputs.rollback_ref }}
 
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -26,8 +34,10 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
 
+          envs: ROLLBACK_REF
+
           timeout: 60s
-          command_timeout: 20m
+          command_timeout: 35m
 
           script: |
             set -euo pipefail
@@ -68,11 +78,19 @@ jobs:
             cp -p "$ENV_FILE" "$ENV_BACKUP"
             echo "✅ Production .env backed up"
 
-            echo "🔄 Fetching origin/main..."
-            git fetch --prune origin main
+            ROLLBACK_REF="${ROLLBACK_REF:-}"
 
-            echo "🔄 Resetting repository..."
-            git reset --hard origin/main
+            if [ -n "$ROLLBACK_REF" ]; then
+              echo "🎯 MANUAL ROLLBACK requested → deploying ref: $ROLLBACK_REF"
+              git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
+              git reset --hard "$ROLLBACK_REF"
+            else
+              echo "🔄 Fetching origin/main..."
+              git fetch --prune origin main
+
+              echo "🔄 Resetting repository..."
+              git reset --hard origin/main
+            fi
 
             CURRENT_COMMIT="$(git rev-parse HEAD)"
 
@@ -94,4 +112,31 @@ jobs:
 
             echo "🚀 Starting deployment..."
 
-            ./scripts/server-deploy.sh
+            if ./scripts/server-deploy.sh; then
+              echo "✅ Deployment succeeded at $CURRENT_COMMIT"
+            else
+              echo "❌ Deployment FAILED at $CURRENT_COMMIT"
+
+              if [ -n "$PREVIOUS_COMMIT" ] && [ "$PREVIOUS_COMMIT" != "$CURRENT_COMMIT" ] && [ -z "$ROLLBACK_REF" ]; then
+                echo "⏪ Auto-rolling back CODE to previous commit: $PREVIOUS_COMMIT"
+                echo "⚠️  NOTE: database migrations are NOT reverted. Rollback restores"
+                echo "⚠️  application code only — schema changes must stay backward-compatible."
+
+                git reset --hard "$PREVIOUS_COMMIT"
+                cp -p "$ENV_BACKUP" "$ENV_FILE"
+                export DEPLOY_COMMIT="$PREVIOUS_COMMIT"
+
+                if ./scripts/server-deploy.sh; then
+                  echo "✅ ROLLBACK OK — production restored to $PREVIOUS_COMMIT"
+                else
+                  echo "🚨 ROLLBACK FAILED — manual intervention required (last good: $PREVIOUS_COMMIT)"
+                fi
+              elif [ -n "$ROLLBACK_REF" ]; then
+                echo "🚨 Manual rollback deploy of $ROLLBACK_REF failed — manual intervention required"
+              else
+                echo "🚨 No distinct previous commit to roll back to — production may be down"
+              fi
+
+              # Always fail the workflow so a bad deploy is visible even after a successful rollback.
+              exit 1
+            fi

@@ -197,19 +197,19 @@ export class TravelExpenseRepository {
     });
   }
 
-  async approveTrip(id: string, _approverId: string, _data?: ApproveBusinessTripDTO) {
+  async approveTrip(_id: string, _approverId: string, _data?: ApproveBusinessTripDTO) {
     throw new BadRequestError('Use workflow action endpoint instead of legacy approve');
   }
 
-  async rejectTrip(id: string, _approverId: string, _data?: ApproveBusinessTripDTO) {
+  async rejectTrip(_id: string, _approverId: string, _data?: ApproveBusinessTripDTO) {
     throw new BadRequestError('Use workflow action endpoint instead of legacy reject');
   }
 
-  async approveClaim(id: string, _approverId: string, _data?: ApproveExpenseClaimDTO) {
+  async approveClaim(_id: string, _approverId: string, _data?: ApproveExpenseClaimDTO) {
     throw new BadRequestError('Use workflow action endpoint instead of legacy approve');
   }
 
-  async rejectClaim(id: string, _approverId: string, _data?: ApproveExpenseClaimDTO) {
+  async rejectClaim(_id: string, _approverId: string, _data?: ApproveExpenseClaimDTO) {
     throw new BadRequestError('Use workflow action endpoint instead of legacy reject');
   }
 

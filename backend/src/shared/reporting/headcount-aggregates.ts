@@ -235,7 +235,6 @@ export function rollingAttritionRate90Days(
 ): RollingAttrition90Result {
   const end = endOfMonth(toDate(rollingEndDate) ?? new Date());
   const start = addDays(startOfMonth(end), -89);
-  const startOfRolling = startOfMonth(start);
   const startDay90 = addDays(end, -89);
   const hiresInWindow: HeadcountEmployee[] = [];
   const resignsInWindow: HeadcountEmployee[] = [];

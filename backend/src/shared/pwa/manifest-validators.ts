@@ -60,21 +60,6 @@ function validateHexColor(color: unknown): boolean {
   return THEME_HEX_REGEX.test(color.trim());
 }
 
-function findPurposeInIcons(icons: PWAIcon[], purpose: string, size: number): boolean {
-  for (const icon of icons) {
-    if (!icon || typeof icon !== 'object') continue;
-    const sizes = parseIconSize(icon.sizes ?? null);
-    const hasSize = sizes.has(size);
-    if (!hasSize) continue;
-    const p = icon.purpose;
-    if (purpose === 'any' && (!p || p === 'any' || (Array.isArray(p) && p.includes('any')))) return true;
-    if (Array.isArray(p) && p.includes(purpose)) return true;
-    if (typeof p === 'string' && p === purpose) return true;
-    if (purpose === 'any' && !icon.purpose) return true; // default purpose "any" jika tidak ada
-  }
-  return false;
-}
-
 const ALLOWED_DISPLAY = new Set(['standalone', 'minimal-ui', 'fullscreen', 'browser']);
 const DEFAULT_START_URL_REGEX = /^\//;
 

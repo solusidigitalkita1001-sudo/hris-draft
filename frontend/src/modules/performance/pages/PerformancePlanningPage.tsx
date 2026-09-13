@@ -15,6 +15,7 @@ import { employeeService, type Employee } from '@/services/employee.service';
 import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { ClipboardCheck, Plus, RefreshCw, Rocket, Target, Trash2, Users } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
 
 const ASSIGNMENT_STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -134,10 +135,10 @@ export function PerformancePlanningPage() {
         ? selectedAssignmentId
         : data.planningAssignments[0]?.id || '';
       setSelectedAssignmentId(nextAssignmentId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
       setWorkspace(null);
-      toast.error(error?.response?.data?.message || 'Gagal memuat planning workspace');
+      toast.error(apiErrorMessage(error, 'Gagal memuat planning workspace'));
     } finally {
       setWorkspaceLoading(false);
     }
@@ -263,9 +264,9 @@ export function PerformancePlanningPage() {
         assignmentSource: 'MANUAL',
       });
       await loadWorkspace(selectedPeriodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat assignment');
+      toast.error(apiErrorMessage(error, 'Gagal membuat assignment'));
     } finally {
       setSavingAssignment(false);
     }
@@ -283,9 +284,9 @@ export function PerformancePlanningPage() {
       });
       toast.success('Reviewer matrix berhasil diperbarui');
       await loadWorkspace(selectedAssignment.periodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal memperbarui reviewer matrix');
+      toast.error(apiErrorMessage(error, 'Gagal memperbarui reviewer matrix'));
     } finally {
       setSavingAssignment(false);
     }
@@ -307,9 +308,9 @@ export function PerformancePlanningPage() {
       });
       toast.success('Assignment berhasil direassign');
       await loadWorkspace(selectedAssignment.periodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal reassign assignment');
+      toast.error(apiErrorMessage(error, 'Gagal reassign assignment'));
     } finally {
       setSavingAssignment(false);
     }
@@ -325,9 +326,9 @@ export function PerformancePlanningPage() {
       await performanceService.deletePlanningAssignment(assignment.id);
       toast.success('Assignment berhasil dihapus');
       await loadWorkspace(assignment.periodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menghapus assignment');
+      toast.error(apiErrorMessage(error, 'Gagal menghapus assignment'));
     } finally {
       setSavingAssignment(false);
     }
@@ -380,9 +381,9 @@ export function PerformancePlanningPage() {
       resetTargetForm(setTargetForm);
       setEditingTargetId('');
       await loadWorkspace(selectedAssignment.periodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menyimpan target planning');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan target planning'));
     } finally {
       setSavingTarget(false);
     }
@@ -407,9 +408,9 @@ export function PerformancePlanningPage() {
         resetTargetForm(setTargetForm);
       }
       await loadWorkspace(selectedAssignment.periodId);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal menghapus target');
+      toast.error(apiErrorMessage(error, 'Gagal menghapus target'));
     } finally {
       setSavingTarget(false);
     }
@@ -426,9 +427,9 @@ export function PerformancePlanningPage() {
       const data = await performanceService.publishPlanning(selectedPeriodId);
       setWorkspace(data);
       toast.success('Planning period berhasil dipublish');
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal publish planning');
+      toast.error(apiErrorMessage(error, 'Gagal publish planning'));
     } finally {
       setPublishing(false);
     }

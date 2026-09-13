@@ -1,5 +1,5 @@
 import prisma from '@/shared/database/prisma';
-import { Prisma, DataScopeType } from '@prisma/client';
+import { DataScopeType } from '@prisma/client';
 import {
   UpsertRoleMenuAccessDTO,
   UpsertRoleDataScopeDTO,

@@ -12,6 +12,7 @@ import { useCompanyStore } from '@/stores/company.store';
 import { BarChart3, Plus, RefreshCw } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const CYCLE_TYPE_OPTIONS: { value: ReviewCyclePayload['type']; label: string }[] = [
   { value: 'MONTHLY', label: 'Monthly' },
@@ -124,9 +125,9 @@ export function PerformanceCyclesPage() {
       resetForm();
       setFormOpen(false);
       await fetchData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error(error?.response?.data?.message || 'Gagal membuat review cycle');
+      toast.error(apiErrorMessage(error, 'Gagal membuat review cycle'));
     } finally {
       setSaving(false);
     }

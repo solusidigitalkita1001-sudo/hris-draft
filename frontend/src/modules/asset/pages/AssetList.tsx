@@ -7,6 +7,7 @@ import { Select2 } from '@/components/ui/select2';
 import { Search, RefreshCw, Plus, Package, UserRound } from 'lucide-react';
 import { formatCurrency } from '@/utils/format';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 // ─── Status style map ────────────────────────────────────
 const STYLES: Record<string, string> = {
@@ -45,7 +46,7 @@ function Modal({ open, onClose, title, children }: {
 
 // ─── Asset Form ────────────────────────────────────────────
 function AssetForm({ onSave, onClose }: {
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState('');
@@ -133,14 +134,14 @@ export function AssetList() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: Record<string, unknown>) => {
     try {
       const cid = localStorage.getItem('companyId') || '';
       await assetService.create({ ...data, companyId: cid });
       toast.success('Asset created successfully');
       fetchData();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create asset');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to create asset'));
       throw err;
     }
   };

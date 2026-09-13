@@ -21,6 +21,7 @@ import {
   ScanFace, ShieldCheck, Upload, Trash2,
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/utils/format';
+import { apiErrorMessage } from '@/lib/errors';
 import {
   FamilyTab, EducationTab, EmergencyContactTab,
   TrainingTab, SkillTab, ExperienceTab, AttachmentTab,
@@ -38,6 +39,8 @@ const CAREER_TRANSACTION_TYPES = [
 
 const EMPLOYMENT_TYPES = ['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREELANCE', 'OUTSOURCING'] as const;
 
+// Used only as a type source (`typeof WORKSPACE_SECTIONS[number]['key']`).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const WORKSPACE_SECTIONS = [
   {
     key: 'overview',
@@ -503,8 +506,8 @@ export function EmployeeDetailPage() {
       setFaceProfile(status);
       setFaceProfileError(null);
       toast.success('Profil wajah berhasil didaftarkan.');
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Registrasi wajah gagal.');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Registrasi wajah gagal.'));
     } finally {
       setSavingFaceProfile(false);
     }
@@ -518,8 +521,8 @@ export function EmployeeDetailPage() {
       setFaceProfile({ enrolled: false });
       setFaceProfileError(null);
       toast.success('Profil wajah dihapus.');
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Gagal menghapus profil wajah.');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Gagal menghapus profil wajah.'));
     } finally {
       setSavingFaceProfile(false);
     }

@@ -1,6 +1,6 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
-import { CreateAttendanceDTO, UpdateAttendanceDTO, CreateOvertimeDTO } from './attendance.dto';
+import { UpdateAttendanceDTO, CreateOvertimeDTO } from './attendance.dto';
 
 export class AttendanceRepository {
   async findAll(companyId: string, filters?: { employeeId?: string; date?: string; month?: string; status?: string }) {
