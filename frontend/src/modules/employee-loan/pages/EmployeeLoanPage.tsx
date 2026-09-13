@@ -167,7 +167,7 @@ export function EmployeeLoanPage() {
       setLoans(data);
     } catch { toast.error('Gagal memuat data pinjaman'); }
     finally { setLoading(false); }
-  }, [companyId, employeeId, isEmployee, statusFilter]);
+  }, [companyId, employeeId, isEmployee, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

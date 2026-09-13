@@ -314,7 +314,7 @@ export function EmployeeDailyActivityPage() {
     }
   };
 
-  useEffect(() => { void fetch(); }, [typeFilter, dateRange]);
+  useEffect(() => { void fetch(); }, [typeFilter, dateRange]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   const filtered = useMemo(
     () => (typeFilter === 'ALL' ? activities : activities.filter((a) => a.activityType === typeFilter)),

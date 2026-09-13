@@ -78,7 +78,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
 
   useEffect(() => {
     fetchEducations();
-  }, [employeeId]);
+  }, [employeeId]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   const openAddDialog = () => {
     setEditingItem(null);

@@ -296,7 +296,7 @@ export function PerformanceResultsPage() {
       || selectedResult.developmentRecommendations?.[0]?.id
       || '';
     setSelectedRecommendationId(nextRecommendationId);
-  }, [selectedDisputeId, selectedResult]);
+  }, [selectedDisputeId, selectedResult]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   useEffect(() => {
     if (!selectedDispute) {

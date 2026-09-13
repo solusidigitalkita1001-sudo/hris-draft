@@ -77,7 +77,7 @@ export function AdminDailyActivityApprovalPage() {
     }
   };
 
-  useEffect(() => { void fetch(); }, [companyId, typeFilter, dateRange]);
+  useEffect(() => { void fetch(); }, [companyId, typeFilter, dateRange]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   const filtered = useMemo(() => {
     if (!employeeSearch.trim()) return activities;

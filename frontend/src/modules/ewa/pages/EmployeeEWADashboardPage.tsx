@@ -224,7 +224,7 @@ export function EmployeeEWADashboardPage() {
     }
   };
 
-  useEffect(() => { void fetchRequests(); }, [statusFilter]);
+  useEffect(() => { void fetchRequests(); }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   const handleCancel = async (id: string) => {
     if (!confirm('Batalkan request EWA ini?')) return;

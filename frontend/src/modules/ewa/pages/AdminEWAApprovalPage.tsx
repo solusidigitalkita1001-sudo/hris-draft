@@ -78,7 +78,7 @@ export function AdminEWAApprovalPage() {
     }
   };
 
-  useEffect(() => { void fetchRequests(); }, [companyId, statusFilter]);
+  useEffect(() => { void fetchRequests(); }, [companyId, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   const filteredRequests = useMemo(() => {
     if (!employeeSearch.trim()) return requests;

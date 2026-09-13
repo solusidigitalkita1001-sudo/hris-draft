@@ -1056,7 +1056,7 @@ function LeaveTabView({ companyId }: { companyId: string }) {
       } catch { /* ignore */ }
       finally { setLoading(false); }
     })();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data cuti...</div></div>;
 
@@ -1102,7 +1102,7 @@ function OvertimeTabView({ companyId }: { companyId: string }) {
       } catch { /* ignore */ }
       finally { setLoading(false); }
     })();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data lembur...</div></div>;
 

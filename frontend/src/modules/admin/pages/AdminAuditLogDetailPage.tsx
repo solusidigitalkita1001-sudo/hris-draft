@@ -59,7 +59,7 @@ export function AdminAuditLogDetailPage() {
 
   useEffect(() => {
     void fetchData();
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   return (
     <div>
