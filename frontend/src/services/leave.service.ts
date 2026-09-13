@@ -60,7 +60,7 @@ export interface WorkflowInstance {
   id: string;
   status: string;
   steps: WorkflowStep[];
-  logs: any[];
+  logs: Array<Record<string, unknown>>;
   template?: { id: string; name: string; approvalType: string };
 }
 

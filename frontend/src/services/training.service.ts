@@ -91,7 +91,7 @@ class TrainingService {
   async getSessions(courseId?: string): Promise<TrainingSession[]> {
     const r = await api.get('/training/sessions', { params: { courseId } }); return r.data.data;
   }
-  async createSession(data: any): Promise<TrainingSession> {
+  async createSession(data: Record<string, unknown>): Promise<TrainingSession> {
     const r = await api.post('/training/sessions', data); return r.data.data;
   }
 
@@ -99,7 +99,7 @@ class TrainingService {
   async getEnrollments(companyId: string, employeeId?: string): Promise<TrainingEnrollment[]> {
     const r = await api.get('/training/enrollments', { params: { companyId, employeeId } }); return r.data.data;
   }
-  async createEnrollment(data: any): Promise<TrainingEnrollment> {
+  async createEnrollment(data: Record<string, unknown>): Promise<TrainingEnrollment> {
     const r = await api.post('/training/enrollments', data); return r.data.data;
   }
   async completeEnrollment(id: string): Promise<TrainingEnrollment> {

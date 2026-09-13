@@ -21,13 +21,13 @@ class AssetService {
   async get(id: string): Promise<Asset> {
     const r = await api.get(`/assets/${id}`); return r.data.data;
   }
-  async create(data: any): Promise<Asset> {
+  async create(data: Record<string, unknown>): Promise<Asset> {
     const r = await api.post('/assets', data); return r.data.data;
   }
-  async assign(id: string, data: any): Promise<AssetAssignment> {
+  async assign(id: string, data: Record<string, unknown>): Promise<AssetAssignment> {
     const r = await api.post(`/assets/${id}/assign`, data); return r.data.data;
   }
-  async returnAsset(id: string, assignmentId: string, data: any): Promise<Asset> {
+  async returnAsset(id: string, assignmentId: string, data: Record<string, unknown>): Promise<Asset> {
     const r = await api.post(`/assets/${id}/return`, { assignmentId, ...data }); return r.data.data;
   }
 }

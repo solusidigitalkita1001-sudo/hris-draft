@@ -1009,7 +1009,7 @@ class PerformanceService {
   async getReview(id: string): Promise<PerformanceReview> {
     const r = await api.get(`/performance/reviews/${id}`); return r.data.data;
   }
-  async createReview(data: any): Promise<PerformanceReview> {
+  async createReview(data: Record<string, unknown>): Promise<PerformanceReview> {
     const r = await api.post('/performance/reviews', data); return r.data.data;
   }
   async submitReview(id: string): Promise<PerformanceReview> {
@@ -1021,10 +1021,10 @@ class PerformanceService {
   async getGoals(companyId: string, employeeId?: string): Promise<Goal[]> {
     const r = await api.get('/performance/goals', { params: { companyId, employeeId } }); return r.data.data;
   }
-  async createGoal(data: any): Promise<Goal> {
+  async createGoal(data: Record<string, unknown>): Promise<Goal> {
     const r = await api.post('/performance/goals', data); return r.data.data;
   }
-  async updateGoalProgress(id: string, data: { progress: number; note?: string }): Promise<any> {
+  async updateGoalProgress(id: string, data: { progress: number; note?: string }): Promise<Goal> {
     const r = await api.patch(`/performance/goals/${id}/progress`, data); return r.data.data;
   }
 

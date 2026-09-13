@@ -56,12 +56,13 @@ export interface FrontendLivenessEvidence {
   } | null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 3rd-party ML singleton (@vladmandic/human) has a dynamic runtime API
 type HumanSingleton = any;
 let humanInstance: HumanSingleton | null = null;
 let humanLoadPromise: Promise<HumanSingleton | null> | null = null;
 let humanStatus: 'uninit' | 'loading' | 'ready' | 'failed' = 'uninit';
 
-const FRONTEND_HUMAN_CONFIG: Record<string, any> = {
+const FRONTEND_HUMAN_CONFIG: Record<string, unknown> = {
   backend: 'webgl',
   modelBasePath: 'https://vladmandic.github.io/human-models/models/',
   debug: false,
@@ -153,7 +154,7 @@ export async function extractFaceVectorFromImageFile(
    ───────────────────────────────────────────────────────────────────── */
 export async function generateLivenessEvidenceFromFile(
   file: File | Blob,
-  challengeResult?: { challenge: any; passed: boolean; score: number; framesCaptured: number } | null,
+  challengeResult?: { challenge: LivenessChallenge; passed: boolean; score: number; framesCaptured: number } | null,
 ): Promise<FrontendLivenessEvidence> {
   const mimeType = ('type' in file ? file.type : null) ?? null;
   const fileSizeBytes = file.size ?? null;

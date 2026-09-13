@@ -21,7 +21,7 @@ class OnboardingService {
   async getResignation(id: string): Promise<Resignation> {
     const r = await api.get(`/onboarding/resignations/${id}`); return r.data.data;
   }
-  async createResignation(data: any): Promise<Resignation> {
+  async createResignation(data: Record<string, unknown>): Promise<Resignation> {
     const r = await api.post('/onboarding/resignations', data); return r.data.data;
   }
   async approveResignation(id: string): Promise<Resignation> {
