@@ -53,4 +53,5 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = 'Button';
 
+// eslint-disable-next-line react-refresh/only-export-components -- buttonVariants (cva) is a stable helper co-located with the component by design
 export { Button, buttonVariants };

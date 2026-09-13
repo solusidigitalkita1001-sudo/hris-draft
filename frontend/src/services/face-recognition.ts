@@ -279,7 +279,7 @@ function computeLandmarkMetrics(mesh: ArrayLike<[number, number, number]>, confi
   // Pitch: perbandingan jarak nose-chin vertical component
   const pitch = (nose[1] - (chin[1] + leftCheek[1] + rightCheek[1]) / 3); // y-axis screen; positive=mengangguk bawah
 
-  return { ear, mar, smileRatio, yaw, pitch, detected: true, confidence: Number(confidence) ?? 0 };
+  return { ear, mar, smileRatio, yaw, pitch, detected: true, confidence: Number(confidence) || 0 };
 }
 
 export interface ChallengeVerificationResult {

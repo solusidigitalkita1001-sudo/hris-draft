@@ -65,6 +65,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- the useI18n hook is intentionally co-located with its provider
 export function useI18n() {
   const context = useContext(I18nContext);
 

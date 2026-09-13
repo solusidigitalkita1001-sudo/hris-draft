@@ -39,6 +39,8 @@ const CAREER_TRANSACTION_TYPES = [
 
 const EMPLOYMENT_TYPES = ['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREELANCE', 'OUTSOURCING'] as const;
 
+// Used only as a type source (`typeof WORKSPACE_SECTIONS[number]['key']`).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const WORKSPACE_SECTIONS = [
   {
     key: 'overview',

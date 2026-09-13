@@ -107,6 +107,7 @@ function PeriodForm({
       });
       onClose();
     } catch {
+      /* toast handled by the caller/service; close+reset still run in finally */
     } finally {
       setSaving(false);
     }

@@ -114,8 +114,6 @@ export function AdminEWAApprovalPage() {
   };
 
   const handleApprove = async () => {
-    if (!rejectReason && approveModal.id) {} // noop
-    if (approveModal.id && rejectReason) {} // noop
     if (!approveModal.id) return;
     setActionLoading(true);
     try {
