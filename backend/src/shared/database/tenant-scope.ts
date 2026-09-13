@@ -35,6 +35,22 @@ const PARENT_SCOPES: Record<string, { relation: string; foreignKey: string }> = 
   AnnouncementRead: { relation: 'announcement', foreignKey: 'announcementId' },
 };
 
+// Mutating Prisma actions. A no-company SUPER_ADMIN (implicit global mode) may
+// read across tenants but must select a company before any of these (#9), so a
+// company-less updateMany/deleteMany can never touch every tenant at once.
+export const TENANT_WRITE_ACTIONS = new Set([
+  'create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert',
+]);
+
+/** Throws when a no-company SUPER_ADMIN attempts a write; reads pass through. */
+export function assertGlobalSuperAdminReadOnly(model: string, action: string): void {
+  if (TENANT_WRITE_ACTIONS.has(action)) {
+    throw new ForbiddenError(
+      `Select a company before modifying tenant data — global SUPER_ADMIN mode is read-only (${model}.${action})`
+    );
+  }
+}
+
 type Data = Record<string, unknown>;
 function object(value: unknown): Data {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ForbiddenError('Invalid tenant-scoped input');

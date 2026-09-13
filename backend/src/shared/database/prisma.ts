@@ -1,16 +1,8 @@
-import { enforceTenantScope } from './tenant-scope';
+import { enforceTenantScope, assertGlobalSuperAdminReadOnly } from './tenant-scope';
 import { PrismaClient } from '@prisma/client';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { getCurrentCompanyId, isSystemContext, isSuperAdmin } from '@/shared/context/RequestContext';
-import { ForbiddenError } from '@/shared/exceptions/AppError';
-
-// Mutating Prisma actions — blocked for a no-company SUPER_ADMIN so the implicit
-// global mode is read-only (a write must first select a company). System context
-// (seeds/workers/migrations) is exempt and may write unscoped.
-const TENANT_WRITE_ACTIONS = new Set([
-  'create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert',
-]);
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -184,14 +176,9 @@ function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {
       // select a company, getCurrentCompanyId() returns it and normal per-tenant
       // scoping below applies.
       if (isSuperAdmin()) {
-        if (TENANT_WRITE_ACTIONS.has(params.action)) {
-          logger.warn(
-            `Blocked global SUPER_ADMIN write ${params.model}.${params.action} — no company selected`
-          );
-          throw new ForbiddenError(
-            `Select a company before modifying tenant data — global SUPER_ADMIN mode is read-only (${params.model}.${params.action})`
-          );
-        }
+        // Reads pass through (global oversight); writes throw until a company
+        // is selected.
+        assertGlobalSuperAdminReadOnly(params.model, params.action);
         return next(params);
       }
       throw new Error(`Tenant context is required for ${params.model}.${params.action}`);
