@@ -11,7 +11,7 @@ jest.mock('@/shared/middleware/Authenticate', () => ({ authenticate: (req: Authe
 jest.mock('@/shared/middleware/AuditLog', () => ({ auditLog: () => (_req: unknown, _res: unknown, next: NextFunction) => next(), auditView: () => (_req: unknown, _res: unknown, next: NextFunction) => next(), appendAuditLogEntry: jest.fn() }));
 jest.mock('./payroll-payment.routes', () => ({ __esModule: true, default: (_req: unknown, _res: unknown, next: NextFunction) => next() }));
 jest.mock('./payroll-formula.routes', () => ({ __esModule: true, default: (_req: unknown, _res: unknown, next: NextFunction) => next() }));
-jest.mock('@/shared/security/employee-data-scope', () => ({ employeeAccessWhere: jest.fn() }));
+jest.mock('@/shared/security/employee-data-scope', () => ({ employeeAccessWhere: jest.fn(), assertEmployeeInScope: jest.fn() }));
 jest.mock('./payroll.service', () => ({ payrollService: {
   createEmployeeSalary: jest.fn(), updateEmployeeSalary: jest.fn(), findAllEmployeeSalaries: jest.fn(), findEmployeeSalaryById: jest.fn(), calculateEmployeeThr: jest.fn(),
 } }));
