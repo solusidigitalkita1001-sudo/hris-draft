@@ -72,6 +72,28 @@ negative test today): BranchAttendancePolicy, asset assignment (foreign employee
 enrollment (foreign employee), daily-activity (foreign employee), approval delegation
 (foreign delegate), and the leave raw-SQL `company_id` predicate.
 
+## Item #9 — SUPER_ADMIN global mode
+
+**Audited behavior:** a SUPER_ADMIN with no company selected was an implicit, always-on,
+read-**write** global mode — triggered by the mere *absence* of a company param. A
+company-less `updateMany`/`deleteMany` could touch every tenant.
+
+**Decision taken:** keep implicit global **reads** (platform oversight, matches the UI which
+auto-selects a company for scoped calls), but make the mode **read-only**.
+
+**Done (this branch):** the Prisma tenant middleware's no-company branch now splits — system
+context (seeds/workers/migrations) still writes unscoped, but a no-company SUPER_ADMIN may only
+read; any write action throws `ForbiddenError` until a company is selected
+(`assertGlobalSuperAdminReadOnly` in `tenant-scope.ts`, unit-tested). Selecting a company scopes
+normally.
+
+**Follow-up (not in this branch):** six tenant modules never mount `requireCompanyAccess`
+(`/api/performance`, `/api/work-calendars`, `/api/company-settings`, `/api/permission-requests`,
+`/api/notifications`, `/api/audit-logs`; `administration` mounts it per-route). There, a request
+never populates context `companyId`, so (a) a SUPER_ADMIN cannot scope to a company even with
+`?companyId`, and (b) OWN_* data-scope is not applied for restricted users. Mounting the
+middleware router-wide on those modules is a separate, broader change deserving its own review.
+
 ## Status
 
 - **Tier 1 — DONE** (this branch). BranchAttendancePolicy added to the tenant middleware
