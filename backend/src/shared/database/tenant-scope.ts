@@ -18,6 +18,21 @@ const PARENT_SCOPES: Record<string, { relation: string; foreignKey: string }> = 
   EmployeeSalaryComponent: { relation: 'employeeSalary', foreignKey: 'employeeSalaryId' },
   WorkflowStage: { relation: 'template', foreignKey: 'templateId' },
   WorkflowConditionRule: { relation: 'stage.template', foreignKey: 'stageId' },
+  // Child tables whose tenant lives on a scoped parent (defense-in-depth: a
+  // direct query on these would otherwise skip the tenant middleware entirely).
+  DocumentSignature: { relation: 'document', foreignKey: 'documentId' },
+  DocumentAccessLog: { relation: 'document', foreignKey: 'documentId' },
+  SurveyQuestion: { relation: 'survey', foreignKey: 'surveyId' },
+  SurveyResponse: { relation: 'survey', foreignKey: 'surveyId' },
+  SurveyAnswer: { relation: 'response.survey', foreignKey: 'responseId' },
+  ReviewSection: { relation: 'review', foreignKey: 'reviewId' },
+  ReviewScore: { relation: 'section.review', foreignKey: 'sectionId' },
+  GoalUpdate: { relation: 'goal', foreignKey: 'goalId' },
+  TrainingMaterial: { relation: 'course', foreignKey: 'courseId' },
+  TrainingAttendance: { relation: 'session.course', foreignKey: 'sessionId' },
+  ShiftFormulaDay: { relation: 'shiftFormula', foreignKey: 'shiftFormulaId' },
+  PerformanceGradeRange: { relation: 'gradeRule', foreignKey: 'gradeRuleId' },
+  AnnouncementRead: { relation: 'announcement', foreignKey: 'announcementId' },
 };
 
 type Data = Record<string, unknown>;
