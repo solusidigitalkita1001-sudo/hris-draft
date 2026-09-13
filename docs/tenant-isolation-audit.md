@@ -72,10 +72,18 @@ negative test today): BranchAttendancePolicy, asset assignment (foreign employee
 enrollment (foreign employee), daily-activity (foreign employee), approval delegation
 (foreign delegate), and the leave raw-SQL `company_id` predicate.
 
-## Recommended order
+## Status
 
-1. **Tier 1** (real leaks) + the matching cross-company negative tests.
-2. **Tier 2** (allowlist + PARENT_SCOPES + delegate validation + leave raw `company_id`) — cheap,
-   high-value, low behavioral risk; verify no system/worker flow regresses.
-3. **Tier 3** — requires a decision on the intended data-scope model (should fetch-by-path enforce
-   OWN_*? is cross-scope colleague read acceptable for payroll roles?) before changing behavior.
+- **Tier 1 — DONE** (this branch). BranchAttendancePolicy added to the tenant middleware
+  allowlist (closes the branchId-only read/soft-delete escape); asset-assign, training-enroll,
+  and daily-activity now validate the client `employeeId` against the caller's company before
+  write. Cross-company negative tests added (`company-scope-sprint2-gaps.test.ts`).
+- **Tier 2 — DONE** (this branch). RoleDataScope/RoleMenuAccess/ApprovalDelegation added to the
+  allowlist; 13 child tables added to `PARENT_SCOPES`; `createDelegation` validates the delegate
+  is an employee in the caller's company; the six leave raw `FOR UPDATE` statements now carry an
+  explicit `company_id` predicate and `finalizeApprovalEffects` requires its scoped fetch to
+  resolve before mutating; the org cycle-walk is scoped by `companyId`. All verified green in CI
+  (type-check + build + 863-test suite + migrations).
+- **Tier 3 — OPEN.** Requires a product decision on the intended data-scope model (should
+  fetch-by-path enforce OWN_*? is cross-scope colleague read acceptable for payroll roles?)
+  before changing behavior. Not started.
