@@ -29,13 +29,29 @@ import {
   type WorkflowOperator,
   type WorkflowStageInput,
   type WorkflowTemplate,
-  type WorkflowInstance,
 } from '@/services/workflow.service';
 import { workflowEngineService, type WorkflowActionType } from '@/services/workflow-engine.service';
 import { apiErrorMessage } from '@/lib/errors';
 
-// my-approvals items carry legacy instanceId/instance fields alongside the WorkflowInstance shape
-type PendingApproval = WorkflowInstance & { instanceId?: string; instance?: { id?: string } };
+// my-approvals items are approval tasks: top-level task fields plus a nested workflow instance
+type PendingApproval = {
+  id?: string;
+  instanceId?: string;
+  name?: string;
+  level?: number;
+  createdAt?: string;
+  approvalType?: string;
+  status?: string;
+  instance?: {
+    id?: string;
+    approvalType?: string;
+    status?: string;
+    referenceType?: string;
+    referenceId?: string;
+    requesterId?: string;
+    createdAt?: string;
+  };
+};
 
 const APPROVAL_TYPES = [
   'LEAVE_REQUEST',
@@ -803,7 +819,9 @@ export function WorkflowAdminPage() {
   };
 
   const toggleSelectAll = () => {
-    const allIds = filteredApprovals.map((a: PendingApproval) => a.instanceId || a.instance?.id);
+    const allIds = filteredApprovals
+      .map((a: PendingApproval) => a.instanceId || a.instance?.id)
+      .filter((v): v is string => Boolean(v));
     if (selectedIds.length >= allIds.length && allIds.length > 0) {
       setSelectedIds([]);
     } else {
@@ -811,7 +829,7 @@ export function WorkflowAdminPage() {
     }
   };
 
-  const allSelected = filteredApprovals.length > 0 && selectedIds.length === filteredApprovals.map((a: PendingApproval) => a.instanceId || a.instance?.id).filter((v: string) => v).length;
+  const allSelected = filteredApprovals.length > 0 && selectedIds.length === filteredApprovals.map((a: PendingApproval) => a.instanceId || a.instance?.id).filter((v): v is string => Boolean(v)).length;
 
   const handleBulkSubmit = async (comment?: string) => {
     if (!bulkAction || selectedIds.length === 0) return;

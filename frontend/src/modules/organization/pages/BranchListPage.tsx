@@ -511,7 +511,7 @@ export function BranchListPage() {
     }
   };
 
-  const handlePolicySave = async (data: Record<string, unknown>) => {
+  const handlePolicySave = async (data: Parameters<typeof organizationService.upsertBranchAttendancePolicy>[1]) => {
     if (!policyTarget) return;
     try {
       await organizationService.upsertBranchAttendancePolicy(policyTarget.id, data);
