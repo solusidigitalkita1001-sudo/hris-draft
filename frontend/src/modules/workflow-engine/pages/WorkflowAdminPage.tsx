@@ -663,7 +663,8 @@ function TemplateForm({
   );
 }
 
-function getReferenceLink(referenceType: string, referenceId: string) {
+function getReferenceLink(referenceType: string | undefined, referenceId: string | undefined) {
+  if (!referenceType || !referenceId) return null;
   switch (referenceType) {
     case 'LEAVE_REQUEST':
       return `/leave/${referenceId}`;
