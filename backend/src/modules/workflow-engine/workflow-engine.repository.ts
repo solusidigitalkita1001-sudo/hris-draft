@@ -236,7 +236,7 @@ export class WorkflowEngineRepository {
     // could be granted approval authority. Employee is tenant-scoped, so a
     // delegate outside data.companyId resolves to null.
     const delegateMembership = await prisma.employee.findFirst({
-      where: { userId: data.delegateId, companyId: data.companyId, deletedAt: null },
+      where: { user: { id: data.delegateId }, companyId: data.companyId, deletedAt: null },
       select: { id: true },
     });
     if (!delegateMembership) throw new NotFoundError('Delegate tidak terdaftar di company ini');
