@@ -59,9 +59,8 @@ jobs:
         run: npm run check
       - name: Build (blocking)
         run: npm run build
-      - name: Lint (soft — flip to blocking after #5)
+      - name: Lint (blocking — errors only; any/non-null remain warnings)
         run: npm run lint
-        continue-on-error: true
 
   migrations:
     name: Migration validation + tests (migrate [blocking], test [soft])
