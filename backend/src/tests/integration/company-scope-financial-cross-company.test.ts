@@ -68,7 +68,6 @@ import { assetService } from '@/modules/asset/asset.service';
 import {
   runAs,
   userCompanyA,
-  userCompanyB,
   userSuperAdmin,
   userGroupAdmin,
   COMPANY_A_ID,
@@ -81,17 +80,13 @@ const ASSET_A_ID = 'asset-a-uuid-001';
 const ASSET_B_ID = 'asset-b-uuid-001';
 const PERM_A_ID = 'perm-req-a-uuid';
 const PERM_B_ID = 'perm-req-b-uuid';
-const JP_A_ID = 'jobpost-a-uuid-001';
 const JP_B_ID = 'jobpost-b-uuid-001';
-const CAND_A_ID = 'cand-a-uuid-001';
 const CAND_B_ID = 'cand-b-uuid-001';
 const TC_A_ID = 'tcat-a-uuid-001';
 const TC_B_ID = 'tcat-b-uuid-001';
 const WC_A_ID = 'wcal-a-uuid-001';
 const WC_B_ID = 'wcal-b-uuid-001';
-const LOANT_A_ID = 'loantype-a-uuid';
 const LOANT_B_ID = 'loantype-b-uuid';
-const ROLE_A_ID = 'role-a-uuid-001';
 const ROLE_B_ID = 'role-b-uuid-001';
 
 const mock = (id: string, companyId: string, extra: Record<string, any> = {}) => ({

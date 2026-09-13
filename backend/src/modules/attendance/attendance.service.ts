@@ -1,7 +1,6 @@
 import { attendanceRepository } from './attendance.repository';
 import {
   CreateAttendanceDTO,
-  UpdateAttendanceDTO,
   CreateOvertimeDTO,
   CheckoutAttendanceDTO,
 } from './attendance.dto';
@@ -13,7 +12,6 @@ import { calculateOvertimePay, OvertimeDayType } from '@/shared/attendance/overt
 import { assessLiveness, LivenessVerdict } from '@/shared/attendance/liveness';
 import {
   assessGpsCompliance,
-  checkRadius,
   haversineMeters,
   MockLocationVerdict,
 } from '@/shared/attendance/gps-mock';
@@ -857,7 +855,7 @@ export class AttendanceService {
     return attendanceRepository.updateOvertimeStatus(id, 'APPROVED', approverUserId);
   }
 
-  async finalizeOvertimeRejectEffects(id: string, approverUserId: string, reason?: string) {
+  async finalizeOvertimeRejectEffects(id: string, _approverUserId: string, _reason?: string) {
     return attendanceRepository.updateOvertimeStatus(id, 'REJECTED');
   }
 
@@ -867,7 +865,7 @@ export class AttendanceService {
     roles: string[],
     action: WorkflowActionDTO & { source?: WorkflowSource },
   ) {
-    const overtime = await this.findOvertimeById(id);
+    await this.findOvertimeById(id);
 
     const instance = await this.findWorkflowInstanceByOvertimeId(id);
 

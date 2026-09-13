@@ -25,8 +25,6 @@ import {
   RespondPerformanceResultDisputeDTO,
   ApprovePerformanceResultsDTO,
   ReopenPerformanceResultDTO,
-  SendPerformanceResultRemindersDTO,
-  SyncPerformanceDevelopmentRecommendationsDTO,
   AssignPerformanceDevelopmentRecommendationDTO,
   CreatePerformanceAutomationScheduleDTO,
   CreatePerformanceFormulaDTO,

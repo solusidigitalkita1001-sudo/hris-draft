@@ -197,7 +197,7 @@ export class EmployeeLoanService {
     roles: string[],
     action: WorkflowActionDTO & { source?: WorkflowSource }
   ) {
-    const loan = await this.findById(loanId);
+    await this.findById(loanId);
 
     const instance = await employeeLoanRepository.findInstanceByLoanId(loanId);
     if (!instance) {

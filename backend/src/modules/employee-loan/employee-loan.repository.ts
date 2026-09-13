@@ -160,15 +160,15 @@ export class EmployeeLoanRepository {
   }
 
   async approve(
-    id: string,
-    approverId: string,
+    _id: string,
+    _approverId: string,
     _loan: { totalInstallments: number; installmentAmount: Prisma.Decimal | number },
     _data?: ApproveLoanDTO
   ) {
     throw new BadRequestError('Use workflow action endpoint instead of legacy approve');
   }
 
-  async reject(id: string, approverId: string, data?: ApproveLoanDTO) {
+  async reject(_id: string, _approverId: string, _data?: ApproveLoanDTO) {
     throw new BadRequestError('Use workflow action endpoint instead of legacy reject');
   }
 

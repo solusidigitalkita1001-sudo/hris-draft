@@ -75,8 +75,6 @@ import {
   COMPANY_B_ID,
   EMPLOYEE_A_ID,
   EMPLOYEE_B_ID,
-  USER_A_ID,
-  USER_SUPERADMIN_ID,
   clearAllPrismaMocks,
 } from '../helpers/setupTestApp';
 
@@ -100,24 +98,13 @@ const mockEmployeeB: any = {
   deletedAt: null,
 };
 
-const FAM_A_ID = 'emp-fam-a-001';
 const FAM_B_ID = 'emp-fam-b-001';
-const EDU_A_ID = 'emp-edu-a-001';
 const EDU_B_ID = 'emp-edu-b-001';
-const EMC_A_ID = 'emp-emc-a-001';
 const EMC_B_ID = 'emp-emc-b-001';
-const TRN_A_ID = 'emp-trn-a-001';
 const TRN_B_ID = 'emp-trn-b-001';
-const SKL_A_ID = 'emp-skl-a-001';
 const SKL_B_ID = 'emp-skl-b-001';
-const EXP_A_ID = 'emp-exp-a-001';
 const EXP_B_ID = 'emp-exp-b-001';
-const ATT_A_ID = 'emp-att-a-001';
 const ATT_B_ID = 'emp-att-b-001';
-const BANK_A_ID = 'emp-bank-a-001';
-const BANK_B_ID = 'emp-bank-b-001';
-const ASG_A_ID = 'emp-asg-a-001';
-const ASG_B_ID = 'emp-asg-b-001';
 
 describe('CompanyScope Cross-Tenant — Employee Module (Task 1.1)', () => {
   beforeEach(() => {

@@ -68,7 +68,6 @@ import { NotFoundError } from '@/shared/exceptions/AppError';
 import {
   runAs,
   userCompanyA,
-  userCompanyB,
   userSuperAdmin,
   COMPANY_A_ID,
   COMPANY_B_ID,

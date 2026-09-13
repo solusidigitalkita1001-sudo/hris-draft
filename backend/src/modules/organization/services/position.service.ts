@@ -1,14 +1,11 @@
 import { positionRepository } from '../repositories/position.repository';
 import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
-import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, ValidationError } from '@/shared/exceptions/AppError';
 import { CreatePositionDTO, UpdatePositionDTO } from '../organization.dto';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { assertNoActiveDependents, assertNoPositionCycle, assertOrgRefsInCompany } from '../org-integrity';
-
-const logger = new WinstonLogger('PositionService');
 
 export class PositionService {
   async findAll(companyId: string, departmentId?: string) {

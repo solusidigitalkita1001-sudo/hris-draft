@@ -88,7 +88,6 @@ const CORR_A_ID = 'att-corr-a-001';
 const CORR_B_ID = 'att-corr-b-001';
 const FACE_A_ID = 'att-face-a-001';
 const FACE_B_ID = 'att-face-b-001';
-const OT_A_ID = 'ot-req-a-001';
 const OT_B_ID = 'ot-req-b-001';
 
 const mockAttendanceA = {
@@ -120,14 +119,6 @@ const mockCorrectionApprovedB = {
   status: 'APPROVED',
   approvedBy: USER_SUPERADMIN_ID,
   approvedAt: new Date(),
-} as any;
-
-const mockOvertimeB = {
-  id: OT_B_ID,
-  employeeId: EMPLOYEE_B_ID,
-  companyId: COMPANY_B_ID,
-  date: new Date(),
-  status: 'PENDING',
 } as any;
 
 describe('CompanyScope Cross-Tenant — Attendance Module (Task 1.2)', () => {

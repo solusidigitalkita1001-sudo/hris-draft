@@ -67,7 +67,6 @@ import { NotFoundError } from '@/shared/exceptions/AppError';
 import {
   runAs,
   userCompanyA,
-  userCompanyB,
   userSuperAdmin,
   userGroupAdmin,
   COMPANY_A_ID,
@@ -78,17 +77,12 @@ import {
 
 const LT_A_ID = 'leavetype-a-uuid-001';
 const LT_B_ID = 'leavetype-b-uuid-001';
-const PM_A_ID = 'perfmethod-a-uuid-001';
 const PM_B_ID = 'perfmethod-b-uuid-001';
-const PP_A_ID = 'perfperiod-a-uuid-001';
 const PP_B_ID = 'perfperiod-b-uuid-001';
 const RC_A_ID = 'reviewcycle-a-uuid-001';
-const RC_B_ID = 'reviewcycle-b-uuid-001';
 const GOAL_A_ID = 'goal-a-uuid-001';
 const GOAL_B_ID = 'goal-b-uuid-001';
-const AUDIT_A_ID = 'audit-a-uuid-001';
 const AUDIT_B_ID = 'audit-b-uuid-001';
-const FR_A_ID = 'feedbackreq-a-uuid-001';
 const FR_B_ID = 'feedbackreq-b-uuid-001';
 
 const mock = (id: string, companyId: string, extra: Record<string, any> = {}) => ({

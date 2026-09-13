@@ -48,18 +48,12 @@ export function isSuperAdmin(roles: unknown): boolean {
   return roles.some(r => typeof r === 'string' && SUPER_ROLES.has(r.trim().toUpperCase()));
 }
 
-function toStrArr(arr: unknown): string[] {
-  if (!Array.isArray(arr)) return [];
-  return arr.map(x => String(x)).filter(Boolean);
-}
-
 export function listSwitchableCompanies(
   accessList: UserCompanyAccessRow[] | null | undefined,
   ctx: SwitcherContext,
 ): UserCompanyAccessRow[] {
   const list = Array.isArray(accessList) ? accessList : [];
   const superAdmin = isSuperAdmin(ctx.currentRoles);
-  const roles = toStrArr(ctx.currentRoles).map(r => r.toUpperCase());
   // Filter out soft deleted
   const notDeleted = list.filter(a => {
     if (!a || !a.companyId) return false;

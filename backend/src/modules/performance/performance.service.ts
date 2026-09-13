@@ -1149,10 +1149,6 @@ export class PerformanceService {
     period: NonNullable<Awaited<ReturnType<typeof performanceRepository.findPeriodById>>>,
     assignment: NonNullable<Awaited<ReturnType<typeof performanceRepository.findPlanningAssignmentById>>>
   ) {
-    const componentMap = new Map(
-      period.methodVersion.components.map((component) => [component.id, component])
-    );
-
     const targetScores = assignment.targets.map((target) => {
       const calculation = this.calculateTargetScore(target, period.methodVersion);
       return {
@@ -1610,7 +1606,6 @@ export class PerformanceService {
 
   async updateMethod(id: string, data: UpdatePerformanceMethodDTO, context: PerformanceAuditContext) {
     const current = await this.findMethodById(id);
-    const nextCode = current.code;
     const payload = {
       name: data.name?.trim(),
       description: data.description?.trim() || undefined,

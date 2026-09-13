@@ -5,7 +5,6 @@ import { authRepository } from './auth.repository';
 import { jwtHandler } from '@/shared/security/JWTHandler';
 import { passwordHandler } from '@/shared/security/PasswordHandler';
 import { decryptSecret, encryptSecret } from '@/shared/security/secret-crypto';
-import { redisCache } from '@/infrastructure/cache/RedisCache';
 import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
@@ -519,7 +518,6 @@ export class AuthService {
 
     // Store refresh token
     const tokenHash = this.hashToken(refreshToken);
-    const decodedRefresh = jwtHandler.decodeToken(refreshToken);
 
     // Parse JWT expiration
     const expiresInMs = config.jwt.refreshExpiresIn;

@@ -66,7 +66,7 @@ jest.mock('@/shared/database/prisma', () => {
 // $queryRaw returns [] so the real GET_LOCK check would falsely time out).
 jest.mock('@/shared/database/advisory-lock', () => ({
   withDatabaseAdvisoryLock: (_ns: string, _key: string, op: (tx: any) => any) =>
-    op(require('@/shared/database/prisma').default),
+    op(require('@/shared/database/prisma').default), // eslint-disable-line @typescript-eslint/no-require-imports -- jest.mock factories are hoisted above imports; require is required inside the factory
 }));
 
 import { leaveService } from '@/modules/leave/leave.service';
@@ -82,7 +82,6 @@ import {
   userCompanyA,
   userCompanyB,
   userEmployeeA,
-  userEmployeeB,
   userSuperAdmin,
   userGroupAdmin,
   COMPANY_A_ID,

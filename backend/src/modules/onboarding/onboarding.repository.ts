@@ -77,7 +77,7 @@ export class OnboardingRepository {
     return prisma.exitClearance.update({ where: { id }, data: update });
   }
 
-  async generateClearances(resignationId: string, employeeId: string) {
+  async generateClearances(resignationId: string, _employeeId: string) {
     const defaults = [
       { department: 'IT', checklistItem: 'Return laptop & accessories' },
       { department: 'IT', checklistItem: 'Deactivate system accounts & email' },

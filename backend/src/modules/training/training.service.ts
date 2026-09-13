@@ -1,7 +1,6 @@
 import { trainingRepository } from './training.repository';
-import { CreateCategoryDTO, CreateCourseDTO, UpdateCourseDTO, CreateSessionDTO, CreateEnrollmentDTO, UpdateEnrollmentDTO } from './training.dto';
+import { CreateCategoryDTO, CreateCourseDTO, UpdateCourseDTO, CreateSessionDTO, CreateEnrollmentDTO } from './training.dto';
 import { NotFoundError, ConflictError } from '@/shared/exceptions/AppError';
-import { logger } from '@/shared/logger/WinstonLogger';
 import { generateSystemCode } from '@/shared/utils/system-code';
 
 export class TrainingService {

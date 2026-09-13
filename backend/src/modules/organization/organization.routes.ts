@@ -10,7 +10,6 @@ import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { auditLog } from '@/shared/middleware/AuditLog';
-import { parsePagination } from '@/shared/middleware/Pagination';
 import {
   createGroupSchema,
   updateGroupSchema,

@@ -1,5 +1,4 @@
 import prisma from '@/shared/database/prisma';
-import { Prisma } from '@prisma/client';
 import { CreateBranchDTO, UpdateBranchDTO, UpsertBranchAttendancePolicyDTO } from '../organization.dto';
 
 export class BranchRepository {

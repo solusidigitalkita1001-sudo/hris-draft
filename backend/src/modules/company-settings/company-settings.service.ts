@@ -14,7 +14,6 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   attendance_default_working_days_per_month: '22',
 };
 
-const LATE_DEDUCTION_KEY_PREFIX = 'late_deduction_';
 const ABSENCE_DEDUCTION_KEY = 'absence_deduction_daily_basic_percent';
 const LATE_DEDUCTION_ENABLED = 'late_deduction_enabled';
 const LATE_DEDUCTION_RATE = 'late_deduction_default_rate_per_minute';

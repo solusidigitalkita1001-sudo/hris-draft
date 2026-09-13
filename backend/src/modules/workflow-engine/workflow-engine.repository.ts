@@ -1,7 +1,7 @@
 import { prisma } from '@/shared/database/prisma';
 import type { Prisma } from '@prisma/client';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
-import { getCurrentCompanyId, getCurrentRoles, isSuperAdmin, getRequestContext } from '@/shared/context/RequestContext';
+import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
 import type {
   CreateWorkflowTemplateDTO,
   StartWorkflowInstanceDTO,

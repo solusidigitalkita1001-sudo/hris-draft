@@ -20,7 +20,7 @@ const COMPANY_SCOPED_MODELS = [
   'employee',
 ];
 
-function makeMockModel(name: string) {
+function makeMockModel(_name: string) {
   return {
     findUnique: jest.fn().mockResolvedValue(null),
     findFirst: jest.fn().mockResolvedValue(null),

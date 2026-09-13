@@ -10,7 +10,6 @@ export async function seedRolePermissions(): Promise<void> {
   const permissions = await prisma.permission.findMany();
 
   const roleMap = new Map(roles.map((r) => [r.code, r.id]));
-  const permMap = new Map(permissions.map((p) => [p.code, p.id]));
 
   // SUPER_ADMIN - all permissions
   const superAdminId = roleMap.get('SUPER_ADMIN')!;

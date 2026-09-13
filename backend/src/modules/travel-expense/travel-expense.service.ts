@@ -66,7 +66,7 @@ export class TravelExpenseService {
 
     const requesterId = currentUser?.id ?? undefined;
 
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (_tx) => {
       const trip = await travelExpenseRepository.createTrip(data);
 
       try {
@@ -160,7 +160,7 @@ export class TravelExpenseService {
     return { trip: finalTrip, workflowInstance: updatedInstance };
   }
 
-  async approveTrip(id: string, userId: string, approverEmployeeId?: string | null) {
+  async approveTrip(id: string, userId: string, _approverEmployeeId?: string | null) {
     const ctx = getRequestContext();
     const roles = ctx?.user?.roles ?? getCurrentRoles();
     return this.applyTripWorkflowAction(id, userId, roles, {
@@ -248,7 +248,7 @@ export class TravelExpenseService {
 
     const requesterId = currentUser?.id ?? undefined;
 
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (_tx) => {
       const claim = await travelExpenseRepository.createClaim(data);
 
       try {
@@ -343,7 +343,7 @@ export class TravelExpenseService {
     return { claim: finalClaim, workflowInstance: updatedInstance };
   }
 
-  async approveClaim(id: string, userId: string, approverEmployeeId?: string | null) {
+  async approveClaim(id: string, userId: string, _approverEmployeeId?: string | null) {
     const ctx = getRequestContext();
     const roles = ctx?.user?.roles ?? getCurrentRoles();
     return this.applyClaimWorkflowAction(id, userId, roles, {
