@@ -501,7 +501,7 @@ export async function seedTestData(): Promise<void> {
   });
 
   await (prisma as any).branchAttendancePolicy.upsert({
-    where: { branchId: branch2.id },
+    where: { companyId_branchId: { companyId: company.id, branchId: branch2.id } },
     update: {
       attendanceMethod: 'MOBILE_GPS',
       gpsLatitude: branch2.latitude,
@@ -544,7 +544,7 @@ export async function seedTestData(): Promise<void> {
   });
 
   await (prisma as any).branchAttendancePolicy.upsert({
-    where: { branchId: branch3.id },
+    where: { companyId_branchId: { companyId: company.id, branchId: branch3.id } },
     update: {
       attendanceMethod: 'BOTH',
       gpsLatitude: branch3.latitude,
