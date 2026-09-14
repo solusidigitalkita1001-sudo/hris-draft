@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { AuthUser } from '@/services/auth.service';
 import { authService } from '@/services/auth.service';
 import { appConfig } from '@/config/app';
+import { useCompanyStore } from './company.store';
 
 interface AuthState {
   user: AuthUser | null;
@@ -29,12 +30,17 @@ function syncUserContext(user: AuthUser | null) {
     return;
   }
 
-  if (user.companyId) {
-    localStorage.setItem('companyId', user.companyId);
-    localStorage.setItem(appConfig.companyKey, user.companyId);
-  } else {
-    localStorage.removeItem('companyId');
-    localStorage.removeItem(appConfig.companyKey);
+  // company.store owns the active-company mirror. Auth only SEEDS it when no
+  // company is active yet; it must never clobber an in-progress company switch
+  // on a window-focus / loadProfile refresh (that was the desync source).
+  if (!useCompanyStore.getState().activeCompany?.id) {
+    if (user.companyId) {
+      localStorage.setItem('companyId', user.companyId);
+      localStorage.setItem(appConfig.companyKey, user.companyId);
+    } else {
+      localStorage.removeItem('companyId');
+      localStorage.removeItem(appConfig.companyKey);
+    }
   }
 
   if (user.employeeId) {
@@ -132,6 +138,9 @@ export const useAuthStore = create<AuthState>()(
 
       reset: () => {
         sessionVersion++;
+        // Clear the active company too, so a previous user's tenant can't leak
+        // into the next session (the company store is persisted).
+        useCompanyStore.getState().setActiveCompany(null);
         syncUserContext(null);
         set({ user: null, isAuthenticated: false, isLoading: false, isBootstrapped: true });
       },
