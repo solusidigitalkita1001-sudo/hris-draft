@@ -8,6 +8,9 @@ export type DataScopeType =
   | 'BRANCH_ONLY'
   | 'DEPARTMENT_ONLY'
   | 'SUB_DEPARTMENT_ONLY'
+  | 'OWN_BRANCH'
+  | 'OWN_DEPARTMENT'
+  | 'OWN_SUB_DEPARTMENT'
   | 'EMPLOYEE_SELF'
   | 'MANAGER_TEAM';
 
@@ -62,6 +65,10 @@ export const SCOPE_TYPE_OPTIONS: Array<{ value: DataScopeType; label: string; de
   { value: 'BRANCH_ONLY', label: 'Branch tertentu', description: 'Hanya branch yang dipilih admin.' },
   { value: 'DEPARTMENT_ONLY', label: 'Department tertentu', description: 'Hanya department yang dipilih admin.' },
   { value: 'SUB_DEPARTMENT_ONLY', label: 'Sub-department tertentu', description: 'Hanya sub-department yang dipilih admin.' },
+  { value: 'OWN_BRANCH', label: 'Branch sendiri (dinamis)', description: 'Branch tempat user berada saat ini — ikut berubah saat user pindah.' },
+  { value: 'OWN_DEPARTMENT', label: 'Department sendiri (dinamis)', description: 'Department user saat ini — ikut berubah saat user pindah.' },
+  { value: 'OWN_SUB_DEPARTMENT', label: 'Sub-department sendiri (dinamis)', description: 'Sub-department user saat ini — ikut berubah saat user pindah.' },
+  { value: 'MANAGER_TEAM', label: 'Tim yang dipimpin', description: 'Karyawan di unit (division/department/sub-department) yang user pimpin sebagai head, termasuk sub-unit. Kosong jika user bukan head unit mana pun.' },
   { value: 'EMPLOYEE_SELF', label: 'Data sendiri', description: 'User hanya dapat mengakses record miliknya.' },
 ];
 

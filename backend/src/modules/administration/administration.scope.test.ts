@@ -6,8 +6,13 @@ const service = new AdministrationService();
 const user = { id: 'u', companyId: 'A', employeeId: 'e', roles: ['MANAGER'] };
 describe('data scope fail-closed', () => {
   beforeEach(() => jest.clearAllMocks());
-  it.each(['employee', 'attendance', 'payroll', 'leave', 'ALL'])('denies unavailable hierarchy for %s', (resource) => {
+  it.each(['employee', 'attendance', 'payroll', 'leave', 'ALL'])('MANAGER_TEAM fails closed (throws) when the requester manages no one (%s)', (resource) => {
     expect(() => service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, user, resource)).toThrow(ForbiddenError);
+  });
+  it('MANAGER_TEAM scopes to the pre-resolved team ids', () => {
+    const mgrTeam = { ...user, teamEmployeeIds: ['e', 't1', 't2'] };
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, mgrTeam)).toEqual({ id: { in: ['e', 't1', 't2'] } });
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, mgrTeam, 'leave')).toEqual({ employeeId: { in: ['e', 't1', 't2'] } });
   });
   it('rejects self scope without employee identity', () => {
     expect(() => service.resolveEmployeeFilterForCurrentUser({ scopeType: 'EMPLOYEE_SELF' }, { ...user, employeeId: undefined })).toThrow(ForbiddenError);
