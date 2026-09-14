@@ -364,7 +364,9 @@ export async function seedTestData(): Promise<void> {
   });
 
   await (prisma as any).branchAttendancePolicy.upsert({
-    where: { branchId: branch.id },
+    // branchId alone is no longer unique — the reconcile migration replaced the
+    // unique(branch_id) with the compound unique(company_id, branch_id).
+    where: { companyId_branchId: { companyId: company.id, branchId: branch.id } },
     update: {
       attendanceMethod: 'FINGERPRINT',
       lateToleranceMinutes: 10,
