@@ -1,4 +1,4 @@
-import { enforceTenantScope } from './tenant-scope';
+import { enforceTenantScope, assertGlobalSuperAdminReadOnly } from './tenant-scope';
 import { PrismaClient } from '@prisma/client';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
@@ -130,6 +130,10 @@ const COMPANY_SCOPED_MODELS = new Set([
   'CompanySetting',
   'EmployeeFaceProfile',
   'Offer',
+  'BranchAttendancePolicy',
+  'RoleDataScope',
+  'RoleMenuAccess',
+  'ApprovalDelegation',
   // Parent-scoped (no own companyId; scoped via PARENT_SCOPES in tenant-scope.ts)
   'LoanInstallment',
   'WorkCalendarDay',
@@ -142,6 +146,19 @@ const COMPANY_SCOPED_MODELS = new Set([
   'EmployeeSalaryComponent',
   'WorkflowStage',
   'WorkflowConditionRule',
+  'DocumentSignature',
+  'DocumentAccessLog',
+  'SurveyQuestion',
+  'SurveyResponse',
+  'SurveyAnswer',
+  'ReviewSection',
+  'ReviewScore',
+  'GoalUpdate',
+  'TrainingMaterial',
+  'TrainingAttendance',
+  'ShiftFormulaDay',
+  'PerformanceGradeRange',
+  'AnnouncementRead',
 ]);
 
 function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {
@@ -149,12 +166,21 @@ function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {
     if (!params.model || !COMPANY_SCOPED_MODELS.has(params.model)) return next(params);
     const companyId = getCurrentCompanyId();
     if (!companyId) {
-      // System jobs and the SUPER_ADMIN platform account operate across tenants.
-      // SUPER_ADMIN has no company rows of its own, so without this a superadmin
-      // with no company selected would 500 on every scoped-model query. When a
-      // superadmin DOES select a company, getCurrentCompanyId() returns it and
-      // the normal per-tenant scoping below applies.
-      if (isSystemContext() || isSuperAdmin()) return next(params);
+      // System jobs (seeds, workers, migrations) legitimately span tenants and
+      // may read AND write unscoped.
+      if (isSystemContext()) return next(params);
+      // SUPER_ADMIN with no company selected runs in an implicit GLOBAL mode.
+      // Reads may span tenants (platform oversight), but WRITES are blocked (#9):
+      // a mutation must select a company first, so a company-less updateMany /
+      // deleteMany can never touch every tenant at once. When a superadmin DOES
+      // select a company, getCurrentCompanyId() returns it and normal per-tenant
+      // scoping below applies.
+      if (isSuperAdmin()) {
+        // Reads pass through (global oversight); writes throw until a company
+        // is selected.
+        assertGlobalSuperAdminReadOnly(params.model, params.action);
+        return next(params);
+      }
       throw new Error(`Tenant context is required for ${params.model}.${params.action}`);
     }
     await enforceTenantScope(params, companyId);

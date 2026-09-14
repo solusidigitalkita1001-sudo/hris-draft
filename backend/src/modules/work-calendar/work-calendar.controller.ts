@@ -5,6 +5,7 @@ import { workCalendarService } from './work-calendar.service';
 import { Result } from '@/shared/core/Result';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { ValidationError } from '@/shared/exceptions/AppError';
+import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 
 export class WorkCalendarController {
   async findAll(req: Request, res: Response, next: NextFunction) {
@@ -179,6 +180,7 @@ export class WorkCalendarController {
 
   async getEmployeeCalendar(req: Request, res: Response, next: NextFunction) {
     try {
+      await assertEmployeeInScope(req.params.employeeId as string, 'work-calendar');
       const calendar = await workCalendarRepository.findEmployeeCalendar(req.params.employeeId as string);
       if (!calendar) return res.status(404).json(Result.error('No calendar found for employee'));
       res.json(Result.success(calendar));
@@ -282,6 +284,9 @@ export class WorkCalendarController {
 
   async getTeamCalendar(req: Request, res: Response, next: NextFunction) {
     try {
+      // The manager whose team is requested must be within the caller's data
+      // scope (T3.2) — otherwise any manager's team calendar is readable.
+      await assertEmployeeInScope(req.params.managerId as string, 'work-calendar');
       const year = Number(req.query.year as string) || new Date().getFullYear();
       const month = Number(req.query.month as string) || (new Date().getMonth() + 1);
       const data = await workCalendarRepository.findTeamCalendar(

@@ -18,7 +18,38 @@ const PARENT_SCOPES: Record<string, { relation: string; foreignKey: string }> = 
   EmployeeSalaryComponent: { relation: 'employeeSalary', foreignKey: 'employeeSalaryId' },
   WorkflowStage: { relation: 'template', foreignKey: 'templateId' },
   WorkflowConditionRule: { relation: 'stage.template', foreignKey: 'stageId' },
+  // Child tables whose tenant lives on a scoped parent (defense-in-depth: a
+  // direct query on these would otherwise skip the tenant middleware entirely).
+  DocumentSignature: { relation: 'document', foreignKey: 'documentId' },
+  DocumentAccessLog: { relation: 'document', foreignKey: 'documentId' },
+  SurveyQuestion: { relation: 'survey', foreignKey: 'surveyId' },
+  SurveyResponse: { relation: 'survey', foreignKey: 'surveyId' },
+  SurveyAnswer: { relation: 'response.survey', foreignKey: 'responseId' },
+  ReviewSection: { relation: 'review', foreignKey: 'reviewId' },
+  ReviewScore: { relation: 'section.review', foreignKey: 'sectionId' },
+  GoalUpdate: { relation: 'goal', foreignKey: 'goalId' },
+  TrainingMaterial: { relation: 'course', foreignKey: 'courseId' },
+  TrainingAttendance: { relation: 'session.course', foreignKey: 'sessionId' },
+  ShiftFormulaDay: { relation: 'shiftFormula', foreignKey: 'shiftFormulaId' },
+  PerformanceGradeRange: { relation: 'gradeRule', foreignKey: 'gradeRuleId' },
+  AnnouncementRead: { relation: 'announcement', foreignKey: 'announcementId' },
 };
+
+// Mutating Prisma actions. A no-company SUPER_ADMIN (implicit global mode) may
+// read across tenants but must select a company before any of these (#9), so a
+// company-less updateMany/deleteMany can never touch every tenant at once.
+export const TENANT_WRITE_ACTIONS = new Set([
+  'create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert',
+]);
+
+/** Throws when a no-company SUPER_ADMIN attempts a write; reads pass through. */
+export function assertGlobalSuperAdminReadOnly(model: string, action: string): void {
+  if (TENANT_WRITE_ACTIONS.has(action)) {
+    throw new ForbiddenError(
+      `Select a company before modifying tenant data — global SUPER_ADMIN mode is read-only (${model}.${action})`
+    );
+  }
+}
 
 type Data = Record<string, unknown>;
 function object(value: unknown): Data {

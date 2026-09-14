@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { administrationService } from '@/modules/administration/administration.service';
 import { getCurrentCompanyId, getCurrentUser, isSystemContext, isSuperAdmin, runInSystemContext } from '@/shared/context/RequestContext';
-import { ForbiddenError } from '@/shared/exceptions/AppError';
+import { ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
 import prisma from '@/shared/database/prisma';
 
 /** Server-derived predicate, independent of request query/body fields. */
@@ -31,6 +31,22 @@ export async function employeeAccessWhere(resource = 'employee'): Promise<Prisma
   // The queried model remains Employee, including when a payroll permission
   // supplies the scope. Self must therefore resolve to id, not employeeId.
   return { ...administrationService.resolveEmployeeFilterForCurrentUser(scope, user, 'employee'), companyId };
+}
+
+/**
+ * Enforce the caller's data scope on a fetch-by-path/by-id endpoint that takes a
+ * target employeeId directly (which the middleware's req.query rewrite cannot
+ * reach). Out-of-scope → NotFound, mirroring the cross-tenant IDOR contract.
+ * No-op for SUPER_ADMIN/system and for ALL/COMPANY_ONLY scopes (whose predicate
+ * only constrains companyId), so only already-restricted users are tightened.
+ */
+export async function assertEmployeeInScope(employeeId: string, resource = 'employee'): Promise<void> {
+  const scope = await employeeAccessWhere(resource);
+  const allowed = await prisma.employee.findFirst({
+    where: { id: employeeId, deletedAt: null, AND: [scope] },
+    select: { id: true },
+  });
+  if (!allowed) throw new NotFoundError('Employee not found');
 }
 
 /** Employee-profile access alone does not authorize the nested salary data. */

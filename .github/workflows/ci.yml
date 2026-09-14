@@ -108,6 +108,50 @@ jobs:
       - name: Backend tests against migrated DB (blocking)
         run: npm test
 
+  migration-rehearsal:
+    name: Migration rehearsal (soft)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: hris_rehearsal
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/hris_rehearsal
+      SHADOW_DATABASE_URL: mysql://root:root@127.0.0.1:3306/hris_rehearsal_shadow
+      # Seed loads @/config which exits without these; values are throwaway.
+      JWT_ACCESS_SECRET: ci_rehearsal_access_secret
+      JWT_REFRESH_SECRET: ci_rehearsal_refresh_secret
+      SESSION_SECRET: ci_rehearsal_session_secret
+      CSRF_SECRET: ci_rehearsal_csrf_secret_16+
+      ENCRYPTION_KEY: ci_rehearsal_encryption_key_32_bytes_min!!
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Create shadow database
+        run: mysql -h 127.0.0.1 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS hris_rehearsal_shadow;"
+      - name: Run migration rehearsal (migrate + seed + assert)
+        run: bash ../scripts/migration-rehearsal.sh
+
   frontend:
     name: Frontend (build [blocking], lint [soft])
     runs-on: ubuntu-latest

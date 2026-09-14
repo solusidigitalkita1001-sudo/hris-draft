@@ -188,12 +188,13 @@ export class LeaveService {
       await assertPayrollRangeOpen(request.companyId, request.startDate, request.endDate);
       await prisma.$transaction(async (tx) => {
         const [row] = await tx.$queryRaw<Array<{ id: string; status: string; total_days: number }>>`
-          SELECT id, status, total_days FROM leave_requests WHERE id = ${id} FOR UPDATE`;
+          SELECT id, status, total_days FROM leave_requests WHERE id = ${id} AND company_id = ${request.companyId} FOR UPDATE`;
         if (!row || row.status !== 'APPROVED') throw new ConflictError('Pengajuan cuti berubah; muat ulang lalu coba lagi');
         const year = new Date(request.startDate).getFullYear();
         const [bal] = await tx.$queryRaw<Array<{ id: string; total_days: number; used_days: number }>>`
           SELECT id, total_days, used_days FROM leave_balances
           WHERE employee_id = ${request.employeeId} AND leave_type_id = ${request.leaveTypeId} AND year = ${year}
+          AND company_id = ${request.companyId}
           FOR UPDATE`;
         if (bal) {
           const usedDays = Math.max(0, Number(bal.used_days) - Number(row.total_days));
@@ -218,9 +219,11 @@ export class LeaveService {
       where: { id: leaveRequestId, deletedAt: null },
       select: { companyId: true, startDate: true, endDate: true },
     });
-    if (pending) {
-      await assertPayrollRangeOpen(pending.companyId, pending.startDate, pending.endDate);
-    }
+    // The scoped fetch is bypassed under system/SUPER_ADMIN context; require it
+    // so the raw FOR UPDATE below can be pinned to the resolved company and we
+    // never mutate a leave request that did not resolve in the caller's tenant.
+    if (!pending) throw new NotFoundError('Leave request not found');
+    await assertPayrollRangeOpen(pending.companyId, pending.startDate, pending.endDate);
     return prisma.$transaction(async (tx) => {
       const [req] = await tx.$queryRaw<
         Array<{
@@ -232,7 +235,7 @@ export class LeaveService {
           start_date: Date;
         }>
       >`SELECT id, status, employee_id, leave_type_id, total_days, start_date
-        FROM leave_requests WHERE id = ${leaveRequestId} FOR UPDATE`;
+        FROM leave_requests WHERE id = ${leaveRequestId} AND company_id = ${pending.companyId} FOR UPDATE`;
 
       if (!req) throw new NotFoundError('Leave request not found');
       if (req.status === 'APPROVED') {
@@ -244,6 +247,7 @@ export class LeaveService {
         Array<{ id: string; used_days: number; remaining_days: number }>
       >`SELECT id, used_days, remaining_days FROM leave_balances
         WHERE employee_id = ${req.employee_id} AND leave_type_id = ${req.leave_type_id} AND year = ${year}
+        AND company_id = ${pending.companyId}
         FOR UPDATE`;
 
       if (!bal || bal.remaining_days < req.total_days) {

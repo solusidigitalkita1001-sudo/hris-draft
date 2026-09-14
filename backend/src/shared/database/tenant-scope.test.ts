@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
-import { enforceTenantScope } from './tenant-scope';
+import { enforceTenantScope, assertGlobalSuperAdminReadOnly } from './tenant-scope';
+import { ForbiddenError } from '@/shared/exceptions/AppError';
 function params(action: Prisma.PrismaAction, args: Record<string, unknown>, model: Prisma.MiddlewareParams['model'] = 'Employee'): Prisma.MiddlewareParams {
   return { model, action, args, dataPath: [], runInTransaction: false };
 }
@@ -52,4 +53,17 @@ describe('tenant constraint enforcement', () => {
     await expect(enforceTenantScope(params('update', { where: { id: 'rule' }, data: { stageId: 'foreign' } }, 'WorkflowConditionRule'), 'A')).rejects.toThrow();
     await expect(enforceTenantScope(params('update', { where: { id: 'day' }, data: { calendarId: 'foreign' } }, 'WorkCalendarDay'), 'A')).rejects.toThrow();
   });
+});
+
+describe('global SUPER_ADMIN read-only gate (#9)', () => {
+  it.each(['create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert'] as const)(
+    'blocks write action %s with ForbiddenError', action => {
+      expect(() => assertGlobalSuperAdminReadOnly('Employee', action)).toThrow(ForbiddenError);
+    },
+  );
+  it.each(['findMany', 'findUnique', 'findFirst', 'count', 'aggregate', 'groupBy'] as const)(
+    'allows read action %s', action => {
+      expect(() => assertGlobalSuperAdminReadOnly('Employee', action)).not.toThrow();
+    },
+  );
 });

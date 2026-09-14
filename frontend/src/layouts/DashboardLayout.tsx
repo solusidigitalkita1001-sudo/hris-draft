@@ -2,12 +2,19 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopNavigation } from './TopNavigation';
 import { useUIStore } from '@/stores/ui.store';
+import { useCompanyStore } from '@/stores/company.store';
 import { cn } from '@/utils/cn';
 import { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 
 export function DashboardLayout() {
   const { sidebarCollapsed } = useUIStore();
+  // Remount all routed content when the active company changes. This discards
+  // every page's component state (lists, detail/modal ids, forms) and re-runs
+  // its data fetches under the new tenant, so no company-A state — nor a slow
+  // company-A response resolving into an unmounted instance — can survive a
+  // switch. Single highest-leverage guard against mixed-tenant UI (#10).
+  const activeCompanyId = useCompanyStore((s) => s.activeCompany?.id);
 
   return (
     <div className="min-h-screen bg-background">
@@ -26,7 +33,9 @@ export function DashboardLayout() {
               <span className="text-sm text-muted-foreground">Memuat halaman…</span>
             </div>
           }>
-            <Outlet />
+            <div key={activeCompanyId ?? 'no-company'}>
+              <Outlet />
+            </div>
           </Suspense>
         </main>
       </div>

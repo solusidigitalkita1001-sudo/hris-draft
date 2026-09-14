@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { payrollService } from './payroll.service';
 import { Result } from '@/shared/core/Result';
+import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 
 export class PayrollController {
   // ==================== Salary Components ====================
@@ -100,6 +101,9 @@ export class PayrollController {
   async calculateEmployeeThr(req: Request, res: Response, next: NextFunction) {
     try {
       const employeeId = req.params.employeeId as string;
+      // Enforce the caller's data scope on this by-path read (the middleware's
+      // req.query rewrite cannot reach req.params) — closes THR salary disclosure.
+      await assertEmployeeInScope(employeeId, 'payroll');
       const dateQuery = req.query.date as string | undefined;
       const referenceDate = dateQuery ? new Date(dateQuery) : undefined;
       const data = await payrollService.calculateEmployeeThr(employeeId, referenceDate);

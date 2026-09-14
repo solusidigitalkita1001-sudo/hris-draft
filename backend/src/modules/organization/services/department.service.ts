@@ -49,7 +49,7 @@ export class DepartmentService {
     if (dto.code === current.code) delete dto.code;
 
     await assertOrgRefsInCompany(current.companyId, { divisionId: dto.divisionId, parentId: dto.parentId, headId: dto.headId });
-    if (dto.parentId) await assertNoDepartmentCycle(id, dto.parentId);
+    if (dto.parentId) await assertNoDepartmentCycle(id, dto.parentId, current.companyId);
 
     return departmentRepository.update(id, dto);
   }
