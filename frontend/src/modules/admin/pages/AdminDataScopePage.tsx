@@ -51,11 +51,15 @@ function ScopeIcon({ type, size = 16 }: { type: DataScopeType; size?: number }) 
   switch (type) {
     case 'ALL': return <Globe2 size={size} />;
     case 'COMPANY_ONLY': return <Building2 size={size} />;
-    case 'BRANCH_ONLY': return <MapPin size={size} />;
+    case 'BRANCH_ONLY':
+    case 'OWN_BRANCH': return <MapPin size={size} />;
     case 'DEPARTMENT_ONLY':
-    case 'SUB_DEPARTMENT_ONLY': return <Users size={size} />;
+    case 'SUB_DEPARTMENT_ONLY':
+    case 'OWN_DEPARTMENT':
+    case 'OWN_SUB_DEPARTMENT': return <Users size={size} />;
     case 'EMPLOYEE_SELF': return <UserCheck size={size} />;
     case 'MANAGER_TEAM': return <ShieldCheck size={size} />;
+    default: return <Globe2 size={size} />;
   }
 }
 
