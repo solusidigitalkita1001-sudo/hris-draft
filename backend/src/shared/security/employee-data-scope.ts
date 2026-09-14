@@ -3,6 +3,7 @@ import { administrationService } from '@/modules/administration/administration.s
 import { getCurrentCompanyId, getCurrentUser, isSystemContext, isSuperAdmin, runInSystemContext } from '@/shared/context/RequestContext';
 import { ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
 import prisma from '@/shared/database/prisma';
+import { resolveManagedEmployeeIds } from './manager-team';
 
 /** Server-derived predicate, independent of request query/body fields. */
 export async function employeeAccessWhere(resource = 'employee'): Promise<Prisma.EmployeeWhereInput> {
@@ -16,7 +17,7 @@ export async function employeeAccessWhere(resource = 'employee'): Promise<Prisma
   if (!actor || !companyId) throw new ForbiddenError('Employee access requires an active company context');
   const user: {
     id: string; roles?: string[]; companyId: string; employeeId?: string; companyScope?: string[]; groupId?: string;
-    branchId?: string | null; departmentId?: string | null; subDepartmentId?: string | null;
+    branchId?: string | null; departmentId?: string | null; subDepartmentId?: string | null; teamEmployeeIds?: string[];
   } = { id: actor.id, roles: actor.roles, companyScope: actor.companyScope, companyId, employeeId: actor.employeeId ?? undefined, groupId: actor.groupId ?? undefined };
   const scope = await administrationService.findMyDataScopeByUser(companyId, user, resource);
   // For OWN_* dynamic scopes, resolve the requester's CURRENT org unit once
@@ -27,6 +28,10 @@ export async function employeeAccessWhere(resource = 'employee'): Promise<Prisma
     user.branchId = self?.branchId ?? null;
     user.departmentId = self?.departmentId ?? null;
     user.subDepartmentId = self?.subDepartmentId ?? null;
+  }
+  // MANAGER_TEAM: resolve the ids the manager heads (self only when they head none).
+  if (actor.employeeId && scope?.scopeType === 'MANAGER_TEAM') {
+    user.teamEmployeeIds = await resolveManagedEmployeeIds(companyId, actor.employeeId);
   }
   // The queried model remains Employee, including when a payroll permission
   // supplies the scope. Self must therefore resolve to id, not employeeId.

@@ -17,6 +17,8 @@ interface UserContext {
   branchId?: string | null;
   departmentId?: string | null;
   subDepartmentId?: string | null;
+  /** Employee ids the requester manages — populated for the MANAGER_TEAM scope. */
+  teamEmployeeIds?: string[];
 }
 
 export class AdministrationService {
@@ -195,6 +197,14 @@ export class AdministrationService {
         return ownField('departmentId', user.departmentId);
       case 'OWN_SUB_DEPARTMENT':
         return ownField('subDepartmentId', user.subDepartmentId);
+      case 'MANAGER_TEAM': {
+        // Team ids are pre-resolved from the manager's headed units (like OWN_*
+        // resolves the current org unit). Fail closed: a requester who manages
+        // no one has no team scope (own-record access is a separate EMPLOYEE_SELF).
+        const ids = user.teamEmployeeIds ?? [];
+        if (ids.length === 0) throw new ForbiddenError('Manager scope has no team');
+        return { [resource === 'employee' ? 'id' : 'employeeId']: { in: ids } };
+      }
     }
 
     switch (scopeType) {
@@ -233,11 +243,6 @@ export class AdministrationService {
           filter.employeeId = user.employeeId;
         }
         break;
-
-      case 'MANAGER_TEAM':
-        // Position hierarchy does not establish an employee reporting line.
-        // Deny until an authoritative employee hierarchy is available.
-        throw new ForbiddenError('Manager team scope is not available');
 
       default:
         throw new ForbiddenError('Unsupported data scope');
