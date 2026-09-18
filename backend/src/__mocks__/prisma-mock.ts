@@ -11,6 +11,10 @@ const COMPANY_SCOPED_MODELS = [
   'expenseApproval',
   'shiftSwapRequest',
   'overtimeRequest',
+  'mobileDeviceRegistration',
+  'pushNotificationDelivery',
+  'payrollUnlockSession',
+  'payrollUnlockGuard',
   'role',
   'permission',
   'rolePermission',
@@ -18,6 +22,7 @@ const COMPANY_SCOPED_MODELS = [
   'leaveType',
   'loanType',
   'employee',
+  'user',
 ];
 
 function makeMockModel(_name: string) {

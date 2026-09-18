@@ -25,6 +25,11 @@ export const payslipIdParamSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const payrollUnlockSchema = z.object({
+  password: z.string().min(1).max(128),
+  totp: z.string().trim().min(6).max(20).optional(),
+});
+
 export const periodIdParamSchema = z.object({
   periodId: z.string().uuid(),
 });

@@ -14,5 +14,11 @@ export const markReadSchema = z.object({
   ids: z.array(z.string().uuid()).min(1),
 });
 
+export const notificationListQuerySchema = z.object({
+  unreadOnly: z.enum(['true', 'false']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
 export type CreateNotificationDTO = z.infer<typeof createNotificationSchema>;
 export type MarkReadDTO = z.infer<typeof markReadSchema>;

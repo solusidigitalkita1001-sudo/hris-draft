@@ -262,27 +262,34 @@ export class WorkflowEngineRepository {
     return [userId, ...delegations.map((d) => d.delegatorId)];
   }
 
-  async findMyApprovals(companyId: string, userId: string, roles: string[]) {
+  async findMyApprovals(companyId: string, userId: string, roles: string[], page = 1, limit = 20) {
     const actorIds = await this.resolveDelegatedApproverIds(userId);
-    return prisma.workflowInstanceStep.findMany({
-      where: {
-        instance: { companyId },
-        isCurrent: true,
-        status: 'PENDING',
-        OR: [
-          { approverId: { in: actorIds } },
-          { approverRoleCode: { in: roles } },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        instance: {
-          include: {
-            template: { select: { id: true, name: true, approvalType: true } },
+    const where = {
+      instance: { companyId },
+      isCurrent: true,
+      status: 'PENDING' as const,
+      OR: [
+        { approverId: { in: actorIds } },
+        { approverRoleCode: { in: roles } },
+      ],
+    };
+    const [items, total] = await Promise.all([
+      prisma.workflowInstanceStep.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          instance: {
+            include: {
+              template: { select: { id: true, name: true, approvalType: true } },
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.workflowInstanceStep.count({ where }),
+    ]);
+    return { items, total };
   }
 
   async findInstanceById(id: string) {

@@ -1,0 +1,260 @@
+{
+  "meta": {
+    "sanitized": true,
+    "generatedFor": "mobile-contract-tests",
+    "apiPrefix": "/api/v1",
+    "timezone": "Asia/Jakarta",
+    "note": "All IDs, identities, tokens, and amounts are synthetic."
+  },
+  "fixtures": {
+    "POST /auth/login": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": {
+          "user": {
+            "id": "10000000-0000-4000-8000-000000000001",
+            "email": "employee@example.test",
+            "employeeId": "20000000-0000-4000-8000-000000000001",
+            "companyId": "30000000-0000-4000-8000-000000000001",
+            "roles": ["EMPLOYEE"],
+            "permissions": ["employee:read", "att:read", "leave:read", "payroll:read"]
+          },
+          "tokens": {
+            "accessToken": "sanitized.access.token",
+            "refreshToken": "sanitized-refresh-token",
+            "expiresIn": 900
+          }
+        }
+      }
+    },
+    "POST /auth/refresh": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": {
+          "tokens": {
+            "accessToken": "rotated.access.token",
+            "refreshToken": "rotated-refresh-token",
+            "expiresIn": 900
+          }
+        }
+      }
+    },
+    "POST /auth/logout": {
+      "status": 200,
+      "body": { "success": true, "message": "Logged out successfully", "data": null }
+    },
+    "GET /auth/me": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": {
+          "id": "10000000-0000-4000-8000-000000000001",
+          "email": "employee@example.test",
+          "employeeId": "20000000-0000-4000-8000-000000000001",
+          "companyId": "30000000-0000-4000-8000-000000000001",
+          "roles": ["EMPLOYEE"],
+          "permissions": ["employee:read", "att:read", "leave:read", "payroll:read"]
+        }
+      }
+    },
+    "POST /auth/change-password": {
+      "status": 200,
+      "body": { "success": true, "message": "Password changed successfully", "data": null }
+    },
+    "GET /attendance/me/today": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": {
+          "serverTime": "2026-09-18T01:15:00.000Z",
+          "serverDate": "2026-09-18",
+          "timezone": "Asia/Jakarta",
+          "record": null,
+          "context": {
+            "workingDay": true,
+            "holiday": false,
+            "allowedMethods": ["MOBILE_GPS", "FACE_RECOGNITION"],
+            "requiresLocation": true,
+            "requiresSelfie": false
+          },
+          "canCheckIn": true,
+          "canCheckOut": false
+        }
+      }
+    },
+    "GET /attendance/me?month=2026-09&page=1&limit=20": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": [],
+        "meta": { "page": 1, "limit": 20, "total": 0, "totalPages": 0, "hasNextPage": false, "hasPreviousPage": false }
+      }
+    },
+    "POST /attendance/me/check-in": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Created successfully",
+        "data": {
+          "id": "40000000-0000-4000-8000-000000000001",
+          "employeeId": "20000000-0000-4000-8000-000000000001",
+          "date": "2026-09-18",
+          "checkIn": "2026-09-18T01:15:00.000Z",
+          "method": "MOBILE_GPS",
+          "status": "PRESENT"
+        }
+      }
+    },
+    "PATCH /attendance/me/check-out": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Updated successfully",
+        "data": {
+          "id": "40000000-0000-4000-8000-000000000001",
+          "checkOut": "2026-09-18T10:00:00.000Z",
+          "status": "PRESENT"
+        }
+      }
+    },
+    "GET /leave/types": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": [{ "id": "50000000-0000-4000-8000-000000000001", "name": "Cuti Tahunan", "isAnnual": true, "requiresAttachment": false }]
+      }
+    },
+    "GET /leave/balances/employee": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": [{ "leaveTypeId": "50000000-0000-4000-8000-000000000001", "year": 2026, "totalDays": 12, "usedDays": 2, "remainingDays": 10 }]
+      }
+    },
+    "GET /leave": {
+      "status": 200,
+      "body": { "success": true, "message": "Success", "data": [], "meta": { "page": 1, "limit": 20, "total": 0, "totalPages": 0, "hasNextPage": false, "hasPreviousPage": false } }
+    },
+    "GET /leave/:id": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": { "id": "60000000-0000-4000-8000-000000000001", "startDate": "2026-09-21", "endDate": "2026-09-22", "duration": 2, "reason": "Keperluan keluarga", "status": "PENDING" }
+      }
+    },
+    "POST /leave": {
+      "status": 201,
+      "body": { "success": true, "message": "Created successfully", "data": { "id": "60000000-0000-4000-8000-000000000001", "status": "PENDING" } }
+    },
+    "PATCH /leave/:id/cancel": {
+      "status": 200,
+      "body": { "success": true, "message": "Updated successfully", "data": { "id": "60000000-0000-4000-8000-000000000001", "status": "CANCELLED" } }
+    },
+    "GET /permission-requests/my": {
+      "status": 200,
+      "body": { "success": true, "message": "Success", "data": [] }
+    },
+    "POST /permission-requests": {
+      "status": 201,
+      "body": { "success": true, "message": "Created successfully", "data": { "id": "70000000-0000-4000-8000-000000000001", "type": "LATE", "status": "PENDING" } }
+    },
+    "PATCH /permission-requests/:id/cancel": {
+      "status": 200,
+      "body": { "success": true, "message": "Updated successfully", "data": { "id": "70000000-0000-4000-8000-000000000001", "status": "CANCELLED" } }
+    },
+    "GET /work-calendars/me/resolved?year=2026&month=9": {
+      "status": 200,
+      "headers": { "X-Office-Timezone": "Asia/Jakarta", "X-Server-Date": "2026-09-18" },
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": {
+          "employee": { "id": "20000000-0000-4000-8000-000000000001", "fullName": "Employee Example" },
+          "period": { "year": 2026, "month": 9 },
+          "timezone": "Asia/Jakarta",
+          "serverDate": "2026-09-18",
+          "days": [{ "date": "2026-09-18", "dayType": "WORKING_DAY", "shift": { "name": "Office", "startTime": "08:00", "endTime": "17:00" } }]
+        }
+      }
+    },
+    "GET /notifications?page=1&limit=50": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": [{ "id": "80000000-0000-4000-8000-000000000001", "title": "Pengajuan disetujui", "message": "Cuti Anda disetujui", "type": "SUCCESS", "resource": "leave", "action": "OPEN", "referenceId": "60000000-0000-4000-8000-000000000001", "isRead": false, "createdAt": "2026-09-18T01:00:00.000Z" }],
+        "meta": { "page": 1, "limit": 50, "total": 1, "totalPages": 1, "hasNextPage": false, "hasPreviousPage": false }
+      }
+    },
+    "GET /notifications/unread-count": {
+      "status": 200,
+      "body": { "success": true, "message": "Success", "data": { "count": 1 } }
+    },
+    "PUT /notifications/read": {
+      "status": 200,
+      "body": { "success": true, "message": "Notifications marked as read", "data": null }
+    },
+    "PUT /notifications/read-all": {
+      "status": 200,
+      "body": { "success": true, "message": "All notifications marked as read", "data": null }
+    },
+    "GET /employees/:id": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Success",
+        "data": { "id": "20000000-0000-4000-8000-000000000001", "employeeNumber": "EMP-EXAMPLE", "fullName": "Employee Example", "email": "employee@example.test", "idNumber": "************1234", "taxId": "********1234" }
+      }
+    },
+    "GET /workflow-engine/instances/my-approvals?page=1&limit=20": {
+      "status": 200,
+      "body": { "success": true, "message": "Success", "data": [], "meta": { "page": 1, "limit": 20, "total": 0, "totalPages": 0, "hasNextPage": false, "hasPreviousPage": false } }
+    },
+    "POST /attendance-corrections": {
+      "status": 201,
+      "body": { "success": true, "message": "Created successfully", "data": { "id": "90000000-0000-4000-8000-000000000001", "status": "PENDING" } }
+    },
+    "GET /attendance-corrections/my": {
+      "status": 200,
+      "body": { "success": true, "message": "Success", "data": [] }
+    },
+    "GET /attendance/overtime": {
+      "status": 200,
+      "body": { "success": true, "message": "Success", "data": [] }
+    },
+    "POST /notifications/device-tokens": {
+      "status": 201,
+      "body": { "success": true, "message": "Device token registered", "data": { "id": "a0000000-0000-4000-8000-000000000001", "installationId": "install-example-0001", "platform": "ANDROID", "provider": "FCM", "isActive": true } }
+    },
+    "GET /payroll/payslips": {
+      "status": 200,
+      "body": { "success": true, "message": "Success", "data": [{ "id": "b0000000-0000-4000-8000-000000000001", "status": "FINALIZED", "locked": true, "payrollRun": { "name": "September 2026", "status": "APPROVED", "period": { "name": "September 2026", "payDate": "2026-09-25T00:00:00.000Z" } } }] }
+    },
+    "POST /payroll/payslips/unlock": {
+      "status": 200,
+      "body": { "success": true, "message": "Payroll unlocked", "data": { "unlockToken": "sanitized-payroll-unlock-grant", "tokenType": "PayrollUnlock", "expiresAt": "2026-09-18T01:20:00.000Z", "expiresIn": 300 } }
+    },
+    "GET /payroll/payslips/:id": {
+      "status": 200,
+      "requestHeaders": { "X-Payroll-Unlock-Token": "sanitized-payroll-unlock-grant" },
+      "body": { "success": true, "message": "Success", "data": { "id": "b0000000-0000-4000-8000-000000000001", "baseSalary": "10000000.00", "totalEarnings": "11000000.00", "totalDeductions": "1500000.00", "netPay": "9500000.00", "components": [] } }
+    }
+  },
+  "errors": {
+    "MFA_REQUIRED": { "status": 401, "body": { "success": false, "code": "MFA_REQUIRED", "message": "MFA code required" } },
+    "IDEMPOTENCY_CONFLICT": { "status": 409, "body": { "success": false, "code": "CONFLICT", "message": "Idempotency key was already used with a different request" } },
+    "PAYROLL_UNLOCK_REQUIRED": { "status": 401, "body": { "success": false, "code": "PAYROLL_UNLOCK_REQUIRED", "message": "Payroll reauthentication is required" } },
+    "PAYROLL_UNLOCK_LOCKED": { "status": 429, "body": { "success": false, "code": "PAYROLL_UNLOCK_LOCKED", "message": "Payroll unlock is temporarily locked" } },
+    "TENANT_NOT_FOUND": { "status": 404, "body": { "success": false, "code": "NOT_FOUND", "message": "Resource not found" } }
+  }
+}

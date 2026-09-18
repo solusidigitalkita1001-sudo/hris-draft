@@ -89,6 +89,13 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
     expect(Object.keys(run.payslips[0].employee).sort()).toEqual(['employeeNumber', 'fullName', 'id']);
     const slip = await detail(f), history = await own(f);
     expect(slip.netPay.toString()).toBe('1000.25'); expect(slip.breakdown.takeHomePay).toBe(1000.25);
+    for (const summary of history) {
+      expect(summary).not.toHaveProperty('baseSalary');
+      expect(summary).not.toHaveProperty('totalEarnings');
+      expect(summary).not.toHaveProperty('totalDeductions');
+      expect(summary).not.toHaveProperty('netPay');
+      expect(summary).not.toHaveProperty('components');
+    }
     for (const row of [slip, ...history]) {
       expect(Object.keys(row.payrollRun).sort()).toEqual(['id', 'name', 'period', 'runNumber', 'status']);
       expect(row.payrollRun.period).not.toHaveProperty('notes');
@@ -193,7 +200,7 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
     expect(slip.components.map(row => row.name)).toEqual(['Frozen salary']);
     expect(slip.formulaCalculations.map(row => row.id)).toEqual([evidence.id]);
     expect(slip.benefitDeductions.map(row => row.id)).toEqual([deductions[0]]);
-    expect((await own(f))[0].components.map(row => row.name)).toEqual(['Frozen salary']);
+    expect((await own(f))[0]).not.toHaveProperty('components');
     expect((await runDetail(f)).payslips.find(row => row.id === f.slip.id)?.components.map(row => row.name)).toEqual(['Frozen salary']);
   });
 

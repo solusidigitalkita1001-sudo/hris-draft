@@ -46,6 +46,65 @@ export class AttendanceRepository {
     return prisma.attendance.findFirst({ where: { employeeId, date: { gte: start, lte: end }, deletedAt: null } });
   }
 
+  async findByEmployeeAndDateRange(employeeId: string, start: Date, end: Date) {
+    return prisma.attendance.findFirst({
+      where: { employeeId, date: { gte: start, lte: end }, deletedAt: null },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true } },
+        branch: { select: { id: true, name: true, code: true } },
+        attendancePolicy: { select: { id: true, attendanceMethod: true } },
+      },
+    });
+  }
+
+  async findLatestOpenByEmployee(employeeId: string, notBefore: Date) {
+    return prisma.attendance.findFirst({
+      where: {
+        employeeId,
+        deletedAt: null,
+        checkIn: { not: null },
+        checkOut: null,
+        date: { gte: notBefore },
+      },
+      orderBy: { checkIn: 'desc' },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true } },
+        branch: { select: { id: true, name: true, code: true } },
+        attendancePolicy: { select: { id: true, attendanceMethod: true } },
+      },
+    });
+  }
+
+  async findMinePaginated(
+    companyId: string,
+    employeeId: string,
+    start: Date,
+    end: Date,
+    page: number,
+    limit: number,
+  ) {
+    const where: Prisma.AttendanceWhereInput = {
+      companyId,
+      employeeId,
+      deletedAt: null,
+      date: { gte: start, lt: end },
+    };
+    const [items, total] = await Promise.all([
+      prisma.attendance.findMany({
+        where,
+        include: {
+          branch: { select: { id: true, name: true, code: true } },
+          attendancePolicy: { select: { id: true, attendanceMethod: true } },
+        },
+        orderBy: { date: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.attendance.count({ where }),
+    ]);
+    return { items, total };
+  }
+
   async create(data: Prisma.AttendanceUncheckedCreateInput) {
     return prisma.attendance.create({
       data,

@@ -467,6 +467,20 @@ export class PayrollRepository {
     });
   }
 
+  async findPayslipSummariesByEmployee(employeeId: string, companyId: string, employeeWhere: Prisma.EmployeeWhereInput, limit = 20) {
+    return prisma.payslip.findMany({
+      where: { employeeId, ...payslipAccessWhere(companyId, employeeWhere), payrollRun: { status: { in: ['APPROVED', 'DISBURSED'] } } },
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        payrollRun: { select: payslipRunSelect },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: limit,
+    });
+  }
+
   async createPayslip(data: Prisma.PayslipCreateInput, database: Prisma.TransactionClient = prisma) {
     return database.payslip.create({ data });
   }

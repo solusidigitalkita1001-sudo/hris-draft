@@ -3,6 +3,64 @@ import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { payrollService } from './payroll.service';
 import { Result } from '@/shared/core/Result';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
+import { payrollUnlockService } from './payroll-unlock.service';
+import PDFDocument from 'pdfkit';
+import { AppError } from '@/shared/exceptions/AppError';
+
+function requiresPayrollUnlock(req: AuthenticatedRequest): boolean {
+  const permissions = req.user?.permissions ?? [];
+  const elevated = req.user?.roles?.includes('SUPER_ADMIN') || permissions.some((permission) =>
+    ['payroll:process', 'payroll:approve', 'payroll:disburse', 'payroll:*'].includes(permission),
+  );
+  return Boolean(req.user?.employeeId) && !elevated;
+}
+
+function payrollUnlockToken(req: AuthenticatedRequest): string | undefined {
+  const value = req.headers['x-payroll-unlock-token'];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function money(value: unknown): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
+}
+
+async function createPayslipPdf(payslip: any): Promise<Buffer> {
+  const document = new PDFDocument({ size: 'A4', margin: 48, info: { Title: `Payslip ${payslip.id}` } });
+  const chunks: Buffer[] = [];
+  document.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+  const completed = new Promise<Buffer>((resolve, reject) => {
+    document.on('end', () => resolve(Buffer.concat(chunks)));
+    document.on('error', reject);
+  });
+
+  document.fontSize(18).text('Slip Gaji', { align: 'center' }).moveDown();
+  document.fontSize(10)
+    .text(`Karyawan: ${payslip.employee?.fullName ?? '-'}`)
+    .text(`Nomor karyawan: ${payslip.employee?.employeeNumber ?? '-'}`)
+    .text(`Periode: ${payslip.payrollRun?.period?.name ?? payslip.payrollRun?.name ?? '-'}`)
+    .text(`Status: ${payslip.status ?? '-'}`)
+    .moveDown();
+  document.fontSize(12).text('Ringkasan').moveDown(0.5);
+  document.fontSize(10)
+    .text(`Gaji pokok: ${money(payslip.baseSalary)}`)
+    .text(`Total pendapatan: ${money(payslip.totalEarnings)}`)
+    .text(`Total potongan: ${money(payslip.totalDeductions)}`)
+    .font('Helvetica-Bold').text(`Gaji bersih: ${money(payslip.netPay)}`).font('Helvetica')
+    .moveDown();
+
+  if (Array.isArray(payslip.components) && payslip.components.length > 0) {
+    document.fontSize(12).text('Komponen').moveDown(0.5);
+    for (const component of payslip.components) {
+      document.fontSize(9).text(`${component.name ?? 'Komponen'} (${component.type ?? '-'})`, { continued: true })
+        .text(money(component.amount), { align: 'right' });
+    }
+  }
+  document.moveDown(2).fontSize(8).fillColor('#666666')
+    .text('Dokumen dibuat otomatis oleh HRIS. Validasi ke HR bila terdapat perbedaan.', { align: 'center' });
+  document.end();
+  return completed;
+}
 
 export class PayrollController {
   // ==================== Salary Components ====================
@@ -250,11 +308,54 @@ export class PayrollController {
 
   // ==================== Payslips ====================
 
-  async findPayslipById(req: Request, res: Response, next: NextFunction) {
+  async unlockPayslips(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const data = await payrollUnlockService.unlock(req.user!, req.body);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(Result.success(data, 'Payroll unlocked'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async lockPayslips(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      await payrollUnlockService.lock(req.user!);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(Result.updated(null, 'Payroll locked'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async findPayslipById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (requiresPayrollUnlock(req)) {
+        await payrollUnlockService.assertGrant(req.user!, payrollUnlockToken(req));
+      }
       const id = req.params.id as string;
       const data = await payrollService.findPayslipById(id);
       res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async downloadPayslipPdf(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (requiresPayrollUnlock(req)) {
+        await payrollUnlockService.assertGrant(req.user!, payrollUnlockToken(req));
+      }
+      const payslip = await payrollService.findPayslipById(req.params.id as string);
+      const pdf = await createPayslipPdf(payslip);
+      if (pdf.byteLength > 5 * 1024 * 1024) {
+        throw new AppError('Generated payslip PDF exceeds the 5 MB limit', 413, 'PAYSLIP_PDF_TOO_LARGE', true);
+      }
+      res.setHeader('Cache-Control', 'no-store, private');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', String(pdf.byteLength));
+      res.setHeader('Content-Disposition', `attachment; filename="payslip-${payslip.id}.pdf"`);
+      res.send(pdf);
     } catch (error) {
       next(error);
     }
@@ -268,7 +369,7 @@ export class PayrollController {
         return res.status(400).json(Result.error('Akun ini tidak tertaut ke data karyawan'));
       }
       const data = await payrollService.findPayslipsByEmployee(employeeId);
-      res.json(Result.success(data));
+      res.json(Result.success(data.map((item) => ({ ...item, locked: true }))));
     } catch (error) {
       next(error);
     }

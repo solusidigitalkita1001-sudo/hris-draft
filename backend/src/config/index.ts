@@ -90,6 +90,17 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 chars'),
   CSRF_SECRET: z.string().min(16, 'CSRF_SECRET must be at least 16 chars'),
   ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 chars (AES-256)'),
+
+  // Native push providers. Optional as a group: delivery is persisted as
+  // BLOCKED_CONFIG until the complete provider credential set is supplied.
+  FCM_PROJECT_ID: z.string().default(''),
+  FCM_CLIENT_EMAIL: z.string().default(''),
+  FCM_PRIVATE_KEY: z.string().default(''),
+  APNS_KEY_ID: z.string().default(''),
+  APNS_TEAM_ID: z.string().default(''),
+  APNS_BUNDLE_ID: z.string().default(''),
+  APNS_PRIVATE_KEY: z.string().default(''),
+  APNS_USE_SANDBOX: z.enum(['true', 'false']).transform((value) => value === 'true').default('false'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -184,6 +195,20 @@ export function buildConfig(env: Env) {
     session: { secret: env.SESSION_SECRET },
     csrf: { secret: env.CSRF_SECRET },
     encryption: { key: env.ENCRYPTION_KEY },
+    push: {
+      fcm: {
+        projectId: env.FCM_PROJECT_ID,
+        clientEmail: env.FCM_CLIENT_EMAIL,
+        privateKey: env.FCM_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      },
+      apns: {
+        keyId: env.APNS_KEY_ID,
+        teamId: env.APNS_TEAM_ID,
+        bundleId: env.APNS_BUNDLE_ID,
+        privateKey: env.APNS_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        sandbox: env.APNS_USE_SANDBOX,
+      },
+    },
   };
 }
 
