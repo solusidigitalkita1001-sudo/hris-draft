@@ -19,9 +19,32 @@ class AttendanceCorrectionService {
     return correction;
   }
 
+  async findByIdForEmployee(id: string, employeeId: string) {
+    const correction = await attendanceCorrectionRepository.findByIdForEmployee(id, employeeId);
+    if (!correction) throw new NotFoundError('Attendance correction not found');
+    return correction;
+  }
+
   async create(data: CreateAttendanceCorrectionDTO) {
     if (!data.requestedCheckIn && !data.requestedCheckOut) {
       throw new BadRequestError('Minimal satu dari requestedCheckIn atau requestedCheckOut harus diisi');
+    }
+    if (data.attendanceId) {
+      const attendance = await prisma.attendance.findFirst({
+        where: {
+          id: data.attendanceId,
+          companyId: data.companyId,
+          employeeId: data.employeeId,
+          deletedAt: null,
+        },
+        select: { date: true },
+      });
+      if (!attendance) throw new NotFoundError('Attendance record not found for this employee');
+      const requestedDate = new Date(data.date).toISOString().slice(0, 10);
+      const attendanceDate = new Date(attendance.date).toISOString().slice(0, 10);
+      if (requestedDate !== attendanceDate) {
+        throw new BadRequestError('Tanggal koreksi harus sama dengan tanggal attendance yang dipilih');
+      }
     }
     await assertPayrollDateOpen(data.companyId, new Date(data.date));
     const correction = await attendanceCorrectionRepository.create(data);

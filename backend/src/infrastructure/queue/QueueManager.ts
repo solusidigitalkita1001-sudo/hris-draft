@@ -8,6 +8,7 @@ export const QueueNames = {
   DOMAIN_EVENTS: 'domain-events',
   PERFORMANCE_AUTOMATION: 'performance-automation',
   LEAVE_AUTOMATION: 'leave-automation',
+  PUSH_NOTIFICATIONS: 'push-notifications',
 } as const;
 
 export class QueueManager {

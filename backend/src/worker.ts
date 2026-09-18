@@ -15,6 +15,7 @@ import { CAREER_TRANSACTION_APPLY_JOB, runCareerTransactionApply, scheduleCareer
 import { OFFBOARDING_APPLY_JOB, runOffboardingApply, scheduleOffboardingApply } from '@/modules/onboarding/offboarding.scheduler';
 import { RETENTION_SWEEP_JOB, runRetentionSweep, scheduleRetentionSweep } from '@/shared/retention/retention.scheduler';
 import { runInSystemContext } from '@/shared/context/RequestContext';
+import { runPushDeliverySweep, schedulePushDeliverySweep } from '@/modules/notification/push-delivery.scheduler';
 
 async function maybeCreateNotification(event: DomainEvent): Promise<void> {
   if (![DomainEvents.USER_LOGGED_IN, DomainEvents.PASSWORD_CHANGED].includes(event.name as any)) {
@@ -100,6 +101,7 @@ async function bootstrapWorker(): Promise<void> {
   await queueManager.getQueueEvents(QueueNames.DOMAIN_EVENTS).waitUntilReady();
   await queueManager.getQueueEvents(QueueNames.PERFORMANCE_AUTOMATION).waitUntilReady();
   await queueManager.getQueueEvents(QueueNames.LEAVE_AUTOMATION).waitUntilReady();
+  await queueManager.getQueueEvents(QueueNames.PUSH_NOTIFICATIONS).waitUntilReady();
 
   queueManager.createWorker<DomainEvent>(
     QueueNames.DOMAIN_EVENTS,
@@ -154,11 +156,18 @@ async function bootstrapWorker(): Promise<void> {
     { concurrency: 1 }
   );
 
+  queueManager.createWorker(
+    QueueNames.PUSH_NOTIFICATIONS,
+    async () => runPushDeliverySweep(),
+    { concurrency: 1 },
+  );
+
   await runInSystemContext('leave-scheduler-bootstrap', () => scheduleYearlyLeaveAccrual());
   await runInSystemContext('workflow-sla-scheduler-bootstrap', () => scheduleWorkflowSlaSweep());
   await runInSystemContext('career-scheduler-bootstrap', () => scheduleCareerTransactionApply());
   await runInSystemContext('offboarding-scheduler-bootstrap', () => scheduleOffboardingApply());
   await runInSystemContext('retention-scheduler-bootstrap', () => scheduleRetentionSweep());
+  await runInSystemContext('push-scheduler-bootstrap', () => schedulePushDeliverySweep());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,
@@ -173,7 +182,7 @@ async function bootstrapWorker(): Promise<void> {
   );
 
   logger.info('Worker ready', {
-    queues: [QueueNames.DOMAIN_EVENTS, QueueNames.PERFORMANCE_AUTOMATION],
+    queues: [QueueNames.DOMAIN_EVENTS, QueueNames.PERFORMANCE_AUTOMATION, QueueNames.LEAVE_AUTOMATION, QueueNames.PUSH_NOTIFICATIONS],
     exchange: config.rabbitmq.exchange,
   });
 

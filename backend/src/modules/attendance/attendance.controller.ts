@@ -2,9 +2,61 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { attendanceService } from './attendance.service';
 import { Result } from '@/shared/core/Result';
-import { ForbiddenError } from '@/shared/exceptions/AppError';
+import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 
 export class AttendanceController {
+  async findMine(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user?.employeeId || !req.user.companyId) {
+        throw new BadRequestError('Akun ini tidak tertaut ke data karyawan dan perusahaan');
+      }
+      const { month, page, limit } = req.query as unknown as {
+        month?: string;
+        page: number;
+        limit: number;
+      };
+      const result = await attendanceService.findMyAttendance(
+        req.user.employeeId,
+        req.user.companyId,
+        { month, page, limit },
+      );
+      res.setHeader('X-Office-Timezone', result.timezone);
+      res.setHeader('X-Server-Date', result.serverDate);
+      res.json(Result.paginated(result.items, result.total, page, limit));
+    } catch (error) { next(error); }
+  }
+
+  async getMyToday(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user?.employeeId || !req.user.companyId) {
+        throw new BadRequestError('Akun ini tidak tertaut ke data karyawan dan perusahaan');
+      }
+      res.json(Result.success(await attendanceService.getMyToday(req.user.employeeId, req.user.companyId)));
+    } catch (error) { next(error); }
+  }
+
+  async checkInSelf(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user?.employeeId || !req.user.companyId) {
+        throw new BadRequestError('Akun ini tidak tertaut ke data karyawan dan perusahaan');
+      }
+      res.status(201).json(Result.created(
+        await attendanceService.checkInSelf(req.user.employeeId, req.user.companyId, req.body),
+      ));
+    } catch (error) { next(error); }
+  }
+
+  async checkOutSelf(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user?.employeeId || !req.user.companyId) {
+        throw new BadRequestError('Akun ini tidak tertaut ke data karyawan dan perusahaan');
+      }
+      res.json(Result.updated(
+        await attendanceService.checkOutSelf(req.user.employeeId, req.user.companyId, req.body),
+      ));
+    } catch (error) { next(error); }
+  }
+
   async findAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await attendanceService.findAll(req.query.companyId as string, {
@@ -93,8 +145,15 @@ export class AttendanceController {
   // Overtime
   async findAllOvertime(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      const canReadOthers = req.user?.roles?.some((role) =>
+        ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(role)
+      ) ?? false;
+      const employeeId = canReadOthers
+        ? req.query.employeeId as string
+        : req.user?.employeeId;
+      if (!employeeId && !canReadOthers) throw new BadRequestError('Akun ini tidak tertaut ke data karyawan');
       const data = await attendanceService.findAllOvertime(req.query.companyId as string, {
-        employeeId: req.query.employeeId as string,
+        employeeId,
         status: req.query.status as string,
       });
       res.json(Result.success(data));
@@ -103,9 +162,15 @@ export class AttendanceController {
 
   async createOvertime(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      if (req.user?.employeeId && !req.body.companyId) {
-        // will be resolved in service or leave as-is if companyId provided in body
+      const canManageOthers = req.user?.roles?.some((role) =>
+        ['SUPER_ADMIN', 'GROUP_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(role)
+      ) ?? false;
+      if (!canManageOthers || !req.body.employeeId) {
+        if (!req.user?.employeeId) throw new BadRequestError('Akun ini tidak tertaut ke data karyawan');
+        req.body.employeeId = req.user.employeeId;
       }
+      if (!req.user?.companyId) throw new BadRequestError('Tidak ada konteks perusahaan aktif');
+      req.body.companyId = req.user.companyId;
       res.status(201).json(Result.created(await attendanceService.createOvertime(req.body)));
     }
     catch (error) { next(error); }

@@ -415,7 +415,10 @@ export class PayrollService {
   async findPayslipsByEmployee(employeeId: string) {
     const { companyId, actor, employeeWhere } = await payrollAccess();
     if (!actor.employeeId || actor.employeeId !== employeeId) throw new ForbiddenError('Self-service payslips require the authenticated employee');
-    return payrollRepository.findPayslipsByEmployee(employeeId, companyId, employeeWhere);
+    // The period list intentionally contains no salary figures or components.
+    // Financial fields are only fetched by the detail endpoint after a short-
+    // lived payroll unlock grant has been verified.
+    return payrollRepository.findPayslipSummariesByEmployee(employeeId, companyId, employeeWhere);
   }
 
   // ==================== Payroll Calculation ====================

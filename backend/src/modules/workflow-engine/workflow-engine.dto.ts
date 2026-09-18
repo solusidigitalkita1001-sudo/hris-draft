@@ -54,6 +54,11 @@ export const bulkApprovalSchema = z.object({
   comment: z.string().max(2000).optional(),
 });
 
+export const myApprovalsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export type WorkflowStageInput = z.infer<typeof workflowStageSchema>;
 export type WorkflowRuleInput = z.infer<typeof workflowRuleSchema>;
 export type CreateWorkflowTemplateDTO = z.infer<typeof createWorkflowTemplateSchema>;

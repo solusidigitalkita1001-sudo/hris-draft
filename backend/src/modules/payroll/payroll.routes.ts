@@ -20,7 +20,7 @@ import {
   calculateBpjsSchema,
   calculateJknSchema,
 } from './payroll.dto';
-import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema } from './payroll.validation';
+import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema, payrollUnlockSchema } from './payroll.validation';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
 
@@ -257,6 +257,27 @@ router.get(
 );
 
 // ==================== Payslips ====================
+router.post(
+  '/payslips/unlock',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(payrollUnlockSchema, 'body'),
+  payrollController.unlockPayslips.bind(payrollController)
+);
+
+router.post(
+  '/payslips/lock',
+  authorize({ resource: 'payroll', action: 'read' }),
+  payrollController.lockPayslips.bind(payrollController)
+);
+
+router.get(
+  '/payslips/:id/pdf',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(payslipIdParamSchema, 'params'),
+  auditView({ action: 'DOWNLOAD_PAYSLIP', entity: 'Payslip' }),
+  payrollController.downloadPayslipPdf.bind(payrollController)
+);
+
 router.get(
   '/payslips/:id',
   authorize({ resource: 'payroll', action: 'read' }),

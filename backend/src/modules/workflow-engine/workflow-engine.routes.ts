@@ -8,6 +8,7 @@ import {
   bulkApprovalSchema,
   createDelegationSchema,
   createWorkflowTemplateSchema,
+  myApprovalsQuerySchema,
   startWorkflowInstanceSchema,
   updateWorkflowTemplateSchema,
   workflowActionSchema,
@@ -27,7 +28,7 @@ router.put('/templates/:id', authorize({ resource: 'workflow', action: 'update' 
 router.delete('/templates/:id', authorize({ resource: 'workflow', action: 'delete' }), workflowEngineController.deleteTemplate.bind(workflowEngineController));
 
 router.get('/instances', authorize({ resource: 'workflow', action: 'read' }), workflowEngineController.findInstances.bind(workflowEngineController));
-router.get('/instances/my-approvals', authorize({ resource: 'workflow', action: 'approve' }), workflowEngineController.findMyApprovals.bind(workflowEngineController));
+router.get('/instances/my-approvals', authorize({ resource: 'workflow', action: 'approve' }), validate(myApprovalsQuerySchema, 'query'), workflowEngineController.findMyApprovals.bind(workflowEngineController));
 router.get('/instances/:id', authorize({ resource: 'workflow', action: 'read' }), workflowEngineController.findInstanceById.bind(workflowEngineController));
 router.post('/instances/start', authorize({ resource: 'workflow', action: 'create' }), validate(startWorkflowInstanceSchema), workflowEngineController.startInstance.bind(workflowEngineController));
 router.post('/instances/:id/actions', authorize({ resource: 'workflow', action: 'approve' }), validate(workflowActionSchema), workflowEngineController.applyAction.bind(workflowEngineController));

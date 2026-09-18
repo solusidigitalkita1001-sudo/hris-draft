@@ -49,6 +49,20 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'leave', action: 'approve', name: 'Approve Leave', module: 'leave', code: 'leave:approve' },
     { resource: 'leave', action: 'export', name: 'Export Leave', module: 'leave', code: 'leave:export' },
 
+    // Work Calendar
+    { resource: 'work-calendar', action: 'create', name: 'Create Work Calendar', module: 'work-calendar', code: 'work-calendar:create' },
+    { resource: 'work-calendar', action: 'read', name: 'Read Work Calendar', module: 'work-calendar', code: 'work-calendar:read' },
+    { resource: 'work-calendar', action: 'update', name: 'Update Work Calendar', module: 'work-calendar', code: 'work-calendar:update' },
+    { resource: 'work-calendar', action: 'delete', name: 'Delete Work Calendar', module: 'work-calendar', code: 'work-calendar:delete' },
+
+    // Permission Requests
+    { resource: 'permission-request', action: 'read', name: 'Read Permission Requests', module: 'permission-request', code: 'permission-request:read' },
+    { resource: 'permission-request', action: 'update', name: 'Review Permission Requests', module: 'permission-request', code: 'permission-request:update' },
+
+    // Employee Loans
+    { resource: 'employee-loan', action: 'read', name: 'Read Employee Loans', module: 'employee-loan', code: 'employee-loan:read' },
+    { resource: 'employee-loan', action: 'update', name: 'Review Employee Loans', module: 'employee-loan', code: 'employee-loan:update' },
+
     // Payroll
     { resource: 'payroll', action: 'create', name: 'Create Payroll', module: 'payroll', code: 'payroll:create' },
     { resource: 'payroll', action: 'read', name: 'Read Payroll', module: 'payroll', code: 'payroll:read' },

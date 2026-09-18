@@ -44,28 +44,28 @@ model CompanyGroup {
 
 /// Company entity under a group
 model Company {
-  payrollFormulaVersions PayrollFormulaVersion[]
-  payrollFormulaAudits PayrollFormulaAudit[]
+  payrollFormulaVersions     PayrollFormulaVersion[]
+  payrollFormulaAudits       PayrollFormulaAudit[]
   payrollFormulaCalculations PayrollFormulaCalculation[]
-  id              String    @id @default(uuid()) @db.VarChar(36)
-  groupId         String    @map("group_id") @db.VarChar(36)
-  name            String    @db.VarChar(255)
-  code            String    @unique @db.VarChar(50)
-  taxId           String?   @map("tax_id") @db.VarChar(50)
-  address         String?   @db.Text
-  phone           String?   @db.VarChar(50)
-  email           String?   @db.VarChar(255)
-  logo            String?   @db.VarChar(500)
-  website         String?   @db.VarChar(500)
-  timezone        String    @default("Asia/Jakarta") @db.VarChar(50)
-  dateFormat      String    @default("DD/MM/YYYY") @map("date_format") @db.VarChar(20)
-  fiscalYearStart String    @default("01-01") @map("fiscal_year_start") @db.VarChar(5)
-  currency        String    @default("IDR") @db.VarChar(10)
-  status          Status    @default(ACTIVE)
-  operationalStatus CompanyOperationalStatus @default(ACTIVE) @map("operational_status")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  deletedAt       DateTime? @map("deleted_at")
+  id                         String                      @id @default(uuid()) @db.VarChar(36)
+  groupId                    String                      @map("group_id") @db.VarChar(36)
+  name                       String                      @db.VarChar(255)
+  code                       String                      @unique @db.VarChar(50)
+  taxId                      String?                     @map("tax_id") @db.VarChar(50)
+  address                    String?                     @db.Text
+  phone                      String?                     @db.VarChar(50)
+  email                      String?                     @db.VarChar(255)
+  logo                       String?                     @db.VarChar(500)
+  website                    String?                     @db.VarChar(500)
+  timezone                   String                      @default("Asia/Jakarta") @db.VarChar(50)
+  dateFormat                 String                      @default("DD/MM/YYYY") @map("date_format") @db.VarChar(20)
+  fiscalYearStart            String                      @default("01-01") @map("fiscal_year_start") @db.VarChar(5)
+  currency                   String                      @default("IDR") @db.VarChar(10)
+  status                     Status                      @default(ACTIVE)
+  operationalStatus          CompanyOperationalStatus    @default(ACTIVE) @map("operational_status")
+  createdAt                  DateTime                    @default(now()) @map("created_at")
+  updatedAt                  DateTime                    @updatedAt @map("updated_at")
+  deletedAt                  DateTime?                   @map("deleted_at")
 
   group                                 CompanyGroup                           @relation(fields: [groupId], references: [id], onDelete: Restrict)
   branches                              Branch[]
@@ -141,9 +141,9 @@ model Company {
   /// D.2 Engagement Surveys
   surveys                               Survey[]
   /// D.3 E-Signature wrapper transactions
-  esignatureTransactions               ESignatureTransaction[]
-  offers                               Offer[]
-  approvalDelegations                  ApprovalDelegation[]
+  esignatureTransactions                ESignatureTransaction[]
+  offers                                Offer[]
+  approvalDelegations                   ApprovalDelegation[]
   leaveTypes                            LeaveType[]
   leaveBalances                         LeaveBalance[]
   leaveRequests                         LeaveRequest[]
@@ -153,6 +153,10 @@ model Company {
   workCalendars                         WorkCalendar[]
   nationalHolidays                      NationalHoliday[]
   notifications                         Notification[]
+  mobileDeviceRegistrations             MobileDeviceRegistration[]
+  pushNotificationDeliveries            PushNotificationDelivery[]
+  payrollUnlockSessions                 PayrollUnlockSession[]
+  payrollUnlockGuards                   PayrollUnlockGuard[]
   permissionRequests                    PermissionRequest[]
   loanTypes                             LoanType[]
   loans                                 Loan[]
@@ -344,24 +348,24 @@ model Position {
 
 /// Master data for salary components (Gaji Pokok, Tunjangan Makan, BPJS, etc)
 model SalaryComponent {
-  formulaVersions PayrollFormulaVersion[]
+  formulaVersions     PayrollFormulaVersion[]
   formulaCalculations PayrollFormulaCalculation[]
-  id                String     @id @default(uuid()) @db.VarChar(36)
-  companyId         String     @map("company_id") @db.VarChar(36)
-  name              String     @db.VarChar(255)
-  code              String     @db.VarChar(50)
-  type              SalaryType @default(ALLOWANCE)
-  calculationMethod String     @default("FIXED") @map("calculation_method") @db.VarChar(50)
-  amount            Decimal?   @db.Decimal(15, 2)
-  ratePercent       Decimal?   @map("rate_percent") @db.Decimal(5, 2)
-  isTaxable         Boolean    @default(true) @map("is_taxable")
-  isProrated        Boolean    @default(false) @map("is_prorated")
-  isActive          Boolean    @default(true) @map("is_active")
-  description       String?    @db.Text
-  sortOrder         Int        @default(0) @map("sort_order")
-  createdAt         DateTime   @default(now()) @map("created_at")
-  updatedAt         DateTime   @updatedAt @map("updated_at")
-  deletedAt         DateTime?  @map("deleted_at")
+  id                  String                      @id @default(uuid()) @db.VarChar(36)
+  companyId           String                      @map("company_id") @db.VarChar(36)
+  name                String                      @db.VarChar(255)
+  code                String                      @db.VarChar(50)
+  type                SalaryType                  @default(ALLOWANCE)
+  calculationMethod   String                      @default("FIXED") @map("calculation_method") @db.VarChar(50)
+  amount              Decimal?                    @db.Decimal(15, 2)
+  ratePercent         Decimal?                    @map("rate_percent") @db.Decimal(5, 2)
+  isTaxable           Boolean                     @default(true) @map("is_taxable")
+  isProrated          Boolean                     @default(false) @map("is_prorated")
+  isActive            Boolean                     @default(true) @map("is_active")
+  description         String?                     @db.Text
+  sortOrder           Int                         @default(0) @map("sort_order")
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  deletedAt           DateTime?                   @map("deleted_at")
 
   company           Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
   employeeSalaries  EmployeeSalaryComponent[]
@@ -417,24 +421,24 @@ model EmployeeSalaryComponent {
 
 /// Payroll periods (monthly, biweekly, etc)
 model PayrollPeriod {
-  id        String           @id @default(uuid()) @db.VarChar(36)
-  companyId String           @map("company_id") @db.VarChar(36)
-  name      String           @db.VarChar(255)
-  code      String           @unique @db.VarChar(50)
-  frequency PayrollFrequency @default(MONTHLY)
-  startDate DateTime         @map("start_date")
-  endDate   DateTime         @map("end_date")
-  payDate   DateTime         @map("pay_date")
-  status                  PayrollStatus    @default(DRAFT)
-  attendanceReviewedAt    DateTime?        @map("attendance_reviewed_at")
-  attendanceReviewedBy    String?          @map("attendance_reviewed_by") @db.VarChar(36)
-  notes     String?          @db.Text
-  createdAt DateTime         @default(now()) @map("created_at")
-  updatedAt DateTime         @updatedAt @map("updated_at")
-  deletedAt DateTime?        @map("deleted_at")
+  id                   String           @id @default(uuid()) @db.VarChar(36)
+  companyId            String           @map("company_id") @db.VarChar(36)
+  name                 String           @db.VarChar(255)
+  code                 String           @unique @db.VarChar(50)
+  frequency            PayrollFrequency @default(MONTHLY)
+  startDate            DateTime         @map("start_date")
+  endDate              DateTime         @map("end_date")
+  payDate              DateTime         @map("pay_date")
+  status               PayrollStatus    @default(DRAFT)
+  attendanceReviewedAt DateTime?        @map("attendance_reviewed_at")
+  attendanceReviewedBy String?          @map("attendance_reviewed_by") @db.VarChar(36)
+  notes                String?          @db.Text
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  deletedAt            DateTime?        @map("deleted_at")
 
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  payrollRuns PayrollRun[]
+  company            Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payrollRuns        PayrollRun[]
   /// C.4 EWA: List request tarik gaji awal yang reference periode ini
   earnedWageAccesses EarnedWageAccess[]
 
@@ -447,36 +451,36 @@ model PayrollPeriod {
 /// Payroll run — generated from a period
 model PayrollRun {
   formulaCalculations PayrollFormulaCalculation[]
-  id              String           @id @default(uuid()) @db.VarChar(36)
-  periodId        String           @map("period_id") @db.VarChar(36)
-  companyId       String           @map("company_id") @db.VarChar(36)
-  name            String           @db.VarChar(255)
-  runNumber       Int              @map("run_number")
-  totalEmployees  Int              @default(0) @map("total_employees")
-  totalEarnings   Decimal          @default(0) @map("total_earnings") @db.Decimal(15, 2)
-  totalDeductions Decimal          @default(0) @map("total_deductions") @db.Decimal(15, 2)
-  totalNetPay     Decimal          @default(0) @map("total_net_pay") @db.Decimal(15, 2)
-  status          PayrollRunStatus @default(DRAFT)
-  createdBy       String?          @map("created_by") @db.VarChar(36)
-  approvedBy      String?          @map("approved_by") @db.VarChar(36)
-  approvedAt      DateTime?        @map("approved_at")
-  disbursedBy     String?          @map("disbursed_by") @db.VarChar(36)
-  disbursedAt     DateTime?        @map("disbursed_at")
+  id                  String                      @id @default(uuid()) @db.VarChar(36)
+  periodId            String                      @map("period_id") @db.VarChar(36)
+  companyId           String                      @map("company_id") @db.VarChar(36)
+  name                String                      @db.VarChar(255)
+  runNumber           Int                         @map("run_number")
+  totalEmployees      Int                         @default(0) @map("total_employees")
+  totalEarnings       Decimal                     @default(0) @map("total_earnings") @db.Decimal(15, 2)
+  totalDeductions     Decimal                     @default(0) @map("total_deductions") @db.Decimal(15, 2)
+  totalNetPay         Decimal                     @default(0) @map("total_net_pay") @db.Decimal(15, 2)
+  status              PayrollRunStatus            @default(DRAFT)
+  createdBy           String?                     @map("created_by") @db.VarChar(36)
+  approvedBy          String?                     @map("approved_by") @db.VarChar(36)
+  approvedAt          DateTime?                   @map("approved_at")
+  disbursedBy         String?                     @map("disbursed_by") @db.VarChar(36)
+  disbursedAt         DateTime?                   @map("disbursed_at")
   /// Frozen tax/BPJS/late-deduction configuration used by this run, so a
   /// closed run's numbers stay re-derivable after reference tables change.
-  policySnapshot  Json?            @map("policy_snapshot")
-  notes           String?          @db.Text
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
-  deletedAt       DateTime?        @map("deleted_at")
+  policySnapshot      Json?                       @map("policy_snapshot")
+  notes               String?                     @db.Text
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  deletedAt           DateTime?                   @map("deleted_at")
 
-  period   PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  company  Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  payslips Payslip[]
-  paymentBatch PayrollPaymentBatch?
+  period                 PayrollPeriod                  @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  company                Company                        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payslips               Payslip[]
+  paymentBatch           PayrollPaymentBatch?
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
   /// C.4 EWA: list employee tarik gaji awal yang di-deducted di run ini
-  earnedWageAccesses EarnedWageAccess[]
+  earnedWageAccesses     EarnedWageAccess[]
 
   @@index([periodId])
   @@index([companyId])
@@ -486,45 +490,85 @@ model PayrollRun {
 
 /// Payslip — one per employee per payroll run
 model Payslip {
-  formulaCalculations PayrollFormulaCalculation[]
-  id               String        @id @default(uuid()) @db.VarChar(36)
-  payrollRunId     String        @map("payroll_run_id") @db.VarChar(36)
-  employeeId       String        @map("employee_id") @db.VarChar(36)
-  companyId        String        @map("company_id") @db.VarChar(36)
-  employeeSalaryId String?       @map("employee_salary_id") @db.VarChar(36)
-  baseSalary       Decimal       @map("base_salary") @db.Decimal(15, 2)
-  totalEarnings    Decimal       @default(0) @map("total_earnings") @db.Decimal(15, 2)
-  totalDeductions  Decimal       @default(0) @map("total_deductions") @db.Decimal(15, 2)
-  netPay           Decimal       @default(0) @map("net_pay") @db.Decimal(15, 2)
-  workDays         Int           @default(0) @map("work_days")
-  presentDays      Int           @default(0) @map("present_days")
-  leaveDays        Int           @default(0) @map("leave_days")
-  absentDays       Int           @default(0) @map("absent_days")
-  overtimeHours    Decimal       @default(0) @map("overtime_hours") @db.Decimal(10, 2)
+  formulaCalculations  PayrollFormulaCalculation[]
+  id                   String                      @id @default(uuid()) @db.VarChar(36)
+  payrollRunId         String                      @map("payroll_run_id") @db.VarChar(36)
+  employeeId           String                      @map("employee_id") @db.VarChar(36)
+  companyId            String                      @map("company_id") @db.VarChar(36)
+  employeeSalaryId     String?                     @map("employee_salary_id") @db.VarChar(36)
+  baseSalary           Decimal                     @map("base_salary") @db.Decimal(15, 2)
+  totalEarnings        Decimal                     @default(0) @map("total_earnings") @db.Decimal(15, 2)
+  totalDeductions      Decimal                     @default(0) @map("total_deductions") @db.Decimal(15, 2)
+  netPay               Decimal                     @default(0) @map("net_pay") @db.Decimal(15, 2)
+  workDays             Int                         @default(0) @map("work_days")
+  presentDays          Int                         @default(0) @map("present_days")
+  leaveDays            Int                         @default(0) @map("leave_days")
+  absentDays           Int                         @default(0) @map("absent_days")
+  overtimeHours        Decimal                     @default(0) @map("overtime_hours") @db.Decimal(10, 2)
   /// Workday/holiday split behind the overtime amount (different statutory bands).
-  overtimeWorkdayHours Decimal   @default(0) @map("overtime_workday_hours") @db.Decimal(10, 2)
-  overtimeHolidayHours Decimal   @default(0) @map("overtime_holiday_hours") @db.Decimal(10, 2)
+  overtimeWorkdayHours Decimal                     @default(0) @map("overtime_workday_hours") @db.Decimal(10, 2)
+  overtimeHolidayHours Decimal                     @default(0) @map("overtime_holiday_hours") @db.Decimal(10, 2)
   /// Employee org context frozen at calculation (dept/position/status names),
   /// so historical payslips stop re-reading the live employee row.
-  employeeSnapshot Json?         @map("employee_snapshot")
-  status           PayslipStatus @default(DRAFT)
-  notes            String?       @db.Text
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
+  employeeSnapshot     Json?                       @map("employee_snapshot")
+  status               PayslipStatus               @default(DRAFT)
+  notes                String?                     @db.Text
+  createdAt            DateTime                    @default(now()) @map("created_at")
+  updatedAt            DateTime                    @updatedAt @map("updated_at")
 
-  payrollRun        PayrollRun         @relation(fields: [payrollRunId], references: [id], onDelete: Restrict)
-  employee          Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  company           Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  employeeSalary    EmployeeSalary?    @relation(fields: [employeeSalaryId], references: [id], onDelete: SetNull)
-  components        PayslipComponent[]
-  benefitDeductions BenefitDeduction[]
-  paymentTransactions PayrollPaymentTransaction[]
+  payrollRun             PayrollRun                     @relation(fields: [payrollRunId], references: [id], onDelete: Restrict)
+  employee               Employee                       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company                Company                        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employeeSalary         EmployeeSalary?                @relation(fields: [employeeSalaryId], references: [id], onDelete: SetNull)
+  components             PayslipComponent[]
+  benefitDeductions      BenefitDeduction[]
+  paymentTransactions    PayrollPaymentTransaction[]
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
 
   @@index([payrollRunId])
   @@index([employeeId])
   @@index([companyId])
   @@map("payslips")
+}
+
+/// Short-lived proof that a user reauthenticated before reading payroll values.
+/// Only a SHA-256 digest is persisted; the bearer grant is returned once.
+model PayrollUnlockSession {
+  id         String    @id @default(uuid()) @db.VarChar(36)
+  companyId  String    @map("company_id") @db.VarChar(36)
+  userId     String    @map("user_id") @db.VarChar(36)
+  employeeId String    @map("employee_id") @db.VarChar(36)
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime  @map("expires_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId, expiresAt])
+  @@index([employeeId, expiresAt])
+  @@map("payroll_unlock_sessions")
+}
+
+/// Dedicated reauthentication lockout state. Login lockouts and payroll
+/// lockouts remain independent so a payroll typo cannot terminate the session.
+model PayrollUnlockGuard {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  companyId      String    @map("company_id") @db.VarChar(36)
+  userId         String    @map("user_id") @db.VarChar(36)
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lockedUntil    DateTime? @map("locked_until")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([lockedUntil])
+  @@map("payroll_unlock_guards")
 }
 
 /// Immutable bank and amount snapshots for manual bank-file exports and reconciliation.
@@ -556,26 +600,26 @@ model PayrollPaymentBatch {
 }
 
 model PayrollPaymentTransaction {
-  id                  String                          @id @default(uuid()) @db.VarChar(36)
-  companyId           String                          @map("company_id") @db.VarChar(36)
-  batchId             String                          @map("batch_id") @db.VarChar(36)
-  payslipId           String                          @map("payslip_id") @db.VarChar(36)
-  employeeId          String                          @map("employee_id") @db.VarChar(36)
-  employeeName        String                          @map("employee_name") @db.VarChar(510)
-  bankCode            String                          @map("bank_code") @db.VarChar(20)
-  bankName            String                          @map("bank_name") @db.VarChar(255)
-  accountNumber       String                          @map("account_number") @db.VarChar(100)
-  accountHolder       String                          @map("account_holder") @db.VarChar(255)
-  referenceNo         String                          @map("reference_no") @db.VarChar(100)
-  expectedAmount      Decimal                         @map("expected_amount") @db.Decimal(15, 2)
-  paidAmount          Decimal?                        @map("paid_amount") @db.Decimal(15, 2)
-  status              PayrollPaymentTransactionStatus @default(PENDING)
-  bankReference       String?                         @map("bank_reference") @db.VarChar(100)
-  failureReason       String?                         @map("failure_reason") @db.VarChar(500)
-  recordedBy          String?                         @map("recorded_by") @db.VarChar(36)
-  recordedAt          DateTime?                       @map("recorded_at")
-  createdAt           DateTime                        @default(now()) @map("created_at")
-  updatedAt           DateTime                        @updatedAt @map("updated_at")
+  id             String                          @id @default(uuid()) @db.VarChar(36)
+  companyId      String                          @map("company_id") @db.VarChar(36)
+  batchId        String                          @map("batch_id") @db.VarChar(36)
+  payslipId      String                          @map("payslip_id") @db.VarChar(36)
+  employeeId     String                          @map("employee_id") @db.VarChar(36)
+  employeeName   String                          @map("employee_name") @db.VarChar(510)
+  bankCode       String                          @map("bank_code") @db.VarChar(20)
+  bankName       String                          @map("bank_name") @db.VarChar(255)
+  accountNumber  String                          @map("account_number") @db.VarChar(100)
+  accountHolder  String                          @map("account_holder") @db.VarChar(255)
+  referenceNo    String                          @map("reference_no") @db.VarChar(100)
+  expectedAmount Decimal                         @map("expected_amount") @db.Decimal(15, 2)
+  paidAmount     Decimal?                        @map("paid_amount") @db.Decimal(15, 2)
+  status         PayrollPaymentTransactionStatus @default(PENDING)
+  bankReference  String?                         @map("bank_reference") @db.VarChar(100)
+  failureReason  String?                         @map("failure_reason") @db.VarChar(500)
+  recordedBy     String?                         @map("recorded_by") @db.VarChar(36)
+  recordedAt     DateTime?                       @map("recorded_at")
+  createdAt      DateTime                        @default(now()) @map("created_at")
+  updatedAt      DateTime                        @updatedAt @map("updated_at")
 
   company Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
   batch   PayrollPaymentBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
@@ -685,17 +729,17 @@ model PayslipComponent {
 /// PPh 21 progressive tax bracket (UU HPP 2022 or latest peraturan DJP).
 /// Global scope (companyId=null) or per-company custom override.
 model TaxBracket {
-  id         String   @id @default(uuid()) @db.VarChar(36)
-  companyId  String?  @map("company_id") @db.VarChar(36)
-  year       Int
-  level      Int      /// Tier sequential number (1 lowest → 5 highest)
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  companyId   String?  @map("company_id") @db.VarChar(36)
+  year        Int
+  level       Int /// Tier sequential number (1 lowest → 5 highest)
   upperBound  Decimal  @map("upper_bound") @db.Decimal(18, 2) /// Max PKP in this bracket; Infinity = 999e15 stored as sentinel
-  ratePercent Decimal @map("rate_percent") @db.Decimal(5, 4)
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  ratePercent Decimal  @map("rate_percent") @db.Decimal(5, 4)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  company    Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, year, level])
   @@index([year])
@@ -705,18 +749,18 @@ model TaxBracket {
 /// PTKP = Penghasilan Tidak Kena Pajak per status pernikahan & jumlah tanggungan.
 /// (TK/0 = single no dependents, K/1 = married +1 child, capped MAX 3 tanggungan).
 model PtkpTable {
-  id             String   @id @default(uuid()) @db.VarChar(36)
-  companyId      String?  @map("company_id") @db.VarChar(36)
-  year           Int
-  maritalStatus  String   @map("marital_status") @db.VarChar(10) /// TK/K
-  dependents     Int      /// 0..MAX_DEPENDENTS(3)
-  amount         Decimal  @db.Decimal(15, 2) /// Rupiah per tahun
-  description    String?  @db.VarChar(255)    /// e.g. "K/3 (Menikah 3 anak)"
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  companyId     String?  @map("company_id") @db.VarChar(36)
+  year          Int
+  maritalStatus String   @map("marital_status") @db.VarChar(10) /// TK/K
+  dependents    Int /// 0..MAX_DEPENDENTS(3)
+  amount        Decimal  @db.Decimal(15, 2) /// Rupiah per tahun
+  description   String?  @db.VarChar(255) /// e.g. "K/3 (Menikah 3 anak)"
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  company        Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, year, maritalStatus, dependents])
   @@index([year])
@@ -724,41 +768,41 @@ model PtkpTable {
 }
 
 enum JKKRiskClass {
-  I      /// Resiko sangat rendah (perkantoran)   → JKK 0.24%
-  II     /// Resiko rendah (perdagangan)        → JKK 0.54%
-  III    /// Resiko sedang (manufaktur ringan)  → JKK 0.89%
-  IV     /// Resiko tinggi (manufaktur berat)   → JKK 1.27%
-  V      /// Resiko sangat tinggi (tambang/logistik) → JKK 1.74%
+  I /// Resiko sangat rendah (perkantoran)   → JKK 0.24%
+  II /// Resiko rendah (perdagangan)        → JKK 0.54%
+  III /// Resiko sedang (manufaktur ringan)  → JKK 0.89%
+  IV /// Resiko tinggi (manufaktur berat)   → JKK 1.27%
+  V /// Resiko sangat tinggi (tambang/logistik) → JKK 1.74%
 }
 
 enum BankCode {
-  BCA      /// Bank Central Asia (BCA KlikBCA bulk)
-  MANDIRI  /// Bank Mandiri
-  BNI      /// Bank Negara Indonesia (BNI e-Collect)
-  OTHER    /// Bank custom lainnya (input manual bankName)
+  BCA /// Bank Central Asia (BCA KlikBCA bulk)
+  MANDIRI /// Bank Mandiri
+  BNI /// Bank Negara Indonesia (BNI e-Collect)
+  OTHER /// Bank custom lainnya (input manual bankName)
 }
 
 /// BPJS Ketenagakerjaan + Kesehatan config defaults per year, or custom per-company.
 model BpjsReference {
-  id                String      @id @default(uuid()) @db.VarChar(36)
-  companyId         String?     @map("company_id") @db.VarChar(36)
-  year              Int
-  jkkRiskClass      JKKRiskClass @default(I) @map("jkk_risk_class")
-  jkkRatePercent    Decimal     @map("jkk_rate_percent") @db.Decimal(5, 4)
-  jkmRatePercent    Decimal     @map("jkm_rate_percent") @db.Decimal(5, 4)
-  jhtEmployerPercent Decimal    @map("jht_employer_percent") @db.Decimal(5, 4)
-  jhtEmployeePercent Decimal    @map("jht_employee_percent") @db.Decimal(5, 4)
-  jpEmployerPercent  Decimal    @map("jp_employer_percent") @db.Decimal(5, 4)
-  jpEmployeePercent  Decimal    @map("jp_employee_percent") @db.Decimal(5, 4)
-  jpWageCap          Decimal    @map("jp_wage_cap") @db.Decimal(15, 2)  /// Upah batas atas Jaminan Pensiun
-  jknEmployerPercent Decimal    @map("jkn_employer_percent") @db.Decimal(5, 4)
-  jknEmployeePercent Decimal    @map("jkn_employee_percent") @db.Decimal(5, 4)
-  jknWageCap         Decimal    @map("jkn_wage_cap") @db.Decimal(15, 2)  /// Upah batas atas BPJS Kesehatan
-  isActive           Boolean    @default(true) @map("is_active")
-  createdAt          DateTime   @default(now()) @map("created_at")
-  updatedAt          DateTime   @updatedAt @map("updated_at")
+  id                 String       @id @default(uuid()) @db.VarChar(36)
+  companyId          String?      @map("company_id") @db.VarChar(36)
+  year               Int
+  jkkRiskClass       JKKRiskClass @default(I) @map("jkk_risk_class")
+  jkkRatePercent     Decimal      @map("jkk_rate_percent") @db.Decimal(5, 4)
+  jkmRatePercent     Decimal      @map("jkm_rate_percent") @db.Decimal(5, 4)
+  jhtEmployerPercent Decimal      @map("jht_employer_percent") @db.Decimal(5, 4)
+  jhtEmployeePercent Decimal      @map("jht_employee_percent") @db.Decimal(5, 4)
+  jpEmployerPercent  Decimal      @map("jp_employer_percent") @db.Decimal(5, 4)
+  jpEmployeePercent  Decimal      @map("jp_employee_percent") @db.Decimal(5, 4)
+  jpWageCap          Decimal      @map("jp_wage_cap") @db.Decimal(15, 2) /// Upah batas atas Jaminan Pensiun
+  jknEmployerPercent Decimal      @map("jkn_employer_percent") @db.Decimal(5, 4)
+  jknEmployeePercent Decimal      @map("jkn_employee_percent") @db.Decimal(5, 4)
+  jknWageCap         Decimal      @map("jkn_wage_cap") @db.Decimal(15, 2) /// Upah batas atas BPJS Kesehatan
+  isActive           Boolean      @default(true) @map("is_active")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  company            Company?   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, year, jkkRiskClass])
   @@index([year])
@@ -769,17 +813,17 @@ model BpjsReference {
 /// Satu karyawan bisa punya beberapa rekening (mis. BCA gaji pokok, BNI tunjangan proyek).
 /// Disbursement pilih yang `isPrimary=true`, atau fallback ke legacy fields Employee.bankName.
 model EmployeeBankAccount {
-  id              String    @id @default(uuid()) @db.VarChar(36)
-  employeeId      String    @map("employee_id") @db.VarChar(36)
-  companyId       String    @map("company_id") @db.VarChar(36)
-  bankCode        BankCode  @default(OTHER) @map("bank_code")
-  bankName        String?   @map("bank_name") @db.VarChar(255)  /// Free text bank custom jika code=OTHER
-  accountNumber   String    @map("account_number") @db.VarChar(50)
-  accountHolder   String    @map("account_holder") @db.VarChar(255)
-  isPrimary       Boolean   @default(false) @map("is_primary")   /// Cuma SATU per employee (validasi app level)
-  isActive        Boolean   @default(true) @map("is_active")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  employeeId    String   @map("employee_id") @db.VarChar(36)
+  companyId     String   @map("company_id") @db.VarChar(36)
+  bankCode      BankCode @default(OTHER) @map("bank_code")
+  bankName      String?  @map("bank_name") @db.VarChar(255) /// Free text bank custom jika code=OTHER
+  accountNumber String   @map("account_number") @db.VarChar(50)
+  accountHolder String   @map("account_holder") @db.VarChar(255)
+  isPrimary     Boolean  @default(false) @map("is_primary") /// Cuma SATU per employee (validasi app level)
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
@@ -1906,20 +1950,20 @@ model Candidate {
 
 /// Job application (links candidate to job posting)
 model JobApplication {
-  id             String            @id @default(uuid()) @db.VarChar(36)
-  jobPostingId   String            @map("job_posting_id") @db.VarChar(36)
-  candidateId    String            @map("candidate_id") @db.VarChar(36)
-  companyId      String            @map("company_id") @db.VarChar(36)
-  status         ApplicationStatus @default(NEW)
-  coverLetter    String?           @map("cover_letter") @db.Text
-  expectedSalary Decimal?          @map("expected_salary") @db.Decimal(15, 2)
-  notes          String?           @db.Text
+  id              String            @id @default(uuid()) @db.VarChar(36)
+  jobPostingId    String            @map("job_posting_id") @db.VarChar(36)
+  candidateId     String            @map("candidate_id") @db.VarChar(36)
+  companyId       String            @map("company_id") @db.VarChar(36)
+  status          ApplicationStatus @default(NEW)
+  coverLetter     String?           @map("cover_letter") @db.Text
+  expectedSalary  Decimal?          @map("expected_salary") @db.Decimal(15, 2)
+  notes           String?           @db.Text
   /// Employee created by the hire transaction — makes hire idempotent and auditable.
-  hiredEmployeeId String?          @map("hired_employee_id") @db.VarChar(36)
-  appliedAt      DateTime          @default(now()) @map("applied_at")
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
-  deletedAt      DateTime?         @map("deleted_at")
+  hiredEmployeeId String?           @map("hired_employee_id") @db.VarChar(36)
+  appliedAt       DateTime          @default(now()) @map("applied_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
 
   jobPosting JobPosting  @relation(fields: [jobPostingId], references: [id], onDelete: Restrict)
   candidate  Candidate   @relation(fields: [candidateId], references: [id], onDelete: Restrict)
@@ -2154,22 +2198,22 @@ model EmployeeShiftOverride {
 
 /// Users (login accounts)
 model User {
-  id                 String     @id @default(uuid()) @db.VarChar(36)
-  email              String     @unique @db.VarChar(255)
-  passwordHash       String     @map("password_hash") @db.VarChar(255)
-  passwordVersion    Int        @default(1) @map("password_version")
-  employeeId         String?    @unique @map("employee_id") @db.VarChar(36)
-  status             UserStatus @default(ACTIVE)
-  mustChangePassword Boolean    @default(true) @map("must_change_password")
-  lastLoginAt        DateTime?  @map("last_login_at")
-  failedAttempts     Int        @default(0) @map("failed_attempts")
-  lockedUntil        DateTime?  @map("locked_until")
-  twoFactorEnabled   Boolean    @default(false) @map("two_factor_enabled")
-  twoFactorSecret    String?    @map("two_factor_secret") @db.VarChar(255)
-  twoFactorRecoveryCodes String? @map("two_factor_recovery_codes") @db.Text
-  createdAt          DateTime   @default(now()) @map("created_at")
-  updatedAt          DateTime   @updatedAt @map("updated_at")
-  deletedAt          DateTime?  @map("deleted_at")
+  id                     String     @id @default(uuid()) @db.VarChar(36)
+  email                  String     @unique @db.VarChar(255)
+  passwordHash           String     @map("password_hash") @db.VarChar(255)
+  passwordVersion        Int        @default(1) @map("password_version")
+  employeeId             String?    @unique @map("employee_id") @db.VarChar(36)
+  status                 UserStatus @default(ACTIVE)
+  mustChangePassword     Boolean    @default(true) @map("must_change_password")
+  lastLoginAt            DateTime?  @map("last_login_at")
+  failedAttempts         Int        @default(0) @map("failed_attempts")
+  lockedUntil            DateTime?  @map("locked_until")
+  twoFactorEnabled       Boolean    @default(false) @map("two_factor_enabled")
+  twoFactorSecret        String?    @map("two_factor_secret") @db.VarChar(255)
+  twoFactorRecoveryCodes String?    @map("two_factor_recovery_codes") @db.Text
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+  deletedAt              DateTime?  @map("deleted_at")
 
   employee                   Employee?                   @relation("EmployeeUser", fields: [employeeId], references: [id], onDelete: SetNull)
   userRoles                  UserRole[]
@@ -2178,6 +2222,10 @@ model User {
   loginAttempts              LoginAttempt[]
   auditLogs                  AuditLog[]
   notifications              Notification[]
+  mobileDeviceRegistrations  MobileDeviceRegistration[]
+  pushNotificationDeliveries PushNotificationDelivery[]
+  payrollUnlockSessions      PayrollUnlockSession[]
+  payrollUnlockGuards        PayrollUnlockGuard[]
   uploadedDocuments          Document[]                  @relation("DocumentUploader")
   documentSignatures         DocumentSignature[]
   documentAccessLogs         DocumentAccessLog[]
@@ -2185,17 +2233,17 @@ model User {
   companyAccesses            UserCompanyAccess[]
   approvedCompanyAssignments EmployeeCompanyAssignment[]
   /// D.1 Announcements (pengumuman yang dibuat user sebagai HR/ADMIN)
-  announcementsCreated         Announcement[]
+  announcementsCreated       Announcement[]
   /// D.1 Read status pengumuman per user
-  announcementReads            AnnouncementRead[]
+  announcementReads          AnnouncementRead[]
   /// D.2 Surveys yang dibuat user (HR/ADMIN)
-  surveysCreated               Survey[]
+  surveysCreated             Survey[]
   /// D.2 Survey responses sebagai responden (bisa null jika anonymous)
-  surveyResponses              SurveyResponse[]
+  surveyResponses            SurveyResponse[]
   /// D.3 E-Signature: dokumen user sebagai signer (wrapper transaction)
-  esignatureAsSigner        ESignatureTransaction[]
-  delegationsAsDelegator    ApprovalDelegation[]        @relation("DelegationDelegator")
-  delegationsAsDelegate     ApprovalDelegation[]        @relation("DelegationDelegate")
+  esignatureAsSigner         ESignatureTransaction[]
+  delegationsAsDelegator     ApprovalDelegation[]        @relation("DelegationDelegator")
+  delegationsAsDelegate      ApprovalDelegation[]        @relation("DelegationDelegate")
 
   @@index([email])
   @@index([status])
@@ -2204,48 +2252,48 @@ model User {
 
 /// Employee master data
 model Employee {
-  id                  String           @id @default(uuid()) @db.VarChar(36)
-  companyId           String           @map("company_id") @db.VarChar(36)
-  branchId            String?          @map("branch_id") @db.VarChar(36)
-  departmentId        String?          @map("department_id") @db.VarChar(36)
-  subDepartmentId     String?          @map("sub_department_id") @db.VarChar(36)
-  positionId          String?          @map("position_id") @db.VarChar(36)
-  shiftFormulaId      String?          @map("shift_formula_id") @db.VarChar(36)
-  employeeNumber      String           @unique @map("employee_number") @db.VarChar(50)
-  firstName           String           @map("first_name") @db.VarChar(255)
-  lastName            String           @map("last_name") @db.VarChar(255)
-  fullName            String           @map("full_name") @db.VarChar(510)
-  email               String?          @unique @db.VarChar(255)
-  phone               String?          @db.VarChar(50)
-  idNumber            String?          @map("id_number") @db.VarChar(50)
-  placeOfBirth        String?          @map("place_of_birth") @db.VarChar(255)
-  dateOfBirth         DateTime?        @map("date_of_birth")
-  gender              Gender?
-  religion            Religion?
-  maritalStatus       MaritalStatus?   @map("marital_status")
-  bloodType           BloodType?       @map("blood_type")
-  nationality         String?          @default("Indonesia") @db.VarChar(50)
-  address             String?          @db.Text
-  avatar              String?          @db.VarChar(500)
+  id                      String           @id @default(uuid()) @db.VarChar(36)
+  companyId               String           @map("company_id") @db.VarChar(36)
+  branchId                String?          @map("branch_id") @db.VarChar(36)
+  departmentId            String?          @map("department_id") @db.VarChar(36)
+  subDepartmentId         String?          @map("sub_department_id") @db.VarChar(36)
+  positionId              String?          @map("position_id") @db.VarChar(36)
+  shiftFormulaId          String?          @map("shift_formula_id") @db.VarChar(36)
+  employeeNumber          String           @unique @map("employee_number") @db.VarChar(50)
+  firstName               String           @map("first_name") @db.VarChar(255)
+  lastName                String           @map("last_name") @db.VarChar(255)
+  fullName                String           @map("full_name") @db.VarChar(510)
+  email                   String?          @unique @db.VarChar(255)
+  phone                   String?          @db.VarChar(50)
+  idNumber                String?          @map("id_number") @db.VarChar(50)
+  placeOfBirth            String?          @map("place_of_birth") @db.VarChar(255)
+  dateOfBirth             DateTime?        @map("date_of_birth")
+  gender                  Gender?
+  religion                Religion?
+  maritalStatus           MaritalStatus?   @map("marital_status")
+  bloodType               BloodType?       @map("blood_type")
+  nationality             String?          @default("Indonesia") @db.VarChar(50)
+  address                 String?          @db.Text
+  avatar                  String?          @db.VarChar(500)
   /// B.7 Backend Ready Face Rec: Reference foto selfie untuk match saat clock in (onboarding saat upload 1 foto pertama). Bisa beda avatar (avatar foto formal, reference foto selfie natural).
-  referencePhotoUrl   String?          @map("reference_photo_url") @db.VarChar(500)
-  referencePhotoUpdatedAt DateTime?    @map("reference_photo_updated_at")
-  joinDate            DateTime?        @map("join_date")
-  employmentStatus    EmploymentStatus @default(ACTIVE) @map("employment_status")
-  employmentType      EmploymentType   @default(PERMANENT) @map("employment_type")
-  employeeCategory    EmployeeCategory @default(OFFICE) @map("employee_category")
-  shiftStartDate      DateTime?        @map("shift_start_date") @db.Date
-  bankName            String?          @map("bank_name") @db.VarChar(100)
-  bankCode            String?          @map("bank_code") @db.VarChar(20)
-  bankAccount         String?          @map("bank_account") @db.VarChar(50)
-  bankAccountHolder   String?          @map("bank_account_holder") @db.VarChar(255)
-  taxId               String?          @map("tax_id") @db.VarChar(50)
-  bpjsKetenagakerjaan String?          @map("bpjs_ketenagakerjaan") @db.VarChar(50)
-  bpjsKesehatan       String?          @map("bpjs_kesehatan") @db.VarChar(50)
-  status              Status           @default(ACTIVE)
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
-  deletedAt           DateTime?        @map("deleted_at")
+  referencePhotoUrl       String?          @map("reference_photo_url") @db.VarChar(500)
+  referencePhotoUpdatedAt DateTime?        @map("reference_photo_updated_at")
+  joinDate                DateTime?        @map("join_date")
+  employmentStatus        EmploymentStatus @default(ACTIVE) @map("employment_status")
+  employmentType          EmploymentType   @default(PERMANENT) @map("employment_type")
+  employeeCategory        EmployeeCategory @default(OFFICE) @map("employee_category")
+  shiftStartDate          DateTime?        @map("shift_start_date") @db.Date
+  bankName                String?          @map("bank_name") @db.VarChar(100)
+  bankCode                String?          @map("bank_code") @db.VarChar(20)
+  bankAccount             String?          @map("bank_account") @db.VarChar(50)
+  bankAccountHolder       String?          @map("bank_account_holder") @db.VarChar(255)
+  taxId                   String?          @map("tax_id") @db.VarChar(50)
+  bpjsKetenagakerjaan     String?          @map("bpjs_ketenagakerjaan") @db.VarChar(50)
+  bpjsKesehatan           String?          @map("bpjs_kesehatan") @db.VarChar(50)
+  status                  Status           @default(ACTIVE)
+  createdAt               DateTime         @default(now()) @map("created_at")
+  updatedAt               DateTime         @updatedAt @map("updated_at")
+  deletedAt               DateTime?        @map("deleted_at")
 
   company                                       Company                                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   branch                                        Branch?                                @relation(fields: [branchId], references: [id], onDelete: SetNull)
@@ -2259,6 +2307,7 @@ model Employee {
   subDepartmentHeads                            SubDepartment[]                        @relation("SubDepartmentHead")
   employeeSalaries                              EmployeeSalary[]
   payslips                                      Payslip[]
+  payrollUnlockSessions                         PayrollUnlockSession[]
   benefitEnrollments                            BenefitEnrollment[]
   performanceReviewsAsEmployee                  PerformanceReview[]                    @relation("ReviewEmployee")
   performanceReviewsAsReviewer                  PerformanceReview[]                    @relation("ReviewReviewer")
@@ -2326,12 +2375,14 @@ model Employee {
   /// C.5 Daily Activity
   dailyActivities                               DailyActivity[]
   /// C.6 Task Assignment (as assignee): list task manager assign ke karyawan ini
-  assignedTasks                                 TaskAssignment[]  @relation("TaskAssignee")
+  assignedTasks                                 TaskAssignment[]                       @relation("TaskAssignee")
   /// C.6 Task Assignment (as creator/manager): tasks yg dibuat oleh karyawan ini sebagai manager
-  createdTasks                                  TaskAssignment[]  @relation("TaskCreator")
+  createdTasks                                  TaskAssignment[]                       @relation("TaskCreator")
   /// C.7 Asset Patrol: daftar patrol log yang dilakukan karyawan ini
   patrolsDone                                   AssetPatrolLog[]
 
+  @@unique([companyId, idNumber])
+  @@unique([companyId, phone])
   @@index([companyId])
   @@index([employeeNumber])
   @@index([departmentId])
@@ -2339,8 +2390,6 @@ model Employee {
   @@index([employmentStatus])
   @@index([branchId])
   @@index([shiftFormulaId])
-  @@unique([companyId, idNumber])
-  @@unique([companyId, phone])
   @@map("employees")
 }
 
@@ -2903,8 +2952,8 @@ model DocumentSignature {
   signedAt   DateTime @default(now()) @map("signed_at")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  signer   User     @relation(fields: [signerId], references: [id], onDelete: Cascade)
+  document               Document                @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  signer                 User                    @relation(fields: [signerId], references: [id], onDelete: Cascade)
   /// D.3 ESignatureTransaction (provider wrapper per signature: INTERNAL / PRIVY / DIGISIGN)
   esignatureTransactions ESignatureTransaction[]
 
@@ -3126,6 +3175,7 @@ model Attendance {
   branch           Branch?                 @relation(fields: [branchId], references: [id], onDelete: SetNull)
   attendancePolicy BranchAttendancePolicy? @relation(fields: [attendancePolicyId], references: [id], onDelete: SetNull)
   faceLogs         AttendanceFaceLog[]
+  corrections      AttendanceCorrection[]
 
   @@unique([employeeId, date])
   @@index([companyId])
@@ -3136,8 +3186,6 @@ model Attendance {
   @@index([status])
   @@index([method])
   @@index([requiresReview])
-  corrections AttendanceCorrection[]
-
   @@map("attendances")
 }
 
@@ -3212,24 +3260,24 @@ model BranchAttendancePolicy {
 /// Attendance face-recognition decision log. Source selfies are not retained.
 /// Failed rows also provide the immutable source for per-employee rate limiting.
 model AttendanceFaceLog {
-  id                  String               @id @default(uuid()) @db.VarChar(36)
-  attendanceId        String?              @map("attendance_id") @db.VarChar(36)
-  employeeId          String               @map("employee_id") @db.VarChar(36)
-  companyId           String               @map("company_id") @db.VarChar(36)
-  selfieUrl           String?              @map("selfie_url") @db.VarChar(500)
+  id              String              @id @default(uuid()) @db.VarChar(36)
+  attendanceId    String?             @map("attendance_id") @db.VarChar(36)
+  employeeId      String              @map("employee_id") @db.VarChar(36)
+  companyId       String              @map("company_id") @db.VarChar(36)
+  selfieUrl       String?             @map("selfie_url") @db.VarChar(500)
   /// Hasil cosine similarity vs reference photo (nilai -1.0 → 1.0; semakin dekat 1.0 semakin mirip). Threshold default 0.60.
-  similarityScore     Decimal              @map("similarity_score") @db.Decimal(5, 4)
-  isFaceMatch         Boolean              @default(false) @map("is_face_match")
+  similarityScore Decimal             @map("similarity_score") @db.Decimal(5, 4)
+  isFaceMatch     Boolean             @default(false) @map("is_face_match")
   /// B.8 Liveness verdict dari heuristic EXIF + metadata (bukan ML deep-learning, tapi cukup deteksi foto galeri vs kamera langsung).
-  livenessVerdict     LivenessVerdict      @default(NO_DATA) @map("liveness_verdict")
+  livenessVerdict LivenessVerdict     @default(NO_DATA) @map("liveness_verdict")
   /// B.9 GPS/Mock Location verdict.
-  mockVerdict         MockLocationVerdict  @default(LIKELY_REAL) @map("mock_verdict")
-  notes               String?              @db.Text
-  createdAt           DateTime             @default(now()) @map("created_at")
+  mockVerdict     MockLocationVerdict @default(LIKELY_REAL) @map("mock_verdict")
+  notes           String?             @db.Text
+  createdAt       DateTime            @default(now()) @map("created_at")
 
   attendance Attendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
-  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  company    Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([attendanceId])
   @@index([employeeId])
@@ -3319,11 +3367,11 @@ model LeaveType {
 
 /// Employee leave balance per year
 model LeaveBalance {
-  id            String   @id @default(uuid()) @db.VarChar(36)
-  employeeId    String   @map("employee_id") @db.VarChar(36)
-  companyId     String   @map("company_id") @db.VarChar(36)
-  leaveTypeId   String   @map("leave_type_id") @db.VarChar(36)
-  year          Int      @default(2026)
+  id            String    @id @default(uuid()) @db.VarChar(36)
+  employeeId    String    @map("employee_id") @db.VarChar(36)
+  companyId     String    @map("company_id") @db.VarChar(36)
+  leaveTypeId   String    @map("leave_type_id") @db.VarChar(36)
+  year          Int       @default(2026)
   totalDays     Int       @default(0) @map("total_days")
   usedDays      Int       @default(0) @map("used_days")
   remainingDays Int       @default(0) @map("remaining_days")
@@ -3799,18 +3847,18 @@ enum OutsideRadiusAction {
 }
 
 enum MockLocationVerdict {
-  PASS             /// Bukan fake location (meta tidak ada tanda mock)
-  LIKELY_REAL      /// Meta device real, tapi ada device flag tidak dikirim (bisa gap aman)
-  SUSPICIOUS       /// Metadata mock enable / mock location enabled / GPS mock tidak konsisten (accuracy jelek, koordinat static >24jam)
-  CONFIRMED_FAKE   /// isMockLocation=true dari device flag (Android ALLOW_MOCK_LOCATION, iOS Simulator)
+  PASS /// Bukan fake location (meta tidak ada tanda mock)
+  LIKELY_REAL /// Meta device real, tapi ada device flag tidak dikirim (bisa gap aman)
+  SUSPICIOUS /// Metadata mock enable / mock location enabled / GPS mock tidak konsisten (accuracy jelek, koordinat static >24jam)
+  CONFIRMED_FAKE /// isMockLocation=true dari device flag (Android ALLOW_MOCK_LOCATION, iOS Simulator)
 }
 
 enum LivenessVerdict {
-  PASS           /// Real live camera detected (liveness heuristic pass)
-  STATIC         /// Foto dari galeri / tidak ada liveness signal / EXIF no-camera data
-  BLUR           /// Blur / variance hash sangat rendah (photo copy / scan print)
-  MANIPULATED    /// EXIF dimanipulasi / edited software (Adobe PhotoShop / Photopea metadata)
-  NO_DATA        /// Tidak ada data selfie / file upload kosong
+  PASS /// Real live camera detected (liveness heuristic pass)
+  STATIC /// Foto dari galeri / tidak ada liveness signal / EXIF no-camera data
+  BLUR /// Blur / variance hash sangat rendah (photo copy / scan print)
+  MANIPULATED /// EXIF dimanipulasi / edited software (Adobe PhotoShop / Photopea metadata)
+  NO_DATA /// Tidak ada data selfie / file upload kosong
 }
 
 enum AttendanceExceptionType {
@@ -3880,8 +3928,9 @@ model Notification {
   readAt      DateTime?        @map("read_at")
   createdAt   DateTime         @default(now()) @map("created_at")
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company    Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries PushNotificationDelivery[]
 
   @@index([userId, isRead])
   @@index([companyId])
@@ -3889,11 +3938,87 @@ model Notification {
   @@map("notifications")
 }
 
+/// Push delivery endpoints registered by native mobile installations.
+/// The raw provider token is never returned by the API after registration.
+model MobileDeviceRegistration {
+  id             String         @id @default(uuid()) @db.VarChar(36)
+  companyId      String         @map("company_id") @db.VarChar(36)
+  userId         String         @map("user_id") @db.VarChar(36)
+  installationId String         @map("installation_id") @db.VarChar(200)
+  platform       MobilePlatform
+  provider       PushProvider
+  token          String         @db.Text // AES-256-GCM ciphertext; decrypt only inside the push delivery worker
+  tokenHash      String         @unique @map("token_hash") @db.Char(64)
+  appVersion     String?        @map("app_version") @db.VarChar(50)
+  deviceModel    String?        @map("device_model") @db.VarChar(100)
+  isActive       Boolean        @default(true) @map("is_active")
+  lastSeenAt     DateTime       @default(now()) @map("last_seen_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  company    Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries PushNotificationDelivery[]
+
+  @@unique([userId, installationId])
+  @@index([companyId, userId, isActive])
+  @@map("mobile_device_registrations")
+}
+
+/// Per-device push outbox. Destination identity is immutable while status and
+/// retry evidence advance in the background worker.
+model PushNotificationDelivery {
+  id                String             @id @default(uuid()) @db.VarChar(36)
+  companyId         String             @map("company_id") @db.VarChar(36)
+  userId            String             @map("user_id") @db.VarChar(36)
+  notificationId    String             @map("notification_id") @db.VarChar(36)
+  registrationId    String             @map("registration_id") @db.VarChar(36)
+  provider          PushProvider
+  status            PushDeliveryStatus @default(PENDING)
+  attempts          Int                @default(0)
+  nextAttemptAt     DateTime           @default(now()) @map("next_attempt_at")
+  providerMessageId String?            @map("provider_message_id") @db.VarChar(500)
+  lastError         String?            @map("last_error") @db.VarChar(500)
+  deliveredAt       DateTime?          @map("delivered_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  company      Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification Notification             @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  registration MobileDeviceRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, registrationId])
+  @@index([status, nextAttemptAt])
+  @@index([companyId, userId, createdAt])
+  @@map("push_notification_deliveries")
+}
+
 enum NotificationType {
   INFO
   SUCCESS
   WARNING
   ERROR
+}
+
+enum MobilePlatform {
+  ANDROID
+  IOS
+}
+
+enum PushProvider {
+  FCM
+  APNS
+}
+
+enum PushDeliveryStatus {
+  PENDING
+  PROCESSING
+  RETRY
+  SENT
+  INVALID_TOKEN
+  FAILED
+  BLOCKED_CONFIG
 }
 
 // ============================================================
@@ -3949,20 +4074,20 @@ enum RequestStatus {
 // ============================================================
 
 model WorkflowTemplate {
-  id           String   @id @default(uuid()) @db.VarChar(36)
-  companyId    String   @map("company_id") @db.VarChar(36)
-  name         String   @db.VarChar(255)
-  approvalType String   @map("approval_type") @db.VarChar(100)
-  resource     String?  @db.VarChar(100)
-  description  String?  @db.Text
-  isActive     Boolean  @default(true) @map("is_active")
+  id                String    @id @default(uuid()) @db.VarChar(36)
+  companyId         String    @map("company_id") @db.VarChar(36)
+  name              String    @db.VarChar(255)
+  approvalType      String    @map("approval_type") @db.VarChar(100)
+  resource          String?   @db.VarChar(100)
+  description       String?   @db.Text
+  isActive          Boolean   @default(true) @map("is_active")
   /// Copy-on-write revision: structural edits create version+1 and retire the old row.
   version           Int       @default(1)
   previousVersionId String?   @map("previous_version_id") @db.VarChar(36)
   /// Template only resolves for new instances at/after this date (null = immediately).
   effectiveFrom     DateTime? @map("effective_from")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   company                Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   stages                 WorkflowStage[]
@@ -4088,13 +4213,13 @@ model WorkflowInstanceLog {
 // ============================================================
 
 model RoleMenuAccess {
-  id        String  @id @default(uuid()) @db.VarChar(36)
-  companyId String  @map("company_id") @db.VarChar(36)
-  roleCode  String  @map("role_code") @db.VarChar(50)
-  menuPath  String  @map("menu_path") @db.VarChar(255)
+  id         String         @id @default(uuid()) @db.VarChar(36)
+  companyId  String         @map("company_id") @db.VarChar(36)
+  roleCode   String         @map("role_code") @db.VarChar(50)
+  menuPath   String         @map("menu_path") @db.VarChar(255)
   accessType MenuAccessType @default(ALLOW) @map("access_type")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -4109,14 +4234,14 @@ enum MenuAccessType {
 }
 
 model RoleDataScope {
-  id         String       @id @default(uuid()) @db.VarChar(36)
-  companyId  String       @map("company_id") @db.VarChar(36)
-  roleCode   String       @map("role_code") @db.VarChar(50)
-  resource   String       @default("ALL") @db.VarChar(100)
+  id         String        @id @default(uuid()) @db.VarChar(36)
+  companyId  String        @map("company_id") @db.VarChar(36)
+  roleCode   String        @map("role_code") @db.VarChar(50)
+  resource   String        @default("ALL") @db.VarChar(100)
   scopeType  DataScopeType @map("scope_type")
-  scopeValue String?      @map("scope_value") @db.Text
-  createdAt  DateTime     @default(now()) @map("created_at")
-  updatedAt  DateTime     @updatedAt @map("updated_at")
+  scopeValue String?       @map("scope_value") @db.Text
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -4247,7 +4372,7 @@ model LoanInstallment {
   createdAt DateTime          @default(now()) @map("created_at")
   updatedAt DateTime          @updatedAt @map("updated_at")
 
-  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  loan                   Loan                           @relation(fields: [loanId], references: [id], onDelete: Cascade)
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
 
   @@index([loanId])
@@ -4323,19 +4448,19 @@ model TravelAdvance {
 /// C.1 Claim Category Limit — Claim with Balance Limit Per Kategori & Periode (Week 10 task).
 /// Admin bisa setting untuk category TRANSPORTATION per company MONTHLY cap 1.500.000 action WARN / BLOCK.
 model ClaimCategoryLimit {
-  id             String               @id @default(uuid()) @db.VarChar(36)
-  companyId      String               @map("company_id") @db.VarChar(36)
-  category       ExpenseCategory
-  periodType     ClaimPeriodType      @default(MONTHLY) @map("period_type")
-  limitAmount    Decimal              @map("limit_amount") @db.Decimal(15, 2)
+  id              String               @id @default(uuid()) @db.VarChar(36)
+  companyId       String               @map("company_id") @db.VarChar(36)
+  category        ExpenseCategory
+  periodType      ClaimPeriodType      @default(MONTHLY) @map("period_type")
+  limitAmount     Decimal              @map("limit_amount") @db.Decimal(15, 2)
   /// NULL / 0 = UNLIMITED (fallback no limit)
   violationAction LimitViolationAction @default(WARN) @map("violation_action")
-  description    String?              @db.Text
-  isActive       Boolean              @default(true) @map("is_active")
-  validFrom      DateTime?            @map("valid_from")
-  validUntil     DateTime?            @map("valid_until")
-  createdAt      DateTime             @default(now()) @map("created_at")
-  updatedAt      DateTime             @updatedAt @map("updated_at")
+  description     String?              @db.Text
+  isActive        Boolean              @default(true) @map("is_active")
+  validFrom       DateTime?            @map("valid_from")
+  validUntil      DateTime?            @map("valid_until")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -4366,38 +4491,38 @@ enum EWATransactionStatus {
 /// di-auto deduct sebagai component EWA-DEDUCT saat payroll run bulan bersangkutan.
 /// C.4 Earned Wage Access — request tarik gaji earned sebagian sebelum payday
 model EarnedWageAccess {
-  id                   String               @id @default(uuid()) @db.VarChar(36)
-  companyId            String               @map("company_id") @db.VarChar(36)
-  employeeId           String               @map("employee_id") @db.VarChar(36)
-  requestCode          String               @unique @map("request_code") @db.VarChar(50) /// EWA-YYYYMMDD-XXXX auto system-code
-  payrollPeriodId      String?              @map("payroll_period_id") @db.VarChar(36) /// Payroll period reference cycle deduction
-  payrollRunId         String?              @map("payroll_run_id") @db.VarChar(36)
-  periodStart          DateTime             @map("period_start") @db.Date
-  periodEnd            DateTime             @map("period_end") @db.Date
-  earnedGrossReference Decimal              @map("earned_gross_reference") @db.Decimal(15, 2)   /// gross upah terhitung saat request (audit)
-  earnedGrossAtRequest Decimal              @map("earned_gross_at_request") @db.Decimal(15, 2)   /// Snapshot create time (sama reference tapi preserved immutable)
-  maxAllowedPercent    Int                  @default(50) @map("max_allowed_percent")             /// default 50% dari gaji (configurable)
-  maxAllowedAtRequest  Decimal              @map("max_allowed_at_request") @db.Decimal(15, 2)   /// Snapshot nilai max rupiah saat create
-  totalApprovedSamePeriod Decimal           @default(0) @map("total_approved_same_period") @db.Decimal(15, 2)
-  amountRequested      Decimal              @map("amount_requested") @db.Decimal(15, 2)
-  adminFee             Decimal              @default(0) @map("admin_fee") @db.Decimal(15, 2)      /// Biaya admin (default 0 employer-funded)
-  amountPaidOut        Decimal?             @map("amount_paid_out") @db.Decimal(15, 2)             /// Actual transfer (bisa kurang amountRequested + fee)
-  amountDeductedPayroll Decimal?            @map("amount_deducted_payroll") @db.Decimal(15, 2)
-  status               EWATransactionStatus @default(PENDING)
-  reason               String?              @db.Text
-  approverId           String?              @map("approver_id") @db.VarChar(36)
-  approvedAt           DateTime?            @map("approved_at")
-  approverNotes        String?              @map("approver_notes") @db.Text
-  financeDisburserId   String?              @map("finance_disburser_id") @db.VarChar(36)
-  paidOutAt            DateTime?            @map("paid_out_at")
-  disbursementReference String?             @map("disbursement_reference") @db.VarChar(100) /// Bukti transfer / rekening ref
-  deductedAt           DateTime?            @map("deducted_at")
-  rejectReason         String?              @map("reject_reason") @db.Text
-  cancelledBy          String?              @map("cancelled_by") @db.VarChar(36)
-  cancelledAt          DateTime?            @map("cancelled_at")
-  notes                String?              @db.Text
-  createdAt            DateTime             @default(now()) @map("created_at")
-  updatedAt            DateTime             @updatedAt @map("updated_at")
+  id                      String               @id @default(uuid()) @db.VarChar(36)
+  companyId               String               @map("company_id") @db.VarChar(36)
+  employeeId              String               @map("employee_id") @db.VarChar(36)
+  requestCode             String               @unique @map("request_code") @db.VarChar(50) /// EWA-YYYYMMDD-XXXX auto system-code
+  payrollPeriodId         String?              @map("payroll_period_id") @db.VarChar(36) /// Payroll period reference cycle deduction
+  payrollRunId            String?              @map("payroll_run_id") @db.VarChar(36)
+  periodStart             DateTime             @map("period_start") @db.Date
+  periodEnd               DateTime             @map("period_end") @db.Date
+  earnedGrossReference    Decimal              @map("earned_gross_reference") @db.Decimal(15, 2) /// gross upah terhitung saat request (audit)
+  earnedGrossAtRequest    Decimal              @map("earned_gross_at_request") @db.Decimal(15, 2) /// Snapshot create time (sama reference tapi preserved immutable)
+  maxAllowedPercent       Int                  @default(50) @map("max_allowed_percent") /// default 50% dari gaji (configurable)
+  maxAllowedAtRequest     Decimal              @map("max_allowed_at_request") @db.Decimal(15, 2) /// Snapshot nilai max rupiah saat create
+  totalApprovedSamePeriod Decimal              @default(0) @map("total_approved_same_period") @db.Decimal(15, 2)
+  amountRequested         Decimal              @map("amount_requested") @db.Decimal(15, 2)
+  adminFee                Decimal              @default(0) @map("admin_fee") @db.Decimal(15, 2) /// Biaya admin (default 0 employer-funded)
+  amountPaidOut           Decimal?             @map("amount_paid_out") @db.Decimal(15, 2) /// Actual transfer (bisa kurang amountRequested + fee)
+  amountDeductedPayroll   Decimal?             @map("amount_deducted_payroll") @db.Decimal(15, 2)
+  status                  EWATransactionStatus @default(PENDING)
+  reason                  String?              @db.Text
+  approverId              String?              @map("approver_id") @db.VarChar(36)
+  approvedAt              DateTime?            @map("approved_at")
+  approverNotes           String?              @map("approver_notes") @db.Text
+  financeDisburserId      String?              @map("finance_disburser_id") @db.VarChar(36)
+  paidOutAt               DateTime?            @map("paid_out_at")
+  disbursementReference   String?              @map("disbursement_reference") @db.VarChar(100) /// Bukti transfer / rekening ref
+  deductedAt              DateTime?            @map("deducted_at")
+  rejectReason            String?              @map("reject_reason") @db.Text
+  cancelledBy             String?              @map("cancelled_by") @db.VarChar(36)
+  cancelledAt             DateTime?            @map("cancelled_at")
+  notes                   String?              @db.Text
+  createdAt               DateTime             @default(now()) @map("created_at")
+  updatedAt               DateTime             @updatedAt @map("updated_at")
 
   company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee      Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
@@ -4414,30 +4539,30 @@ model EarnedWageAccess {
 
 /// C.5 Daily Activity Module — field worker / remote employee activity log with photo + geotag + duration
 model DailyActivity {
-  id               String             @id @default(uuid()) @db.VarChar(36)
-  companyId        String             @map("company_id") @db.VarChar(36)
-  employeeId       String             @map("employee_id") @db.VarChar(36)
-  branchId         String?            @map("branch_id") @db.VarChar(36)
-  activityDate     DateTime           @map("activity_date") @db.Date
-  activityType     DailyActivityType  @default(WORK) @map("activity_type")
-  title            String             @db.VarChar(255)
-  description      String?            @db.Text
-  photoUrl         String?            @map("photo_url") @db.VarChar(500)
-  latitude         Decimal?           @map("latitude") @db.Decimal(10, 7)
-  longitude        Decimal?           @map("longitude") @db.Decimal(10, 7)
-  geoAccuracyMeters Decimal?          @map("geo_accuracy_meters") @db.Decimal(8, 2)
-  startTime        DateTime           @map("start_time")
-  endTime          DateTime           @map("end_time")
-  durationMinutes  Int                @map("duration_minutes")
-  isOutsideRadius  Boolean            @default(false) @map("is_outside_radius")
-  distanceFromBranchMeters Int?       @map("distance_from_branch_meters")
-  notes            String?            @db.Text
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  id                       String            @id @default(uuid()) @db.VarChar(36)
+  companyId                String            @map("company_id") @db.VarChar(36)
+  employeeId               String            @map("employee_id") @db.VarChar(36)
+  branchId                 String?           @map("branch_id") @db.VarChar(36)
+  activityDate             DateTime          @map("activity_date") @db.Date
+  activityType             DailyActivityType @default(WORK) @map("activity_type")
+  title                    String            @db.VarChar(255)
+  description              String?           @db.Text
+  photoUrl                 String?           @map("photo_url") @db.VarChar(500)
+  latitude                 Decimal?          @map("latitude") @db.Decimal(10, 7)
+  longitude                Decimal?          @map("longitude") @db.Decimal(10, 7)
+  geoAccuracyMeters        Decimal?          @map("geo_accuracy_meters") @db.Decimal(8, 2)
+  startTime                DateTime          @map("start_time")
+  endTime                  DateTime          @map("end_time")
+  durationMinutes          Int               @map("duration_minutes")
+  isOutsideRadius          Boolean           @default(false) @map("is_outside_radius")
+  distanceFromBranchMeters Int?              @map("distance_from_branch_meters")
+  notes                    String?           @db.Text
+  createdAt                DateTime          @default(now()) @map("created_at")
+  updatedAt                DateTime          @updatedAt @map("updated_at")
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  branch   Branch?   @relation(fields: [branchId],   references: [id], onDelete: SetNull)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  branch   Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([companyId, activityDate])
   @@index([employeeId, activityDate])
@@ -4448,27 +4573,27 @@ model DailyActivity {
 
 /// C.6 Basic Operational Task Assignment — manager assign task ke karyawan (1-klik update status + feedback)
 model TaskAssignment {
-  id               String       @id @default(uuid()) @db.VarChar(36)
-  companyId        String       @map("company_id") @db.VarChar(36)
-  creatorId        String       @map("creator_id") @db.VarChar(36)       /// Manager yang buat task
-  assigneeId       String       @map("assignee_id") @db.VarChar(36)      /// Employee yang ditugaskan
-  branchId         String?      @map("branch_id") @db.VarChar(36)
-  title            String       @db.VarChar(255)
-  description      String?      @db.Text
-  priority         Priority     @default(MEDIUM)
-  status           TaskStatus   @default(TODO)
-  dueDate          DateTime?    @map("due_date") @db.Date
-  completedAt      DateTime?    @map("completed_at")
-  feedbackStar     Int?         @map("feedback_star")   /// 1-5 (manager review quality)
-  feedbackNote     String?      @map("feedback_note") @db.Text
-  progressPercent  Int          @default(0) @map("progress_percent") /// 0-100
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
+  id              String     @id @default(uuid()) @db.VarChar(36)
+  companyId       String     @map("company_id") @db.VarChar(36)
+  creatorId       String     @map("creator_id") @db.VarChar(36) /// Manager yang buat task
+  assigneeId      String     @map("assignee_id") @db.VarChar(36) /// Employee yang ditugaskan
+  branchId        String?    @map("branch_id") @db.VarChar(36)
+  title           String     @db.VarChar(255)
+  description     String?    @db.Text
+  priority        Priority   @default(MEDIUM)
+  status          TaskStatus @default(TODO)
+  dueDate         DateTime?  @map("due_date") @db.Date
+  completedAt     DateTime?  @map("completed_at")
+  feedbackStar    Int?       @map("feedback_star") /// 1-5 (manager review quality)
+  feedbackNote    String?    @map("feedback_note") @db.Text
+  progressPercent Int        @default(0) @map("progress_percent") /// 0-100
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
 
-  company    Company   @relation(fields: [companyId],  references: [id], onDelete: Cascade)
-  creator    Employee  @relation("TaskCreator",  fields: [creatorId],  references: [id], onDelete: Restrict)
-  assignee   Employee  @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
-  branch     Branch?   @relation(fields: [branchId],   references: [id], onDelete: SetNull)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator  Employee @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  assignee Employee @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  branch   Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([companyId, status])
   @@index([assigneeId, status])
@@ -4479,66 +4604,66 @@ model TaskAssignment {
 
 /// D.3 E-Signature Transaction — wrapper extend existing DocumentSignature table (support external providers internal/external provider signed)
 model ESignatureTransaction {
-  id                         String                       @id @default(uuid()) @db.VarChar(36)
-  companyId                  String                     @map("company_id") @db.VarChar(36)
-  documentSignatureId          String                     @map("document_signature_id") @db.VarChar(36) /// extend DocumentSignature.id existing
-  documentId               String                     @map("document_id") @db.VarChar(36)
-  signerUserId             String                     @map("signer_user_id") @db.VarChar(36)
-  provider                   ESignatureProvider         @default(INTERNAL)
-  status                       ESignatureStatus             @default(DRAFT)
-  verificationLevel         ESignatureVerificationLevel @default(BASIC)
-  providerReference            String?                @map("provider_ref") @db.VarChar(100)     /// transaction id dari eksternal provider (Privy Doc ID, Digisign Sign ID)
-  signerNik                String?                @db.VarChar(32)                  /// NIK 16 digit jika perlu untuk certified provider
-  signerEmail             String?                @db.VarChar(255)                /// signer email
-  signerPhone           String?                @db.VarChar(20)                /// signer phone WA untuk OTP
-  requestSentAt              DateTime?           @map("request_sent_at")
-  signedAt                 DateTime?           @map("signed_at")
-  verifiedAt                DateTime?          @map("verified_at")
-  expiredAt               DateTime?         @map("expired_at")           /// default = requestedAt +30 hari
-  callbackPayloadJson        String?          @map("callback_payload_json") @db.Text /// raw callback dari provider (encrypted DB)
-  documentHashSha256       String?         @map("document_hash_sha256") @db.VarChar(64)     /// integrity hash check verify
-  signingUrl            String?               @db.VarChar(700)            /// sign URL provider / internal sign link
-  costAmountRupiah         Decimal?       @db.Decimal(15, 2)            /// provider cost/ biaya provider per dokumen
-  notes                    String?          @db.Text
-  createdAt              DateTime          @default(now()) @map("created_at")
-  updatedAt              DateTime          @updatedAt @map("updated_at")
+  id                  String                      @id @default(uuid()) @db.VarChar(36)
+  companyId           String                      @map("company_id") @db.VarChar(36)
+  documentSignatureId String                      @map("document_signature_id") @db.VarChar(36) /// extend DocumentSignature.id existing
+  documentId          String                      @map("document_id") @db.VarChar(36)
+  signerUserId        String                      @map("signer_user_id") @db.VarChar(36)
+  provider            ESignatureProvider          @default(INTERNAL)
+  status              ESignatureStatus            @default(DRAFT)
+  verificationLevel   ESignatureVerificationLevel @default(BASIC)
+  providerReference   String?                     @map("provider_ref") @db.VarChar(100) /// transaction id dari eksternal provider (Privy Doc ID, Digisign Sign ID)
+  signerNik           String?                     @db.VarChar(32) /// NIK 16 digit jika perlu untuk certified provider
+  signerEmail         String?                     @db.VarChar(255) /// signer email
+  signerPhone         String?                     @db.VarChar(20) /// signer phone WA untuk OTP
+  requestSentAt       DateTime?                   @map("request_sent_at")
+  signedAt            DateTime?                   @map("signed_at")
+  verifiedAt          DateTime?                   @map("verified_at")
+  expiredAt           DateTime?                   @map("expired_at") /// default = requestedAt +30 hari
+  callbackPayloadJson String?                     @map("callback_payload_json") @db.Text /// raw callback dari provider (encrypted DB)
+  documentHashSha256  String?                     @map("document_hash_sha256") @db.VarChar(64) /// integrity hash check verify
+  signingUrl          String?                     @db.VarChar(700) /// sign URL provider / internal sign link
+  costAmountRupiah    Decimal?                    @db.Decimal(15, 2) /// provider cost/ biaya provider per dokumen
+  notes               String?                     @db.Text
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
 
-  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  documentSignature DocumentSignature  @relation(fields: [documentSignatureId], references: [id], onDelete: Cascade)
-  document         Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  signer             User                @relation(fields: [signerUserId], references: [id], onDelete: Restrict)
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  documentSignature DocumentSignature @relation(fields: [documentSignatureId], references: [id], onDelete: Cascade)
+  document          Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  signer            User              @relation(fields: [signerUserId], references: [id], onDelete: Restrict)
 
+  @@unique([provider, providerReference])
   @@index([companyId, status])
   @@index([provider, status])
   @@index([documentId])
-  @@unique([provider, providerReference])
   @@map("esignature_transactions")
 }
 
 /// C.7 Asset Patrol & Tracking (security/outsourcing) — petugas scan barcode asset & catat kondisi + lokasi + timestamp.
 model AssetPatrolLog {
-  id                 String               @id @default(uuid()) @db.VarChar(36)
-  companyId          String               @map("company_id") @db.VarChar(36)
-  assetId            String               @map("asset_id") @db.VarChar(36)
-  patrolById         String               @map("patrol_by_id") @db.VarChar(36)   /// Petugas security / lapangan
-  barcodeScanRaw     String?              @map("barcode_scan_raw") @db.VarChar(255)  /// hasil actual scan
-  expectedAssetCode  String?              @map("expected_asset_code") @db.VarChar(50)   /// kode asset yang diharapkan dari route
-  isBarcodeMatched   Boolean              @default(true) @map("is_barcode_matched")
-  photoConditionUrl  String?              @map("photo_condition_url") @db.VarChar(500)
-  conditionRating    AssetConditionRating @default(GOOD) @map("condition_rating")
-  note               String?              @db.Text
-  latitude           Decimal?             @map("latitude") @db.Decimal(10, 7)
-  longitude          Decimal?             @map("longitude") @db.Decimal(10, 7)
-  geoAccuracyMeters  Decimal?             @map("geo_accuracy_meters") @db.Decimal(8, 2)
-  patrolRouteId      String?              @map("patrol_route_id") @db.VarChar(36)
-  patrolSequenceNo   Int?                 @map("patrol_sequence_no")
-  occurredAt         DateTime             @map("occurred_at")   /// saat patrol (bukan createdAt)
-  createdAt          DateTime             @default(now()) @map("created_at")
-  updatedAt          DateTime             @updatedAt @map("updated_at")
+  id                String               @id @default(uuid()) @db.VarChar(36)
+  companyId         String               @map("company_id") @db.VarChar(36)
+  assetId           String               @map("asset_id") @db.VarChar(36)
+  patrolById        String               @map("patrol_by_id") @db.VarChar(36) /// Petugas security / lapangan
+  barcodeScanRaw    String?              @map("barcode_scan_raw") @db.VarChar(255) /// hasil actual scan
+  expectedAssetCode String?              @map("expected_asset_code") @db.VarChar(50) /// kode asset yang diharapkan dari route
+  isBarcodeMatched  Boolean              @default(true) @map("is_barcode_matched")
+  photoConditionUrl String?              @map("photo_condition_url") @db.VarChar(500)
+  conditionRating   AssetConditionRating @default(GOOD) @map("condition_rating")
+  note              String?              @db.Text
+  latitude          Decimal?             @map("latitude") @db.Decimal(10, 7)
+  longitude         Decimal?             @map("longitude") @db.Decimal(10, 7)
+  geoAccuracyMeters Decimal?             @map("geo_accuracy_meters") @db.Decimal(8, 2)
+  patrolRouteId     String?              @map("patrol_route_id") @db.VarChar(36)
+  patrolSequenceNo  Int?                 @map("patrol_sequence_no")
+  occurredAt        DateTime             @map("occurred_at") /// saat patrol (bukan createdAt)
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  asset    Asset     @relation(fields: [assetId], references: [id], onDelete: Restrict)
-  patrolBy Employee  @relation(fields: [patrolById], references: [id], onDelete: Restrict)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  asset    Asset    @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  patrolBy Employee @relation(fields: [patrolById], references: [id], onDelete: Restrict)
 
   @@index([companyId, occurredAt])
   @@index([assetId, occurredAt])
@@ -4552,29 +4677,29 @@ model AssetPatrolLog {
 // ============================================================
 
 model Announcement {
-  id               String               @id @default(uuid()) @db.VarChar(36)
-  companyId        String?              @map("company_id") @db.VarChar(36) /// null = ALL platform SUPERADMIN (rare)
-  authorId         String               @map("author_id") @db.VarChar(36) /// User.id pembuat (HR / ADMIN)
-  audienceType     AnnouncementAudience @default(COMPANY_WIDE)
-  departmentIds    String?              @db.Text /// JSON array uuid department (audience DEPARTMENT_ONLY)
-  branchIds        String?              @db.Text /// JSON array uuid branch (BRANCH_ONLY)
-  positionIds      String?              @db.Text /// JSON array uuid position (POSITION_ONLY)
-  employeeIds      String?              @db.Text /// JSON array uuid employee (EMPLOYEE_SPECIFIC)
-  title            String               @db.VarChar(255)
-  content          String               @db.Text
-  coverImageUrl    String?              @map("cover_image_url") @db.VarChar(500)
-  priority         AnnouncementPriority @default(NORMAL)
-  status           AnnouncementStatus   @default(DRAFT)
-  publishFrom      DateTime?            @map("publish_from") /// null = langsung terbit jika status=PUBLISHED
-  publishUntil     DateTime?            @map("publish_until") /// null = tidak expired
-  pinnedUntil      DateTime?            @map("pinned_until") /// PINNED memiliki masa aktif
-  allowComment     Boolean              @default(false)
-  totalViews       Int                  @default(0)
-  createdAt        DateTime             @default(now()) @map("created_at")
-  updatedAt        DateTime             @updatedAt @map("updated_at")
+  id            String               @id @default(uuid()) @db.VarChar(36)
+  companyId     String?              @map("company_id") @db.VarChar(36) /// null = ALL platform SUPERADMIN (rare)
+  authorId      String               @map("author_id") @db.VarChar(36) /// User.id pembuat (HR / ADMIN)
+  audienceType  AnnouncementAudience @default(COMPANY_WIDE)
+  departmentIds String?              @db.Text /// JSON array uuid department (audience DEPARTMENT_ONLY)
+  branchIds     String?              @db.Text /// JSON array uuid branch (BRANCH_ONLY)
+  positionIds   String?              @db.Text /// JSON array uuid position (POSITION_ONLY)
+  employeeIds   String?              @db.Text /// JSON array uuid employee (EMPLOYEE_SPECIFIC)
+  title         String               @db.VarChar(255)
+  content       String               @db.Text
+  coverImageUrl String?              @map("cover_image_url") @db.VarChar(500)
+  priority      AnnouncementPriority @default(NORMAL)
+  status        AnnouncementStatus   @default(DRAFT)
+  publishFrom   DateTime?            @map("publish_from") /// null = langsung terbit jika status=PUBLISHED
+  publishUntil  DateTime?            @map("publish_until") /// null = tidak expired
+  pinnedUntil   DateTime?            @map("pinned_until") /// PINNED memiliki masa aktif
+  allowComment  Boolean              @default(false)
+  totalViews    Int                  @default(0)
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
 
-  company Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  author  User      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  company Company?           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  author  User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
   reads   AnnouncementRead[]
 
   @@index([companyId, status])
@@ -4585,13 +4710,13 @@ model Announcement {
 
 /// Track per user sudah baca pengumuman atau belum (dot merah/notification bell)
 model AnnouncementRead {
-  id             String       @id @default(uuid()) @db.VarChar(36)
-  announcementId String       @map("announcement_id") @db.VarChar(36)
-  userId         String       @map("user_id") @db.VarChar(36)
-  readAt         DateTime     @default(now()) @map("read_at")
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  announcementId String   @map("announcement_id") @db.VarChar(36)
+  userId         String   @map("user_id") @db.VarChar(36)
+  readAt         DateTime @default(now()) @map("read_at")
 
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId],         references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([announcementId, userId])
   @@index([userId, readAt])
@@ -4603,25 +4728,25 @@ model AnnouncementRead {
 // ============================================================
 
 model Survey {
-  id                String         @id @default(uuid()) @db.VarChar(36)
-  companyId         String         @map("company_id") @db.VarChar(36)
-  createdById       String         @map("created_by_id") @db.VarChar(36)
-  type              SurveyType     @default(SURVEY)
-  title             String         @db.VarChar(255)
-  description       String?        @db.Text
-  status            SurveyStatus   @default(DRAFT)
-  anonymous         Boolean        @default(false)
-  allowMultipleSubmission Boolean  @default(false)
-  startDate         DateTime?      @map("start_date") @db.Date
-  endDate           DateTime?      @map("end_date")   @db.Date
-  targetAudienceIds String?        @db.Text /// JSON array employeeIds (optional)
-  maxResponses      Int?           @map("max_responses") /// null = unlimited
-  totalResponses    Int            @default(0)
-  createdAt         DateTime       @default(now()) @map("created_at")
-  updatedAt         DateTime       @updatedAt @map("updated_at")
+  id                      String       @id @default(uuid()) @db.VarChar(36)
+  companyId               String       @map("company_id") @db.VarChar(36)
+  createdById             String       @map("created_by_id") @db.VarChar(36)
+  type                    SurveyType   @default(SURVEY)
+  title                   String       @db.VarChar(255)
+  description             String?      @db.Text
+  status                  SurveyStatus @default(DRAFT)
+  anonymous               Boolean      @default(false)
+  allowMultipleSubmission Boolean      @default(false)
+  startDate               DateTime?    @map("start_date") @db.Date
+  endDate                 DateTime?    @map("end_date") @db.Date
+  targetAudienceIds       String?      @db.Text /// JSON array employeeIds (optional)
+  maxResponses            Int?         @map("max_responses") /// null = unlimited
+  totalResponses          Int          @default(0)
+  createdAt               DateTime     @default(now()) @map("created_at")
+  updatedAt               DateTime     @updatedAt @map("updated_at")
 
-  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdBy User              @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
   questions SurveyQuestion[]
   responses SurveyResponse[]
 
@@ -4632,18 +4757,18 @@ model Survey {
 
 /// 1 survey punya banyak pertanyaan (ordered position)
 model SurveyQuestion {
-  id           String              @id @default(uuid()) @db.VarChar(36)
-  surveyId     String              @map("survey_id") @db.VarChar(36)
-  position     Int                 @default(0)
-  questionText String              @map("question_text") @db.Text
-  type         SurveyQuestionType  @default(SINGLE_CHOICE)
-  optionsJson  String?             @map("options_json") @db.Text /// JSON array string [{label:"Sangat Puas",value:"A"}]
-  required     Boolean             @default(true)
-  minSelect    Int?                @map("min_select") /// MULTIPLE_CHOICE min jawaban (default 1)
-  maxSelect    Int?                @map("max_select") /// MULTIPLE max jawaban (default = options.len)
-  createdAt    DateTime            @default(now()) @map("created_at")
+  id           String             @id @default(uuid()) @db.VarChar(36)
+  surveyId     String             @map("survey_id") @db.VarChar(36)
+  position     Int                @default(0)
+  questionText String             @map("question_text") @db.Text
+  type         SurveyQuestionType @default(SINGLE_CHOICE)
+  optionsJson  String?            @map("options_json") @db.Text /// JSON array string [{label:"Sangat Puas",value:"A"}]
+  required     Boolean            @default(true)
+  minSelect    Int?               @map("min_select") /// MULTIPLE_CHOICE min jawaban (default 1)
+  maxSelect    Int?               @map("max_select") /// MULTIPLE max jawaban (default = options.len)
+  createdAt    DateTime           @default(now()) @map("created_at")
 
-  survey  Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  survey  Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   answers SurveyAnswer[]
 
   @@index([surveyId, position])
@@ -4652,29 +4777,29 @@ model SurveyQuestion {
 
 /// 1 user submit 1 response (non-anonymous punya userId, anonymous = null)
 model SurveyResponse {
-  id           String      @id @default(uuid()) @db.VarChar(36)
-  surveyId     String      @map("survey_id") @db.VarChar(36)
-  respondentId String?     @map("respondent_id") @db.VarChar(36) /// null = anonymous=true
-  submittedAt  DateTime    @default(now()) @map("submitted_at")
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  surveyId     String   @map("survey_id") @db.VarChar(36)
+  respondentId String?  @map("respondent_id") @db.VarChar(36) /// null = anonymous=true
+  submittedAt  DateTime @default(now()) @map("submitted_at")
 
-  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  respondent User?  @relation(fields: [respondentId], references: [id], onDelete: SetNull)
+  survey     Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  respondent User?          @relation(fields: [respondentId], references: [id], onDelete: SetNull)
   answers    SurveyAnswer[]
 
+  @@unique([respondentId, surveyId])
   @@index([surveyId])
   @@index([respondentId, surveyId])
-  @@unique([respondentId, surveyId])
   @@map("survey_responses")
 }
 
 /// Per question per response = jawaban (SINGLE/MULTIPLE pilih value option, TEXT = bebas, RATING = numeric)
 model SurveyAnswer {
-  id            String  @id @default(uuid()) @db.VarChar(36)
-  responseId    String  @map("response_id") @db.VarChar(36)
-  questionId    String  @map("question_id") @db.VarChar(36)
-  textValue     String? @db.Text                     /// TEXT type, atau concatenated MULTIPLE delimiter comma
-  numberValue   Decimal? @db.Decimal(10, 2)          /// RATING_1_5 type
-  selectedJson  String? @map("selected_json") @db.Text /// JSON array values MULTIPLE_CHOICE
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  responseId   String   @map("response_id") @db.VarChar(36)
+  questionId   String   @map("question_id") @db.VarChar(36)
+  textValue    String?  @db.Text /// TEXT type, atau concatenated MULTIPLE delimiter comma
+  numberValue  Decimal? @db.Decimal(10, 2) /// RATING_1_5 type
+  selectedJson String?  @map("selected_json") @db.Text /// JSON array values MULTIPLE_CHOICE
 
   response SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
   question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -4862,8 +4987,8 @@ enum ClaimPeriodType {
 
 /// C.1 Claim Limit Violation Action
 enum LimitViolationAction {
-  WARN      /// Submit TETAP DITERIMA tapi requiresReview = true + flag warning untuk admin audit
-  BLOCK     /// Submit DIREJECT dengan error BadRequest (policy sangat ketat)
+  WARN /// Submit TETAP DITERIMA tapi requiresReview = true + flag warning untuk admin audit
+  BLOCK /// Submit DIREJECT dengan error BadRequest (policy sangat ketat)
 }
 
 /// C.5 Daily Activity Module — karyawan remote/field worker submit aktivitas harian dengan foto + lokasi + durasi
@@ -4952,29 +5077,29 @@ enum SurveyQuestionType {
 
 /// D.3 E-Signature provider list: internal built-in OR eksternal provider resmi Indonesia (Privy/Digisign sesuai UU ITE)
 enum ESignatureProvider {
-  INTERNAL        /// Sign built-in (non-legal audit trail fallback only, NOT recommended untuk kontrak kerja)
-  PRIVY_ID        /// PrivyID - provider resmi OJK/Kemenkominfo
-  DIGISIGN        /// Digisign - provider e-sign bersertifikat
-  PERURI          /// Peruri e-sign (instansi pemerintah)
+  INTERNAL /// Sign built-in (non-legal audit trail fallback only, NOT recommended untuk kontrak kerja)
+  PRIVY_ID /// PrivyID - provider resmi OJK/Kemenkominfo
+  DIGISIGN /// Digisign - provider e-sign bersertifikat
+  PERURI /// Peruri e-sign (instansi pemerintah)
   OTHER
 }
 
 enum ESignatureStatus {
-  DRAFT           /// Dokumen draft, belum dikirim sign
-  REQUESTED       /// Sudah dikirim ke signer via provider (pending sign)
-  SIGNED          /// Signer sudah menandatangani
-  VERIFIED        /// Provider sudah verifikasi audit trail sah
-  REJECTED        /// Signer menolak menandatangani
-  EXPIRED         /// Link sign kadaluwarsa (default 30 hari)
-  FAILED          /// Error provider / sign error
-  CANCELLED       /// Pembatalan oleh pengirim sebelum sign
+  DRAFT /// Dokumen draft, belum dikirim sign
+  REQUESTED /// Sudah dikirim ke signer via provider (pending sign)
+  SIGNED /// Signer sudah menandatangani
+  VERIFIED /// Provider sudah verifikasi audit trail sah
+  REJECTED /// Signer menolak menandatangani
+  EXPIRED /// Link sign kadaluwarsa (default 30 hari)
+  FAILED /// Error provider / sign error
+  CANCELLED /// Pembatalan oleh pengirim sebelum sign
 }
 
 /// D.3 Level verifikasi e-signature (ketat -> longgar)
 enum ESignatureVerificationLevel {
-  CERTIFIED       /// Tertinggi: Kemenkominfo / OJK registered provider + e-KYC + audit trail (wajib kontrak kerja)
-  AUDIT_TRAIL     /// Menengah: Timestamp + hash chain + signer identity log (bukan certificate-based)
-  BASIC           /// Fallback internal: basic check email + no audit (not legal)
+  CERTIFIED /// Tertinggi: Kemenkominfo / OJK registered provider + e-KYC + audit trail (wajib kontrak kerja)
+  AUDIT_TRAIL /// Menengah: Timestamp + hash chain + signer identity log (bukan certificate-based)
+  BASIC /// Fallback internal: basic check email + no audit (not legal)
 }
 
 // ============================================================
@@ -5056,28 +5181,28 @@ enum AttendanceCorrectionStatus {
   REJECTED
 }
 
-
 /// Immutable formula revisions. Publishing schedules the override at period start.
 model PayrollFormulaVersion {
-  id String @id @default(uuid()) @db.VarChar(36)
-  companyId String @map("company_id") @db.VarChar(36)
-  componentId String @map("component_id") @db.VarChar(36)
-  version Int
-  expression String @db.Text
-  expressionHash String @map("expression_hash") @db.Char(64)
-  engineVersion Int @default(1) @map("engine_version")
-  effectiveFrom DateTime @map("effective_from") @db.Date
-  status PayrollFormulaStatus @default(DRAFT)
-  createdBy String @map("created_by") @db.VarChar(36)
-  previewedAt DateTime? @map("previewed_at")
-  publishedBy String? @map("published_by") @db.VarChar(36)
-  publishedAt DateTime? @map("published_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  component SalaryComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
-  audits PayrollFormulaAudit[]
-  calculations PayrollFormulaCalculation[]
+  id             String                      @id @default(uuid()) @db.VarChar(36)
+  companyId      String                      @map("company_id") @db.VarChar(36)
+  componentId    String                      @map("component_id") @db.VarChar(36)
+  version        Int
+  expression     String                      @db.Text
+  expressionHash String                      @map("expression_hash") @db.Char(64)
+  engineVersion  Int                         @default(1) @map("engine_version")
+  effectiveFrom  DateTime                    @map("effective_from") @db.Date
+  status         PayrollFormulaStatus        @default(DRAFT)
+  createdBy      String                      @map("created_by") @db.VarChar(36)
+  previewedAt    DateTime?                   @map("previewed_at")
+  publishedBy    String?                     @map("published_by") @db.VarChar(36)
+  publishedAt    DateTime?                   @map("published_at")
+  createdAt      DateTime                    @default(now()) @map("created_at")
+  updatedAt      DateTime                    @updatedAt @map("updated_at")
+  company        Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  component      SalaryComponent             @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  audits         PayrollFormulaAudit[]
+  calculations   PayrollFormulaCalculation[]
+
   @@unique([componentId, version])
   @@index([companyId, status, effectiveFrom])
   @@map("payroll_formula_versions")
@@ -5090,40 +5215,42 @@ enum PayrollFormulaStatus {
 
 /// Audit stores identity and revision hashes, never payroll simulation inputs.
 model PayrollFormulaAudit {
-  id String @id @default(uuid()) @db.VarChar(36)
-  companyId String @map("company_id") @db.VarChar(36)
-  versionId String @map("version_id") @db.VarChar(36)
-  actorId String @map("actor_id") @db.VarChar(36)
-  action String @db.VarChar(30)
-  expressionHash String @map("expression_hash") @db.Char(64)
-  ipAddress String? @map("ip_address") @db.VarChar(45)
-  requestId String? @map("request_id") @db.VarChar(100)
-  createdAt DateTime @default(now()) @map("created_at")
-  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  version PayrollFormulaVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  id             String                @id @default(uuid()) @db.VarChar(36)
+  companyId      String                @map("company_id") @db.VarChar(36)
+  versionId      String                @map("version_id") @db.VarChar(36)
+  actorId        String                @map("actor_id") @db.VarChar(36)
+  action         String                @db.VarChar(30)
+  expressionHash String                @map("expression_hash") @db.Char(64)
+  ipAddress      String?               @map("ip_address") @db.VarChar(45)
+  requestId      String?               @map("request_id") @db.VarChar(100)
+  createdAt      DateTime              @default(now()) @map("created_at")
+  company        Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  version        PayrollFormulaVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+
   @@index([companyId, versionId])
   @@map("payroll_formula_audits")
 }
 
 /// Frozen execution evidence attached to the actual payslip.
 model PayrollFormulaCalculation {
-  id String @id @default(uuid()) @db.VarChar(36)
-  companyId String @map("company_id") @db.VarChar(36)
-  runId String @map("run_id") @db.VarChar(36)
-  payslipId String @map("payslip_id") @db.VarChar(36)
-  componentId String @map("component_id") @db.VarChar(36)
-  versionId String @map("version_id") @db.VarChar(36)
-  expression String @db.Text
-  amount Decimal @db.Decimal(15, 2)
-  inputs Json
-  dependencies Json
-  engineVersion Int @map("engine_version")
-  createdAt DateTime @default(now()) @map("created_at")
-  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  run PayrollRun @relation(fields: [runId], references: [id], onDelete: Restrict)
-  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
-  component SalaryComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
-  version PayrollFormulaVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  id            String                @id @default(uuid()) @db.VarChar(36)
+  companyId     String                @map("company_id") @db.VarChar(36)
+  runId         String                @map("run_id") @db.VarChar(36)
+  payslipId     String                @map("payslip_id") @db.VarChar(36)
+  componentId   String                @map("component_id") @db.VarChar(36)
+  versionId     String                @map("version_id") @db.VarChar(36)
+  expression    String                @db.Text
+  amount        Decimal               @db.Decimal(15, 2)
+  inputs        Json
+  dependencies  Json
+  engineVersion Int                   @map("engine_version")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  company       Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  run           PayrollRun            @relation(fields: [runId], references: [id], onDelete: Restrict)
+  payslip       Payslip               @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  component     SalaryComponent       @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  version       PayrollFormulaVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+
   @@unique([payslipId, componentId])
   @@index([companyId, runId])
   @@map("payroll_formula_calculations")

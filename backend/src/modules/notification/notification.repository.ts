@@ -3,15 +3,20 @@ import { Prisma } from '@prisma/client';
 import type { CreateNotificationDTO } from './notification.dto';
 
 export class NotificationRepository {
-  async findAll(userId: string, unreadOnly = false, limit = 50) {
-    const where: Prisma.NotificationWhereInput = { userId };
+  async findAll(companyId: string, userId: string, unreadOnly = false, page = 1, limit = 50) {
+    const where: Prisma.NotificationWhereInput = { companyId, userId };
     if (unreadOnly) where.isRead = false;
 
-    return prisma.notification.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    const [items, total] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.notification.count({ where }),
+    ]);
+    return { items, total };
   }
 
   async findById(id: string) {
@@ -22,27 +27,27 @@ export class NotificationRepository {
     return prisma.notification.create({ data: data as any });
   }
 
-  async markAsRead(ids: string[], userId: string) {
+  async markAsRead(ids: string[], userId: string, companyId: string) {
     return prisma.notification.updateMany({
-      where: { id: { in: ids }, userId },
+      where: { id: { in: ids }, userId, companyId },
       data: { isRead: true, readAt: new Date() },
     });
   }
 
-  async markAllAsRead(userId: string) {
+  async markAllAsRead(userId: string, companyId: string) {
     return prisma.notification.updateMany({
-      where: { userId, isRead: false },
+      where: { userId, companyId, isRead: false },
       data: { isRead: true, readAt: new Date() },
     });
   }
 
-  async delete(id: string, userId: string) {
-    return prisma.notification.deleteMany({ where: { id, userId } });
+  async delete(id: string, userId: string, companyId: string) {
+    return prisma.notification.deleteMany({ where: { id, userId, companyId } });
   }
 
-  async getUnreadCount(userId: string) {
+  async getUnreadCount(userId: string, companyId: string) {
     return prisma.notification.count({
-      where: { userId, isRead: false },
+      where: { userId, companyId, isRead: false },
     });
   }
 }

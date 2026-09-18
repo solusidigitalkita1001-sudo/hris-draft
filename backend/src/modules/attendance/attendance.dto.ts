@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+const deviceGpsSchema = z.object({
+  isMockLocation: z.boolean().optional().nullable(),
+  mockProviderApp: z.string().max(200).optional().nullable(),
+  accuracyMeters: z.number().min(0).optional().nullable(),
+  coordinateStaleHours: z.number().min(0).optional().nullable(),
+  altitudeMeters: z.number().optional().nullable(),
+  bearingDegrees: z.number().min(0).max(360).optional().nullable(),
+});
+
 export const createAttendanceSchema = z.object({
   employeeId: z.string().uuid(),
   companyId: z.string().uuid(),
@@ -49,16 +58,7 @@ export const createAttendanceSchema = z.object({
     })
     .optional(),
   /// B.9 GPS / Mock Location
-  deviceGps: z
-    .object({
-      isMockLocation: z.boolean().optional().nullable(),
-      mockProviderApp: z.string().max(200).optional().nullable(),
-      accuracyMeters: z.number().min(0).optional().nullable(),
-      coordinateStaleHours: z.number().min(0).optional().nullable(),
-      altitudeMeters: z.number().optional().nullable(),
-      bearingDegrees: z.number().min(0).max(360).optional().nullable(),
-    })
-    .optional(),
+  deviceGps: deviceGpsSchema.optional(),
 });
 
 export const checkoutAttendanceSchema = z.object({
@@ -66,6 +66,7 @@ export const checkoutAttendanceSchema = z.object({
   method: z.enum(['FINGERPRINT', 'MOBILE_GPS', 'MANUAL', 'FACE_RECOGNITION']).optional(),
   checkOutLatitude: z.number().optional(),
   checkOutLongitude: z.number().optional(),
+  deviceGps: deviceGpsSchema.optional(),
   notes: z.string().optional(),
 });
 
@@ -106,6 +107,28 @@ export const attendanceQuerySchema = z.object({
   status: z.string().optional(),
 });
 
+/**
+ * Mobile self-service queries never accept an employee/company identity. Those
+ * values are taken from the authenticated session by the controller.
+ */
+export const myAttendanceQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must use YYYY-MM').optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const selfCheckInSchema = createAttendanceSchema.pick({
+  method: true,
+  notes: true,
+  checkInLatitude: true,
+  checkInLongitude: true,
+  faceRecognition: true,
+  liveness: true,
+  deviceGps: true,
+});
+
+export const selfCheckOutSchema = checkoutAttendanceSchema.omit({ checkOut: true });
+
 export const attendanceContextQuerySchema = z.object({
   employeeId: z.string().uuid(),
   companyId: z.string().uuid().optional(),
@@ -123,6 +146,12 @@ export const createOvertimeSchema = z.object({
   multiplier: z.number().default(1.5),
 });
 
+/** Company always comes from the active tenant. employeeId is only honored
+ * for elevated users; regular employees are forced to their session identity. */
+export const overtimeRequestSchema = createOvertimeSchema.omit({ companyId: true }).extend({
+  employeeId: z.string().uuid().optional(),
+});
+
 export const overtimeQuerySchema = z.object({
   companyId: z.string().uuid(),
   employeeId: z.string().uuid().optional(),
@@ -135,3 +164,5 @@ export type CreateAttendanceDTO = z.infer<typeof createAttendanceSchema>;
 export type CheckoutAttendanceDTO = z.infer<typeof checkoutAttendanceSchema>;
 export type UpdateAttendanceDTO = z.infer<typeof updateAttendanceSchema>;
 export type CreateOvertimeDTO = z.infer<typeof createOvertimeSchema>;
+export type SelfCheckInDTO = z.infer<typeof selfCheckInSchema>;
+export type SelfCheckOutDTO = z.infer<typeof selfCheckOutSchema>;

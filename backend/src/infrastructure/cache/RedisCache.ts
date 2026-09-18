@@ -76,6 +76,17 @@ export class RedisCache {
     }
   }
 
+  async setIfAbsent(key: string, value: unknown, ttlSeconds: number): Promise<boolean> {
+    if (!this.client) return false;
+    try {
+      const result = await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds, 'NX');
+      return result === 'OK';
+    } catch (error) {
+      logger.error('Redis set-if-absent error', { key, error });
+      return false;
+    }
+  }
+
   async delete(key: string): Promise<void> {
     if (!this.client) return;
 

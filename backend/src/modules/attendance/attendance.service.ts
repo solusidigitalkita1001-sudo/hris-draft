@@ -3,6 +3,8 @@ import {
   CreateAttendanceDTO,
   CreateOvertimeDTO,
   CheckoutAttendanceDTO,
+  SelfCheckInDTO,
+  SelfCheckOutDTO,
 } from './attendance.dto';
 import { NotFoundError, BadRequestError, ForbiddenError, ServiceUnavailableError, ConflictError } from '@/shared/exceptions/AppError';
 import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
@@ -27,7 +29,7 @@ import {
 import { attendanceContextService } from './attendance-context.service';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
-import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
+import { getCurrentCompanyId, getCurrentRoles, getCurrentUser, getRequestContext } from '@/shared/context/RequestContext';
 import prisma from '@/shared/database/prisma';
 import {
   extractFaceVectorFromImage,
@@ -111,6 +113,28 @@ function buildScheduledEndTime(baseDate: Date, workStart: string | null | undefi
 
 function calculateMinutesDifference(laterDate: Date, earlierDate: Date) {
   return Math.max(0, Math.round((laterDate.getTime() - earlierDate.getTime()) / 60000));
+}
+
+function dateKeyInTimezone(date: Date, timezone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${value.year}-${value.month}-${value.day}`;
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+function utcDayRange(dateKey: string) {
+  return {
+    start: new Date(`${dateKey}T00:00:00.000Z`),
+    end: new Date(`${dateKey}T23:59:59.999Z`),
+  };
 }
 
 function calculateDistanceMeters(
@@ -280,6 +304,87 @@ export class AttendanceService {
 
   async findAll(companyId: string, filters?: any) {
     return attendanceRepository.findAll(companyId, filters);
+  }
+
+  private async selfClock(employeeId: string, companyId: string, now = new Date()) {
+    const actor = getCurrentUser();
+    if (!actor?.employeeId || actor.employeeId !== employeeId || actor.companyId !== companyId) {
+      throw new ForbiddenError('Self-service attendance requires the authenticated employee');
+    }
+    const company = await prisma.company.findFirst({
+      where: { id: companyId, deletedAt: null },
+      select: { timezone: true },
+    });
+    if (!company) throw new NotFoundError('Company not found');
+    const timezone = company.timezone || 'UTC';
+    const serverDate = dateKeyInTimezone(now, timezone);
+    // Noon UTC remains on the intended calendar date across the normal IANA
+    // timezone range and avoids a host-local timezone changing getDay().
+    const calendarDate = new Date(`${serverDate}T12:00:00.000Z`);
+    return { now, timezone, serverDate, calendarDate, ...utcDayRange(serverDate) };
+  }
+
+  async findMyAttendance(
+    employeeId: string,
+    companyId: string,
+    query: { month?: string; page: number; limit: number },
+  ) {
+    const clock = await this.selfClock(employeeId, companyId);
+    const month = query.month ?? clock.serverDate.slice(0, 7);
+    const start = new Date(`${month}-01T00:00:00.000Z`);
+    const [year, monthNumber] = month.split('-').map(Number);
+    const end = new Date(Date.UTC(year, monthNumber, 1));
+    const result = await attendanceRepository.findMinePaginated(
+      companyId,
+      employeeId,
+      start,
+      end,
+      query.page,
+      query.limit,
+    );
+    return { ...result, month, timezone: clock.timezone, serverDate: clock.serverDate };
+  }
+
+  async getMyToday(employeeId: string, companyId: string) {
+    const clock = await this.selfClock(employeeId, companyId);
+    const [record, context] = await Promise.all([
+      attendanceRepository.findByEmployeeAndDateRange(employeeId, clock.start, clock.end),
+      this.getResolvedContext(employeeId, clock.calendarDate.toISOString(), companyId),
+    ]);
+    return {
+      serverTime: clock.now.toISOString(),
+      serverDate: clock.serverDate,
+      timezone: clock.timezone,
+      record,
+      context,
+      canCheckIn: !record,
+      canCheckOut: Boolean(record?.checkIn && !record?.checkOut),
+    };
+  }
+
+  async checkInSelf(employeeId: string, companyId: string, input: SelfCheckInDTO) {
+    const clock = await this.selfClock(employeeId, companyId);
+    return this.create({
+      ...input,
+      employeeId,
+      companyId,
+      date: clock.calendarDate.toISOString(),
+      checkIn: clock.now.toISOString(),
+      status: 'PRESENT',
+      source: 'MOBILE_SELF_SERVICE',
+    });
+  }
+
+  async checkOutSelf(employeeId: string, companyId: string, input: SelfCheckOutDTO) {
+    const clock = await this.selfClock(employeeId, companyId);
+    // A night shift may check out after the office date changes. Only consider
+    // recent open records; an older orphan must be corrected through approval.
+    const notBefore = new Date(clock.start.getTime() - 36 * 60 * 60 * 1000);
+    const record = await attendanceRepository.findLatestOpenByEmployee(employeeId, notBefore);
+    if (!record || record.companyId !== companyId) {
+      throw new NotFoundError('No open attendance record found for checkout');
+    }
+    return this.checkOut(record.id, { ...input, checkOut: clock.now.toISOString() });
   }
 
   async findById(id: string) {
@@ -491,10 +596,7 @@ export class AttendanceService {
       (data.deviceGps ?? null) as any,
     );
     const prismaMock: PrismaMockVerdict = (gpsCompliance.mockVerdict ?? 'LIKELY_REAL') as PrismaMockVerdict;
-    if (
-      method === AttendanceCaptureMethod.FACE_RECOGNITION &&
-      gpsCompliance.mockVerdict === MockLocationVerdict.CONFIRMED_FAKE
-    ) {
+    if (gpsCompliance.mockVerdict === MockLocationVerdict.CONFIRMED_FAKE) {
       throw new BadRequestError(`Lokasi terdeteksi palsu (Mock Location). Matikan fake GPS app untuk clock-in.`);
     }
 
@@ -553,8 +655,7 @@ export class AttendanceService {
       requiresReview:
         gpsEvaluation.requiresReview ||
         context.warnings.length > 0 ||
-        gpsCompliance.mockVerdict === MockLocationVerdict.SUSPICIOUS ||
-        gpsCompliance.mockVerdict === MockLocationVerdict.CONFIRMED_FAKE,
+        gpsCompliance.mockVerdict === MockLocationVerdict.SUSPICIOUS,
       policySnapshot: snapshot as Prisma.InputJsonValue,
       notes: data.notes,
     };
@@ -616,6 +717,20 @@ export class AttendanceService {
       phaseLabel: 'Check-out',
     });
 
+    const gpsCompliance = assessGpsCompliance(
+      { latitude: data.checkOutLatitude, longitude: data.checkOutLongitude },
+      {
+        latitude: context.policy.gpsLatitude,
+        longitude: context.policy.gpsLongitude,
+        radiusMeters: context.policy.gpsRadiusMeters,
+        name: context.branch?.name ?? null,
+      },
+      (data.deviceGps ?? null) as any,
+    );
+    if (gpsCompliance.mockVerdict === MockLocationVerdict.CONFIRMED_FAKE) {
+      throw new BadRequestError(`Lokasi terdeteksi palsu (Mock Location). Matikan fake GPS app untuk clock-out.`);
+    }
+
     const checkOutTime = new Date(data.checkOut);
     const scheduledEnd = buildScheduledEndTime(record.date, context.schedule.workStart, context.schedule.workEnd);
     let earlyLeaveMinutes = 0;
@@ -636,6 +751,7 @@ export class AttendanceService {
     const mergedWarnings = [
       ...context.warnings,
       ...(gpsEvaluation.exceptionType ? [gpsEvaluation.exceptionType] : []),
+      ...gpsCompliance.warnings,
     ];
 
     return attendanceRepository.update(id, {
@@ -647,7 +763,7 @@ export class AttendanceService {
       earlyLeaveMinutes,
       distanceMeters: record.distanceMeters ?? gpsEvaluation.distanceMeters,
       isWithinRadius: record.isWithinRadius ?? gpsEvaluation.isWithinRadius,
-      isException: record.isException || gpsEvaluation.isException || earlyLeaveMinutes > 0 || context.warnings.length > 0,
+      isException: record.isException || gpsEvaluation.isException || earlyLeaveMinutes > 0 || context.warnings.length > 0 || gpsCompliance.warnings.length > 0,
       exceptionType:
         record.exceptionType ??
         gpsEvaluation.exceptionType ??
@@ -660,7 +776,12 @@ export class AttendanceService {
           : context.warnings.length > 0
             ? 'Attendance context requires branch review'
             : null),
-      requiresReview: record.requiresReview || gpsEvaluation.requiresReview || earlyLeaveMinutes > 0 || context.warnings.length > 0,
+      requiresReview:
+        record.requiresReview ||
+        gpsEvaluation.requiresReview ||
+        earlyLeaveMinutes > 0 ||
+        context.warnings.length > 0 ||
+        gpsCompliance.mockVerdict === MockLocationVerdict.SUSPICIOUS,
       policySnapshot: {
         ...((record.policySnapshot as Record<string, unknown> | null) ?? {}),
         ...((this.buildPolicySnapshot(context, allowedMethods, mergedWarnings) as unknown as Record<string, unknown>) ?? {}),
@@ -670,6 +791,10 @@ export class AttendanceService {
           longitude: data.checkOutLongitude ?? null,
           distanceMeters: gpsEvaluation.distanceMeters,
           isWithinRadius: gpsEvaluation.isWithinRadius,
+          gpsCompliance: {
+            mockVerdict: gpsCompliance.mockVerdict,
+            warnings: gpsCompliance.warnings,
+          },
           earlyLeaveMinutes,
           workDuration,
         },

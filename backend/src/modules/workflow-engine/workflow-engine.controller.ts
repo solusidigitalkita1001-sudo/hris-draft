@@ -173,8 +173,10 @@ export class WorkflowEngineController {
         return res.status(400).json(Result.error('companyId is required'));
       }
 
-      const data = await workflowEngineRepository.findMyApprovals(companyId, req.user.id, req.user.roles || []);
-      res.json(Result.success(data));
+      const page = Number(req.query.page);
+      const limit = Number(req.query.limit);
+      const data = await workflowEngineRepository.findMyApprovals(companyId, req.user.id, req.user.roles || [], page, limit);
+      res.json(Result.paginated(data.items, data.total, page, limit));
     } catch (error) {
       next(error);
     }

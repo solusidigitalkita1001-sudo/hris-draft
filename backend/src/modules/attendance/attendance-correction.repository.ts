@@ -20,6 +20,13 @@ class AttendanceCorrectionRepository {
     });
   }
 
+  findByIdForEmployee(id: string, employeeId: string) {
+    return prisma.attendanceCorrection.findFirst({
+      where: { id, employeeId, deletedAt: null },
+      include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
+    });
+  }
+
   create(data: CreateAttendanceCorrectionDTO) {
     return prisma.attendanceCorrection.create({
       data: {

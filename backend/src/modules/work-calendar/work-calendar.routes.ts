@@ -45,7 +45,8 @@ router.get(
 );
 
 // National Holidays
-router.get('/holidays/list', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.findAllHolidays.bind(workCalendarController));
+// Safe self-service reference data; tenant scope still comes from the session.
+router.get('/holidays/list', workCalendarController.findAllHolidays.bind(workCalendarController));
 router.post('/holidays', authorize({ resource: 'work-calendar', action: 'create' }), validate(createHolidaySchema), workCalendarController.createHoliday.bind(workCalendarController));
 router.put('/holidays/:hid', authorize({ resource: 'work-calendar', action: 'update' }), validate(updateHolidaySchema), workCalendarController.updateHoliday.bind(workCalendarController));
 router.delete('/holidays/:hid', authorize({ resource: 'work-calendar', action: 'delete' }), workCalendarController.deleteHoliday.bind(workCalendarController));
