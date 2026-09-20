@@ -39,6 +39,35 @@ jobs:
           fi
           echo "OK: no '* 2.ts' / '*copy*' files."
 
+  mobile-release-contract:
+    name: Mobile smoke + HTTPS configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate deployment shell syntax
+        run: bash -n scripts/server-deploy.sh
+      - name: Verify the 24-operation sanitized smoke contract
+        run: node scripts/checks/mobile-api-smoke.test.cjs
+      - name: Generate throwaway TLS files for Nginx syntax validation
+        run: >-
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1
+          -subj '/CN=localhost'
+          -keyout /tmp/hris-ci-privkey.pem
+          -out /tmp/hris-ci-fullchain.pem
+      - name: Validate HTTPS Nginx configuration
+        run: >-
+          docker run --rm
+          --add-host api:127.0.0.1
+          --add-host api-replica:127.0.0.1
+          -v "$PWD/docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"
+          -v "$PWD/deploy/nginx-https:/etc/nginx/sites-enabled:ro"
+          -v "/tmp/hris-ci-fullchain.pem:/etc/nginx/tls/fullchain.pem:ro"
+          -v "/tmp/hris-ci-privkey.pem:/etc/nginx/tls/privkey.pem:ro"
+          nginx:alpine nginx -t
+
   backend:
     name: Backend (type-check + build [blocking], lint + test [soft])
     runs-on: ubuntu-latest

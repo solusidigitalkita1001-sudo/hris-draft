@@ -47,6 +47,7 @@ export function enforceTrustedFaceRecognition(
   method: AttendanceCaptureMethod,
   faceInput: any,
   hasServerReference: boolean,
+  requiresSelfie = false,
 ): void {
   const hasClientDerivedBiometric = Boolean(faceInput) && (
     faceInput.selfieUrl !== undefined ||
@@ -63,7 +64,10 @@ export function enforceTrustedFaceRecognition(
     );
   }
 
-  if (method !== AttendanceCaptureMethod.FACE_RECOGNITION) {
+  const requiresFaceVerification =
+    method === AttendanceCaptureMethod.FACE_RECOGNITION || requiresSelfie;
+
+  if (!requiresFaceVerification) {
     if (faceInput !== undefined) {
       throw new BadRequestError('Payload faceRecognition hanya boleh dipakai dengan method FACE_RECOGNITION');
     }
@@ -461,7 +465,9 @@ export class AttendanceService {
     });
 
     const faceInput = data.faceRecognition as any;
-    const hasFacePayload = method === AttendanceCaptureMethod.FACE_RECOGNITION || !!faceInput;
+    const requiresFaceVerification =
+      method === AttendanceCaptureMethod.FACE_RECOGNITION || context.policy.requiresSelfie;
+    const hasFacePayload = requiresFaceVerification || !!faceInput;
 
     const employeeForFace = hasFacePayload
       ? await prisma.employee.findFirst({
@@ -480,13 +486,18 @@ export class AttendanceService {
         })
       : null;
 
-    enforceTrustedFaceRecognition(method, faceInput, Boolean(employeeForFace?.faceProfile));
+    enforceTrustedFaceRecognition(
+      method,
+      faceInput,
+      Boolean(employeeForFace?.faceProfile),
+      context.policy.requiresSelfie,
+    );
 
     let similarity = 0;
     let isFaceMatch = false;
     let faceExtraction: FaceExtractionResult | null = null;
 
-    if (method === AttendanceCaptureMethod.FACE_RECOGNITION) {
+    if (requiresFaceVerification) {
       const profile = employeeForFace?.faceProfile;
       if (!employeeForFace || !profile) {
         throw new BadRequestError('Profil wajah karyawan belum terdaftar.');
@@ -572,7 +583,7 @@ export class AttendanceService {
     const livenessInput = (data.liveness ?? null) as any;
     const livenessAssess = hasFacePayload ? assessLiveness(livenessInput as any) : null;
     const prismaLiveness: PrismaLivenessVerdict = (livenessAssess?.verdict ?? 'NO_DATA') as PrismaLivenessVerdict;
-    if (method === AttendanceCaptureMethod.FACE_RECOGNITION && livenessAssess) {
+    if (requiresFaceVerification && livenessAssess) {
       if (livenessAssess.verdict === LivenessVerdict.STATIC) {
         throw new BadRequestError(`Liveness gagal: foto terdeteksi dari galeri / bukan kamera real-time.`);
       }

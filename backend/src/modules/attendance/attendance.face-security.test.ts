@@ -43,4 +43,33 @@ describe('trusted face-recognition request policy', () => {
       false,
     )).toThrow(/profil wajah karyawan belum terdaftar/i);
   });
+
+  describe('when the resolved attendance policy requires a selfie', () => {
+    it('requires a selfie even for MOBILE_GPS attendance', () => {
+      expect(() => enforceTrustedFaceRecognition(
+        AttendanceCaptureMethod.MOBILE_GPS,
+        undefined,
+        true,
+        true,
+      )).toThrow(/membutuhkan selfieImage/i);
+    });
+
+    it('requires a trusted server profile for MOBILE_GPS attendance', () => {
+      expect(() => enforceTrustedFaceRecognition(
+        AttendanceCaptureMethod.MOBILE_GPS,
+        { selfieImage },
+        false,
+        true,
+      )).toThrow(/profil wajah karyawan belum terdaftar/i);
+    });
+
+    it('accepts a source selfie backed by a trusted server profile', () => {
+      expect(() => enforceTrustedFaceRecognition(
+        AttendanceCaptureMethod.MOBILE_GPS,
+        { selfieImage },
+        true,
+        true,
+      )).not.toThrow();
+    });
+  });
 });

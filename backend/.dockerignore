@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+logs
+uploads
+.env
+.env.*
+!.env.example
+.claude
+.DS_Store
+*.log
+*.tsbuildinfo
+**/*.test.ts
+**/*.spec.ts

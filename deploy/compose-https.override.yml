@@ -1,0 +1,9 @@
+services:
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx-https:/etc/nginx/sites-enabled:ro
+      - ${TLS_CERTIFICATE_PATH:?TLS_CERTIFICATE_PATH is required}:/etc/nginx/tls/fullchain.pem:ro
+      - ${TLS_PRIVATE_KEY_PATH:?TLS_PRIVATE_KEY_PATH is required}:/etc/nginx/tls/privkey.pem:ro

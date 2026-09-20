@@ -5,6 +5,53 @@ Ditujukan kepada: Backend Developer HRIS
 Repository client: `hris-mobile-app`
 Kontrak utama: `mobile-api.md`, baseline backend branch `main` per 12 September 2026
 
+## Update Tahap 1 — 19 September 2026
+
+Live smoke terhadap 24 pasangan method/path sudah dijalankan dengan akun uji
+employee dan manager. Hasil unik: 13 respons sukses, 7 mutation menolak payload
+invalid sesuai kontrak, 2 endpoint aktif tetapi belum mendapat positive fixture,
+dan 2 endpoint gagal karena akun employee belum mempunyai kalender kerja aktif
+atau formula shift. Login, `/auth/me`, refresh-token rotation, logout, dan profil
+berhasil; native login dengan `X-Client-Type: mobile` tidak mengalami error
+`Access token is missing`. Seluruh sesi sudah di-logout, password tidak diubah,
+dan artefak tidak menyimpan credential/token.
+
+Remediasi backend pada branch ini menambahkan:
+
+- provisioner fixture staging tertarget dan idempotent untuk kalender, leave
+  request, notifikasi, GPS policy opt-in, serta face enrollment opt-in;
+- smoke runner 24 operasi dengan positive fixture selection, safe negative
+  mutations, refresh rotation, cleanup logout, dan output JSON tersanitasi;
+- test integrasi mock yang membuktikan tepat 24 request dan tidak ada secret di
+  artefak;
+- Compose override dan konfigurasi Nginx HTTPS tanpa menyimpan certificate/key.
+
+Validasi lokal terisolasi setelah remediasi menghasilkan:
+
+- seluruh 61 migration dan synthetic seed berhasil pada database baru;
+- fixture calendar, leave, dan notification tetap satu record setelah apply
+  kedua (idempotent), sedangkan perubahan GPS branch bersama ditolak tanpa
+  acknowledgement eksplisit;
+- smoke final lulus untuk 24/24 operasi inti, lima operasi manager tambahan,
+  dan assertion rotasi token (`30 passed`, `0 failed`, `0 blocked`), dengan
+  artefak mode `0600` dan tanpa credential/token;
+- policy Bandung `requiresSelfie=true` kini menolak check-in `MOBILE_GPS` tanpa
+  selfie (HTTP 400) dan tidak membuat row attendance; enforcement server-side
+  telah diperbaiki agar face match serta liveness tidak dapat dilewati dengan
+  memilih metode GPS;
+- build TypeScript/API berhasil dan konfigurasi HTTPS lulus `nginx -t` memakai
+  certificate sementara.
+
+Pemeriksaan publik read-only pada 19 September 2026 masih menemukan HTTP health
+port 8084 merespons 200, sementara TLS pada port 8083/8084 gagal saat handshake
+dan port 443 timeout. Karena itu status tetap `PASS lokal`, `REVIEW live
+deployment`, dan `PENDING real device` sampai perubahan ini dideploy, fixture
+diterapkan ke akun sintetis, sertifikat/DNS/port 443 disiapkan, smoke live bersih,
+dan tabel acceptance perangkat di `docs/mobile-staging-acceptance.md` selesai.
+
+Bagian "batas audit" di bawah menjelaskan kondisi audit awal 16 September dan
+dipertahankan sebagai riwayat, bukan status live terbaru.
+
 ## 1. Tujuan report
 
 Report ini membandingkan kontrak API mobile terbaru dengan implementasi Flutter yang sedang berjalan. Tujuannya adalah menentukan:

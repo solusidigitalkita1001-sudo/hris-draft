@@ -22,6 +22,9 @@ set -Eeuo pipefail
 
 DEPLOY_DIR="${DEPLOY_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-}"
+HTTPS_ENABLED="${HTTPS_ENABLED:-false}"
+HTTPS_COMPOSE_FILE="${HTTPS_COMPOSE_FILE:-deploy/compose-https.override.yml}"
 ENV_FILE="${ENV_FILE:-backend/.env}"
 BACKEND_CONTAINER="${BACKEND_CONTAINER:-hris_backend}"
 BACKEND_PORT="${BACKEND_PORT:-3000}"
@@ -34,6 +37,18 @@ MIGRATION_SCHEMA="src/database/prisma/schema.prisma"
 SPECIAL_MIGRATION="20260809120000_attendance_policy_company_default"
 FACE_MATCH_MIGRATION="20260903090000_face_match_rate_limit_index"
 FACE_MATCH_RECOVERY="$DEPLOY_DIR/scripts/migrations/recover-face-match-rate-limit-index.cjs"
+
+COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+if [ -n "$COMPOSE_ENV_FILE" ]; then
+    COMPOSE_ARGS=(--env-file "$COMPOSE_ENV_FILE" "${COMPOSE_ARGS[@]}")
+fi
+if [ "$HTTPS_ENABLED" = "true" ]; then
+    COMPOSE_ARGS+=( -f "$HTTPS_COMPOSE_FILE" )
+fi
+
+compose() {
+    docker compose "${COMPOSE_ARGS[@]}" "$@"
+}
 
 # =====================================================================
 # LOGGING
@@ -78,7 +93,7 @@ on_error() {
 
     echo ""
     echo "🐳 Docker Compose status:"
-    docker compose -f "$COMPOSE_FILE" ps 2>/dev/null || true
+    compose ps 2>/dev/null || true
 
     echo ""
     echo "📋 Backend logs:"
@@ -110,6 +125,7 @@ log "HRIS deployment started"
 
 echo "Deploy dir    : $DEPLOY_DIR"
 echo "Compose file  : $COMPOSE_FILE"
+echo "HTTPS enabled : $HTTPS_ENABLED"
 echo "Backend       : $BACKEND_CONTAINER"
 echo "Started       : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "Commit        : ${DEPLOY_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
@@ -135,6 +151,16 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     exit 1
 fi
 
+if [ -n "$COMPOSE_ENV_FILE" ] && [ ! -f "$COMPOSE_ENV_FILE" ]; then
+    error_message "Compose env file tidak ditemukan: $COMPOSE_ENV_FILE"
+    exit 1
+fi
+
+if [ "$HTTPS_ENABLED" = "true" ] && [ ! -f "$HTTPS_COMPOSE_FILE" ]; then
+    error_message "HTTPS compose override tidak ditemukan: $HTTPS_COMPOSE_FILE"
+    exit 1
+fi
+
 if [ ! -f "$ENV_FILE" ]; then
     error_message "$ENV_FILE tidak ditemukan."
     exit 1
@@ -155,7 +181,7 @@ if [ ! -f "$FACE_MATCH_RECOVERY" ]; then
     exit 1
 fi
 
-docker compose -f "$COMPOSE_FILE" config --quiet
+compose config --quiet
 
 ok "Deployment environment valid"
 
@@ -165,19 +191,15 @@ ok "Deployment environment valid"
 
 log "STEP 2/8: Docker compose build"
 
-docker compose \
-    -f "$COMPOSE_FILE" \
-    build
+compose build
 
 log "Starting Docker services"
 
-docker compose \
-    -f "$COMPOSE_FILE" \
-    up \
+compose up \
     -d \
     --remove-orphans
 
-docker compose -f "$COMPOSE_FILE" ps
+compose ps
 
 # =====================================================================
 # STEP 3 — WAIT BACKEND CONTAINER
