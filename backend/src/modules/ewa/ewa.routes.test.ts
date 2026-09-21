@@ -85,6 +85,17 @@ describe('EWA HTTP boundary', () => {
     await request(app()).post(BASE).send({ employeeId: EMPLOYEE, amountRequested: '100.25', adminFee: '0', reason: ' School fee ', actorId: 'forged', status: 'PAID' }).expect(201);
     expect(actor).toBe(ACTOR); expect(service.createRequest).toHaveBeenCalledWith({ employeeId: EMPLOYEE, amountRequested: 100.25, adminFee: 0, reason: 'School fee' });
   });
+  it('replays an EWA create with the same idempotency key without a duplicate service call', async () => {
+    service.createRequest.mockResolvedValueOnce({ id: EWA } as never);
+    const key = 'ewa-create-request-0001';
+    const payload = { amountRequested: '100.25', reason: 'School fee' };
+
+    await request(app()).post(BASE).set('Idempotency-Key', key).send(payload).expect(201);
+    const replay = await request(app()).post(BASE).set('Idempotency-Key', key).send(payload).expect(201);
+
+    expect(replay.headers['idempotency-replayed']).toBe('true');
+    expect(service.createRequest).toHaveBeenCalledTimes(1);
+  });
   it.each(['earnedGross', 'periodStart', 'periodEnd'])('rejects client-derived %s before creating EWA', async field => {
     await request(app()).post(BASE).send({ amountRequested: 1, [field]: 'forged' }).expect(422);
     expect(service.createRequest).not.toHaveBeenCalled();

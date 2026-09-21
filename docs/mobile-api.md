@@ -73,7 +73,9 @@ Tidak butuh access token hidup. Seluruh keluarga refresh token sesi itu di-revok
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | GET | `/auth/me` | Bearer | Profil user + roles/permissions saat ini |
-| POST | `/auth/change-password` | Bearer | Ganti password (`oldPassword`, `newPassword`) |
+| POST | `/auth/change-password` | Bearer | Ganti password (`currentPassword`, `newPassword`) |
+| POST | `/auth/forgot-password` | — | Minta email reset (`email`); selalu `202` agar akun tidak dapat dienumerasi |
+| POST | `/auth/reset-password` | — | Pakai grant sekali pakai (`token`, `password`) dalam 15 menit |
 | POST | `/auth/mfa/setup` | Bearer | Mulai setup TOTP (balas QR/secret) |
 | POST | `/auth/mfa/enable` | Bearer | Aktifkan MFA (`code`) |
 | POST | `/auth/mfa/disable` | Bearer | Nonaktifkan MFA (`code`) |
@@ -92,7 +94,8 @@ Content-Type: application/json
 ```
 
 Untuk mutasi yang aman di-retry (check-in, check-out, pengajuan cuti/izin,
-koreksi, lembur, dan registrasi device), kirim header opsional:
+koreksi, lembur, loan, EWA, aktivitas harian, trip/expense, dan registrasi
+device), kirim header opsional:
 
 ```text
 Idempotency-Key: <16-128 karakter ASCII unik>
@@ -101,7 +104,10 @@ Idempotency-Key: <16-128 karakter ASCII unik>
 Key disimpan 24 jam dan di-scope ke company, user, method, dan path. Request
 ulang dengan key dan payload yang sama mengembalikan response pertama serta
 header `Idempotency-Replayed: true`; payload berbeda atau request yang masih
-diproses menghasilkan `409`.
+diproses menghasilkan `409`. Hanya response sukses `2xx` yang disimpan;
+response validasi/permission/conflict/server-error melepas reservation sehingga
+request yang sudah diperbaiki dapat memakai key yang sama. Urutan key object JSON
+tidak mengubah fingerprint request.
 
 **Envelope sukses:**
 ```json
@@ -438,6 +444,11 @@ Pakai ini sebagai sumber kebenaran mutlak kalau ada perbedaan versi.
 - **Production masih HTTP polos.** Sampai HTTPS terpasang, token bisa disadap. Pasang HTTPS + certificate pinning sebelum rilis mobile publik.
 - Access token 15 menit → implementasi auto-refresh saat `401` (retry sekali, antrekan request paralel selama refresh).
 - Rate limit login: 10 gagal / 15 menit per IP & per email; 5 gagal → akun terkunci 15 menit.
+- Forgot-password dibatasi 5 request/IP/15 menit dan satu email/user/menit.
+  Token reset 256-bit hanya disimpan sebagai SHA-256, sekali pakai, dan seluruh
+  refresh session user dicabut setelah reset. Access token membawa session
+  version yang diperiksa pada setiap protected request, sehingga token sebelum
+  perubahan password langsung ditolak. SMTP harus diaktifkan eksplisit.
 - Simpan token di Keychain (iOS) / Keystore/EncryptedSharedPreferences (Android), bukan storage polos.
 
 ---

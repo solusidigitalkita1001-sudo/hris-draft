@@ -11,6 +11,7 @@ import { dailyActivityController } from './daily-activity.controller';
 import { auditLog } from '@/shared/middleware/AuditLog';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
+import { idempotency } from '@/shared/middleware/Idempotency';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.post(
   '/',
   authorize({ resource: 'daily-activity', action: 'create' }),
   validate(createDailyActivitySchema),
+  idempotency(),
   auditLog({ action: 'create', entity: 'Daily_Activity', model: 'dailyActivity' }),
   dailyActivityController.createRequest.bind(dailyActivityController),
 );
@@ -43,6 +45,7 @@ router.put(
   '/:id',
   authorize({ resource: 'daily-activity', action: 'update' }),
   validate(updateDailyActivitySchema),
+  idempotency(),
   auditLog({ action: 'update', entity: 'Daily_Activity', model: 'dailyActivity' }),
   dailyActivityController.updateRequest.bind(dailyActivityController),
 );
@@ -50,12 +53,14 @@ router.post(
   '/:id/complete',
   authorize({ resource: 'daily-activity', action: 'update' }),
   validate(completeDailyActivitySchema),
+  idempotency(),
   auditLog({ action: 'process', entity: 'Daily_Activity', model: 'dailyActivity' }),
   dailyActivityController.completeRequest.bind(dailyActivityController),
 );
 router.delete(
   '/:id',
   authorize({ resource: 'daily-activity', action: 'delete' }),
+  idempotency(),
   auditLog({ action: 'delete', entity: 'Daily_Activity', model: 'dailyActivity' }),
   dailyActivityController.deleteRequest.bind(dailyActivityController),
 );

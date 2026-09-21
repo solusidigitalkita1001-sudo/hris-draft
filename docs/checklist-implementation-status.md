@@ -2,6 +2,21 @@
 
 Status keseluruhan: **partial**. Perbaikan P0 dan lanjutan P1 di bawah sudah diimplementasikan dan diuji. Seluruh backlog belum selesai; aplikasi belum dinyatakan production-ready.
 
+## Update mobile/auth — 20 September 2026
+
+- `MANAGER_TEAM` tidak lagi selalu 403. Scope kini diselesaikan dari kepala
+  division/department/sub-department beserta subtree dan tetap fail-closed bila
+  actor tidak mengelola unit. Catatan penolakan MANAGER_TEAM di bagian riwayat
+  bawah menggambarkan status fase 10 September dan sudah superseded.
+- Password recovery digest-only/single-use tersedia dengan SMTP opt-in, throttle,
+  revokasi refresh token, serta session version yang langsung menolak access token
+  sebelum perubahan password.
+- Idempotency mobile diperluas ke loan, EWA, daily activity, dan travel/expense;
+  hanya respons 2xx disimpan dan fingerprint JSON sudah canonical.
+- Verifikasi terbaru: 101 suite/939 test lulus, 89 test integrasi opsional
+  dilewati, build lulus, dan seluruh 63 migration berhasil dari database kosong.
+  Rincian mobile terbaru berada di `docs/GAP_API_MOBILE_IMPLEMENTATION.md`.
+
 ## Hotfix: login server HTTP dan CSRF 304
 
 - Reproduksi read-only di server: build frontend port 8083 memakai API port 8084. Bootstrap API menghasilkan 304 ketika diberi ETag lama, dan mengirim cookie Secure melalui HTTP sehingga browser menolaknya.
@@ -180,7 +195,9 @@ Dependency `node_modules` workspace memiliki file macOS `dataless` yang menyebab
 
 Empat migration baru dan SQL rollback telah disiapkan serta diuji pada MySQL sementara. Belum ada migration ke database aplikasi, push, atau deployment.
 
-- `MANAGER_TEAM` mengembalikan 403 sampai reporting line pegawai tersedia. Position.reportsToId belum dianggap sebagai sumber hierarchy pegawai secara otomatis.
+- `MANAGER_TEAM` memakai hierarchy kepala unit organisasi. `Position.reportsToId`
+  belum dijadikan direct-supervisor profil karena makna reporting line produk
+  masih perlu diputuskan.
 - URL raw `/uploads/*` tidak lagi dapat diakses. Dokumen memakai controller document; kuitansi memakai `/api/v1/private-files/receipts/:claimId`; evidence memakai `/api/v1/private-files/performance-evidence/:evidenceId`. Prefix mengikuti konfigurasi aplikasi.
 - Signed document URL tetap memiliki format yang sama tetapi sekarang memerlukan session dan permission aktif; client eksternal yang membagikan link anonim harus menyesuaikan.
 - Metadata dokumen tidak lagi berisi `filePath`. Hasil upload kuitansi mengembalikan storage key relatif pada `filePath`, bukan path filesystem internal. Frontend memakai URL referensi untuk pengajuan dan endpoint berdasarkan ID untuk download.
@@ -197,7 +214,9 @@ Empat migration baru dan SQL rollback telah disiapkan serta diuji pada MySQL sem
 
 ## Backlog prioritas berikutnya
 
-1. Selesaikan sumber reporting line pegawai, migration, direct/nested report dan cycle tests. MANAGER_TEAM saat ini aman dengan penolakan, belum fungsional.
+1. Putuskan apakah `Position.reportsToId` menjadi sumber direct-supervisor profil,
+   termasuk aturan ketika satu posisi ditempati beberapa employee dan cycle.
+   `MANAGER_TEAM` berbasis kepala unit sudah fungsional.
 2. Lengkapi matriks endpoint/role/scope dan audit semua list/detail/export/mutasi. Salary/THR/profil dan payslip sudah memakai predicate server. Run/period serta boundary HTTP ledger/export memerlukan scope seluruh company. Akses EWA kini menggabungkan scope EWA/payroll dan ownership; kalkulasi lembur/final payroll, konfigurasi/formula dan laporan masih perlu audit; kebijakan publikasi slip serta payroll parsial perlu kontrak tersendiri. Middleware lama masih menginjeksi filter ke query; pemaksaan filter pada repository seluruh modul belum terbukti.
 3. Audit seluruh consumer file selain dokumen/kuitansi/planning evidence, termasuk upload gagal pada modul lain dan attachment performance-result. Akses raw ditolak, tetapi kesetaraan fungsi seluruh consumer belum diverifikasi.
 4. Lengkapi test client CSRF retry/rotation dan E2E auth browser; pastikan revocation/role changes di server berlaku sesuai kebijakan session, bukan hanya refresh profil frontend.

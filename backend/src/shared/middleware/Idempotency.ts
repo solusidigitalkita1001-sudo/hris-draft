@@ -19,6 +19,24 @@ function digest(value: string) {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
+/**
+ * JSON object key order is not part of the request's meaning. Canonicalizing
+ * before hashing prevents an otherwise identical retry from being rejected
+ * merely because a client serializer emitted keys in a different order.
+ */
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, nested]) => nested !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalize(nested)]),
+    );
+  }
+  return value;
+}
+
 function memoryGet(key: string): IdempotencyRecord | null {
   const record = memory.get(key);
   if (!record) return null;
@@ -82,7 +100,10 @@ export function idempotency(ttlSeconds = 24 * 60 * 60) {
       const path = `${req.baseUrl}${req.path}`;
       const scope = `${req.user.companyId ?? 'none'}:${req.user.id}:${req.method}:${path}:${rawKey}`;
       const storageKey = `idempotency:mobile:${digest(scope)}`;
-      const fingerprint = digest(JSON.stringify({ body: req.body ?? null, query: req.query ?? null }));
+      const fingerprint = digest(JSON.stringify(canonicalize({
+        body: req.body ?? null,
+        query: req.query ?? null,
+      })));
       const existing = await getRecord(storageKey);
       if (existing && replayOrThrow(existing, fingerprint, res)) return;
 
@@ -98,19 +119,33 @@ export function idempotency(ttlSeconds = 24 * 60 * 60) {
       }
 
       const originalJson = res.json.bind(res);
+      let responseFinalized = false;
       res.json = function json(body: unknown) {
-        if (res.statusCode >= 200 && res.statusCode < 500) {
-          void save(storageKey, {
-            fingerprint,
-            state: 'COMPLETED',
-            statusCode: res.statusCode,
-            body,
-            expiresAt: pending.expiresAt,
-          }, ttlSeconds);
-        } else {
-          void release(storageKey);
-        }
-        return originalJson(body);
+        if (responseFinalized) return res;
+        responseFinalized = true;
+        const statusCode = res.statusCode;
+
+        // Persist only completed success responses. Validation, permission,
+        // conflict and server failures must remain retryable with the same key.
+        // Delay sending the response until Redis has durably replaced PENDING,
+        // otherwise an immediate retry can observe a false in-progress conflict.
+        const finalize = statusCode >= 200 && statusCode < 300
+          ? save(storageKey, {
+              fingerprint,
+              state: 'COMPLETED',
+              statusCode,
+              body,
+              expiresAt: pending.expiresAt,
+            }, ttlSeconds)
+          : release(storageKey);
+
+        void finalize
+          .then(() => originalJson(body))
+          .catch(async (error) => {
+            await release(storageKey).catch(() => undefined);
+            next(error);
+          });
+        return res;
       };
       res.on('close', () => {
         if (!res.writableFinished) void release(storageKey);

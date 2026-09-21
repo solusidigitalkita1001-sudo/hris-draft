@@ -44,4 +44,20 @@ describe('loadEnv (Task 0.1 env validation)', () => {
   it.each(['', '0', 'no', 'FALSE'])('rejects an ambiguous COOKIE_SECURE value %s', (value) => {
     expect(() => loadEnv({ ...validEnv, COOKIE_SECURE: value })).toThrow(/COOKIE_SECURE/);
   });
+
+  it.each([
+    ['REDIS_ENABLED', 'redis'],
+    ['RABBITMQ_ENABLED', 'rabbitmq'],
+    ['QUEUE_ENABLED', 'queue'],
+  ] as const)('parses explicit %s=false without truthy string coercion', (key, section) => {
+    const parsed = buildConfig(loadEnv({ ...validEnv, NODE_ENV: 'production', [key]: 'false' }));
+    expect(parsed[section].enabled).toBe(false);
+  });
+
+  it.each(['REDIS_ENABLED', 'RABBITMQ_ENABLED', 'QUEUE_ENABLED'] as const)(
+    'rejects ambiguous %s values',
+    (key) => {
+      expect(() => loadEnv({ ...validEnv, [key]: '0' })).toThrow(new RegExp(key));
+    },
+  );
 });

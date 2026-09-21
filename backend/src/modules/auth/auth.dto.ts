@@ -46,9 +46,10 @@ export const changePasswordSchema = z.object({
 export const forgotPasswordSchema = z.object({
   email: z
     .string()
+    .trim()
     .email('Invalid email format')
     .max(255, 'Email must not exceed 255 characters')
-    .transform((email) => email.toLowerCase().trim()),
+    .transform((email) => email.toLowerCase()),
 });
 
 export const resetPasswordSchema = z.object({

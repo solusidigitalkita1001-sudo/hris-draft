@@ -91,18 +91,25 @@ Batas audit:
 
 ## 3. Ringkasan eksekutif
 
-Client saat ini menggunakan 24 pasangan method/path untuk auth, absensi self-service, cuti, izin, kalender, notifikasi, dan profil. Seluruhnya telah memiliki test lokal, tetapi belum mempunyai bukti smoke test terhadap deployment final.
+Client saat ini menggunakan 24 pasangan method/path untuk auth, absensi
+self-service, cuti, izin, kalender, notifikasi, dan profil. Seluruhnya memiliki
+test lokal dan sudah menjalani smoke live. Dua operasi calendar-dependent masih
+gagal karena fixture akun deployment, sehingga acceptance deployment belum final.
 
 Gap paling penting:
 
 1. HTTPS production belum tersedia dalam kontrak deployment.
-2. Approval Center sudah mempunyai endpoint, tetapi belum ada schema detail dan belum diintegrasikan mobile.
-3. Koreksi absensi dan lembur sudah mempunyai endpoint, tetapi belum diintegrasikan mobile.
-4. Payroll hanya mempunyai list/detail payslip. Kontrak PIN, unlock server, expiry, dan PDF belum tersedia.
-5. Push notification belum mempunyai endpoint registrasi token perangkat.
-6. Chat, dokumen employee, supervisor, dan password recovery belum mempunyai kontrak mobile final.
-7. Mayoritas endpoint hanya mempunyai tabel method/path tanpa contoh response `data` yang stabil.
-8. Enforcement geofence, fake GPS, liveness, server time, idempotency, dan tenant scope belum dibuktikan pada deployment.
+2. Source Flutter/mobile tidak ada di repository backend ini, sehingga Approval
+   Center, koreksi, lembur, payroll, push, loan, EWA, activity, dan travel yang
+   sudah mempunyai kontrak backend masih perlu diintegrasikan di repository client.
+3. Chat, announcement dashboard, dan kontrak direct-supervisor masih memerlukan
+   keputusan produk/API.
+4. SMTP, Firebase/APNs, akun staging, serta certificate/DNS belum tersedia di
+   workspace dan secret manager deployment.
+5. Mayoritas endpoint lanjutan masih memerlukan contoh response `data` dan
+   fixture staging yang stabil untuk client.
+6. Enforcement geofence, fake GPS, liveness, tenant scope, push provider, dan
+   timezone boundary belum dibuktikan pada deployment/perangkat nyata.
 
 ## 4. Endpoint yang sudah digunakan mobile
 
@@ -116,7 +123,7 @@ Status seluruh item pada bagian ini adalah **terintegrasi lokal, perlu live revi
 | POST | `/auth/refresh` | Refresh satu kali dan retry protected request | Refresh token wajib berotasi dan pasangan token baru tidak boleh kosong |
 | POST | `/auth/logout` | Revoke refresh-token family setelah local cleanup | Harus tetap menerima refresh token saat access token sudah mati |
 | GET | `/auth/me` | Restore identity, role, permission, employee, company | Response harus mengganti snapshot sesi, termasuk ketika affiliation dicabut |
-| POST | `/auth/change-password` | Mandatory password change | Client mengikuti body `oldPassword` dan `newPassword` |
+| POST | `/auth/change-password` | Mandatory password change | Client mengikuti body `currentPassword` dan `newPassword` |
 
 ### 4.2 Attendance self-service
 
@@ -273,45 +280,28 @@ Tim backend perlu menuliskan method/path exact untuk detail dan seluruh action a
 - `GET /api/v1/meta/endpoints`: hanya untuk discovery admin dan audit deployment, bukan fitur pengguna.
 - `GET /auth/csrf`: web only, tidak boleh ditambahkan pada native Bearer flow.
 
-## 6. Capability yang belum mempunyai kontrak backend memadai
+## 6. Status capability kontrak backend
 
-Status bagian ini adalah **tidak tersedia dalam kontrak mobile final**, bukan pernyataan bahwa route pasti tidak ada di source backend.
+Bagian ini direkonsiliasi ulang dengan source dan `docs/mobile-api.md` pada 20
+September 2026. Beberapa gap audit awal sudah ditutup di backend tetapi tetap
+memerlukan integrasi client atau konfigurasi deployment.
 
 ### 6.1 Payroll terlindungi
 
-Kontrak saat ini hanya menyediakan:
-
-- `GET /payroll/payslips`;
-- `GET /payroll/payslips/:id`.
-
-Mobile belum dapat mengimplementasikan slip gaji aman sampai tersedia keputusan berikut:
-
-1. list periode sebelum unlock tidak boleh memuat nominal atau components;
-2. endpoint PIN setup atau kebijakan PIN yang sudah ada;
-3. challenge dan verify PIN atau reauthentication server;
-4. bukti unlock yang terikat session, employee, company, dan device bila diperlukan;
-5. expiry, revoke, relock, rate limit, dan lockout;
-6. detail payslip hanya setelah unlock berhasil;
-7. PDF/download dengan content type, batas ukuran, expiry, redirect policy, dan authorization;
-8. status THR dan komponen payroll;
-9. error code untuk PIN salah, lockout, unlock expired, periode terlarang, dan akses employee lain.
-
-Menyembunyikan nominal di UI setelah client menerima response tidak memenuhi kebutuhan keamanan. Server harus mencegah nominal dikirim sebelum unlock.
+**Selesai di backend.** List locked tidak mengirim nominal/components. Endpoint
+unlock memakai reautentikasi password dan TOTP bila MFA aktif, grant terikat
+user/employee/company selama lima menit, relock tersedia, lima kegagalan memicu
+lockout 15 menit, detail dilindungi, dan PDF privat dibuat on-demand dengan batas
+5 MB. Kontrak ada pada `docs/mobile-api.md`; acceptance live dan integrasi client
+masih terbuka.
 
 ### 6.2 Push notification
 
-Kontrak berikut belum tersedia:
-
-- register token FCM/APNs;
-- update atau rotate token;
-- unregister token saat logout;
-- identitas device/install;
-- binding token ke user dan company;
-- payload resource/action/reference ID;
-- invalid token handling;
-- konfigurasi Firebase/APNs untuk environment development, staging, dan production.
-
-Endpoint inbox notifikasi tidak menggantikan kontrak push device.
+**Selesai di backend, menunggu credential/provider.** Register/rotate dan
+unregister tersedia pada `POST/DELETE /notifications/device-tokens`. Token
+dienkripsi, diikat ke installation/user/company, payload membawa navigasi, worker
+FCM/APNs memakai delivery outbox/retry, dan invalid token dinonaktifkan. Tanpa
+credential provider, delivery berstatus `BLOCKED_CONFIG`, bukan sukses palsu.
 
 ### 6.3 Chat atau pesan
 
@@ -330,47 +320,45 @@ Mobile saat ini hanya memberi keterangan bahwa chat belum tersedia dan tidak mem
 
 ### 6.4 Dokumen employee dan relasi atasan
 
-Belum ada kontrak mobile final untuk:
-
-- daftar dokumen employee;
-- metadata dokumen, tipe, periode, dan expiry;
-- preview/download berizin;
-- temporary URL atau streaming file;
-- supervisor/manager langsung;
-- reporting line atau approver hierarchy pada Profil.
-
-`GET /employees/:id` belum mendokumentasikan field supervisor dan bukan pengganti kontrak file pribadi.
+Dokumen employee sudah mempunyai list/detail/signed-url/download privat dan
+tercatat pada kontrak mobile. `MANAGER_TEAM` juga sudah fungsional berdasarkan
+kepala division/department/sub-department beserta subtree. Yang masih terbuka
+adalah field direct-supervisor pada profil dan keputusan apakah hierarchy kepala
+unit tersebut menjadi reporting line produk yang ditampilkan ke pengguna.
 
 ### 6.5 Password recovery
 
-Daftar endpoint auth final tidak memuat forgot-password, reset-password, OTP recovery, expiry token, atau invalidation session setelah reset. Mobile tidak menampilkan kontrol lupa kata sandi sampai kontrak tersedia.
+**Selesai di backend pada 20 September 2026.** `POST /auth/forgot-password`
+selalu memberi response generik `202`; `POST /auth/reset-password` memakai token
+acak 256-bit, digest-only, single-use, expiry 15 menit, rate limit, dan mencabut
+seluruh refresh session. Delivery SMTP bersifat opt-in dan grant langsung
+dinonaktifkan bila provider tidak aktif/gagal. Session version disertakan pada
+JWT dan diperiksa terhadap database di setiap protected request, sehingga access
+token yang terbit sebelum perubahan password langsung ditolak.
 
 ### 6.6 Dashboard, team, announcement, dan timezone
 
 Belum ada kontrak khusus untuk:
 
 - announcement resmi beserta category dan target audience;
-- status `Tim Hari Ini`;
-- jadwal/cuti tim yang boleh dilihat manager;
 - next shift yang stabil lintas batas bulan;
-- timezone kantor dan tanggal server saat ini.
+- direct-supervisor yang stabil pada profil.
 
-Dashboard sekarang menyaring item `/notifications` yang mempunyai category announcement. Field tersebut belum dijelaskan dalam schema response final. Kalender memakai tanggal device untuk label Hari Ini karena response belum mendokumentasikan timezone kantor atau server date.
+Attendance today/history sudah mengembalikan `serverDate` dan timezone kantor;
+kalender tim manager juga sudah tersedia. Announcement resmi, next shift lintas
+batas bulan, dan direct-supervisor tetap terbuka.
 
 ### 6.7 Offline mutation dan idempotency
 
-Client sudah mengirim `Idempotency-Key` pada check-in, check-out, dan pengajuan tertentu, tetapi kontrak belum menyatakan:
-
-- endpoint mana yang mendukung key;
-- lama retensi key;
-- scope key terhadap user/company/route;
-- response ketika key yang sama dikirim ulang;
-- response bila key sama dipakai dengan payload berbeda;
-- aturan timestamp capture offline;
-- konflik saat shift, policy, atau sesi berubah;
-- apakah antrean offline attendance didukung.
-
-Tanpa kontrak ini, mobile tidak dapat membuat offline queue dengan aman.
+**Kontrak retry selesai di backend.** Key 16–128 ASCII dipertahankan 24 jam dan
+di-scope ke company/user/method/path. Payload sama mereplay response `2xx` serta
+header `Idempotency-Replayed`; payload berbeda/in-progress menghasilkan `409`.
+Error tidak disimpan, fingerprint object stabil terhadap urutan key JSON, dan
+response Redis baru dikirim setelah record selesai dipersist. Cakupan meliputi
+attendance, leave/permission/correction/overtime, device token, loan, EWA, daily
+activity, serta trip/expense dan action statusnya. Yang belum diputuskan adalah
+timestamp capture offline, perubahan policy/session saat antre, dan apakah
+offline attendance queue didukung produk.
 
 ### 6.8 Endpoint dari dokumen lama yang belum dikonfirmasi
 
@@ -505,22 +493,22 @@ Semua fixture harus tersanitasi, memakai ID placeholder yang jelas, dan tetap me
 
 - [ ] Berikan base URL HTTPS staging dan production.
 - [ ] Berikan akun uji employee dan manager melalui secret manager atau konfigurasi lokal, bukan melalui chat/source repository.
-- [ ] Berikan OpenAPI atau fixture response tersanitasi untuk 24 operasi yang sudah dipakai client.
-- [ ] Konfirmasi pagination riwayat attendance, leave, dan notification.
-- [ ] Konfirmasi dukungan serta semantics `Idempotency-Key`.
-- [ ] Berikan matriks permission employee/manager.
+- [x] Berikan fixture response tersanitasi untuk 24 operasi yang sudah dipakai client (`docs/mobile-api-fixtures.json`; OpenAPI penuh masih backlog).
+- [x] Konfirmasi pagination riwayat attendance, leave, dan notification.
+- [x] Konfirmasi dukungan serta semantics `Idempotency-Key`.
+- [x] Berikan matriks permission employee/manager.
 - [ ] Jalankan atau fasilitasi acceptance geofence, fake GPS, face/liveness, server time, tenant scope, dan replay.
-- [ ] Putuskan kontrak payroll unlock/PIN/PDF atau keluarkan payslip dari scope rilis.
-- [ ] Putuskan endpoint device-token push atau keluarkan push dari scope rilis.
+- [x] Putuskan kontrak payroll unlock/reautentikasi/PDF.
+- [x] Putuskan endpoint device-token push.
 
 ### P1
 
 - [ ] Berikan schema Approval Center dan seluruh action result/error.
-- [ ] Perjelas list riwayat koreksi milik employee.
-- [ ] Perjelas identity/scope endpoint overtime employee.
+- [x] Perjelas list riwayat koreksi milik employee.
+- [x] Perjelas identity/scope endpoint overtime employee.
 - [ ] Tentukan action utama untuk leave/permission: domain action atau workflow-engine action.
-- [ ] Tambahkan timezone kantor/server date ke response yang relevan.
-- [ ] Berikan kontrak announcement, team status, next shift, supervisor, dan dokumen employee bila tetap masuk scope.
+- [x] Tambahkan timezone kantor/server date ke response yang relevan.
+- [ ] Berikan kontrak announcement, next shift, dan direct-supervisor bila tetap masuk scope; kalender tim dan dokumen employee sudah tersedia.
 
 ### P2
 
@@ -531,18 +519,22 @@ Semua fixture harus tersanitasi, memakai ID placeholder yang jelas, dan tetap me
 ## 11. Urutan integrasi setelah backend merespons
 
 1. Verifikasi 24 operasi aktif terhadap HTTPS staging dan fixture resmi.
-2. Tutup gap permission, pagination, identity, timezone, idempotency, dan response schema.
+2. Integrasikan kontrak permission, pagination, identity, timezone, dan idempotency yang sudah ditutup backend ke client.
 3. Implementasikan Approval Center manager.
 4. Implementasikan koreksi absensi dan lembur.
-5. Implementasikan payroll hanya setelah kontrak keamanan lengkap.
-6. Implementasikan push hanya setelah device-token contract dan konfigurasi Firebase/APNs tersedia.
-7. Implementasikan chat, dokumen, supervisor, dan password recovery setelah contract ditambahkan.
+5. Integrasikan payroll memakai kontrak unlock/relock/PDF yang sudah tersedia.
+6. Integrasikan push setelah credential Firebase/APNs staging tersedia.
+7. Integrasikan dokumen dan password recovery; tunda chat/supervisor sampai keputusan kontraknya final.
 8. Lanjutkan loan, EWA, travel/claim, dan daily activity berdasarkan prioritas produk.
 
 ## 12. Kesimpulan
 
 Mobile tidak lagi bergantung pada endpoint admin lama untuk auth atau attendance dasar. Jalur yang telah diintegrasikan sudah menggunakan Bearer token, self-service identity, server result, dan state error yang jujur. Blocker utama berikutnya berada pada kontrak backend/deployment, bukan desain UI.
 
-Approval, correction, overtime, loan, EWA, daily activity, dan travel sudah mempunyai kandidat endpoint dalam kontrak, tetapi masih membutuhkan response schema dan fixture sebelum client integration dapat dinyatakan stabil. Payroll, push, chat, dokumen, supervisor, recovery password, timezone, dan idempotency masih memerlukan keputusan kontrak backend yang eksplisit.
+Approval, correction, overtime, loan, EWA, daily activity, travel, payroll,
+push, dokumen, password recovery, timezone, dan idempotency sudah mempunyai
+kontrak backend. Integrasi client, response fixture lanjutan, credential provider,
+serta acceptance staging tetap diperlukan. Chat, announcement, next shift,
+direct-supervisor, dan aturan offline attendance masih membutuhkan keputusan.
 
 Status aplikasi tetap **REVIEW lokal**, belum **DONE staging/release**, sampai acceptance pada bagian 9 selesai dan bukti deployment dicatat.

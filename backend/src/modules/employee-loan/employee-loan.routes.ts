@@ -7,6 +7,7 @@ import { createLoanSchema, approveLoanSchema } from './employee-loan.dto';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { auditLog } from '@/shared/middleware/AuditLog';
+import { idempotency } from '@/shared/middleware/Idempotency';
 
 const router = Router();
 router.use(authenticate);
@@ -17,15 +18,15 @@ router.get('/types', employeeLoanController.findLoanTypes.bind(employeeLoanContr
 router.get('/', authorize({ resource: 'employee-loan', action: 'read' }), employeeLoanController.findAll.bind(employeeLoanController));
 router.get('/my', employeeLoanController.findMyLoans.bind(employeeLoanController));
 router.get('/:id', authorize({ resource: 'employee-loan', action: 'read' }), employeeLoanController.findById.bind(employeeLoanController));
-router.post('/', validate(createLoanSchema), auditLog({ action: 'CREATE_LOAN', entity: 'Loan' }), employeeLoanController.create.bind(employeeLoanController));
+router.post('/', validate(createLoanSchema), idempotency(), auditLog({ action: 'CREATE_LOAN', entity: 'Loan' }), employeeLoanController.create.bind(employeeLoanController));
 
 // Self-service: ownership/elevated-role check lives in the service.
-router.patch('/:id/cancel', auditLog({ action: 'CANCEL_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.cancel.bind(employeeLoanController));
-router.patch('/:id/approve', authorize({ resource: 'employee-loan', action: 'update' }), validate(approveLoanSchema), auditLog({ action: 'APPROVE_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.approve.bind(employeeLoanController));
-router.patch('/:id/reject', authorize({ resource: 'employee-loan', action: 'update' }), validate(approveLoanSchema), auditLog({ action: 'REJECT_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.reject.bind(employeeLoanController));
+router.patch('/:id/cancel', idempotency(), auditLog({ action: 'CANCEL_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.cancel.bind(employeeLoanController));
+router.patch('/:id/approve', authorize({ resource: 'employee-loan', action: 'update' }), validate(approveLoanSchema), idempotency(), auditLog({ action: 'APPROVE_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.approve.bind(employeeLoanController));
+router.patch('/:id/reject', authorize({ resource: 'employee-loan', action: 'update' }), validate(approveLoanSchema), idempotency(), auditLog({ action: 'REJECT_LOAN', entity: 'Loan', model: 'loan' }), employeeLoanController.reject.bind(employeeLoanController));
 
 router.get('/:id/workflow', authorize({ resource: 'employee-loan', action: 'read' }), employeeLoanController.getWorkflow.bind(employeeLoanController));
-router.patch('/:id/workflow-action', authorize({ resource: 'employee-loan', action: 'update' }), validate(workflowActionSchema), auditLog({ action: 'LOAN_WORKFLOW_ACTION', entity: 'Loan', model: 'loan' }), employeeLoanController.applyWorkflowAction.bind(employeeLoanController));
+router.patch('/:id/workflow-action', authorize({ resource: 'employee-loan', action: 'update' }), validate(workflowActionSchema), idempotency(), auditLog({ action: 'LOAN_WORKFLOW_ACTION', entity: 'Loan', model: 'loan' }), employeeLoanController.applyWorkflowAction.bind(employeeLoanController));
 
 router.get('/:id/installments', authorize({ resource: 'employee-loan', action: 'read' }), employeeLoanController.getInstallments.bind(employeeLoanController));
 router.get('/:id/amortization', authorize({ resource: 'employee-loan', action: 'read' }), employeeLoanController.getAmortization.bind(employeeLoanController));

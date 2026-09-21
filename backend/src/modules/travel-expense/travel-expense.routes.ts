@@ -23,6 +23,7 @@ import {
 } from './travel-expense.dto';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
+import { idempotency } from '@/shared/middleware/Idempotency';
 
 const router = Router();
 
@@ -68,21 +69,24 @@ router.post(
   '/trips',
   authorizeRole(...employeeRoles),
   validate(createBusinessTripSchema),
+  idempotency(),
   travelExpenseController.createTrip.bind(travelExpenseController)
 );
 router.get('/trips/:id', authorizeRole(...approverRoles), travelExpenseController.findTripById.bind(travelExpenseController));
 router.patch(
   '/trips/:id/approve',
   authorizeRole(...approverRoles),
-  auditLog({ action: 'APPROVE', entity: 'BusinessTrip', model: 'businessTrip' }),
   validate(approveBusinessTripSchema),
+  idempotency(),
+  auditLog({ action: 'APPROVE', entity: 'BusinessTrip', model: 'businessTrip' }),
   travelExpenseController.approveTrip.bind(travelExpenseController)
 );
 router.patch(
   '/trips/:id/reject',
   authorizeRole(...approverRoles),
-  auditLog({ action: 'REJECT', entity: 'BusinessTrip', model: 'businessTrip' }),
   validate(approveBusinessTripSchema),
+  idempotency(),
+  auditLog({ action: 'REJECT', entity: 'BusinessTrip', model: 'businessTrip' }),
   travelExpenseController.rejectTrip.bind(travelExpenseController)
 );
 router.get(
@@ -93,15 +97,17 @@ router.get(
 router.patch(
   '/trips/:id/workflow-action',
   authorizeRole(...approverRoles),
-  auditLog({ action: 'WORKFLOW_ACTION', entity: 'BusinessTrip', model: 'businessTrip' }),
   validate(workflowActionSchema),
+  idempotency(),
+  auditLog({ action: 'WORKFLOW_ACTION', entity: 'BusinessTrip', model: 'businessTrip' }),
   travelExpenseController.applyTripWorkflowAction.bind(travelExpenseController)
 );
 router.post(
   '/trips/:id/advance',
   authorizeRole(...approverRoles),
-  auditLog({ action: 'CREATE_ADVANCE', entity: 'BusinessTrip' }),
   validate(createTravelAdvanceSchema),
+  idempotency(),
+  auditLog({ action: 'CREATE_ADVANCE', entity: 'BusinessTrip' }),
   travelExpenseController.createAdvance.bind(travelExpenseController)
 );
 
@@ -118,21 +124,24 @@ router.post(
   '/claims',
   authorizeRole(...employeeRoles),
   validate(createExpenseClaimSchema),
+  idempotency(),
   travelExpenseController.createClaim.bind(travelExpenseController)
 );
 router.get('/claims/:id', authorizeRole(...approverRoles), travelExpenseController.findClaimById.bind(travelExpenseController));
 router.patch(
   '/claims/:id/approve',
   authorizeRole(...approverRoles),
-  auditLog({ action: 'APPROVE', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   validate(approveExpenseClaimSchema),
+  idempotency(),
+  auditLog({ action: 'APPROVE', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   travelExpenseController.approveClaim.bind(travelExpenseController)
 );
 router.patch(
   '/claims/:id/reject',
   authorizeRole(...approverRoles),
-  auditLog({ action: 'REJECT', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   validate(approveExpenseClaimSchema),
+  idempotency(),
+  auditLog({ action: 'REJECT', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   travelExpenseController.rejectClaim.bind(travelExpenseController)
 );
 router.get(
@@ -143,15 +152,17 @@ router.get(
 router.patch(
   '/claims/:id/workflow-action',
   authorizeRole(...approverRoles),
-  auditLog({ action: 'WORKFLOW_ACTION', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   validate(workflowActionSchema),
+  idempotency(),
+  auditLog({ action: 'WORKFLOW_ACTION', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   travelExpenseController.applyClaimWorkflowAction.bind(travelExpenseController)
 );
 router.post(
   '/claims/:id/reimburse',
   authorizeRole(...approverRoles),
-  auditLog({ action: 'REIMBURSE', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   validate(reimburseExpenseClaimSchema),
+  idempotency(),
+  auditLog({ action: 'REIMBURSE', entity: 'ExpenseClaim', model: 'expenseClaim' }),
   travelExpenseController.reimburseClaim.bind(travelExpenseController)
 );
 
