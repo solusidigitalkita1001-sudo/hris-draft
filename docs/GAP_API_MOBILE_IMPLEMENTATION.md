@@ -97,9 +97,11 @@ baru:
   environment deployment. Kode provider/worker sudah tersedia.
 - Source Flutter/mobile tidak ada di repository ini, sehingga pemanggilan API
   dari aplikasi mobile tetap harus dikerjakan di repository client.
-- Kontrak produk baru untuk chat belum dapat diputuskan dari source backend.
-  Announcement dashboard, reporting line, next shift, employee document,
-  password recovery, dan kalender tim kini dicatat dalam kontrak mobile.
+- Chat ditunda eksplisit dari scope rilis mobile awal; client tidak boleh
+  membuat data contoh atau menebak endpoint. Kontrak chat baru tetap memerlukan
+  keputusan produk pada versi berikutnya. Announcement dashboard, reporting
+  line, next shift, employee document, password recovery, dan kalender tim kini
+  dicatat dalam kontrak mobile.
 - Acceptance live untuk geofence, liveness, tenant isolation, token replay,
   push provider, dan timezone boundary tetap memerlukan deployment, akun
   sintetis, serta perangkat; runner dan checklist sudah disediakan.

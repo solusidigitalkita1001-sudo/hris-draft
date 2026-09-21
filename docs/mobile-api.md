@@ -19,6 +19,13 @@ Local dev     : http://localhost:3000/api/v1
 
 Semua path di dokumen ini sudah termasuk prefix `/api/v1`.
 
+**Scope rilis mobile awal:** kontrak ini mencakup capability yang tercantum pada
+bagian 4. Chat/messaging, Training/LMS, Performance, onboarding/offboarding,
+pengelolaan MFA, daftar/revoke sesi, dan delete notifikasi tidak termasuk scope
+rilis awal. Client harus menampilkan state “belum tersedia” dan tidak membuat
+data contoh atau menebak endpoint. Penambahan capability tersebut memerlukan
+kontrak produk/API versi berikutnya; ketiadaannya bukan fallback diam-diam.
+
 ---
 
 ## 2. Autentikasi (Mobile = mode Bearer)

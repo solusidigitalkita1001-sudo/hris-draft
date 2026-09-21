@@ -305,7 +305,10 @@ credential provider, delivery berstatus `BLOCKED_CONFIG`, bukan sukses palsu.
 
 ### 6.3 Chat atau pesan
 
-Belum ada kontrak untuk:
+**Keputusan rilis awal: ditunda.** Chat tidak termasuk scope mobile release
+pertama. Client menampilkan state tidak tersedia, tidak membuat percakapan
+contoh, dan tidak mencoba path hasil tebakan. Ketika capability ini dibuka pada
+versi berikutnya, kontraknya wajib mencakup:
 
 - conversation list;
 - message history dan pagination;
@@ -316,7 +319,8 @@ Belum ada kontrak untuk:
 - realtime transport, reconnect, dan ordering;
 - authorization antar-user/company.
 
-Mobile saat ini hanya memberi keterangan bahwa chat belum tersedia dan tidak membuat percakapan contoh.
+Keputusan ini menutup ambiguitas scope rilis pertama, tetapi tidak mengklaim
+bahwa backend chat sudah tersedia.
 
 ### 6.4 Dokumen employee dan relasi atasan
 
@@ -538,7 +542,7 @@ Approval, correction, overtime, loan, EWA, daily activity, travel, payroll,
 push, dokumen, password recovery, announcement, next shift, reporting line,
 timezone, dan idempotency sudah mempunyai
 kontrak backend. Integrasi client, response fixture lanjutan, credential provider,
-serta acceptance staging tetap diperlukan. Chat masih membutuhkan keputusan;
-attendance offline sudah ditutup sebagai live-only dengan jalur koreksi.
+serta acceptance staging tetap diperlukan. Chat ditunda eksplisit dari rilis
+awal; attendance offline sudah ditutup sebagai live-only dengan jalur koreksi.
 
 Status aplikasi tetap **REVIEW lokal**, belum **DONE staging/release**, sampai acceptance pada bagian 9 selesai dan bukti deployment dicatat.
