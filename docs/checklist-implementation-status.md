@@ -2,7 +2,7 @@
 
 Status keseluruhan: **partial**. Perbaikan P0 dan lanjutan P1 di bawah sudah diimplementasikan dan diuji. Seluruh backlog belum selesai; aplikasi belum dinyatakan production-ready.
 
-## Update mobile/auth — 20 September 2026
+## Update mobile/auth — 21 September 2026
 
 - `MANAGER_TEAM` tidak lagi selalu 403. Scope kini diselesaikan dari kepala
   division/department/sub-department beserta subtree dan tetap fail-closed bila
@@ -13,7 +13,9 @@ Status keseluruhan: **partial**. Perbaikan P0 dan lanjutan P1 di bawah sudah dii
   sebelum perubahan password.
 - Idempotency mobile diperluas ke loan, EWA, daily activity, dan travel/expense;
   hanya respons 2xx disimpan dan fingerprint JSON sudah canonical.
-- Verifikasi terbaru: 101 suite/939 test lulus, 89 test integrasi opsional
+- Announcement dashboard, reporting line self-service, dan next-shift lintas
+  bulan kini mempunyai endpoint serta kontrak mobile yang tenant-safe.
+- Verifikasi terbaru: 106 suite/961 test lulus, 89 test integrasi opsional
   dilewati, build lulus, dan seluruh 63 migration berhasil dari database kosong.
   Rincian mobile terbaru berada di `docs/GAP_API_MOBILE_IMPLEMENTATION.md`.
 
@@ -214,9 +216,11 @@ Empat migration baru dan SQL rollback telah disiapkan serta diuji pada MySQL sem
 
 ## Backlog prioritas berikutnya
 
-1. Putuskan apakah `Position.reportsToId` menjadi sumber direct-supervisor profil,
-   termasuk aturan ketika satu posisi ditempati beberapa employee dan cycle.
-   `MANAGER_TEAM` berbasis kepala unit sudah fungsional.
+1. Reporting line self-service kini memakai `Position.reportsToId`; primary
+   holder diurutkan deterministik dan holder lain tetap dikembalikan sebagai
+   alternatif. Pantau kebutuhan produk bila kelak dibutuhkan relasi supervisor
+   per-employee yang berbeda dari hierarchy posisi. `MANAGER_TEAM` berbasis
+   kepala unit sudah fungsional.
 2. Lengkapi matriks endpoint/role/scope dan audit semua list/detail/export/mutasi. Salary/THR/profil dan payslip sudah memakai predicate server. Run/period serta boundary HTTP ledger/export memerlukan scope seluruh company. Akses EWA kini menggabungkan scope EWA/payroll dan ownership; kalkulasi lembur/final payroll, konfigurasi/formula dan laporan masih perlu audit; kebijakan publikasi slip serta payroll parsial perlu kontrak tersendiri. Middleware lama masih menginjeksi filter ke query; pemaksaan filter pada repository seluruh modul belum terbukti.
 3. Audit seluruh consumer file selain dokumen/kuitansi/planning evidence, termasuk upload gagal pada modul lain dan attachment performance-result. Akses raw ditolak, tetapi kesetaraan fungsi seluruh consumer belum diverifikasi.
 4. Lengkapi test client CSRF retry/rotation dan E2E auth browser; pastikan revocation/role changes di server berlaku sesuai kebijakan session, bukan hanya refresh profil frontend.

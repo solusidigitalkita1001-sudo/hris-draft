@@ -4,6 +4,9 @@ import leaveRoutes from './leave/leave.routes';
 import notificationRoutes from './notification/notification.routes';
 import payrollRoutes from './payroll/payroll.routes';
 import workflowEngineRoutes from './workflow-engine/workflow-engine.routes';
+import announcementRoutes from './announcement/announcement.routes';
+import employeeRoutes from './employee/employee.routes';
+import workCalendarRoutes from './work-calendar/work-calendar.routes';
 
 function paths(router: unknown): string[] {
   return ((router as { stack: Array<{ route?: { path: string } }> }).stack)
@@ -29,6 +32,21 @@ describe('mobile route contract and ordering', () => {
     expect(paths(attendanceCorrectionRoutes)).toEqual(expect.arrayContaining(['/my', '/my/:id']));
     expect(paths(notificationRoutes)).toEqual(expect.arrayContaining(['/device-tokens']));
     expect(paths(workflowEngineRoutes)).toContain('/instances/my-approvals');
+  });
+
+  it('exposes announcement inbox, unread count, detail, and read state', () => {
+    expect(paths(announcementRoutes)).toEqual(expect.arrayContaining([
+      '/', '/unread-count', '/:id', '/:id/read',
+    ]));
+  });
+
+  it('keeps the self reporting-line route reachable before employee detail', () => {
+    const registered = paths(employeeRoutes);
+    expect(registered.indexOf('/me/reporting-line')).toBeLessThan(registered.indexOf('/:id'));
+  });
+
+  it('exposes a next-shift resolver that crosses calendar months', () => {
+    expect(paths(workCalendarRoutes)).toContain('/me/next-shift');
   });
 
   it('keeps payroll unlock, lock, and PDF routes reachable before payslip detail', () => {

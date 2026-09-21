@@ -47,6 +47,9 @@ describe('D.1 Announcement engagement pure functions', () => {
     expect(sorted[0]).toBe('b'); // PINNED active #1
     // c pin expired -> rank normal tapi createdAt 12 > a.createdAt 10 -> c sebelum a
     expect(sorted.slice(1)).toEqual(['c', 'a']);
+
+    const oldExpiredPin = { ...c, id: 'old', createdAt: new Date(2026, 6, 1) };
+    expect(sortAnnouncementsForDashboard([a, oldExpiredPin], now).map(r => r.id)).toEqual(['a', 'old']);
   });
 
   it('D.1 CASE3: Audience DEPARTMENT_ONLY dept HR => ctxHR visible=true, ctxENG visible=false.', () => {

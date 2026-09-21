@@ -62,6 +62,11 @@ deployment.
   revokasi seluruh refresh session setelah reset. Session version pada JWT juga
   membuat access token lama langsung ditolak. Deployment dan acceptance dijelaskan
   di `docs/password-recovery.md`.
+- Announcement self-service tersedia dengan audience company/department/branch/
+  position/employee, platform announcement, pagination, unread count, detail,
+  dan read-state idempotent. Reporting line self-service memakai hierarchy
+  `Position.reportsToId` dengan urutan holder deterministik. Next shift memakai
+  timezone company dan resolver kalender yang sama hingga lintas bulan.
 
 ## Migration
 
@@ -82,9 +87,9 @@ baru:
   environment deployment. Kode provider/worker sudah tersedia.
 - Source Flutter/mobile tidak ada di repository ini, sehingga pemanggilan API
   dari aplikasi mobile tetap harus dikerjakan di repository client.
-- Kontrak produk baru untuk chat dan announcement dashboard belum dapat
-  diputuskan dari source backend. Employee document, password recovery, dan kalender
-  tim yang ternyata sudah tersedia kini dicatat dalam kontrak mobile.
+- Kontrak produk baru untuk chat belum dapat diputuskan dari source backend.
+  Announcement dashboard, reporting line, next shift, employee document,
+  password recovery, dan kalender tim kini dicatat dalam kontrak mobile.
 - Acceptance live untuk geofence, liveness, tenant isolation, token replay,
   push provider, dan timezone boundary tetap memerlukan deployment, akun
   sintetis, serta perangkat; runner dan checklist sudah disediakan.
@@ -93,7 +98,7 @@ baru:
 
 - `npm run check`
 - `npx prisma validate`
-- Seluruh 101 suite Jest lulus: 939 test lulus dan 89 test dilewati sesuai
+- Seluruh 106 suite Jest lulus: 961 test lulus dan 89 test dilewati sesuai
   konfigurasi integrasi opsional.
 - Seluruh 63 migration berhasil diterapkan dari nol pada MySQL temporer;
   `session_version` dan tabel `password_reset_tokens` ikut diverifikasi.

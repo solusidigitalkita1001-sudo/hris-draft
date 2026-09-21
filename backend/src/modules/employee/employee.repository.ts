@@ -93,6 +93,61 @@ export class EmployeeRepository {
     });
   }
 
+  async findMyReportingLine(employeeId: string, companyId: string) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, companyId, deletedAt: null, status: 'ACTIVE' },
+      select: {
+        id: true,
+        employeeNumber: true,
+        fullName: true,
+        position: {
+          select: {
+            id: true,
+            name: true,
+            reportsTo: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!employee) return null;
+
+    const reportsToPosition = employee.position?.reportsTo ?? null;
+    const supervisors = reportsToPosition
+      ? await prisma.employee.findMany({
+          where: {
+            companyId,
+            positionId: reportsToPosition.id,
+            deletedAt: null,
+            status: 'ACTIVE',
+            employmentStatus: 'ACTIVE',
+          },
+          select: {
+            id: true,
+            employeeNumber: true,
+            fullName: true,
+            email: true,
+            avatar: true,
+            position: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+          },
+          orderBy: [{ employeeNumber: 'asc' }, { id: 'asc' }],
+        })
+      : [];
+
+    return {
+      source: 'POSITION_REPORTS_TO' as const,
+      employee: {
+        id: employee.id,
+        employeeNumber: employee.employeeNumber,
+        fullName: employee.fullName,
+        position: employee.position ? { id: employee.position.id, name: employee.position.name } : null,
+      },
+      reportsToPosition,
+      primarySupervisor: supervisors[0] ?? null,
+      alternateSupervisors: supervisors.slice(1),
+    };
+  }
+
   async findCareerTransactions(employeeId: string) {
     return prisma.employeeCareerTransaction.findMany({
       where: { employeeId, deletedAt: null },

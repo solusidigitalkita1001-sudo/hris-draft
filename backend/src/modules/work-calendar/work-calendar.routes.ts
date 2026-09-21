@@ -9,6 +9,7 @@ import {
   createShiftFormulaSchema, updateShiftFormulaSchema,
   createShiftSwapRequestSchema, reviewShiftSwapRequestSchema,
   workCalendarIdParamsSchema, countWorkingDaysQuerySchema,
+  nextShiftQuerySchema,
 } from './work-calendar.dto';
 import { validateRequest } from '@/shared/middleware/RequestValidator';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
@@ -53,6 +54,7 @@ router.delete('/holidays/:hid', authorize({ resource: 'work-calendar', action: '
 
 // My Calendar
 router.get('/me/resolved', workCalendarController.getMyResolvedCalendar.bind(workCalendarController));
+router.get('/me/next-shift', validate(nextShiftQuerySchema, 'query'), workCalendarController.getMyNextShift.bind(workCalendarController));
 router.get('/shift-swaps/candidates/my', workCalendarController.findShiftSwapCandidates.bind(workCalendarController));
 router.get('/shift-swaps/my', workCalendarController.findMyShiftSwapRequests.bind(workCalendarController));
 router.get('/shift-swaps/approvals/my', workCalendarController.findMyShiftSwapApprovals.bind(workCalendarController));

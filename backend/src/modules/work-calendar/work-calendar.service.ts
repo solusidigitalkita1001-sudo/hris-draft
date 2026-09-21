@@ -6,10 +6,65 @@ import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/share
 import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
 import prisma from '@/shared/database/prisma';
 import { logger } from '@/shared/logger/WinstonLogger';
+import type { ResolvedWorkCalendarMonthDay } from './work-calendar.repository';
 
 type WorkflowSource = 'WORKFLOW' | 'LEGACY';
 
+export function selectNextScheduledShift(
+  days: ResolvedWorkCalendarMonthDay[],
+  fromDate: string,
+  throughDate: string,
+): ResolvedWorkCalendarMonthDay | null {
+  return days.find((day) =>
+    day.date >= fromDate &&
+    day.date <= throughDate &&
+    day.isWorkingDay &&
+    (!day.absence || day.absence.partialDay),
+  ) ?? null;
+}
+
 export class WorkCalendarService {
+  async getMyNextShift(userId: string, from?: string) {
+    const clock = await workCalendarRepository.findMyOfficeClock(userId);
+    const fromDate = from ?? clock.serverDate;
+    const through = new Date(`${fromDate}T12:00:00.000Z`);
+    through.setUTCDate(through.getUTCDate() + 92);
+    const throughDate = through.toISOString().slice(0, 10);
+    let year = Number(fromDate.slice(0, 4));
+    let month = Number(fromDate.slice(5, 7));
+    let employee: Awaited<ReturnType<typeof workCalendarRepository.findResolvedMyWorkCalendarMonth>>['employee'] | null = null;
+
+    for (let index = 0; index < 4; index += 1) {
+      const resolved = await workCalendarRepository.findResolvedMyWorkCalendarMonth(userId, year, month);
+      employee ??= resolved.employee;
+      const shift = selectNextScheduledShift(resolved.days, fromDate, throughDate);
+      if (shift) {
+        return {
+          timezone: clock.timezone,
+          serverDate: clock.serverDate,
+          fromDate,
+          throughDate,
+          employee: resolved.employee,
+          shift,
+        };
+      }
+      month += 1;
+      if (month === 13) {
+        month = 1;
+        year += 1;
+      }
+    }
+
+    return {
+      timezone: clock.timezone,
+      serverDate: clock.serverDate,
+      fromDate,
+      throughDate,
+      employee,
+      shift: null,
+    };
+  }
+
   async findShiftSwapById(id: string) {
     const request = await workCalendarRepository.findShiftSwapRequestById(id);
     if (!request) throw new NotFoundError('Shift swap request not found');

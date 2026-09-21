@@ -102,8 +102,8 @@ Gap paling penting:
 2. Source Flutter/mobile tidak ada di repository backend ini, sehingga Approval
    Center, koreksi, lembur, payroll, push, loan, EWA, activity, dan travel yang
    sudah mempunyai kontrak backend masih perlu diintegrasikan di repository client.
-3. Chat, announcement dashboard, dan kontrak direct-supervisor masih memerlukan
-   keputusan produk/API.
+3. Chat masih memerlukan keputusan produk/API; announcement dashboard, next
+   shift, dan reporting line sudah mempunyai kontrak self-service.
 4. SMTP, Firebase/APNs, akun staging, serta certificate/DNS belum tersedia di
    workspace dan secret manager deployment.
 5. Mayoritas endpoint lanjutan masih memerlukan contoh response `data` dan
@@ -322,9 +322,10 @@ Mobile saat ini hanya memberi keterangan bahwa chat belum tersedia dan tidak mem
 
 Dokumen employee sudah mempunyai list/detail/signed-url/download privat dan
 tercatat pada kontrak mobile. `MANAGER_TEAM` juga sudah fungsional berdasarkan
-kepala division/department/sub-department beserta subtree. Yang masih terbuka
-adalah field direct-supervisor pada profil dan keputusan apakah hierarchy kepala
-unit tersebut menjadi reporting line produk yang ditampilkan ke pengguna.
+kepala division/department/sub-department beserta subtree. Reporting line
+self-service tersedia di `/employees/me/reporting-line`, memakai
+`Position.reportsToId`, memilih primary holder secara deterministik, dan tetap
+mengembalikan holder alternatif bila satu posisi ditempati lebih dari satu orang.
 
 ### 6.5 Password recovery
 
@@ -338,15 +339,13 @@ token yang terbit sebelum perubahan password langsung ditolak.
 
 ### 6.6 Dashboard, team, announcement, dan timezone
 
-Belum ada kontrak khusus untuk:
-
-- announcement resmi beserta category dan target audience;
-- next shift yang stabil lintas batas bulan;
-- direct-supervisor yang stabil pada profil.
-
-Attendance today/history sudah mengembalikan `serverDate` dan timezone kantor;
-kalender tim manager juga sudah tersedia. Announcement resmi, next shift lintas
-batas bulan, dan direct-supervisor tetap terbuka.
+**Selesai di backend.** Attendance today/history mengembalikan `serverDate` dan
+timezone kantor; kalender tim manager tersedia. `/announcements` menegakkan
+status, publish window, target audience, pagination, unread count, detail, dan
+read-state. `/work-calendars/me/next-shift` mencari jadwal lintas bulan memakai
+timezone company dan melewati absence penuh. `/employees/me/reporting-line`
+memberikan hierarchy posisi yang stabil. Model announcement saat ini tidak
+memiliki category; client tidak boleh mengarang category sendiri.
 
 ### 6.7 Offline mutation dan idempotency
 
@@ -508,7 +507,7 @@ Semua fixture harus tersanitasi, memakai ID placeholder yang jelas, dan tetap me
 - [x] Perjelas identity/scope endpoint overtime employee.
 - [ ] Tentukan action utama untuk leave/permission: domain action atau workflow-engine action.
 - [x] Tambahkan timezone kantor/server date ke response yang relevan.
-- [ ] Berikan kontrak announcement, next shift, dan direct-supervisor bila tetap masuk scope; kalender tim dan dokumen employee sudah tersedia.
+- [x] Berikan kontrak announcement, next shift, reporting line, kalender tim, dan dokumen employee.
 
 ### P2
 
@@ -532,9 +531,10 @@ Semua fixture harus tersanitasi, memakai ID placeholder yang jelas, dan tetap me
 Mobile tidak lagi bergantung pada endpoint admin lama untuk auth atau attendance dasar. Jalur yang telah diintegrasikan sudah menggunakan Bearer token, self-service identity, server result, dan state error yang jujur. Blocker utama berikutnya berada pada kontrak backend/deployment, bukan desain UI.
 
 Approval, correction, overtime, loan, EWA, daily activity, travel, payroll,
-push, dokumen, password recovery, timezone, dan idempotency sudah mempunyai
+push, dokumen, password recovery, announcement, next shift, reporting line,
+timezone, dan idempotency sudah mempunyai
 kontrak backend. Integrasi client, response fixture lanjutan, credential provider,
-serta acceptance staging tetap diperlukan. Chat, announcement, next shift,
-direct-supervisor, dan aturan offline attendance masih membutuhkan keputusan.
+serta acceptance staging tetap diperlukan. Chat dan aturan offline attendance
+masih membutuhkan keputusan.
 
 Status aplikasi tetap **REVIEW lokal**, belum **DONE staging/release**, sampai acceptance pada bagian 9 selesai dan bukti deployment dicatat.

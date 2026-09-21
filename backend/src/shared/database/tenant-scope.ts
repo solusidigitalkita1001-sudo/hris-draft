@@ -77,10 +77,18 @@ export async function enforceTenantScope(params: Prisma.MiddlewareParams, compan
   const parent = params.model ? PARENT_SCOPES[params.model] : undefined;
   const args: Data = params.args ?? {};
   params.args = args;
-  const tenant = parent
-    ? parent.relation.split('.').reduceRight<Data>((acc, key) => ({ [key]: acc }), { companyId })
-    : { companyId };
+  // Published platform announcements intentionally use companyId=null and are
+  // visible to every authenticated tenant. All other company-scoped models
+  // remain exact-company only. AnnouncementRead follows the same parent rule.
   const filteredActions = new Set(['findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate', 'groupBy', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
+  const mayAccessPlatformAnnouncement = params.model === 'AnnouncementRead'
+    || (params.model === 'Announcement' && !TENANT_WRITE_ACTIONS.has(params.action));
+  const companyConstraint: Data = mayAccessPlatformAnnouncement
+    ? { OR: [{ companyId }, { companyId: null }] }
+    : { companyId };
+  const tenant = parent
+    ? parent.relation.split('.').reduceRight<Data>((acc, key) => ({ [key]: acc }), companyConstraint)
+    : companyConstraint;
   if (filteredActions.has(params.action)) {
     const where = args.where ? object(args.where) : {};
     // Keep unique selectors at top level for Prisma WhereUniqueInput.

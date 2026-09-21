@@ -5,7 +5,7 @@
 > dan konvensi `employeeId` via query yang sudah tidak berlaku).
 > Panduan auth ringkas juga ada di `api-mobile-integration.md`.
 >
-> Baseline: branch `main`, per 12 September 2026.
+> Baseline: branch `feat/mobile-api-gap`, per 21 September 2026.
 
 ---
 
@@ -220,7 +220,13 @@ Endpoint admin/HR (butuh `attendance:read/create/update`):
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | GET | `/work-calendars/me/resolved?year=YYYY&month=M` | self | Kalender kerja + shift + absence milik sendiri (untuk tampilan jadwal) |
+| GET | `/work-calendars/me/next-shift?from=YYYY-MM-DD` | self | Shift kerja berikutnya pada/selepas tanggal `from`, menyeberang bulan dan melewati cuti/izin penuh |
 | GET | `/work-calendars/holidays/list` | read | Daftar hari libur |
+
+`from` bersifat inklusif dan default-nya adalah tanggal server pada timezone
+company. Pencarian dibatasi 92 hari. Response membawa `timezone`, `serverDate`,
+`fromDate`, `throughDate`, `employee`, dan `shift`; `shift=null` berarti tidak ada
+jadwal kerja dalam horizon tersebut.
 
 **Tukar shift (shift swap) — self-service:**
 
@@ -370,6 +376,7 @@ redirect, atau file sementara dan dibatasi maksimum 5 MB.
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | GET | `/auth/me` | self | Cara termudah ambil profil ringkas (id, roles, permissions, employeeId, companyId) |
+| GET | `/employees/me/reporting-line` | self | Posisi atasan, supervisor utama, dan supervisor alternatif berdasarkan `Position.reportsToId` |
 | GET | `/employees/:id` | perm | Detail karyawan (data sensitif ter-mask sesuai izin) |
 | GET | `/employees/:id/attachments` | perm/self-scope | Metadata lampiran employee |
 
@@ -388,6 +395,23 @@ redirect, atau file sementara dan dibatasi maksimum 5 MB.
 |---|---|---|---|
 | GET | `/work-calendars/team/:managerId?year=&month=` | `work-calendar:read` | Status kalender tim yang dibatasi data scope manager |
 | GET | `/work-calendars/employee/:employeeId?year=&month=` | `work-calendar:read` | Kalender employee yang berada dalam data scope pemanggil |
+
+### 4.16 Announcement — `/api/v1/announcements`
+
+| Method | Path | Auth | Fungsi |
+|---|---|---|---|
+| GET | `/announcements?page=1&limit=20&unreadOnly=false` | self | Announcement visible untuk company/audience pemanggil |
+| GET | `/announcements/unread-count` | self | Jumlah announcement visible yang belum dibaca |
+| GET | `/announcements/:id` | self | Detail announcement; ID di luar audience menghasilkan 404 |
+| PUT | `/announcements/:id/read` | self | Tandai dibaca secara idempotent |
+
+Audience resmi: `ALL`, `COMPANY_WIDE`, `DEPARTMENT_ONLY`, `BRANCH_ONLY`,
+`POSITION_ONLY`, dan `EMPLOYEE_SPECIFIC`. Hanya status `PUBLISHED` dalam jendela
+`publishFrom`/`publishUntil` yang muncul. Pin aktif berada di atas; pin kedaluwarsa
+kembali ke urutan normal. List mengembalikan `contentPreview`, author minimal,
+`isRead`, dan `readAt`; detail menambahkan `content`, `allowComment`, dan
+`totalViews`. Announcement platform `companyId=null` dapat dibaca semua tenant,
+tetapi announcement tenant lain tetap tidak terlihat.
 
 ---
 
@@ -458,7 +482,7 @@ Pakai ini sebagai sumber kebenaran mutlak kalau ada perbedaan versi.
 1. `POST /auth/login` (header `X-Client-Type: mobile`) → simpan `accessToken` + `refreshToken`.
 2. Semua request berikut: `Authorization: Bearer <accessToken>`.
 3. `GET /auth/me` → tahu roles/permissions untuk atur menu.
-4. Dashboard karyawan: `GET /attendance/me/today`, `GET /notifications/unread-count`, `GET /leave/balances/employee`, `GET /ewa/my/limit`.
+4. Dashboard karyawan: `GET /attendance/me/today`, `GET /work-calendars/me/next-shift`, `GET /notifications/unread-count`, `GET /announcements`, `GET /announcements/unread-count`, `GET /leave/balances/employee`, `GET /ewa/my/limit`.
 5. Absen: `GET /attendance/me/today` → tampilkan metode yang diizinkan → `POST /attendance/me/check-in` → nanti `PATCH /attendance/me/check-out`.
 6. Saat dapat `401`: `POST /auth/refresh` → ganti token → ulangi request. Gagal refresh → paksa login ulang.
 </content>

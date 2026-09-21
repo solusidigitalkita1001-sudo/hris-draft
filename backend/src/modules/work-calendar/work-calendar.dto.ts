@@ -123,6 +123,16 @@ export const countWorkingDaysQuerySchema = z.object({
   }
 });
 
+export const nextShiftQuerySchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid from date format. Use YYYY-MM-DD').optional(),
+}).superRefine((value, ctx) => {
+  if (!value.from) return;
+  const date = new Date(`${value.from}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value.from) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['from'], message: 'Invalid calendar date' });
+  }
+});
+
 export type CreateCalendarDTO = z.infer<typeof createCalendarSchema>;
 export type UpdateCalendarDTO = z.infer<typeof updateCalendarSchema>;
 export type UpdateDayDTO = z.infer<typeof updateDaySchema>;
@@ -136,3 +146,4 @@ export type CreateShiftSwapRequestDTO = z.infer<typeof createShiftSwapRequestSch
 export type ReviewShiftSwapRequestDTO = z.infer<typeof reviewShiftSwapRequestSchema>;
 export type WorkCalendarIdParamsDTO = z.infer<typeof workCalendarIdParamsSchema>;
 export type CountWorkingDaysQueryDTO = z.infer<typeof countWorkingDaysQuerySchema>;
+export type NextShiftQueryDTO = z.infer<typeof nextShiftQuerySchema>;

@@ -48,6 +48,22 @@ describe('tenant constraint enforcement', () => {
     await enforceTenantScope(request, 'A');
     expect(request.args.where.AND).toEqual([{ stage: { template: { companyId: 'A' } } }]);
   });
+  it('allows company and platform announcements without opening another tenant', async () => {
+    const announcement = params('findMany', { where: {} }, 'Announcement');
+    await enforceTenantScope(announcement, 'A');
+    expect(announcement.args.where.AND).toEqual([{ OR: [{ companyId: 'A' }, { companyId: null }] }]);
+
+    const read = params('findMany', { where: {} }, 'AnnouncementRead');
+    await enforceTenantScope(read, 'A');
+    expect(read.args.where.AND).toEqual([{
+      announcement: { OR: [{ companyId: 'A' }, { companyId: null }] },
+    }]);
+  });
+  it('does not allow a tenant to mutate a platform announcement', async () => {
+    const announcement = params('update', { where: { id: 'platform' }, data: { title: 'Changed' } }, 'Announcement');
+    await enforceTenantScope(announcement, 'A');
+    expect(announcement.args.where.AND).toEqual([{ companyId: 'A' }]);
+  });
   it('rejects parent reassignment on existing records', async () => {
     await expect(enforceTenantScope(params('update', { where: { id: 'step' }, data: { instanceId: 'foreign' } }, 'WorkflowInstanceStep'), 'A')).rejects.toThrow();
     await expect(enforceTenantScope(params('update', { where: { id: 'rule' }, data: { stageId: 'foreign' } }, 'WorkflowConditionRule'), 'A')).rejects.toThrow();

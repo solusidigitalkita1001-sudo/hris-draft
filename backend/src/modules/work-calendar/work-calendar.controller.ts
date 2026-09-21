@@ -4,10 +4,23 @@ import { workCalendarRepository } from './work-calendar.repository';
 import { workCalendarService } from './work-calendar.service';
 import { Result } from '@/shared/core/Result';
 import { generateSystemCode } from '@/shared/utils/system-code';
-import { ValidationError } from '@/shared/exceptions/AppError';
+import { AuthError, ValidationError } from '@/shared/exceptions/AppError';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 
 export class WorkCalendarController {
+  async getMyNextShift(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new AuthError('Authentication required');
+      const result = await workCalendarService.getMyNextShift(
+        req.user.id,
+        req.query.from as string | undefined,
+      );
+      res.setHeader('X-Office-Timezone', result.timezone);
+      res.setHeader('X-Server-Date', result.serverDate);
+      res.json(Result.success(result));
+    } catch (error) { next(error); }
+  }
+
   async findAll(req: Request, res: Response, next: NextFunction) {
     try {
       const data = await workCalendarRepository.findAll(req.query.companyId as string);
