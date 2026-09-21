@@ -130,6 +130,21 @@ The release gate is complete only when the sanitized smoke artifact has zero
 the public base URL is HTTPS. Local success alone remains `PASS lokal`; it does
 not promote live deployment or real-device status.
 
+Copy `docs/mobile-release-evidence.example.json` to a private working location,
+fill it with sanitized deployment/device evidence, then run the machine-readable
+gate. The example intentionally fails until every required case is `PASS`:
+
+```bash
+node scripts/checks/mobile-release-gate.mjs \
+  /tmp/hris-mobile-smoke-results.json \
+  /secure/path/mobile-release-evidence.json
+```
+
+The verifier rejects HTTP targets, failed/blocked smoke checks, missing manual
+cases, target mismatches, and evidence objects containing common secret fields.
+Commit only the example/template; keep the filled release evidence in the
+approved release-evidence system.
+
 ## 6. Local verification record — 19 September 2026
 
 The remediation was exercised against a fresh, isolated MySQL database rather
