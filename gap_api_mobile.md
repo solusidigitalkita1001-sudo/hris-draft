@@ -130,7 +130,7 @@ Status seluruh item pada bagian ini adalah **terintegrasi lokal, perlu live revi
 | Method | Path | Pemakaian client | Catatan live review |
 |---|---|---|---|
 | GET | `/attendance/me/today` | Record hari ini dan policy/context | Bentuk `context`, allowed methods, lokasi, selfie, dan status belum mempunyai fixture final |
-| GET | `/attendance/me?month=YYYY-MM` | Riwayat bulanan | Client juga mengirim `page` dan `limit`, tetapi keduanya belum disebut pada kontrak endpoint |
+| GET | `/attendance/me?month=YYYY-MM&page=1&limit=20` | Riwayat bulanan | `page` dan `limit` sudah menjadi kontrak resmi dan response memakai meta pagination standar |
 | POST | `/attendance/me/check-in` | GPS atau face check-in | Client mengirim raw selfie data URI, liveness, GPS metadata, dan `Idempotency-Key` |
 | PATCH | `/attendance/me/check-out` | GPS check-out | Client tidak mengirim employee/company atau waktu device |
 
@@ -153,7 +153,7 @@ Status seluruh item pada bagian ini adalah **terintegrasi lokal, perlu live revi
 | Method | Path | Pemakaian client | Catatan live review |
 |---|---|---|---|
 | GET | `/work-calendars/me/resolved` | Kalender kerja bulanan | Client memerlukan `employee`, `period`, dan daftar `days` lengkap satu bulan |
-| GET | `/notifications?limit=N` | Inbox dan announcement yang difilter | Kontrak hanya menjelaskan `limit`, belum page/cursor dan schema item |
+| GET | `/notifications?page=1&limit=50&unreadOnly=false` | Inbox yang difilter | Pagination dan schema item sudah dicatat pada kontrak mobile |
 | GET | `/notifications/unread-count` | Badge notifikasi | Client mengharapkan `data.count` integer nonnegatif |
 | PUT | `/notifications/read` | Tandai ID tertentu dibaca | Body `{ids:[...]}` |
 | PUT | `/notifications/read-all` | Tandai semua dibaca | Scope user/company harus diturunkan server |
@@ -359,29 +359,25 @@ activity, serta trip/expense dan action statusnya. Yang belum diputuskan adalah
 timestamp capture offline, perubahan policy/session saat antre, dan apakah
 offline attendance queue didukung produk.
 
-### 6.8 Endpoint dari dokumen lama yang belum dikonfirmasi
+### 6.8 Status endpoint dari dokumen lama
 
-Checklist lama menyebut beberapa capability berikut, tetapi nama/path tersebut tidak ada dalam `mobile-api.md` final:
+Status berikut sudah dikonfirmasi dari router yang dipasang di `app.ts`:
 
-- resolved RBAC terpisah;
-- shift swap;
-- asset employee;
-- certification;
-- performance;
-- training/LMS;
-- organization chart dan employee directory;
-- onboarding checklist;
-- document management;
-- sebagian nama path lama berbentuk singular seperti `permission-request`, `travel-expense`, `employee-loan`, `daily-activity`, dan `work-calendar`.
+| Capability lama | Status backend | Keputusan kontrak mobile |
+|---|---|---|
+| Shift swap | Aktif di `/work-calendars/shift-swaps/*` | Sudah masuk kontrak mobile |
+| Asset | Aktif di `/assets`; permission masih memakai resource employee | Admin/web; belum ada endpoint `my assets` yang aman untuk employee |
+| Certification | Tidak ada router certification tersendiri | Record training employee ada di `/employees/:id/trainings`; jangan memakai path certification lama |
+| Performance | Aktif di `/performance`, termasuk `/results/me` | Tersedia tetapi belum dirilis sebagai fitur mobile |
+| Training/LMS | Aktif di `/training`, termasuk self-enroll/complete | Tersedia tetapi permission dan UX mobile belum diputuskan |
+| Organization/directory | Aktif di `/organization` dan `/employees` | Mayoritas admin; reporting line self-service sudah dipisahkan |
+| Onboarding/offboarding | Aktif bersama di `/onboarding` (checklist, resignation, clearance) | Belum ada kontrak self-service mobile khusus |
+| Document management | Aktif di `/documents` | Sudah masuk kontrak mobile dengan file privat |
+| Resolved RBAC | Tidak ada endpoint self-service terpisah | Gunakan role/permission dari auth session; jangan memakai path lama |
 
-Mohon backend mengonfirmasi apakah modul tersebut:
-
-1. masih aktif dengan path baru;
-2. tersedia tetapi belum dimasukkan ke kontrak mobile;
-3. hanya untuk web/admin;
-4. deprecated atau belum siap.
-
-Client hanya akan menggunakan path plural yang tercantum dalam kontrak final sampai ada revisi resmi.
+Nama singular lama seperti `permission-request`, `travel-expense`,
+`employee-loan`, `daily-activity`, dan `work-calendar` tidak dipasang. Client
+hanya boleh memakai path plural pada kontrak final.
 
 ## 7. Risiko pada endpoint yang sudah terintegrasi
 
@@ -409,7 +405,9 @@ Mohon sediakan matriks role employee/manager dan permissions final. Self-service
 
 ### 7.3 Response schema dan pagination
 
-Kontrak baru menjelaskan envelope umum, tetapi belum memberikan schema `data` lengkap pada mayoritas endpoint. Hal yang perlu dipastikan:
+Kontrak kini menjelaskan schema data untuk Approval Center, loan, EWA, daily
+activity, travel/expense, notification, announcement, next shift, reporting
+line, dan payroll self-service. Modul lain tetap mengikuti aturan umum berikut:
 
 - apakah list berada langsung di `data` atau di `data.items`;
 - field `meta.page`, `limit`, `total`, dan `totalPages`;
@@ -418,7 +416,9 @@ Kontrak baru menjelaskan envelope umum, tetapi belum memberikan schema `data` le
 - enum status, type, action, method, dayType, dan error code;
 - nullable field dan backward compatibility.
 
-Khusus notifikasi, kontrak saat ini hanya mendukung `limit`. Client tidak mengirim page/cursor dan fitur muat lebih banyak mengambil ulang N item terbaru. Bila backend mendukung pagination, contract perlu menyebut parameter dan metadata secara eksplisit.
+Notifikasi mendukung `page`, `limit`, dan `unreadOnly`; client harus memakai
+`meta.hasNextPage` dan tidak lagi mengambil ulang N item terbaru sebagai pseudo
+pagination.
 
 ### 7.4 Server-authoritative attendance
 
@@ -460,8 +460,10 @@ Semua fixture harus tersanitasi, memakai ID placeholder yang jelas, dan tetap me
 - approve, reject, stale action, forbidden, dan bulk partial failure;
 - correction create/detail/history/approve/reject;
 - overtime list/create/pay/approve/reject;
-- session list/revoke dan MFA management;
 - holiday list.
+
+Session list/revoke, pengaturan MFA, dan delete notification ditunda dari rilis
+mobile awal. Challenge TOTP saat login tetap bagian dari acceptance auth inti.
 
 ### P0 keamanan untuk payroll
 
@@ -502,18 +504,18 @@ Semua fixture harus tersanitasi, memakai ID placeholder yang jelas, dan tetap me
 
 ### P1
 
-- [ ] Berikan schema Approval Center dan seluruh action result/error.
+- [x] Berikan schema Approval Center dan seluruh action result/error.
 - [x] Perjelas list riwayat koreksi milik employee.
 - [x] Perjelas identity/scope endpoint overtime employee.
-- [ ] Tentukan action utama untuk leave/permission: domain action atau workflow-engine action.
+- [x] Action utama Approval Center untuk leave/permission adalah `POST /workflow-engine/instances/:id/actions`; route domain tetap compatibility-only.
 - [x] Tambahkan timezone kantor/server date ke response yang relevan.
 - [x] Berikan kontrak announcement, next shift, reporting line, kalender tim, dan dokumen employee.
 
 ### P2
 
-- [ ] Lengkapi schema employee loan, EWA, daily activity, dan travel expense.
-- [ ] Konfirmasi status endpoint lama untuk shift swap, asset, certification, performance, training, organization, onboarding, dan document management.
-- [ ] Tentukan apakah delete notification, session management, dan MFA settings akan dirilis pada mobile.
+- [x] Lengkapi schema employee loan, EWA, daily activity, dan travel expense.
+- [x] Konfirmasi status endpoint lama untuk shift swap, asset, certification, performance, training, organization, onboarding, dan document management.
+- [x] Delete notification UI, session management, dan MFA settings ditunda dari rilis mobile awal; endpoint backend tidak dihapus.
 
 ## 11. Urutan integrasi setelah backend merespons
 
@@ -523,7 +525,7 @@ Semua fixture harus tersanitasi, memakai ID placeholder yang jelas, dan tetap me
 4. Implementasikan koreksi absensi dan lembur.
 5. Integrasikan payroll memakai kontrak unlock/relock/PDF yang sudah tersedia.
 6. Integrasikan push setelah credential Firebase/APNs staging tersedia.
-7. Integrasikan dokumen dan password recovery; tunda chat/supervisor sampai keputusan kontraknya final.
+7. Integrasikan dokumen dan password recovery; tunda chat sampai keputusan kontraknya final.
 8. Lanjutkan loan, EWA, travel/claim, dan daily activity berdasarkan prioritas produk.
 
 ## 12. Kesimpulan

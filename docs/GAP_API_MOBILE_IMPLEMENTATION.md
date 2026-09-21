@@ -67,6 +67,11 @@ deployment.
   dan read-state idempotent. Reporting line self-service memakai hierarchy
   `Position.reportsToId` dengan urutan holder deterministik. Next shift memakai
   timezone company dan resolver kalender yang sama hingga lintas bulan.
+- Kontrak Approval Center, loan, EWA, daily activity, travel/expense, attendance
+  pagination, dan notification pagination/schema sudah dirinci. Approval Center
+  memakai workflow-engine action sebagai jalur utama; route action domain tetap
+  compatibility-only. Session management, MFA settings, dan delete notification
+  UI ditunda dari rilis mobile awal tanpa menghapus endpoint backend.
 
 ## Migration
 
