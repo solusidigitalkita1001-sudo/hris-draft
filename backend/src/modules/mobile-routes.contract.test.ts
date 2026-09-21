@@ -7,6 +7,7 @@ import workflowEngineRoutes from './workflow-engine/workflow-engine.routes';
 import announcementRoutes from './announcement/announcement.routes';
 import employeeRoutes from './employee/employee.routes';
 import workCalendarRoutes from './work-calendar/work-calendar.routes';
+import assetRoutes from './asset/asset.routes';
 
 function paths(router: unknown): string[] {
   return ((router as { stack: Array<{ route?: { path: string } }> }).stack)
@@ -47,6 +48,11 @@ describe('mobile route contract and ordering', () => {
 
   it('exposes a next-shift resolver that crosses calendar months', () => {
     expect(paths(workCalendarRoutes)).toContain('/me/next-shift');
+  });
+
+  it('keeps the employee asset inbox reachable before asset detail', () => {
+    const registered = paths(assetRoutes);
+    expect(registered.indexOf('/my')).toBeLessThan(registered.indexOf('/:id'));
   });
 
   it('keeps payroll unlock, lock, and PDF routes reachable before payslip detail', () => {

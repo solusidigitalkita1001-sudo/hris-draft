@@ -72,6 +72,11 @@ deployment.
   memakai workflow-engine action sebagai jalur utama; route action domain tetap
   compatibility-only. Session management, MFA settings, dan delete notification
   UI ditunda dari rilis mobile awal tanpa menghapus endpoint backend.
+- Asset employee sekarang memiliki inbox self-service terpaginasikan melalui
+  `GET /assets/my`, di-scope ke company/employee dari sesi dan tidak mengekspos
+  nilai finansial atau assignment employee lain. Kontrak attendance offline juga
+  diputuskan live-only: retry memakai idempotency key, sedangkan punch yang tidak
+  pernah mencapai server harus masuk melalui koreksi absensi.
 
 ## Migration
 

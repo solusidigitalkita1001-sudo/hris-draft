@@ -3,13 +3,15 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { assetController } from './asset.controller';
-import { createAssetSchema, assignAssetSchema } from './asset.dto';
+import { createAssetSchema, assignAssetSchema, myAssetsQuerySchema } from './asset.dto';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
 router.use(requireCompanyAccess());
 
+// Employee self-service. Keep this static path before /:id.
+router.get('/my', validate(myAssetsQuerySchema, 'query'), assetController.findMine.bind(assetController));
 router.get('/', authorize({ resource: 'employee', action: 'read' }), assetController.findAll.bind(assetController));
 router.get('/:id', authorize({ resource: 'employee', action: 'read' }), assetController.findById.bind(assetController));
 router.get('/:id/depreciation', authorize({ resource: 'employee', action: 'read' }), assetController.getDepreciation.bind(assetController));

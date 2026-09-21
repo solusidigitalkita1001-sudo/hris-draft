@@ -355,9 +355,11 @@ header `Idempotency-Replayed`; payload berbeda/in-progress menghasilkan `409`.
 Error tidak disimpan, fingerprint object stabil terhadap urutan key JSON, dan
 response Redis baru dikirim setelah record selesai dipersist. Cakupan meliputi
 attendance, leave/permission/correction/overtime, device token, loan, EWA, daily
-activity, serta trip/expense dan action statusnya. Yang belum diputuskan adalah
-timestamp capture offline, perubahan policy/session saat antre, dan apakah
-offline attendance queue didukung produk.
+activity, serta trip/expense dan action statusnya. Attendance punch diputuskan
+live-only: waktu selalu berasal dari server, retry transport memakai key yang
+sama, dan punch yang tidak pernah mencapai server diselesaikan melalui koreksi
+absensi. Karena queue attendance offline tidak didukung, perubahan policy atau
+session selama antre tidak menjadi state kontrak yang harus direkonsiliasi.
 
 ### 6.8 Status endpoint dari dokumen lama
 
@@ -366,7 +368,7 @@ Status berikut sudah dikonfirmasi dari router yang dipasang di `app.ts`:
 | Capability lama | Status backend | Keputusan kontrak mobile |
 |---|---|---|
 | Shift swap | Aktif di `/work-calendars/shift-swaps/*` | Sudah masuk kontrak mobile |
-| Asset | Aktif di `/assets`; permission masih memakai resource employee | Admin/web; belum ada endpoint `my assets` yang aman untuk employee |
+| Asset | Aktif di `/assets`; permission admin masih memakai resource employee | `GET /assets/my` tersedia untuk assignment milik employee, terpaginasikan dan tanpa field finansial |
 | Certification | Tidak ada router certification tersendiri | Record training employee ada di `/employees/:id/trainings`; jangan memakai path certification lama |
 | Performance | Aktif di `/performance`, termasuk `/results/me` | Tersedia tetapi belum dirilis sebagai fitur mobile |
 | Training/LMS | Aktif di `/training`, termasuk self-enroll/complete | Tersedia tetapi permission dan UX mobile belum diputuskan |
@@ -536,7 +538,7 @@ Approval, correction, overtime, loan, EWA, daily activity, travel, payroll,
 push, dokumen, password recovery, announcement, next shift, reporting line,
 timezone, dan idempotency sudah mempunyai
 kontrak backend. Integrasi client, response fixture lanjutan, credential provider,
-serta acceptance staging tetap diperlukan. Chat dan aturan offline attendance
-masih membutuhkan keputusan.
+serta acceptance staging tetap diperlukan. Chat masih membutuhkan keputusan;
+attendance offline sudah ditutup sebagai live-only dengan jalur koreksi.
 
 Status aplikasi tetap **REVIEW lokal**, belum **DONE staging/release**, sampai acceptance pada bagian 9 selesai dan bukti deployment dicatat.

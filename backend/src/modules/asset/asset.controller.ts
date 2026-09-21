@@ -2,8 +2,28 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { assetService } from './asset.service';
 import { Result } from '@/shared/core/Result';
+import { BadRequestError } from '@/shared/exceptions/AppError';
 
 export class AssetController {
+  async findMine(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user?.employeeId || !req.user.companyId) {
+        throw new BadRequestError('Akun ini tidak tertaut ke data karyawan dan perusahaan');
+      }
+      const { status, page, limit } = req.query as unknown as {
+        status: 'ACTIVE' | 'RETURNED' | 'ALL';
+        page: number;
+        limit: number;
+      };
+      const result = await assetService.findMine(
+        req.user.companyId,
+        req.user.employeeId,
+        { status, page, limit },
+      );
+      res.json(Result.paginated(result.items, result.total, page, limit));
+    } catch (error) { next(error); }
+  }
+
   async findAll(req: Request, res: Response, next: NextFunction) {
     try { res.json(Result.success(await assetService.findAll(req.query.companyId as string, req.query.status as string))); }
     catch (error) { next(error); }

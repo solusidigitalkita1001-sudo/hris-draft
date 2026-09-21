@@ -23,6 +23,8 @@ const COMPANY_SCOPED_MODELS = [
   'loanType',
   'employee',
   'user',
+  'asset',
+  'assetAssignment',
 ];
 
 function makeMockModel(_name: string) {

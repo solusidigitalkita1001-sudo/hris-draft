@@ -504,6 +504,19 @@ kembali ke urutan normal. List mengembalikan `contentPreview`, author minimal,
 `totalViews`. Announcement platform `companyId=null` dapat dibaca semua tenant,
 tetapi announcement tenant lain tetap tidak terlihat.
 
+### 4.17 Aset Employee — `/api/v1/assets`
+
+| Method | Path | Auth | Fungsi |
+|---|---|---|---|
+| GET | `/assets/my?status=ACTIVE&page=1&limit=20` | self | Aset yang sedang atau pernah ditugaskan kepada employee dari sesi |
+
+`status` menerima `ACTIVE` (default), `RETURNED`, atau `ALL`. Response memakai
+pagination standar dan hanya memuat identitas aset, serial number, status,
+branch, waktu assignment/return, serta kondisi serah-terima. Nilai pembelian,
+nilai buku, catatan internal aset, dan assignment employee lain tidak pernah
+dikembalikan dari endpoint self-service ini. Route admin `/assets` tetap
+memerlukan permission employee yang sesuai.
+
 ---
 
 ## 5. Payload Capture Absensi (GPS / Face / Liveness)
@@ -540,6 +553,12 @@ POST /api/v1/attendance/me/check-in
 - **Rate limit face:** 5x gagal / 15 menit per karyawan → `429` (HR dinotifikasi). Tampilkan sisa waktu retry ke user.
 - Liveness menolak foto galeri/manipulasi/blur; GPS palsu (mock location) → `400`.
 - Di luar radius: sesuai policy branch → bisa ditandai `requiresReview` (tetap tercatat) atau ditolak.
+- Check-in/check-out adalah operasi **online dan live-only**. Client tidak boleh
+  mengantre punch offline atau mengirim waktu capture perangkat; waktu final
+  selalu waktu server ketika request diterima. Bila jaringan gagal setelah
+  request dikirim, retry request yang sama dengan `Idempotency-Key` yang sama.
+  Bila punch memang tidak pernah mencapai server, gunakan pengajuan koreksi
+  absensi setelah koneksi pulih.
 
 ---
 

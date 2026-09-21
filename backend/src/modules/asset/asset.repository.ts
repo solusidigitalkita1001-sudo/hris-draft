@@ -1,7 +1,7 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import { NotFoundError } from '@/shared/exceptions/AppError';
-import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO } from './asset.dto';
+import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO, MyAssetsQueryDTO } from './asset.dto';
 import {
   generateDepreciationSchedule,
   bookValueAfterMonths,
@@ -9,6 +9,46 @@ import {
 } from '@/shared/asset/depreciation';
 
 export class AssetRepository {
+  async findMine(companyId: string, employeeId: string, query: MyAssetsQueryDTO) {
+    const where: Prisma.AssetAssignmentWhereInput = {
+      companyId,
+      employeeId,
+      asset: { deletedAt: null },
+      ...(query.status === 'ACTIVE'
+        ? { returnedAt: null }
+        : query.status === 'RETURNED'
+          ? { returnedAt: { not: null } }
+          : {}),
+    };
+    const [items, total] = await Promise.all([
+      prisma.assetAssignment.findMany({
+        where,
+        select: {
+          id: true,
+          assignedAt: true,
+          returnedAt: true,
+          conditionAtAssign: true,
+          conditionAtReturn: true,
+          asset: {
+            select: {
+              id: true,
+              assetCode: true,
+              name: true,
+              serialNumber: true,
+              status: true,
+              branchId: true,
+            },
+          },
+        },
+        orderBy: [{ returnedAt: 'asc' }, { assignedAt: 'desc' }, { id: 'desc' }],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      prisma.assetAssignment.count({ where }),
+    ]);
+    return { items, total };
+  }
+
   async findAll(companyId: string, status?: string) {
     const where: Prisma.AssetWhereInput = { companyId, deletedAt: null };
     if (status) where.status = status as any;
