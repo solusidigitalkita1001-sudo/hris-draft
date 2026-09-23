@@ -13,9 +13,11 @@ import {
 } from './work-calendar.dto';
 import { validateRequest } from '@/shared/middleware/RequestValidator';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 // Calendar CRUD
 router.get('/', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.findAll.bind(workCalendarController));

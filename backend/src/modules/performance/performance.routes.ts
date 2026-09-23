@@ -5,6 +5,7 @@ import path from 'path';
 import multer from 'multer';
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { performanceController } from './performance.controller';
@@ -106,6 +107,7 @@ const attachmentUpload = multer({
 });
 
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/methods', authorize({ resource: 'performance', action: 'read' }), performanceController.findAllMethods.bind(performanceController));
 router.get('/methods/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.findMethodById.bind(performanceController));

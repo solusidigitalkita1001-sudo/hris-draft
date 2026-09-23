@@ -1,5 +1,6 @@
 import { requireCompanyAccess } from './CompanyScope';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
+import { getCurrentCompanyId, runInRequestContext } from '@/shared/context/RequestContext';
 
 function makeReq(overrides: any = {}) {
   return {
@@ -52,6 +53,21 @@ describe('requireCompanyAccess (multi-tenant isolation)', () => {
     expect(next).toHaveBeenCalled();
     expect(next.mock.calls[0][0]).toBeUndefined();
     expect(req.query.companyId).toBe('B');
+  });
+
+  it('propagates the validated selected company into downstream server context', async () => {
+    const user = { id: 'u', email: 'u@example.com', companyId: 'A', companyScope: ['A', 'B'], roles: ['HR_MANAGER'] };
+    const req = makeReq({ user, query: { companyId: 'B' } });
+    let downstreamCompanyId: string | undefined;
+
+    await runInRequestContext({ user }, async () => {
+      await requireCompanyAccess()(req, {} as any, (() => {
+        downstreamCompanyId = getCurrentCompanyId();
+      }) as any);
+    });
+
+    expect(downstreamCompanyId).toBe('B');
+    expect(req.user.companyId).toBe('B');
   });
 
   it('SUPER_ADMIN bypass tanpa normalisasi', async () => {

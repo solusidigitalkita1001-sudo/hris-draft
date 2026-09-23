@@ -3,6 +3,7 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validateRequest } from '@/shared/middleware/RequestValidator';
 import { companySettingsController } from './company-settings.controller';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import {
   getSettingByKeyParamsSchema,
   setSettingByKeyParamsSchema,
@@ -13,6 +14,7 @@ import {
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get(
   '/',
