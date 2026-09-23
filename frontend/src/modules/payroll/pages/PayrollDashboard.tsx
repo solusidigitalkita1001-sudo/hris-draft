@@ -4,16 +4,22 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Banknote, Users, CheckCircle2, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useCompanyStore } from '@/stores/company.store';
 
 export function PayrollDashboard() {
   const navigate = useNavigate();
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    if (!companyId) {
+      setRuns([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await payrollService.getPayrollRuns(companyId);
       setRuns(data);
     } catch (error) {
@@ -21,7 +27,7 @@ export function PayrollDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     fetchData();

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Search, RefreshCw, Plus, CalendarDays, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PENDING: <Clock size={14} className="text-amber-500" />,
@@ -27,6 +28,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 export function LeaveList() {
   const navigate = useNavigate();
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -37,9 +39,13 @@ export function LeaveList() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
+    if (!companyId) {
+      setRequests([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const params: Record<string, string> = {};
       if (statusFilter) params.status = statusFilter;
       const reqData = await leaveService.getRequests(companyId, Object.keys(params).length ? params : undefined);
@@ -49,7 +55,7 @@ export function LeaveList() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [companyId, statusFilter]);
 
   useEffect(() => {
     fetchData();

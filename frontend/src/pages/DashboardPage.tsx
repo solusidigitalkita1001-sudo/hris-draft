@@ -11,13 +11,13 @@ import { apiErrorMessage } from '@/lib/errors';
 
 export function DashboardPage() {
   const { user } = useAuthStore();
-  const { activeCompany } = useCompanyStore();
+  const activeCompanyId = useCompanyStore((state) => state.activeCompanyId);
   const { t } = useI18n();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const companyId = activeCompany?.id || user?.companyId || '';
+  const companyId = activeCompanyId || '';
 
   const loadSummary = useCallback(async () => {
     if (!companyId) {

@@ -40,6 +40,7 @@ function ImportModal({
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }) {
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +64,6 @@ function ImportModal({
 
     setImporting(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const formData = new FormData();
       formData.append('file', file);
 
@@ -168,7 +168,7 @@ export function EmployeeListPage() {
   // Reactive active company: the list must re-fetch when the company is
   // selected/switched (e.g. SUPER_ADMIN picking a tenant), not read a stale
   // localStorage value once on mount.
-  const activeCompanyId = useCompanyStore((s) => s.activeCompany?.id);
+  const activeCompanyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,20 +180,24 @@ export function EmployeeListPage() {
   const [showImportModal, setShowImportModal] = useState(false);
 
   const fetchData = useCallback(async () => {
+    if (!activeCompanyId) {
+      setEmployees([]);
+      setDepartments([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const companyId = activeCompanyId || localStorage.getItem('companyId') || '';
-
       const [empResult, deptData] = await Promise.all([
         employeeService.getEmployees({
-          companyId,
+          companyId: activeCompanyId,
           departmentId: deptFilter || undefined,
           status: statusFilter || undefined,
           search: search || undefined,
           page,
           limit: 20,
         }),
-        organizationService.getDepartments(companyId),
+        organizationService.getDepartments(activeCompanyId),
       ]);
 
       setEmployees(empResult.data);
@@ -217,9 +221,8 @@ export function EmployeeListPage() {
 
   const handleExport = async () => {
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const blob = await employeeService.exportCsv({
-        companyId,
+        companyId: activeCompanyId,
         departmentId: deptFilter || undefined,
         status: statusFilter || undefined,
       });

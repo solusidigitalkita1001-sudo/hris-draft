@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select2 } from '@/components/ui/select2';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   RefreshCw, CheckCircle, XCircle, Wallet, Eye, UserRound, Send,
 } from 'lucide-react';
@@ -46,7 +47,7 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 }
 
 export function AdminEWAApprovalPage() {
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [requests, setRequests] = useState<EWARequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<EWAStatus | 'ALL'>('ALL');
@@ -64,7 +65,11 @@ export function AdminEWAApprovalPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const fetchRequests = async () => {
-    if (!companyId) return;
+    if (!companyId) {
+      setRequests([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await ewaService.findAll(companyId, {

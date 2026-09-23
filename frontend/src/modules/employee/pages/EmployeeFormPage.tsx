@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { useCompanyStore } from '@/stores/company.store';
 
 const EMPLOYMENT_TYPES = ['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREELANCE', 'OUTSOURCING'] as const;
 const EMPLOYEE_CATEGORIES = ['OFFICE', 'FACTORY', 'FIELD', 'REMOTE'] as const;
@@ -50,7 +51,7 @@ export function EmployeeFormPage() {
     bpjsKesehatan: '',
   });
 
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
   useEffect(() => {
     const fetchRefs = async () => {

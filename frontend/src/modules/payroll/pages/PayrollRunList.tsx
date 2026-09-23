@@ -6,17 +6,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, RefreshCw, ScrollText } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { useCompanyStore } from '@/stores/company.store';
 
 export function PayrollRunList() {
   const navigate = useNavigate();
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   const fetchData = useCallback(async () => {
+    if (!companyId) {
+      setRuns([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await payrollService.getPayrollRuns(companyId);
       setRuns(data);
     } catch (error) {
@@ -24,7 +30,7 @@ export function PayrollRunList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     fetchData();

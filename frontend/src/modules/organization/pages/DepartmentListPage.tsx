@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, RefreshCw, Building2, Pencil, Trash2 } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null;
@@ -38,7 +39,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
 function DeptForm({ initial, onSave, onClose }: {
   initial?: Partial<Department>; onSave: (data: Partial<Department>) => Promise<void>; onClose: () => void;
 }) {
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [name, setName] = useState(initial?.name || '');
   const [costCenter, setCostCenter] = useState(initial?.costCenter || '');
   const [saving, setSaving] = useState(false);
@@ -70,7 +71,7 @@ export function DepartmentListPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Department | null>(null);
   const [deleting, setDeleting] = useState<Department | null>(null);
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
   const fetchData = useCallback(async () => {
     setLoading(true);

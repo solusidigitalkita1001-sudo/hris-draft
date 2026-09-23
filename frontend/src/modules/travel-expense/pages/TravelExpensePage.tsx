@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useCompanyStore } from '@/stores/company.store';
 import { apiErrorMessage } from '@/lib/errors';
 import {
   BUSINESS_TRIP_STATUS_LABELS,
@@ -355,6 +356,7 @@ function ClaimForm({
 
 export function TravelExpensePage() {
   const { user } = useAuthStore();
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [activeTab, setActiveTab] = useState<'trips' | 'claims'>('trips');
   const [tripStatus, setTripStatus] = useState('');
   const [claimStatus, setClaimStatus] = useState('');
@@ -365,7 +367,6 @@ export function TravelExpensePage() {
   const [showTripForm, setShowTripForm] = useState(false);
   const [showClaimForm, setShowClaimForm] = useState(false);
 
-  const companyId = user?.companyId || localStorage.getItem('companyId') || '';
   const employeeId = user?.employeeId || localStorage.getItem('employeeId') || '';
   const isApprover = useMemo(
     () =>

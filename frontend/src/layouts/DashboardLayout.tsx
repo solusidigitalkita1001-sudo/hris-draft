@@ -14,7 +14,7 @@ export function DashboardLayout() {
   // its data fetches under the new tenant, so no company-A state — nor a slow
   // company-A response resolving into an unmounted instance — can survive a
   // switch. Single highest-leverage guard against mixed-tenant UI (#10).
-  const activeCompanyId = useCompanyStore((s) => s.activeCompany?.id);
+  const activeCompanyId = useCompanyStore((s) => s.activeCompanyId);
 
   return (
     <div className="min-h-screen bg-background">

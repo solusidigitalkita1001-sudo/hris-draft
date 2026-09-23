@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   Plus, RefreshCw, Banknote, Eye,
 } from 'lucide-react';
@@ -38,7 +39,7 @@ function LoanForm({ onClose }: { onClose: () => void }) {
   const [installments, setInstallments] = useState(1);
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const employeeId = localStorage.getItem('employeeId') || '';
 
   useEffect(() => {
@@ -154,7 +155,7 @@ export function EmployeeLoanPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const employeeId = localStorage.getItem('employeeId') || '';
   const isEmployee = !!employeeId;
 

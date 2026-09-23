@@ -1,6 +1,5 @@
 import { PayrollFormulaPanel } from '../components/PayrollFormulaPanel';
 import { useCompanyStore } from '@/stores/company.store';
-import { useAuthStore } from '@/stores/auth.store';
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { payrollService, type SalaryComponent } from '@/services/payroll.service';
@@ -230,9 +229,8 @@ function SalaryComponentForm({
 }
 
 export function SalaryComponentList() {
-  const activeCompanyId = useCompanyStore(state => state.activeCompany?.id);
-  const sessionCompanyId = useAuthStore(state => state.user?.companyId);
-  const companyId = activeCompanyId ?? sessionCompanyId ?? '';
+  const activeCompanyId = useCompanyStore(state => state.activeCompanyId);
+  const companyId = activeCompanyId ?? '';
   // Discard open editors, simulation results and pending UI callbacks on a switch.
   return <SalaryComponentListForCompany key={companyId} companyId={companyId} />;
 }

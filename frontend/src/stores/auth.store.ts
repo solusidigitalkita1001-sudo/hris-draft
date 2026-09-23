@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { AuthUser } from '@/services/auth.service';
 import { authService } from '@/services/auth.service';
-import { appConfig } from '@/config/app';
 import { useCompanyStore } from './company.store';
 
 interface AuthState {
@@ -23,23 +22,20 @@ function syncUserContext(user: AuthUser | null) {
   if (typeof window === 'undefined') return;
 
   if (!user) {
-    localStorage.removeItem('companyId');
     localStorage.removeItem('employeeId');
     localStorage.removeItem('groupId');
-    localStorage.removeItem(appConfig.companyKey);
+    useCompanyStore.getState().clearActiveCompany();
     return;
   }
 
   // company.store owns the active-company mirror. Auth only SEEDS it when no
   // company is active yet; it must never clobber an in-progress company switch
   // on a window-focus / loadProfile refresh (that was the desync source).
-  if (!useCompanyStore.getState().activeCompany?.id) {
+  if (!useCompanyStore.getState().activeCompanyId) {
     if (user.companyId) {
-      localStorage.setItem('companyId', user.companyId);
-      localStorage.setItem(appConfig.companyKey, user.companyId);
+      useCompanyStore.getState().seedActiveCompanyId(user.companyId);
     } else {
-      localStorage.removeItem('companyId');
-      localStorage.removeItem(appConfig.companyKey);
+      useCompanyStore.getState().clearActiveCompany();
     }
   }
 
@@ -140,7 +136,6 @@ export const useAuthStore = create<AuthState>()(
         sessionVersion++;
         // Clear the active company too, so a previous user's tenant can't leak
         // into the next session (the company store is persisted).
-        useCompanyStore.getState().setActiveCompany(null);
         syncUserContext(null);
         set({ user: null, isAuthenticated: false, isLoading: false, isBootstrapped: true });
       },

@@ -15,6 +15,21 @@ Codebase ini secara **desain bisnis & domain logic** sudah cukup matang (perhitu
 
 **21 dari 23 modul yang diperiksa** punya minimal satu instance dari bug scoping ini.
 
+### Re-review company switching — checklist #10 (2026-09-23)
+
+Status: implementation complete, pending final CI evidence on the delivery commit.
+
+- `activeCompanyId` is owned by one Zustand store; no page reads or writes the company ID in
+  local storage directly.
+- The Axios request interceptor supplies company context centrally and aborts pending requests
+  when the tenant changes.
+- React Query tenant keys include the company ID and prior-tenant cache entries are cancelled
+  and removed on switch.
+- The routed page subtree is still keyed by company ID, so selections, details, and form state
+  from the prior tenant are unmounted.
+- A → B → A coverage exists for Payroll, Employee, and Asset, plus transport-abort and cache
+  lifecycle tests. See `docs/company-switching.md` for the evidence map.
+
 ---
 
 ### 📊 Status Temuan Per Tanggal 2026-08-22 (Living Document — Akhir Minggu 6 FULL CLOSE 19/19 ✔)

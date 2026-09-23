@@ -12,6 +12,7 @@ import {
 } from '@/services/work-calendar.service';
 import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 
 const DAY_TYPES: DayType[] = ['WD', 'WS', 'WE', 'NH', 'JL', 'CH', 'RH', 'OT'];
 
@@ -273,7 +274,7 @@ function ShiftFormulaForm({
 }
 
 export function ShiftFormulaPage() {
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [formulas, setFormulas] = useState<ShiftFormula[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -281,7 +282,11 @@ export function ShiftFormulaPage() {
   const [deletingFormula, setDeletingFormula] = useState<ShiftFormula | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!companyId) return;
+    if (!companyId) {
+      setFormulas([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await workCalendarService.findAllShiftFormulas(companyId);

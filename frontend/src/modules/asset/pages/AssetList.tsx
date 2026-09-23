@@ -8,6 +8,7 @@ import { Search, RefreshCw, Plus, Package, UserRound } from 'lucide-react';
 import { formatCurrency } from '@/utils/format';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 
 // ─── Status style map ────────────────────────────────────
 const STYLES: Record<string, string> = {
@@ -119,25 +120,29 @@ function AssetForm({ onSave, onClose }: {
 
 // ─── Main Page ────────────────────────────────────────────
 export function AssetList() {
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
 
   const fetchData = useCallback(async () => {
+    if (!companyId) {
+      setAssets([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const cid = localStorage.getItem('companyId') || '';
-      setAssets(await assetService.getAll(cid));
+      setAssets(await assetService.getAll(companyId));
     } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, []);
+  }, [companyId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleCreate = async (data: Record<string, unknown>) => {
     try {
-      const cid = localStorage.getItem('companyId') || '';
-      await assetService.create({ ...data, companyId: cid });
+      await assetService.create({ ...data, companyId });
       toast.success('Asset created successfully');
       fetchData();
     } catch (err) {

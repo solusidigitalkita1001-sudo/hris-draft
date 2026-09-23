@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { appConfig } from '@/config/app';
+import { useCompanyStore } from '@/stores/company.store';
 
 let isRefreshing = false;
 let failedQueue: Array<{
@@ -22,11 +23,10 @@ const clearClientSession = () => {
   csrfToken = undefined;
   localStorage.removeItem(appConfig.authTokenKey);
   localStorage.removeItem(appConfig.refreshTokenKey);
-  localStorage.removeItem(appConfig.companyKey);
-  localStorage.removeItem('companyId');
   localStorage.removeItem('employeeId');
   localStorage.removeItem('groupId');
   localStorage.removeItem('hrms-auth-store');
+  useCompanyStore.getState().clearActiveCompany();
 };
 
 const api = axios.create({
@@ -41,6 +41,40 @@ const api = axios.create({
 
 const UNSAFE_METHODS = new Set(['post', 'put', 'patch', 'delete']);
 const SESSION_ENDPOINT = /\/auth\/(login|refresh)(?:[?#]|$)/;
+const COMPANY_INDEPENDENT_ENDPOINTS = [
+  /^\/auth(?:\/|$)/,
+  /^\/health(?:\/|$)/,
+  /^\/organization\/(?:groups|companies)(?:\/|$)/,
+];
+
+function isCompanyScopedRequest(url = ''): boolean {
+  const path = url.replace(appConfig.apiUrl, '').split('?')[0];
+  return !COMPANY_INDEPENDENT_ENDPOINTS.some((pattern) => pattern.test(path));
+}
+
+function withCompanyParam(
+  params: InternalAxiosRequestConfig['params'],
+  companyId: string | null,
+): InternalAxiosRequestConfig['params'] {
+  if (params instanceof URLSearchParams) {
+    const next = new URLSearchParams(params);
+    if (companyId) next.set('companyId', companyId);
+    else next.delete('companyId');
+    return next;
+  }
+
+  const next = { ...(params ?? {}) } as Record<string, unknown>;
+  if (companyId) next.companyId = companyId;
+  else delete next.companyId;
+  return next;
+}
+
+let companyRequestController = new AbortController();
+useCompanyStore.subscribe((state, previousState) => {
+  if (state.activeCompanyId === previousState.activeCompanyId) return;
+  companyRequestController.abort('Active company changed');
+  companyRequestController = new AbortController();
+});
 
 function tokenFromResponse(body: unknown): string | undefined {
   if (!body || typeof body !== 'object' || !('data' in body)) return undefined;
@@ -97,6 +131,15 @@ async function refreshSession(): Promise<void> {
 // No manual Authorization header attachment from localStorage for security (XSS mitigation).
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
+    if (isCompanyScopedRequest(config.url)) {
+      config.params = withCompanyParam(
+        config.params,
+        useCompanyStore.getState().activeCompanyId,
+      );
+      config.signal = config.signal
+        ? AbortSignal.any([config.signal, companyRequestController.signal])
+        : companyRequestController.signal;
+    }
     if (UNSAFE_METHODS.has((config.method || '').toLowerCase())) {
       config.headers.set('X-CSRF-Token', await ensureCsrfToken());
     }

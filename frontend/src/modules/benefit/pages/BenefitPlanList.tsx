@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Heart, Users, Pencil } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 
 // ─── Modal ────────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -46,7 +47,7 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
   onSave: (data: Partial<BenefitPlan>) => Promise<void>;
   onClose: () => void;
 }) {
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [name, setName] = useState(initial?.name || '');
   const [type, setType] = useState(initial?.type || '');
   const [description, setDescription] = useState(initial?.description || '');
@@ -139,6 +140,7 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
 // ─── Page ─────────────────────────────────────────────────
 export function BenefitPlanList() {
   const navigate = useNavigate();
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [plans, setPlans] = useState<BenefitPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -146,9 +148,13 @@ export function BenefitPlanList() {
   const [editing, setEditing] = useState<BenefitPlan | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (!companyId) {
+      setPlans([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await benefitService.getPlans(companyId);
       setPlans(data);
     } catch (error) {
@@ -157,7 +163,7 @@ export function BenefitPlanList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     fetchData();

@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   CalendarDays, Plus, RefreshCw, Copy, Pencil, Trash2,
   Search, ChevronRight,
@@ -243,7 +244,7 @@ export function WorkCalendarListPage() {
   const [calendars, setCalendars] = useState<WorkCalendar[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
   // Modal states
   const [showCreate, setShowCreate] = useState(false);
@@ -252,7 +253,11 @@ export function WorkCalendarListPage() {
   const [copyingCalendar, setCopyingCalendar] = useState<WorkCalendar | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!companyId) return;
+    if (!companyId) {
+      setCalendars([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await workCalendarService.findAll(companyId);

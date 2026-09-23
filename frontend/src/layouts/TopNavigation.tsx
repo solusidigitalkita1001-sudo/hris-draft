@@ -16,7 +16,7 @@ export function TopNavigation() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { theme, setTheme, setSidebarMobileOpen } = useUIStore();
-  const { activeCompany, setActiveCompany, setCompanies: setStoredCompanies } = useCompanyStore();
+  const { activeCompanyId, activeCompany, setActiveCompany, setCompanies: setStoredCompanies } = useCompanyStore();
   const { t } = useI18n();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
@@ -70,8 +70,7 @@ export function TopNavigation() {
         setCompanyOptions(scopedCompanies);
 
         const scopedCompany =
-          scopedCompanies.find((company) => company.id === activeCompany?.id) ||
-          scopedCompanies.find((company) => company.id === localStorage.getItem('companyId')) ||
+          scopedCompanies.find((company) => company.id === activeCompanyId) ||
           scopedCompanies.find((company) => company.id === user.companyId) ||
           scopedCompanies[0];
 
@@ -90,7 +89,7 @@ export function TopNavigation() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany?.id, getScopedCompanies, setActiveCompany, setStoredCompanies, user]);
+  }, [activeCompanyId, getScopedCompanies, setActiveCompany, setStoredCompanies, user]);
 
   const switchCompany = useCallback(
     (company: Company) => {

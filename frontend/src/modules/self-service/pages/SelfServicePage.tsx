@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   Plus, RefreshCw, FileText, CalendarDays, Clock,
   CheckCircle, XCircle, AlertCircle, Ban,
@@ -366,6 +367,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 // ─── Main Component ─────────────────────────────────────
 export function SelfServicePage() {
   const { user } = useAuthStore();
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [permissions, setPermissions] = useState<PermissionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'permissions' | 'leave' | 'overtime' | 'calendar' | 'shift-swap'>('permissions');
@@ -373,7 +375,6 @@ export function SelfServicePage() {
   const [activeModal, setActiveModal] = useState<'permission' | 'shift-swap' | null>(null);
   const [shiftCalendarMeta, setShiftCalendarMeta] = useState<MyWorkCalendarMonth | null>(null);
   const [loadingShiftEligibility, setLoadingShiftEligibility] = useState(true);
-  const companyId = user?.companyId || localStorage.getItem('companyId') || '';
   const employeeId = user?.employeeId || localStorage.getItem('employeeId') || '';
 
   const fetchPermissions = useCallback(async () => {
