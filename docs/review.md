@@ -34,6 +34,22 @@ Status: ✅ complete and verified on delivery commit `3993c95` (2026-09-23).
 
 ---
 
+### Re-review tenant isolation — checklist #8 (2026-09-23)
+
+Status: ✅ complete and verified on commit `1f3b976`.
+
+- Audited all 27 tenant/business modules as an endpoint-family × operation × company-scope
+  matrix; see `.docs/tenant-isolation-audit.md`.
+- Inventoried every production `runInSystemContext` call and its compensating tenant boundary.
+- Closed T2.6: audit-log, company-settings, performance, permission-request, and work-calendar
+  now validate/propagate the selected company at the router boundary.
+- Added negative export/import tests, selected-company context propagation coverage, and a route
+  wiring contract test. Existing nested-FK negative coverage remains green.
+- GitHub Actions run `35822381091`: backend type-check/build/lint passed; migration validation and
+  rehearsal passed; **109 suites / 972 tests passed** (9 suites / 89 tests intentionally skipped).
+
+---
+
 ### 📊 Status Temuan Per Tanggal 2026-08-22 (Living Document — Akhir Minggu 6 FULL CLOSE 19/19 ✔)
 
 | Total | ✅ Fixed | 🔶 Partial | ☐ Open |

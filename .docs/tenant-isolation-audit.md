@@ -122,8 +122,14 @@ New/updated tests in this pass:
 - Existing `company-scope-sprint2-gaps.test.ts`: asset, training, daily-activity, delegation, and
   custom-role overtime negative cases.
 
-Execution status: targeted and full-suite results will be recorded here after the current changes
-finish verification.
+Verification passed on commit `1f3b976`, GitHub Actions run `35822381091`:
+
+- Backend: type-check, build, and lint passed.
+- Full backend test suite against the migrated MySQL schema: **109 suites passed, 972 tests
+  passed**; 9 suites / 89 tests were intentionally skipped (118 suites / 1,061 tests total).
+- Full migration chain, schema drift check, and migration rehearsal passed.
+- Frontend build/lint, secret scan, dependency audit, mobile smoke/HTTPS validation, and repo
+  hygiene also passed.
 
 ## Checklist #9 hand-off
 

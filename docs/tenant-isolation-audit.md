@@ -1,5 +1,9 @@
 # Tenant Isolation Audit (Sprint 2 · item #8)
 
+> 2026-09-23 re-audit: the canonical current-tree 27-module matrix, complete
+> `runInSystemContext` inventory, T2.6 router-boundary fix, and fresh test evidence now live in
+> `.docs/tenant-isolation-audit.md`. The historical findings below are retained for provenance.
+
 Systematic module-by-module verification of multi-company (tenant) isolation, done by
 reading the code — not sampling. Verdicts below are grounded in `file:line` evidence.
 

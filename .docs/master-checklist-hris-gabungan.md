@@ -6,14 +6,15 @@
 
 ## #8 — Tenant isolation audit, module by module
 
-- [ ] Re-verify every backend module and document the endpoint × operation × company-scope
+- [x] Re-verify every backend module and document the endpoint × operation × company-scope
   matrix.
-- [ ] Inventory and justify every `runInSystemContext` boundary.
-- [ ] Add missing cross-company and export/import negative integration tests.
-- [ ] Fix small findings completely; record larger findings as prioritized follow-ups.
+- [x] Inventory and justify every `runInSystemContext` boundary.
+- [x] Add missing cross-company and export/import negative integration tests.
+- [x] Fix small findings completely; record larger findings as prioritized follow-ups.
 
-Status: pending re-audit in this session. Existing evidence is in
-`docs/tenant-isolation-audit.md` and must be checked against the current tree.
+Status: ✅ complete and verified on commit `1f3b976`. The 27-module matrix and system-context
+inventory are in `.docs/tenant-isolation-audit.md`. GitHub Actions run `35822381091` passed
+backend type-check/build/lint, migrations, and **109 suites / 972 tests**.
 
 ## #9 — Explicit SUPER_ADMIN tenant mode
 
