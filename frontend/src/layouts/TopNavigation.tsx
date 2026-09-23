@@ -76,7 +76,7 @@ export function TopNavigation() {
 
         if (!scopedCompany) return;
 
-        if (activeCompany?.id !== scopedCompany.id) {
+        if (activeCompanyId !== scopedCompany.id) {
           setActiveCompany(scopedCompany);
         }
       } catch {
