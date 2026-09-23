@@ -54,6 +54,11 @@ back, and cached data cannot be reused by a different company.
   and the old tenant cache is removed on switch.
 - Repository grep permits `companyId` local-storage access only in
   `frontend/src/stores/company.store.ts`.
+- Targeted frontend verification: **4 files / 19 tests passed**.
+- Full frontend Vitest suite: **8 files / 36 tests passed**.
+- Delivery commit `3993c95` passed GitHub Actions run `35820486074`, including frontend
+  build/lint, backend type-check/build/lint/tests, migration validation, secret scan, and repo
+  hygiene.
 
 ## Deploy note
 

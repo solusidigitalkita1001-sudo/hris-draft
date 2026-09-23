@@ -17,7 +17,7 @@ Codebase ini secara **desain bisnis & domain logic** sudah cukup matang (perhitu
 
 ### Re-review company switching — checklist #10 (2026-09-23)
 
-Status: implementation complete, pending final CI evidence on the delivery commit.
+Status: ✅ complete and verified on delivery commit `3993c95` (2026-09-23).
 
 - `activeCompanyId` is owned by one Zustand store; no page reads or writes the company ID in
   local storage directly.
@@ -29,6 +29,8 @@ Status: implementation complete, pending final CI evidence on the delivery commi
   from the prior tenant are unmounted.
 - A → B → A coverage exists for Payroll, Employee, and Asset, plus transport-abort and cache
   lifecycle tests. See `docs/company-switching.md` for the evidence map.
+- Targeted frontend tests passed (**4 files / 19 tests**), full frontend Vitest passed
+  (**8 files / 36 tests**), and GitHub Actions run `35820486074` passed all jobs.
 
 ---
 
