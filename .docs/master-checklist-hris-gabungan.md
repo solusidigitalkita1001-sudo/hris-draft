@@ -18,13 +18,18 @@ backend type-check/build/lint, migrations, and **109 suites / 972 tests**.
 
 ## #9 — Explicit SUPER_ADMIN tenant mode
 
-- [ ] Confirm the product decision before changing the existing behavior.
-- [ ] Implement the selected explicit mode consistently.
-- [ ] Verify denial for non-super-admin users and audit logging for global access.
+- [x] Confirm the product decision: option 1, mandatory active company for tenant endpoints.
+- [x] Remove the implicit company-less global tenant mode at request, employee-scope, and Prisma
+  boundaries.
+- [x] Restrict the platform registry exception to group/company discovery/provisioning, with a
+  masked company-list projection and entity-audited mutations.
+- [x] Verify non-super-admin selection denial, company-less super-admin denial, selected-company
+  propagation, and dedicated super-admin access auditing.
 
-Status: pending product confirmation. The current branch already contains a historical
-read-only implicit global-mode implementation; this session will not silently treat that as the
-requested product decision.
+Status: ✅ complete and verified on commits `b8c8232` and `9055765`. GitHub Actions run
+`35846232651` passed all jobs, including backend type-check/build/lint, migrations, and **110
+suites / 979 tests**. The decision and exception boundary are documented in
+`.docs/tenant-isolation-audit.md`.
 
 ## #10 — Centralized frontend company switching
 

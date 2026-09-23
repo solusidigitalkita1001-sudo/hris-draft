@@ -50,6 +50,30 @@ Status: ✅ complete and verified on commit `1f3b976`.
 
 ---
 
+### Re-review explicit SUPER_ADMIN tenant mode — checklist #9 (2026-09-23)
+
+Status: ✅ complete; product selected option 1 (mandatory active company).
+
+- Removed the historical company-less global tenant mode. Tenant requests now fail closed in
+  both `requireCompanyAccess()` and the Prisma scoping middleware until `SUPER_ADMIN` explicitly
+  selects a company.
+- RBAC, user, administration, organization detail/mutations, and all other tenant operations use
+  the selected-company boundary. A `SUPER_ADMIN` can select any company, but cannot query tenant
+  data globally.
+- Kept only the group/company platform registry required to discover or provision tenants.
+  Company lists expose a safe projection without tax, address, or contact data; existing-company
+  detail and mutation calls are tenant-scoped, while platform mutations retain entity audits.
+- Added dedicated audit events: `SUPER_ADMIN_TENANT_ACCESS` for selected-company tenant requests
+  and `SUPER_ADMIN_PLATFORM_DIRECTORY_ACCESS` for the narrow directory exception. Metadata is
+  limited to method/path rather than request body or credentials.
+- Regression tests cover missing/malformed company selection, server-context propagation,
+  database fail-closed behavior, employee/user/workflow boundaries, and audit logging.
+- GitHub Actions run `35846232651` passed all jobs: backend type-check/build/lint, migration
+  chain/rehearsal/drift checks, **110 suites / 979 tests**, frontend build/lint, security checks,
+  mobile smoke/HTTPS validation, and repository hygiene.
+
+---
+
 ### 📊 Status Temuan Per Tanggal 2026-08-22 (Living Document — Akhir Minggu 6 FULL CLOSE 19/19 ✔)
 
 | Total | ✅ Fixed | 🔶 Partial | ☐ Open |

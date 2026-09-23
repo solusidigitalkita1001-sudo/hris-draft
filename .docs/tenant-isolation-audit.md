@@ -9,7 +9,9 @@ because it establishes identity/session context rather than operating on tenant 
 The request boundary is `authenticate` followed by `requireCompanyAccess()`. The latter accepts
 a client-selected company only after checking the JWT-derived `companyScope`, overwrites any
 client company field with the validated value, and carries it into `AsyncLocalStorage` for all
-downstream calls. The database boundary independently scopes every model in
+downstream calls. A `SUPER_ADMIN` must also explicitly select an active company before entering
+a tenant endpoint; its broad authority changes which company it may select, not whether a tenant
+context is required. The database boundary independently scopes every model in
 `COMPANY_SCOPED_MODELS`; child models without their own `companyId` are constrained through
 `PARENT_SCOPES`. Employee visibility uses the server-derived predicate in
 `employee-data-scope.ts`. Client `employeeId` values used as foreign keys are additionally
@@ -42,16 +44,16 @@ Legend used below:
 | 13 | leave — `/types`, `/balances/*`, `/`, `/:id`, workflow/action endpoints | L/R/C/U/A | CTX + DB; raw locking SQL includes `company_id`; employee/type/workflow references scoped | ✅ Fixed + regression covered |
 | 14 | notification — `/`, `/unread-count`, `/read*`, `/:id`, `/device-tokens` | L/R/C/U/D | CTX + DB; user ID is session-derived; global token rebind is narrowly justified below | ✅ Verified |
 | 15 | onboarding — `/checklists/*`, `/resignations/*`, `/clearances/*` | L/R/C/U/A | CTX + DB/PARENT; employee/resignation/clearance relations scoped | ✅ Verified |
-| 16 | organization — groups/companies/branches/divisions/departments/positions and attendance policies | L/R/C/U/D | group endpoints use group guard; tenant endpoints CTX + DB; every graph hop/FK validates company and cycle bounds | ✅ Fixed + regression covered |
+| 16 | organization — groups/companies/branches/divisions/departments/positions and attendance policies | L/R/C/U/D | group/company registry is a narrow platform discovery/provisioning surface; company lists are masked; existing-company detail/mutations and all tenant endpoints require an explicit CTX + DB; every graph hop/FK validates company and cycle bounds | ✅ Fixed + regression covered |
 | 17 | payroll — components/salaries/periods/runs/payslips/formulas/payment batches | L/R/C/U/D/A/X | CTX + DB/PARENT + employee payroll scope; raw locks carry company; exports/downloads re-fetch scoped parents | ✅ Verified |
 | 18 | performance — methods/formulas/indicators/grades/periods/planning/execution/results/calibration/reviews/goals/feedback | L/R/C/U/D/A | CTX + DB/PARENT + employee data-scope; uploads attach only after scoped parent lookup | ✅ Fixed router boundary |
 | 19 | permission-request — `/my`, `/`, `/:id`, cancel/approve/reject/workflow | L/R/C/U/A | CTX + DB + SELF; approver and workflow paths re-fetch scoped request | ✅ Fixed router boundary |
-| 20 | RBAC — `/permissions/all`, roles, role permissions | L/R/C/U/D | permission catalog is global reference data; Role/RoleMenuAccess are DB scoped; assignment authority guards target company and priority | ✅ Verified |
+| 20 | RBAC — `/permissions/all`, roles, role permissions | L/R/C/U/D | permission catalog is global reference data; every tenant RBAC operation requires CTX; Role/RoleMenuAccess are DB scoped; assignment authority guards target company and priority | ✅ Verified |
 | 21 | recruitment — postings/candidates/applications/offers/interviews/feedback | L/R/C/U/A | CTX + DB/PARENT; application/offer/interview FKs remain under scoped parents | ✅ Verified |
 | 22 | reports — `/summary`, `/headcount`, `/attendance`, `/leave`, `/payroll`, `/turnover`, `/recruitment` | L/X | CTX; all source queries use scoped models; payroll report additionally audited | ✅ Verified |
 | 23 | training — categories/courses/sessions/enrollments | L/R/C/U | CTX + DB/PARENT; enrollment employee FK validated in active company | ✅ Fixed + regression covered |
 | 24 | travel-expense — categories/trips/advances/claims/receipts/reimbursements/workflow | L/R/C/U/A | CTX + DB/PARENT + SELF; receipt path is owner-derived; employee/workflow relations scoped | ✅ Verified |
-| 25 | user — users, roles, company-access grants | L/R/C/U/D | global User rows are filtered by `user-access-guard`; target employee/company memberships and role authority are server-validated | ✅ Verified (manual global-model guard) |
+| 25 | user — users, roles, company-access grants | L/R/C/U/D | tenant user operations require CTX; global User rows are filtered by `user-access-guard`; target employee/company memberships and role authority are server-validated inside the selected company | ✅ Verified (manual global-model guard) |
 | 26 | work-calendar — calendars/days/formulas/holidays/shift swaps/employee/team | L/R/C/U/D/A | CTX + DB/PARENT; employee/team path IDs pass `assertEmployeeInScope`; manager traversal is bounded and tenant-filtered | ✅ Fixed router boundary |
 | 27 | workflow-engine — templates/instances/actions/bulk approvals/delegations | L/R/C/U/D/A | CTX + DB/PARENT; delegate must be an employee in active company; references and approvers scoped | ✅ Fixed + regression covered |
 
@@ -131,10 +133,31 @@ Verification passed on commit `1f3b976`, GitHub Actions run `35822381091`:
 - Frontend build/lint, secret scan, dependency audit, mobile smoke/HTTPS validation, and repo
   hygiene also passed.
 
-## Checklist #9 hand-off
+## Checklist #9 closure — explicit `SUPER_ADMIN` tenant mode
 
-The code currently contains a historical **implicit global read-only** mode for a company-less
-SUPER_ADMIN. This audit records it as current behavior only; it does not treat that historical
-choice as the product confirmation required by checklist #9. No Task #9 behavior is changed until
-the product owner chooses between mandatory active-company mode and an explicit audited global
-mode.
+Product decision: **option 1, mandatory active company**. A `SUPER_ADMIN` no longer receives an
+implicit global read or write mode when `companyId` is absent. Tenant routes fail closed at
+`requireCompanyAccess()`, and Prisma independently rejects company-scoped reads and writes when
+no company context exists. `employee-data-scope.ts` has no company-less global fallback.
+
+The only cross-company HTTP surface retained is the narrow organization platform registry needed
+to discover and provision tenants. It is not a tenant-data mode: company list projection omits
+address, tax, and contact fields; existing-company detail and mutations derive the selected
+company from the target path and pass through `requireCompanyAccess()`. Directory reads emit
+`SUPER_ADMIN_PLATFORM_DIRECTORY_ACCESS`; platform mutations keep their entity-specific audit
+events; every successful selected-company tenant request emits `SUPER_ADMIN_TENANT_ACCESS` with
+only method and path metadata. Existing global rate limiting continues to apply.
+
+Regression coverage verifies that a company-less `SUPER_ADMIN` is denied, an explicitly selected
+company is propagated to server and Prisma context, array/object parameter manipulation is
+rejected, foreign-company user/workflow operations stay outside the active tenant, and the
+dedicated audit event is appended. Non-super-admin company selection remains restricted by the
+JWT-derived allowlist.
+
+Verification passed on commits `b8c8232` and `9055765`, GitHub Actions run `35846232651`:
+
+- Backend type-check, build, and lint passed.
+- Full backend test suite against the migrated MySQL schema: **110 suites passed, 979 tests
+  passed**; 9 suites / 89 tests were intentionally skipped (119 suites / 1,068 tests total).
+- Full migration chain, schema drift check, migration rehearsal, frontend build/lint, security
+  checks, mobile smoke/HTTPS validation, and repository hygiene passed.
