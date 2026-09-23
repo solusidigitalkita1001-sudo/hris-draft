@@ -384,7 +384,7 @@ describe('Workflow Bulk Approval Partial Result Semantics (A.5 cross-verificatio
         .mockImplementation((opts: any) => {
           const id = opts?.where?.id;
           if (id.includes('B')) return Promise.resolve(null);
-          let companyId = COMPANY_A_ID;
+          const companyId = COMPANY_A_ID;
           let requesterId = USER_B_ID;
           if (id.includes('self')) requesterId = USER_SUPERADMIN_ID;
           return Promise.resolve({
