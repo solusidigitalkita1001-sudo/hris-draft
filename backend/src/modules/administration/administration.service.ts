@@ -26,17 +26,22 @@ export class AdministrationService {
     user: UserContext,
     targetCompanyId: string
   ): void {
-    if (!this.isSuperAdmin(user)) {
-      const allowed =
-        user.companyScope && user.companyScope.length > 0
-          ? user.companyScope
-          : user.companyId
-            ? [user.companyId]
-            : [];
-
-      if (!allowed.includes(targetCompanyId)) {
-        throw new ForbiddenError('Cross-company access modification is not allowed');
+    if (this.isSuperAdmin(user)) {
+      if (!user.companyId || user.companyId !== targetCompanyId) {
+        throw new ForbiddenError('SUPER_ADMIN must select the target company before access');
       }
+      return;
+    }
+
+    const allowed =
+      user.companyScope && user.companyScope.length > 0
+        ? user.companyScope
+        : user.companyId
+          ? [user.companyId]
+          : [];
+
+    if (!allowed.includes(targetCompanyId)) {
+      throw new ForbiddenError('Cross-company access modification is not allowed');
     }
   }
 

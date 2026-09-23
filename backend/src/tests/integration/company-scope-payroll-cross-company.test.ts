@@ -240,7 +240,7 @@ describe('CompanyScope Cross-Tenant — Payroll & Benefit Module (Task 1.4)', ()
     });
   });
 
-  describe('SUPER_ADMIN / GROUP_ADMIN Bypass Payroll (payslip sensitive)', () => {
+  describe('SUPER_ADMIN / GROUP_ADMIN selected-company payroll access (payslip sensitive)', () => {
     it('SUPER_ADMIN payslip lookup still queries the active company and permits an explicit assigned company switch', async () => {
       const query = jest.spyOn(prisma.payslip, 'findFirst').mockResolvedValueOnce(null);
       await expect(runAs(userSuperAdmin(), () => payrollService.findPayslipById(PS_B_ID))).rejects.toThrow(NotFoundError);

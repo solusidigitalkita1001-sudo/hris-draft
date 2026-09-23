@@ -255,10 +255,10 @@ describe('CompanyScope Cross-Tenant — Attendance Module (Task 1.2)', () => {
     });
   });
 
-  describe('SUPER_ADMIN / GROUP_ADMIN Bypass', () => {
-    it('SUPER_ADMIN findById attendance company B → sukses', async () => {
+  describe('SUPER_ADMIN / GROUP_ADMIN selected-company access', () => {
+    it('SUPER_ADMIN with company B active can read attendance company B', async () => {
       jest.spyOn(prisma.attendance, 'findFirst').mockResolvedValue(mockAttendanceB);
-      const res = await runAs(userSuperAdmin(), () => attendanceService.findById(ATT_B_ID));
+      const res = await runAs(userSuperAdmin(COMPANY_B_ID), () => attendanceService.findById(ATT_B_ID));
       expect(res.id).toBe(ATT_B_ID);
       expect(res.companyId).toBe(COMPANY_B_ID);
     });

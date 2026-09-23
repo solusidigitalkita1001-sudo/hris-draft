@@ -1,6 +1,9 @@
+jest.mock('./AuditLog', () => ({ createAuditLog: jest.fn().mockResolvedValue(undefined) }));
+
 import { requireCompanyAccess } from './CompanyScope';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId, runInRequestContext } from '@/shared/context/RequestContext';
+import { createAuditLog } from './AuditLog';
 
 function makeReq(overrides: any = {}) {
   return {
@@ -8,6 +11,11 @@ function makeReq(overrides: any = {}) {
     params: overrides.params ?? {},
     query: overrides.query ?? {},
     body: overrides.body ?? {},
+    method: overrides.method ?? 'GET',
+    baseUrl: overrides.baseUrl ?? '/api/v1/employees',
+    path: overrides.path ?? '/',
+    headers: overrides.headers ?? {},
+    ip: overrides.ip ?? '127.0.0.1',
   } as any;
 }
 
@@ -70,26 +78,34 @@ describe('requireCompanyAccess (multi-tenant isolation)', () => {
     expect(req.user.companyId).toBe('B');
   });
 
-  it('SUPER_ADMIN bypass tanpa normalisasi', async () => {
+  it('SUPER_ADMIN may select any explicit company and is normalized to it', async () => {
     const req = makeReq({ user: { id: 'u', companyId: 'A', roles: ['SUPER_ADMIN'] }, query: { companyId: 'B' } });
     const next = await run(req);
     expect(next).toHaveBeenCalled();
     expect(req.query.companyId).toBe('B');
   });
 
-  it('GROUP_ADMIN bypass', async () => {
-    const req = makeReq({ user: { id: 'u', companyId: 'A', roles: ['GROUP_ADMIN'] }, query: { companyId: 'B' } });
+  it('GROUP_ADMIN may select only a company in its server-derived scope', async () => {
+    const req = makeReq({ user: { id: 'u', companyId: 'A', companyScope: ['A', 'B'], roles: ['GROUP_ADMIN'] }, query: { companyId: 'B' } });
     const next = await run(req);
-    expect(next).toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('rejects array/object company parameter manipulation for every role', async () => {
+    for (const roles of [['SUPER_ADMIN'], ['GROUP_ADMIN'], ['EMPLOYEE']]) {
+      const req = makeReq({ user: { id: 'u', companyId: 'A', companyScope: ['A'], roles }, query: { companyId: ['A', 'B'] } });
+      const next = await run(req);
+      expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+    }
   });
 });
 
 describe('requireCompanyAccess — SUPER_ADMIN platform account (no company rows)', () => {
-  it('does not 403 a super admin with empty scope and no requested company', async () => {
+  it('rejects a super admin with no explicitly selected company', async () => {
     const req = makeReq({ user: { id: 'sa', roles: ['SUPER_ADMIN'], companyScope: [] } });
     const next = await run(req);
-    expect(next).toHaveBeenCalled();
-    expect(next.mock.calls[0][0]).toBeUndefined();
+    expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+    expect(next.mock.calls[0][0].message).toMatch(/select an active company/i);
   });
 
   it('lets a super admin target any company explicitly', async () => {
@@ -98,6 +114,35 @@ describe('requireCompanyAccess — SUPER_ADMIN platform account (no company rows
     expect(next.mock.calls[0][0]).toBeUndefined();
     expect(req.company.id).toBe('company-X');
     expect(req.user.companyId).toBe('company-X');
+  });
+
+  it('writes a dedicated audit event for successful selected-company access', async () => {
+    const finishHandlers: Array<() => void> = [];
+    const res = {
+      statusCode: 200,
+      on: jest.fn((event: string, handler: () => void) => {
+        if (event === 'finish') finishHandlers.push(handler);
+      }),
+    } as any;
+    const req = makeReq({
+      user: { id: 'sa', email: 'sa@example.com', roles: ['SUPER_ADMIN'], companyScope: [] },
+      query: { companyId: 'company-X' },
+      method: 'GET',
+      baseUrl: '/api/v1/employees',
+      path: '/',
+      headers: { 'user-agent': 'jest' },
+    });
+    const next = jest.fn();
+
+    await requireCompanyAccess()(req, res, next);
+    finishHandlers.forEach((handler) => handler());
+
+    expect(createAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: 'company-X',
+      userId: 'sa',
+      action: 'SUPER_ADMIN_TENANT_ACCESS',
+      entity: 'API',
+    }));
   });
 
   it('still 403s a regular user with no scope at all', async () => {

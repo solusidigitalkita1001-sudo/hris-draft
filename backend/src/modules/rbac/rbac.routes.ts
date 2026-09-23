@@ -5,6 +5,7 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { auditLog } from '@/shared/middleware/AuditLog';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import {
   createRoleSchema,
   updateRoleSchema,
@@ -14,6 +15,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 // Permissions catalog
 router.get('/permissions/all', authorize({ resource: 'rbac', action: 'read' }), permissionController.findAll.bind(permissionController));

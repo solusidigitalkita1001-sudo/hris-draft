@@ -5,6 +5,7 @@ import config from '@/config';
 import { AuthenticatedRequest } from './Authenticate';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
+import { createAuditLog } from './AuditLog';
 
 const logger = new WinstonLogger('CompanyScope');
 
@@ -89,7 +90,9 @@ export function requireCompanyAccess() {
         throw new ForbiddenError('Authentication required for company access');
       }
 
-      // Super admin and group admins can access any company
+      // Elevated roles bypass employee data-scope injection. GROUP_ADMIN is
+      // still limited to its JWT companyScope; SUPER_ADMIN may select any
+      // company, but must do so explicitly (checklist #9, option 1).
       const isSuperOrGroupAdmin = req.user.roles?.some((r) =>
         ['SUPER_ADMIN', 'GROUP_ADMIN'].includes(r)
       );
@@ -102,38 +105,37 @@ export function requireCompanyAccess() {
             ? [req.user.companyId]
             : [];
 
-      const requestedCompanyId =
+      const requestedCompanyValue =
         req.params.companyId ||
-        (req.query.companyId as string) ||
+        req.query.companyId ||
         req.body?.companyId;
+      if (
+        requestedCompanyValue !== undefined &&
+        (typeof requestedCompanyValue !== 'string' || !requestedCompanyValue.trim())
+      ) {
+        throw new ForbiddenError('Active company must be a non-empty string');
+      }
+      const requestedCompanyId = typeof requestedCompanyValue === 'string'
+        ? requestedCompanyValue.trim()
+        : undefined;
 
-      // SUPER_ADMIN is a platform account with no company rows of its own —
-      // the membership check and the "must have a company" rule below would
-      // otherwise 403 every request it makes.
+      if (isSuperAdminRole && !requestedCompanyId) {
+        throw new ForbiddenError('SUPER_ADMIN must select an active company for tenant access');
+      }
+
       if (requestedCompanyId && !allowedCompanyIds.includes(requestedCompanyId) && !isSuperAdminRole) {
         throw new ForbiddenError('You do not have access to this company data');
       }
 
       const effectiveCompanyId =
         requestedCompanyId || req.user.companyId || allowedCompanyIds[0];
-      if (!effectiveCompanyId && !isSuperAdminRole) {
+      if (!effectiveCompanyId) {
         throw new ForbiddenError(
           'No accessible company scope found for this request'
         );
       }
-      if (effectiveCompanyId) {
-        req.company = { id: effectiveCompanyId, groupId: req.user.groupId };
-        // Propagate the VALIDATED company into the request context so the
-        // Prisma tenant middleware can scope queries for multi-company
-        // admins and SUPER_ADMIN (whose JWT carries no single companyId).
-        const ctx = getRequestContext();
-        if (ctx?.user && !ctx.user.companyId) {
-          ctx.user.companyId = effectiveCompanyId;
-        }
-        if (req.user && !req.user.companyId) {
-          req.user.companyId = effectiveCompanyId;
-        }
-      }
+      req.company = { id: effectiveCompanyId, groupId: req.user.groupId };
+      const scopedUser = { ...req.user, companyId: effectiveCompanyId };
 
       if (effectiveCompanyId && req.query && typeof req.query === 'object') {
         (req.query as Record<string, unknown>).companyId = effectiveCompanyId;
@@ -158,11 +160,11 @@ export function requireCompanyAccess() {
           const scope = await administrationService.findMyDataScopeByUser(
             effectiveCompanyId,
             {
-              id: req.user.id,
-              roles: req.user.roles,
-              companyId: req.user.companyId,
-              employeeId: req.user.employeeId,
-              companyScope: req.user.companyScope,
+              id: scopedUser.id,
+              roles: scopedUser.roles,
+              companyId: scopedUser.companyId,
+              employeeId: scopedUser.employeeId,
+              companyScope: scopedUser.companyScope,
             },
             targetResource
           );
@@ -176,16 +178,16 @@ export function requireCompanyAccess() {
               id: string; roles?: string[]; companyId?: string; employeeId?: string; companyScope?: string[];
               branchId?: string | null; departmentId?: string | null; subDepartmentId?: string | null;
             } = {
-              id: req.user.id,
-              roles: req.user.roles,
-              companyId: req.user.companyId,
-              employeeId: req.user.employeeId,
-              companyScope: req.user.companyScope,
+              id: scopedUser.id,
+              roles: scopedUser.roles,
+              companyId: scopedUser.companyId,
+              employeeId: scopedUser.employeeId,
+              companyScope: scopedUser.companyScope,
             };
             // OWN_* dynamic scopes need the requester's current org unit.
-            if (req.user.employeeId && typeof scope.scopeType === 'string' && scope.scopeType.startsWith('OWN_')) {
+            if (scopedUser.employeeId && typeof scope.scopeType === 'string' && scope.scopeType.startsWith('OWN_')) {
               const self = await runInSystemContext('own-scope-org-lookup', () =>
-                prisma.employee.findFirst({ where: { id: req.user!.employeeId!, companyId: effectiveCompanyId, deletedAt: null }, select: { branchId: true, departmentId: true, subDepartmentId: true } }));
+                prisma.employee.findFirst({ where: { id: scopedUser.employeeId!, companyId: effectiveCompanyId, deletedAt: null }, select: { branchId: true, departmentId: true, subDepartmentId: true } }));
               scopeUser.branchId = self?.branchId ?? null;
               scopeUser.departmentId = self?.departmentId ?? null;
               scopeUser.subDepartmentId = self?.subDepartmentId ?? null;
@@ -197,7 +199,7 @@ export function requireCompanyAccess() {
               applyParsedFilterToQuery(
                 req.query as Record<string, unknown>,
                 parsedFilter,
-                req.user.employeeId
+                scopedUser.employeeId
               );
             }
           }
@@ -211,8 +213,28 @@ export function requireCompanyAccess() {
       }
 
       // Carry the validated active company into all downstream database operations.
-      req.user = { ...req.user, companyId: effectiveCompanyId };
-      runInRequestContext({ ...getRequestContext(), user: req.user }, () => next());
+      req.user = scopedUser;
+
+      // A selected-company SUPER_ADMIN request is privileged cross-tenant
+      // access. Record every successful request without storing body/query
+      // values (which may contain salary, identity, or bank data).
+      if (isSuperAdminRole && typeof _res.on === 'function') {
+        _res.on('finish', () => {
+          if (_res.statusCode >= 200 && _res.statusCode < 400) {
+            void createAuditLog({
+              companyId: effectiveCompanyId,
+              userId: scopedUser.id,
+              action: 'SUPER_ADMIN_TENANT_ACCESS',
+              entity: 'API',
+              newValue: JSON.stringify({ method: req.method, path: req.baseUrl + req.path }),
+              ipAddress: req.ip,
+              userAgent: req.headers['user-agent'],
+            });
+          }
+        });
+      }
+
+      runInRequestContext({ ...getRequestContext(), user: scopedUser }, () => next());
     } catch (error) {
       next(error);
     }

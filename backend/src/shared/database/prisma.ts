@@ -1,8 +1,8 @@
-import { enforceTenantScope, assertGlobalSuperAdminReadOnly } from './tenant-scope';
+import { enforceTenantScope, assertTenantCompanyContext } from './tenant-scope';
 import { PrismaClient } from '@prisma/client';
 import config from '@/config';
 import { logger } from '@/shared/logger/WinstonLogger';
-import { getCurrentCompanyId, isSystemContext, isSuperAdmin } from '@/shared/context/RequestContext';
+import { getCurrentCompanyId, isSystemContext } from '@/shared/context/RequestContext';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -173,19 +173,10 @@ function attachCompanyScopeMiddleware(client: PrismaClient): PrismaClient {
       // System jobs (seeds, workers, migrations) legitimately span tenants and
       // may read AND write unscoped.
       if (isSystemContext()) return next(params);
-      // SUPER_ADMIN with no company selected runs in an implicit GLOBAL mode.
-      // Reads may span tenants (platform oversight), but WRITES are blocked (#9):
-      // a mutation must select a company first, so a company-less updateMany /
-      // deleteMany can never touch every tenant at once. When a superadmin DOES
-      // select a company, getCurrentCompanyId() returns it and normal per-tenant
-      // scoping below applies.
-      if (isSuperAdmin()) {
-        // Reads pass through (global oversight); writes throw until a company
-        // is selected.
-        assertGlobalSuperAdminReadOnly(params.model, params.action);
-        return next(params);
-      }
-      throw new Error(`Tenant context is required for ${params.model}.${params.action}`);
+      // No request role bypasses tenant context. SUPER_ADMIN must select an
+      // active company at the HTTP boundary; this is the fail-closed backstop
+      // for service calls and any route that is wired incorrectly.
+      assertTenantCompanyContext(companyId, params.model, params.action);
     }
     await enforceTenantScope(params, companyId);
     return next(params);

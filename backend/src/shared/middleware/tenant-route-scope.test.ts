@@ -6,6 +6,8 @@ const TENANT_ROUTES = [
   'company-settings/company-settings.routes.ts',
   'performance/performance.routes.ts',
   'permission-request/permission-request.routes.ts',
+  'rbac/rbac.routes.ts',
+  'user/user.routes.ts',
   'work-calendar/work-calendar.routes.ts',
 ];
 

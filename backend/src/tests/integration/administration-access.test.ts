@@ -174,7 +174,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
   });
 
   describe('assignPermissions (RoleMenuAccess-like cross-company)', () => {
-    it('assignPermissions ke role company B oleh SUPER_ADMIN → allowed (bypass)', async () => {
+    it('assignPermissions to company B is allowed after SUPER_ADMIN selects company B', async () => {
       jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-B-1',
         companyId: COMPANY_B_ID,
@@ -192,7 +192,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
         { roleId: 'role-B-1', permissionId: 'perm-2' },
       ] as any);
 
-      const result = await runAs(userSuperAdmin(), () =>
+      const result = await runAs(userSuperAdmin(COMPANY_B_ID), () =>
         roleService.assignPermissions('role-B-1', { permissionIds: ['perm-1', 'perm-2'] })
       );
       expect(result).toBeDefined();
@@ -364,7 +364,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
     });
   });
 
-  describe('SUPER_ADMIN cross company role management', () => {
+  describe('SUPER_ADMIN selected-company role management', () => {
     it('SUPER_ADMIN create role GROUP scope dengan groupId → allowed', async () => {
       jest.spyOn(prisma.role, 'findFirst').mockResolvedValue(null);
       (jest.spyOn(prisma.role, 'create') as any).mockImplementation((opts: any) =>
@@ -389,7 +389,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
       expect(result.scope).toBe('GROUP');
     });
 
-    it('SUPER_ADMIN assignPermissions ke non-system role company B → sukses', async () => {
+    it('SUPER_ADMIN with company B active assigns permissions to company B role', async () => {
       jest.spyOn(prisma.role, 'findFirst').mockResolvedValue({
         id: 'role-B-sa',
         companyId: COMPANY_B_ID,
@@ -409,7 +409,7 @@ describe('Administration Access Control (A.7 cross verify — RBAC Role & Permis
         { roleId: 'role-B-sa', permissionId: 'p3' },
       ] as any);
 
-      const perms = await runAs(userSuperAdmin(), () =>
+      const perms = await runAs(userSuperAdmin(COMPANY_B_ID), () =>
         roleService.assignPermissions('role-B-sa', { permissionIds: ['p1', 'p2', 'p3'] })
       );
       expect(perms.length).toBe(3);

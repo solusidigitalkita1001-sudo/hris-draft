@@ -197,13 +197,13 @@ describe('CompanyScope Cross-Tenant — LeaveType Master / Performance / AuditLo
     });
   });
 
-  describe('SUPER_ADMIN / GROUP_ADMIN Bypass (Leave/Perf/Audit)', () => {
-    it('SUPER_ADMIN find performanceMethod company B → sukses', async () => {
+  describe('SUPER_ADMIN / GROUP_ADMIN selected-company access (Leave/Perf/Audit)', () => {
+    it('SUPER_ADMIN with company B active can read performanceMethod company B', async () => {
       jest.spyOn(prisma.performanceMethod, 'findFirst').mockResolvedValue(
         mock(PM_B_ID, COMPANY_B_ID, { name: 'Method B - Bell Curve' })
       );
       const findFn = async () => prisma.performanceMethod.findFirst({ where: { id: PM_B_ID } });
-      const res = await runAs(userSuperAdmin(), findFn);
+      const res = await runAs(userSuperAdmin(COMPANY_B_ID), findFn);
       expect(res?.id).toBe(PM_B_ID);
       expect(res?.companyId).toBe(COMPANY_B_ID);
     });

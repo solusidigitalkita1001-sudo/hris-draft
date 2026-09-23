@@ -230,12 +230,12 @@ describe('CompanyScope Cross-Tenant — Financial/Document/Remainder Module (Tas
     });
   });
 
-  describe('SUPER_ADMIN / GROUP_ADMIN Bypass (Financial)', () => {
-    it('SUPER_ADMIN findById asset company B → sukses', async () => {
+  describe('SUPER_ADMIN / GROUP_ADMIN selected-company access (Financial)', () => {
+    it('SUPER_ADMIN with company B active can read asset company B', async () => {
       jest.spyOn(prisma.asset, 'findFirst').mockResolvedValue(
         mock(ASSET_B_ID, COMPANY_B_ID, { categoryId: 'cat-2' })
       );
-      const res = await runAs(userSuperAdmin(), () => assetService.findById(ASSET_B_ID));
+      const res = await runAs(userSuperAdmin(COMPANY_B_ID), () => assetService.findById(ASSET_B_ID));
       expect(res.id).toBe(ASSET_B_ID);
       expect(res.companyId).toBe(COMPANY_B_ID);
     });
