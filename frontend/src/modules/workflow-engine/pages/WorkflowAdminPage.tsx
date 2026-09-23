@@ -20,7 +20,6 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
-import { useAuthStore } from '@/stores/auth.store';
 import { useCompanyStore } from '@/stores/company.store';
 import {
   workflowService,
@@ -686,7 +685,6 @@ function getReferenceLink(referenceType: string | undefined, referenceId: string
 
 export function WorkflowAdminPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
   const [activeTab, setActiveTab] = useState<'templates' | 'approvals'>('templates');

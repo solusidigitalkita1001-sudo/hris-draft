@@ -76,6 +76,23 @@ useCompanyStore.subscribe((state, previousState) => {
   companyRequestController = new AbortController();
 });
 
+function withCompanyAbortSignal(
+  requestSignal: InternalAxiosRequestConfig['signal'],
+): AbortSignal {
+  const companySignal = companyRequestController.signal;
+  if (!requestSignal) return companySignal;
+
+  const combined = new AbortController();
+  const abort = () => combined.abort();
+  if (requestSignal.aborted || companySignal.aborted) {
+    abort();
+    return combined.signal;
+  }
+  requestSignal.addEventListener?.('abort', abort);
+  companySignal.addEventListener('abort', abort, { once: true });
+  return combined.signal;
+}
+
 function tokenFromResponse(body: unknown): string | undefined {
   if (!body || typeof body !== 'object' || !('data' in body)) return undefined;
   const data = body.data;
@@ -136,9 +153,7 @@ api.interceptors.request.use(
         config.params,
         useCompanyStore.getState().activeCompanyId,
       );
-      config.signal = config.signal
-        ? AbortSignal.any([config.signal, companyRequestController.signal])
-        : companyRequestController.signal;
+      config.signal = withCompanyAbortSignal(config.signal);
     }
     if (UNSAFE_METHODS.has((config.method || '').toLowerCase())) {
       config.headers.set('X-CSRF-Token', await ensureCsrfToken());

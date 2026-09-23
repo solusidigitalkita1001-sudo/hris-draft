@@ -165,7 +165,7 @@ describe('API CSRF bootstrap and session rotation', () => {
     let firstConfig: InternalAxiosRequestConfig | undefined;
     api.defaults.adapter = (config) => new Promise((_resolve, reject) => {
       firstConfig = config;
-      config.signal?.addEventListener('abort', () => reject(new axios.CanceledError()), { once: true });
+      config.signal?.addEventListener?.('abort', () => reject(new axios.CanceledError()));
     });
 
     const pending = api.get('/employees').catch((error) => error);

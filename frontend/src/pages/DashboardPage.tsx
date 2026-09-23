@@ -11,7 +11,7 @@ import { apiErrorMessage } from '@/lib/errors';
 
 export function DashboardPage() {
   const { user } = useAuthStore();
-  const activeCompanyId = useCompanyStore((state) => state.activeCompanyId);
+  const { activeCompanyId, activeCompany } = useCompanyStore();
   const { t } = useI18n();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
