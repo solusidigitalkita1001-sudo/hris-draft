@@ -118,11 +118,14 @@ New/updated tests in this pass:
 - `CompanyScope.test.ts`: the selected, validated company is visible in downstream server
   context (not merely rewritten in query/body).
 - `tenant-route-scope.test.ts`: every router fixed by T2.6 mounts the company boundary directly
-  after authentication.
+  after authentication; notification is included so the complete former six-router follow-up
+  stays protected.
 - `employee.import-export-scope.test.ts`: foreign-company export is denied before reading rows;
   foreign-company multipart import is denied before parsing/inserting rows.
-- Existing `company-scope-sprint2-gaps.test.ts`: asset, training, daily-activity, delegation, and
-  custom-role overtime negative cases.
+- `company-scope-sprint2-gaps.test.ts`: asset, training, daily-activity, delegation,
+  BranchAttendancePolicy read/delete, Leave finalization, and custom-role overtime negative cases.
+- `leave-raw-sql-company-scope.test.ts`: all six Leave locking queries must retain an explicit
+  `company_id` predicate.
 
 Verification passed on commit `1f3b976`, GitHub Actions run `35822381091`:
 
@@ -132,6 +135,12 @@ Verification passed on commit `1f3b976`, GitHub Actions run `35822381091`:
 - Full migration chain, schema drift check, and migration rehearsal passed.
 - Frontend build/lint, secret scan, dependency audit, mobile smoke/HTTPS validation, and repo
   hygiene also passed.
+
+Supplemental follow-up verification passed on commit `f29b4a3`, GitHub Actions run
+`35952397150`: **111 suites / 990 tests passed**; 9 suites / 89 tests were intentionally skipped
+(120 suites / 1,079 tests total). This run includes the notification route contract,
+BranchAttendancePolicy negative cases, foreign Leave finalization guard, and all six Leave raw-lock
+source contracts.
 
 ## Checklist #9 closure — explicit `SUPER_ADMIN` tenant mode
 

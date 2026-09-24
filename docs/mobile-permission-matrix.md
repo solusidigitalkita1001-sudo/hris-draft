@@ -38,5 +38,6 @@ capabilities.
   interpreted as company-wide access.
 - HR/Company Admin: scope is assigned per role/company and still intersects the
   active company selected in the session.
-- Global super-admin reads may span tenants only in explicit global mode;
-  mutations require selecting a company first.
+- SUPER_ADMIN must explicitly select an active company for both tenant reads and mutations.
+  There is no global tenant-data mode; only the narrow group/company platform registry remains
+  available for tenant discovery and provisioning.

@@ -13,7 +13,9 @@ Legenda prioritas:
 
 Codebase ini secara **desain bisnis & domain logic** sudah cukup matang (perhitungan BPJS/PPh21/lembur sesuai regulasi, concurrency-safe leave approval, audit log anti-tamper, upload validation pakai magic bytes). Tapi ada **satu akar masalah arsitektur yang berulang di hampir semua modul**: tidak ada layer terpusat yang memvalidasi bahwa `companyId`/`employeeId` yang dipakai query benar-benar milik/berwenang bagi user yang login. Middleware yang tepat untuk ini (`CompanyScope`, `authorizeOwnership`) **sudah dibuat tapi tidak pernah dipakai** — pola "alat sudah ada, tidak disambungkan" ini muncul berkali-kali (juga di `auditLog()` middleware, `CompanySetting`/`GroupPolicy` table).
 
-**21 dari 23 modul yang diperiksa** punya minimal satu instance dari bug scoping ini.
+**21 dari 23 modul yang diperiksa** punya minimal satu instance dari bug scoping ini pada baseline
+review awal. Angka ini historis dan sudah disupersede oleh re-review checklist #8–#10 di bawah;
+jangan digunakan sebagai status current tree.
 
 ### Re-review company switching — checklist #10 (2026-09-23)
 

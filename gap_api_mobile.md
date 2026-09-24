@@ -105,7 +105,8 @@ Gap paling penting:
 3. Chat masih memerlukan keputusan produk/API; announcement dashboard, next
    shift, dan reporting line sudah mempunyai kontrak self-service.
 4. SMTP, Firebase/APNs, akun staging, serta certificate/DNS belum tersedia di
-   workspace dan secret manager deployment.
+   workspace dan secret manager deployment. Ini prerequisite environment/deployment, bukan gap
+   implementasi kode; push backend sudah fail-honest dengan status `BLOCKED_CONFIG`.
 5. Mayoritas endpoint lanjutan masih memerlukan contoh response `data` dan
    fixture staging yang stabil untuk client.
 6. Enforcement geofence, fake GPS, liveness, tenant scope, push provider, dan

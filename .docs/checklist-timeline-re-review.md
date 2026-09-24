@@ -1,5 +1,9 @@
 # Checklist & Timeline Perbaikan — Temuan Re-Review Update Terbaru
 
+> **Dokumen historis/superseded.** Jangan gunakan checkbox di file ini sebagai status current
+> tree. Status terkini checklist #8–#10 dan bukti CI berada di
+> `.docs/master-checklist-hris-gabungan.md`.
+
 Berdasarkan `re-review-update-terbaru.md`. Fokus: menutup gap antara klaim "253/253 GRAND TOTAL COMPLETE" dengan realita kode, sebelum lanjut fitur baru.
 
 Estimasi total: **4 minggu**
@@ -19,7 +23,7 @@ Target: tutup cross-tenant leak di modul yang belum ter-cover Prisma middleware.
 | 1.4 | Tambahkan `SalaryComponent`, `EmployeeSalary`, `PayrollPeriod`, `PayrollRun`, `Payslip` | 8h | ☐ | Cross-tenant payroll read/write → NotFound |
 | 1.5 | Tambahkan `Asset`, `Benefit`, `Document`, `OnboardingTask`, `JobPosting`, `Candidate`, `TrainingProgram` | 8h | ☐ | Semua modul sisa ter-cover |
 | 1.6 | Integration test cross-company untuk semua model baru di atas (pola sama seperti `company-scope-cross-company.test.ts` yang sudah ada) | 16h | ☐ | Test suite hijau, minimal 1 test per model baru |
-| 1.7 | Regression check: pastikan middleware baru tidak break SUPER_ADMIN/GROUP_ADMIN bypass yang sudah ada | 4h | ☐ | Super admin tetap bisa akses lintas company seperti sebelumnya |
+| 1.7 | Regression check akses multi-company elevated roles | 4h | ✅ [x] | SUPER_ADMIN dapat memilih company mana pun tetapi wajib active company; GROUP_ADMIN tetap dibatasi `companyScope` |
 
 ### Exit Criteria Minggu 1
 - [ ] Semua 11 modul yang disebut di finding #3 `review.md` sudah masuk `COMPANY_SCOPED_MODELS`

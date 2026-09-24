@@ -45,3 +45,36 @@ suites / 979 tests**. The decision and exception boundary are documented in
 Evidence (2026-09-23): targeted frontend tests **4 files / 19 tests passed**; full frontend
 Vitest **8 files / 36 tests passed**; GitHub Actions run `35820486074` passed all jobs on commit
 `3993c95`. See `docs/company-switching.md` for the implementation map.
+
+## Current-tree reconciliation (2026-09-24)
+
+- The former six-router follow-up is closed: performance, work-calendar, company-settings,
+  permission-request, notification, and audit-log all mount `requireCompanyAccess()` immediately
+  after authentication, with a route-wiring regression contract.
+- The former negative-test gaps are closed for BranchAttendancePolicy, foreign asset/training/
+  daily-activity employee references, foreign approval delegates, and all six Leave raw locks.
+- Checklist #9 does **not** retain a global read-only tenant mode. The final product decision is
+  mandatory active-company mode for SUPER_ADMIN, with only the narrow platform registry outside
+  tenant-domain scope.
+- Checklist #10 is implemented and regression-tested; it is not pending.
+- Firebase/APNs production credentials remain an external deployment-secret prerequisite. Push
+  delivery code is complete and reports `BLOCKED_CONFIG` when provider credentials are absent.
+
+## Remaining backlog after reconciliation
+
+- [ ] **Retire the legacy migration-recovery scaffolding.** Remove
+  `scripts/migrations/recover-face-match-rate-limit-index.cjs`, its dedicated check, and the
+  recovery branches in `scripts/server-deploy.sh` only after production confirms both affected
+  migrations are applied and stable. Because the deploy script is protected, this must be a
+  separate explicitly authorized change followed by a clean migration rehearsal.
+- [ ] **Broaden browser E2E coverage.** Extend beyond the current focused frontend integration
+  tests to critical authenticated journeys against a stable staging environment.
+- [ ] **Generate and enforce the OpenAPI contract.** Publish a machine-readable specification and
+  add request/response contract checks for the remaining modules.
+- [ ] **Measure face-recognition FAR/FRR.** Run the documented protocol with at least 30–50
+  consented real-photo pairs across lighting/angle variation, then tune
+  `DEFAULT_FACE_MATCH_THRESHOLD` from the measured result rather than synthetic fixtures.
+
+The router-middleware and cross-company negative-test items are no longer backlog: they were
+closed and verified by GitHub Actions run `35952397150` on commit `f29b4a3` (**111 suites / 990
+tests passed**; 9 suites / 89 tests intentionally skipped).
