@@ -35,9 +35,9 @@ export class BranchRepository {
     return prisma.branch.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
-  async findAttendancePolicy(branchId: string) {
+  async findAttendancePolicy(branchId: string, companyId: string) {
     return prisma.branchAttendancePolicy.findFirst({
-      where: { branchId, deletedAt: null },
+      where: { branchId, companyId, deletedAt: null },
       include: {
         branch: true,
         company: true,
@@ -54,9 +54,9 @@ export class BranchRepository {
     });
   }
 
-  async softDeleteAttendancePolicy(branchId: string) {
+  async softDeleteAttendancePolicy(branchId: string, companyId: string) {
     return prisma.branchAttendancePolicy.updateMany({
-      where: { branchId, deletedAt: null },
+      where: { branchId, companyId, deletedAt: null },
       data: { deletedAt: new Date() },
     });
   }

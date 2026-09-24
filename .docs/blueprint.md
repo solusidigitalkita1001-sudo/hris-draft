@@ -207,7 +207,7 @@ components/
 
 ### RBAC Hierarchy
 ```
-SUPER_ADMIN (bypass semua, companyId=null → system-wide)
+SUPER_ADMIN (boleh memilih company mana pun; tenant endpoint wajib active company)
 └── GROUP_ADMIN (scope: GROUP → semua company dalam group)
     └── COMPANY_ADMIN (scope: COMPANY → satu company)
         └── HR_MANAGER
@@ -221,8 +221,11 @@ SUPER_ADMIN (bypass semua, companyId=null → system-wide)
 - Resource alias map: organization→org, attendance→att, recruitment→rec, dashboard→dash, travel-expense→travel
 
 **Row-Level Access Rules**:
-- `CompanyScope` middleware ensures all queries filter `companyId IN req.user.companyScope`
-- System roles include: companyId=null tetap muncul di list meskipun filter company
+- `CompanyScope` memvalidasi active company dan membawa company terpilih ke request context.
+- Prisma middleware menginterseksikan query tenant dengan satu active `companyId`; tidak ada
+  bypass company-less untuk role HTTP, termasuk SUPER_ADMIN.
+- `runInSystemContext()` adalah satu-satunya bypass umum dan hanya dipakai callback internal
+  terinventarisasi seperti seed/worker.
 - Performance assignments: employee hanya melihat milik sendiri (hard constraint)
 
 **Immutable Properties**:

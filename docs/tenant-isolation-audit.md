@@ -29,9 +29,9 @@ reading the code — not sampling. Verdicts below are grounded in `file:line` ev
 ## What is solid (verified, no action)
 
 - No cross-**company** escape via a client `companyId` — double backstop (validate-and-overwrite
-  middleware + DB scoping) holds across every module checked, including modules without
-  `requireCompanyAccess` (performance, work-calendar, company-settings, permission-request,
-  audit-log, user) because backstop 2 still applies. `User`/`CompanySetting` compensate in-service.
+  middleware + DB scoping) holds across every module checked. The former six-router wiring gap is
+  closed for performance, work-calendar, company-settings, permission-request, notification, and
+  audit-log; `tenant-route-scope.test.ts` protects the boundary from regression.
 - **No SQL injection.** Zero `$queryRawUnsafe`/`$executeRawUnsafe`; all raw SQL is parameterized.
 - **Export / import / download / report surface is clean** — every payslip, document, private
   file, CSV export/import, and report query resolves through a tenant-scoped query, so guessing a
@@ -70,13 +70,25 @@ Cross-company is blocked here; the gap is **fine-grained `DataAccessScope` (OWN_
 
 **NEEDS-REVIEW class:** many list endpoints accept a `req.query.employeeId` filter (attendance, leave balances, payroll salaries, EWA, benefit, training, onboarding, performance). Cross-company is blocked; within-company they are protected *only if* the caller has an OWN_* scope configured. This is by-design for HR roles but becomes a disclosure risk if `resource:read` is over-granted without a matching scope.
 
-## Test coverage
+## Test coverage — historical gaps closed
 
-Existing DB integration tests cover cross-company IDOR for: cross-company (general), employee,
-payroll, attendance, organization, financial, leave/perf/audit. **Gaps to add** (no cross-company
-negative test today): BranchAttendancePolicy, asset assignment (foreign employee), training
-enrollment (foreign employee), daily-activity (foreign employee), approval delegation
-(foreign delegate), and the leave raw-SQL `company_id` predicate.
+The original audit identified missing negative coverage for BranchAttendancePolicy, asset
+assignment, training enrollment, daily activity, approval delegation, and Leave raw locks. Those
+gaps are now closed:
+
+- `company-scope-sprint2-gaps.test.ts` rejects foreign employee/delegate references and verifies
+  BranchAttendancePolicy reads/deletes intersect `branchId` with the active `companyId`.
+- `leave-raw-sql-company-scope.test.ts` inventories all six `SELECT ... FOR UPDATE` statements
+  and requires an explicit `company_id` predicate on every lock.
+- The Leave finalization regression rejects a foreign request before entering its raw-lock
+  transaction or mutating a balance.
+- `tenant-route-scope.test.ts` guards router-level `requireCompanyAccess()` wiring, including all
+  six routes from the former follow-up list.
+
+The broader cross-company suites continue to cover employee, payroll, attendance, organization,
+financial, leave/performance/audit, export/import, and selected-company SUPER_ADMIN behavior.
+GitHub Actions run `35952397150` on commit `f29b4a3` passed **111 suites / 990 tests** with 9
+suites / 89 tests intentionally skipped.
 
 ## Item #9 — explicit `SUPER_ADMIN` tenant mode
 
@@ -111,8 +123,8 @@ append coverage pass in GitHub Actions run `35846232651` (**110 suites / 979 tes
   allowlist; 13 child tables added to `PARENT_SCOPES`; `createDelegation` validates the delegate
   is an employee in the caller's company; the six leave raw `FOR UPDATE` statements now carry an
   explicit `company_id` predicate and `finalizeApprovalEffects` requires its scoped fetch to
-  resolve before mutating; the org cycle-walk is scoped by `companyId`. All verified green in CI
-  (type-check + build + 863-test suite + migrations).
+  resolve before mutating; the org cycle-walk is scoped by `companyId`. All verified green in CI,
+  including the supplemental follow-up run cited above.
 - **Tier 3 — DONE** (this branch; product decision: enforce the fine-grained scope on all
   accesses). `assertEmployeeInScope()` enforces the caller's DataAccessScope on fetch-by-path/
   by-id reads (payroll THR, work-calendar employee calendar); `getTeamCalendar` requires the

@@ -219,9 +219,9 @@ export class LeaveService {
       where: { id: leaveRequestId, deletedAt: null },
       select: { companyId: true, startDate: true, endDate: true },
     });
-    // The scoped fetch is bypassed under system/SUPER_ADMIN context; require it
-    // so the raw FOR UPDATE below can be pinned to the resolved company and we
-    // never mutate a leave request that did not resolve in the caller's tenant.
+    // Resolve the row through the active-company boundary before taking raw
+    // locks. System jobs are the only unscoped context; HTTP SUPER_ADMIN calls
+    // must already have an explicitly selected company.
     if (!pending) throw new NotFoundError('Leave request not found');
     await assertPayrollRangeOpen(pending.companyId, pending.startDate, pending.endDate);
     return prisma.$transaction(async (tx) => {

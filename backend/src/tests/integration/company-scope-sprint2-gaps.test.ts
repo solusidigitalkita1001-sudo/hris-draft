@@ -56,6 +56,8 @@ import { trainingService } from '@/modules/training/training.service';
 import { dailyActivityService } from '@/modules/daily-activity/daily-activity.service';
 import { attendanceService } from '@/modules/attendance/attendance.service';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
+import { branchRepository } from '@/modules/organization/repositories/branch.repository';
+import { leaveService } from '@/modules/leave/leave.service';
 import { NotFoundError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { runAs, userCompanyA, makeUserContext, COMPANY_A_ID, EMPLOYEE_A_ID, EMPLOYEE_B_ID, USER_B_ID, clearAllPrismaMocks } from '../helpers/setupTestApp';
 
@@ -116,6 +118,50 @@ describe('CompanyScope Sprint 2 #8 — cross-tenant FK validation', () => {
           endDate: new Date('2026-02-01T00:00:00Z'),
         }))
     ).rejects.toThrow(NotFoundError);
+  });
+
+  it('BranchAttendancePolicy read intersects branchId with the active company', async () => {
+    const findPolicy = jest.spyOn(prisma.branchAttendancePolicy, 'findFirst').mockResolvedValue(null);
+
+    await expect(
+      runAs(userCompanyA(), () =>
+        branchRepository.findAttendancePolicy('branch-owned-by-company-B', COMPANY_A_ID))
+    ).resolves.toBeNull();
+
+    expect(findPolicy).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        branchId: 'branch-owned-by-company-B',
+        companyId: COMPANY_A_ID,
+        deletedAt: null,
+      },
+    }));
+  });
+
+  it('BranchAttendancePolicy delete intersects branchId with the active company', async () => {
+    const deletePolicy = jest.spyOn(prisma.branchAttendancePolicy, 'updateMany')
+      .mockResolvedValue({ count: 0 });
+
+    await runAs(userCompanyA(), () =>
+      branchRepository.softDeleteAttendancePolicy('branch-owned-by-company-B', COMPANY_A_ID));
+
+    expect(deletePolicy).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        branchId: 'branch-owned-by-company-B',
+        companyId: COMPANY_A_ID,
+        deletedAt: null,
+      },
+    }));
+  });
+
+  it('leave finalization rejects a foreign request before any balance mutation', async () => {
+    jest.spyOn(prisma.leaveRequest, 'findFirst').mockResolvedValue(null);
+    const updateBalance = jest.spyOn(prisma.leaveBalance, 'update');
+
+    await expect(
+      runAs(userCompanyA(), () => leaveService.finalizeApprovalEffects('leave-company-B'))
+    ).rejects.toThrow(NotFoundError);
+
+    expect(updateBalance).not.toHaveBeenCalled();
   });
 
   it('createOvertime by a custom non-elevated role for another employee → ForbiddenError (T3.3)', async () => {

@@ -4,6 +4,7 @@ import path from 'node:path';
 const TENANT_ROUTES = [
   'audit-log/audit-log.routes.ts',
   'company-settings/company-settings.routes.ts',
+  'notification/notification.routes.ts',
   'performance/performance.routes.ts',
   'permission-request/permission-request.routes.ts',
   'rbac/rbac.routes.ts',
