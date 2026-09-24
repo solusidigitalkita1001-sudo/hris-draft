@@ -90,13 +90,13 @@ export class BranchService {
   }
 
   async getAttendancePolicy(branchId: string) {
-    await this.findById(branchId);
-    return branchRepository.findAttendancePolicy(branchId);
+    const branch = await this.findById(branchId);
+    return branchRepository.findAttendancePolicy(branchId, branch.companyId);
   }
 
   async upsertAttendancePolicy(branchId: string, dto: UpsertBranchAttendancePolicyDTO) {
     const branch = await this.findById(branchId);
-    const existing = await branchRepository.findAttendancePolicy(branchId);
+    const existing = await branchRepository.findAttendancePolicy(branchId, branch.companyId);
 
     const merged = {
       attendanceMethod: dto.attendanceMethod ?? existing?.attendanceMethod,
@@ -154,13 +154,13 @@ export class BranchService {
   }
 
   async deleteAttendancePolicy(branchId: string) {
-    await this.findById(branchId);
-    const existing = await branchRepository.findAttendancePolicy(branchId);
+    const branch = await this.findById(branchId);
+    const existing = await branchRepository.findAttendancePolicy(branchId, branch.companyId);
     if (!existing) {
       throw new NotFoundError('Branch attendance policy not found');
     }
 
-    await branchRepository.softDeleteAttendancePolicy(branchId);
+    await branchRepository.softDeleteAttendancePolicy(branchId, branch.companyId);
   }
 }
 
