@@ -1,6 +1,17 @@
 import type { NextFunction, Response } from 'express';
+import config from '@/config';
+import { redisCache } from '@/infrastructure/cache/RedisCache';
 import type { AuthenticatedRequest } from './Authenticate';
 import { idempotency } from './Idempotency';
+
+jest.mock('@/infrastructure/cache/RedisCache', () => ({
+  redisCache: {
+    get: jest.fn(),
+    setIfAbsent: jest.fn(),
+    set: jest.fn(),
+    delete: jest.fn(),
+  },
+}));
 
 function request(key: string, body: unknown): AuthenticatedRequest {
   return {
@@ -21,6 +32,7 @@ function request(key: string, body: unknown): AuthenticatedRequest {
 
 function response() {
   const headers: Record<string, string> = {};
+  const json = jest.fn(function json(this: Response) { return this; });
   const res = {
     statusCode: 200,
     writableFinished: true,
@@ -29,13 +41,20 @@ function response() {
       (this as unknown as { statusCode: number }).statusCode = code;
       return this;
     }),
-    json: jest.fn(function json(this: Response) { return this; }),
+    json,
     on: jest.fn(),
   } as unknown as Response;
-  return { res, headers };
+  return { res, headers, json };
 }
 
 describe('Idempotency-Key middleware', () => {
+  const originalRedisEnabled = config.redis.enabled;
+
+  afterEach(() => {
+    config.redis.enabled = originalRedisEnabled;
+    jest.clearAllMocks();
+  });
+
   it('replays the original status and body for the same request', async () => {
     const key = 'attendance-test-key-0001';
     const first = response();
@@ -65,5 +84,63 @@ describe('Idempotency-Key middleware', () => {
     const next = jest.fn();
     await idempotency()(request(key, { method: 'MOBILE_GPS' }), response().res, next);
     expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 409, code: 'CONFLICT' });
+  });
+
+  it('treats object key order as the same request', async () => {
+    const key = 'attendance-test-key-0003';
+    const first = response();
+    await idempotency()(request(key, {
+      method: 'MOBILE_GPS',
+      deviceGps: { accuracyMeters: 5, isMockLocation: false },
+    }), first.res, jest.fn());
+    first.res.statusCode = 201;
+    first.res.json({ success: true, data: { id: 'attendance-3' } });
+
+    const replay = response();
+    await idempotency()(request(key, {
+      deviceGps: { isMockLocation: false, accuracyMeters: 5 },
+      method: 'MOBILE_GPS',
+    }), replay.res, jest.fn());
+
+    expect(replay.res.status).toHaveBeenCalledWith(201);
+    expect(replay.headers['Idempotency-Replayed']).toBe('true');
+  });
+
+  it.each([400, 409, 422, 500])('releases the key after an HTTP %s response', async (statusCode) => {
+    const key = `attendance-retry-${statusCode}-key`;
+    const first = response();
+    await idempotency()(request(key, { method: 'MOBILE_GPS' }), first.res, jest.fn());
+    first.res.statusCode = statusCode;
+    first.res.json({ success: false });
+
+    const retry = response();
+    const retryNext = jest.fn();
+    await idempotency()(request(key, { method: 'MOBILE_GPS' }), retry.res, retryNext);
+
+    expect(retryNext).toHaveBeenCalledWith();
+    expect(retry.headers['Idempotency-Replayed']).toBeUndefined();
+  });
+
+  it('does not send a successful response until Redis persistence completes', async () => {
+    config.redis.enabled = true;
+    jest.mocked(redisCache.get).mockResolvedValue(null);
+    jest.mocked(redisCache.setIfAbsent).mockResolvedValue(true);
+
+    let finishSave!: () => void;
+    jest.mocked(redisCache.set).mockImplementation(() => new Promise<void>((resolve) => {
+      finishSave = resolve;
+    }));
+
+    const first = response();
+    const next = jest.fn();
+    await idempotency()(request('attendance-redis-key-0001', { method: 'MANUAL' }), first.res, next);
+    first.res.statusCode = 201;
+    first.res.json({ success: true });
+
+    expect(first.json).not.toHaveBeenCalled();
+    finishSave();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(first.json).toHaveBeenCalledWith({ success: true });
   });
 });

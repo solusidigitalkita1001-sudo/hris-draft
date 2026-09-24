@@ -11,6 +11,8 @@ import {
   validateRefreshToken,
   validateChangePassword,
   validateMfaCode,
+  validateForgotPassword,
+  validateResetPassword,
 } from './auth.validation';
 
 const router = Router();
@@ -74,10 +76,30 @@ const generalLimiter = rateLimit({
   store: redisStore('auth-general'),
 });
 
+const passwordResetRequestLimiter = rateLimit({
+  windowMs: config.rateLimit.windowMs,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisStore('password-reset-request'),
+  message: tooManyAttempts,
+});
+
+const passwordResetSubmitLimiter = rateLimit({
+  windowMs: config.rateLimit.windowMs,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisStore('password-reset-submit'),
+  message: tooManyAttempts,
+});
+
 // Public routes (no auth required)
 router.get('/csrf', generalLimiter, authController.csrfToken.bind(authController));
 router.post('/login', authLimiter, loginEmailLimiter, validate(validateLogin), authController.login.bind(authController));
 router.post('/refresh', authLimiter, validate(validateRefreshToken), authController.refresh.bind(authController));
+router.post('/forgot-password', passwordResetRequestLimiter, validate(validateForgotPassword), authController.forgotPassword.bind(authController));
+router.post('/reset-password', passwordResetSubmitLimiter, validate(validateResetPassword), authController.resetPassword.bind(authController));
 
 // Logout must work with an EXPIRED access token — it only needs the refresh
 // cookie, and refusing it would leave the 7-day refresh token alive.

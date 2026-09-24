@@ -16,7 +16,7 @@ const asUser = (user: Record<string, unknown>, fn: () => unknown) =>
   runInRequestContext({ user: user as never }, fn);
 
 const hrAdminOfA = { id: 'u1', email: 'a@a.co', companyId: 'company-A', companyScope: ['company-A'], roles: ['COMPANY_ADMIN'] };
-const superAdmin = { id: 'u2', email: 's@s.co', roles: ['SUPER_ADMIN'], companyScope: [] };
+const superAdmin = { id: 'u2', email: 's@s.co', companyId: 'company-A', roles: ['SUPER_ADMIN'], companyScope: [] };
 const groupAdminG1 = { id: 'u3', email: 'g@g.co', groupId: 'group-1', companyScope: ['company-A', 'company-B'], roles: ['GROUP_ADMIN'] };
 
 describe('assertCompanyAccessAuthority — tenant takeover guard', () => {
@@ -28,8 +28,9 @@ describe('assertCompanyAccessAuthority — tenant takeover guard', () => {
     expect(() => asUser(hrAdminOfA, () => assertCompanyAccessAuthority('company-A'))).not.toThrow();
   });
 
-  it('always allows SUPER_ADMIN', () => {
-    expect(() => asUser(superAdmin, () => assertCompanyAccessAuthority('company-Z', { accessScope: 'GROUP_WIDE', groupId: 'any' }))).not.toThrow();
+  it('limits SUPER_ADMIN grants to the explicitly selected company', () => {
+    expect(() => asUser(superAdmin, () => assertCompanyAccessAuthority('company-Z'))).toThrow(/outside your company scope/);
+    expect(() => asUser(superAdmin, () => assertCompanyAccessAuthority('company-A', { accessScope: 'GROUP_WIDE', groupId: 'any' }))).not.toThrow();
   });
 
   it('blocks GROUP_WIDE grants from a non group admin', () => {
@@ -56,8 +57,9 @@ describe('assertUserWithinScope — cross-tenant user visibility', () => {
     expect(() => asUser(hrAdminOfA, () => assertUserWithinScope(local))).not.toThrow();
   });
 
-  it('never restricts SUPER_ADMIN', () => {
-    expect(() => asUser(superAdmin, () => assertUserWithinScope({ companyAccesses: [] }))).not.toThrow();
+  it('limits SUPER_ADMIN visibility to the explicitly selected company', () => {
+    expect(() => asUser(superAdmin, () => assertUserWithinScope({ companyAccesses: [] }))).toThrow('User not found');
+    expect(() => asUser(superAdmin, () => assertUserWithinScope({ companyAccesses: [{ companyId: 'company-A' }] }))).not.toThrow();
   });
 });
 

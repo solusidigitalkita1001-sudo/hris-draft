@@ -29,6 +29,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 router.get('/', authorize({ resource: 'employee', action: 'read' }), employeeController.findAll.bind(employeeController));
 router.get('/export', authorize({ resource: 'employee', action: 'read' }), auditView({ action: 'EXPORT_EMPLOYEES', entity: 'Employee' }), employeeController.exportCsv.bind(employeeController));
+router.get('/me/reporting-line', employeeController.getMyReportingLine.bind(employeeController));
 router.get('/:id', authorize({ resource: 'employee', action: 'read' }), employeeController.findById.bind(employeeController));
 router.get('/:id/face-profile', authorize({ resource: 'employee', action: 'read' }), employeeController.getFaceProfile.bind(employeeController));
 router.get('/:id/career-transactions', authorize({ resource: 'employee', action: 'read' }), employeeController.findCareerTransactions.bind(employeeController));

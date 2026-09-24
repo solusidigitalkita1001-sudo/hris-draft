@@ -17,6 +17,7 @@ export interface TokenPayload {
 export interface AccessTokenPayload {
   sub: string;
   email: string;
+  sessionVersion: number;
   employeeId?: string;
   companyId?: string;
   companyScope?: string[];
@@ -99,10 +100,14 @@ export class JWTHandler {
       if (decoded.type !== 'access') {
         throw new AuthError('Invalid token type');
       }
+      if (!Number.isInteger(decoded.sessionVersion) || decoded.sessionVersion < 1) {
+        throw new AuthError('Access token session is obsolete');
+      }
 
       return {
         sub: decoded.sub,
         email: decoded.email,
+        sessionVersion: decoded.sessionVersion,
         employeeId: decoded.employeeId,
         companyId: decoded.companyId,
         companyScope: decoded.companyScope,

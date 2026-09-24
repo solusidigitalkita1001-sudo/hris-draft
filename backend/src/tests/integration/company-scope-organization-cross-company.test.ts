@@ -202,10 +202,10 @@ describe('CompanyScope Cross-Tenant — Organization Module (Task 1.3)', () => {
     });
   });
 
-  describe('SUPER_ADMIN / GROUP_ADMIN Bypass', () => {
-    it('SUPER_ADMIN findById branch company B → sukses', async () => {
+  describe('SUPER_ADMIN / GROUP_ADMIN selected-company access', () => {
+    it('SUPER_ADMIN with company B active can read branch company B', async () => {
       jest.spyOn(prisma.branch, 'findFirst').mockResolvedValue(mock(BR_B_ID, COMPANY_B_ID, { timezone: 'Asia/Jakarta' }));
-      const res = await runAs(userSuperAdmin(), () => branchService.findById(BR_B_ID));
+      const res = await runAs(userSuperAdmin(COMPANY_B_ID), () => branchService.findById(BR_B_ID));
       expect(res.id).toBe(BR_B_ID);
       expect(res.companyId).toBe(COMPANY_B_ID);
     });

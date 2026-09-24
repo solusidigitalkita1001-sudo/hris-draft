@@ -5,6 +5,15 @@ import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { canReadSensitiveEmployeeData, serializeEmployee, serializeEmployees } from './employee-pii';
 
 export class EmployeeController {
+  async getMyReportingLine(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await employeeService.getMyReportingLine(req.user?.employeeId, req.user?.companyId);
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getFaceProfile(req: Request, res: Response, next: NextFunction) {
     try {
       const status = await employeeService.getFaceProfile(req.params.id as string);

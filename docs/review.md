@@ -15,6 +15,63 @@ Codebase ini secara **desain bisnis & domain logic** sudah cukup matang (perhitu
 
 **21 dari 23 modul yang diperiksa** punya minimal satu instance dari bug scoping ini.
 
+### Re-review company switching — checklist #10 (2026-09-23)
+
+Status: ✅ complete and verified on delivery commit `3993c95` (2026-09-23).
+
+- `activeCompanyId` is owned by one Zustand store; no page reads or writes the company ID in
+  local storage directly.
+- The Axios request interceptor supplies company context centrally and aborts pending requests
+  when the tenant changes.
+- React Query tenant keys include the company ID and prior-tenant cache entries are cancelled
+  and removed on switch.
+- The routed page subtree is still keyed by company ID, so selections, details, and form state
+  from the prior tenant are unmounted.
+- A → B → A coverage exists for Payroll, Employee, and Asset, plus transport-abort and cache
+  lifecycle tests. See `docs/company-switching.md` for the evidence map.
+- Targeted frontend tests passed (**4 files / 19 tests**), full frontend Vitest passed
+  (**8 files / 36 tests**), and GitHub Actions run `35820486074` passed all jobs.
+
+---
+
+### Re-review tenant isolation — checklist #8 (2026-09-23)
+
+Status: ✅ complete and verified on commit `1f3b976`.
+
+- Audited all 27 tenant/business modules as an endpoint-family × operation × company-scope
+  matrix; see `.docs/tenant-isolation-audit.md`.
+- Inventoried every production `runInSystemContext` call and its compensating tenant boundary.
+- Closed T2.6: audit-log, company-settings, performance, permission-request, and work-calendar
+  now validate/propagate the selected company at the router boundary.
+- Added negative export/import tests, selected-company context propagation coverage, and a route
+  wiring contract test. Existing nested-FK negative coverage remains green.
+- GitHub Actions run `35822381091`: backend type-check/build/lint passed; migration validation and
+  rehearsal passed; **109 suites / 972 tests passed** (9 suites / 89 tests intentionally skipped).
+
+---
+
+### Re-review explicit SUPER_ADMIN tenant mode — checklist #9 (2026-09-23)
+
+Status: ✅ complete; product selected option 1 (mandatory active company).
+
+- Removed the historical company-less global tenant mode. Tenant requests now fail closed in
+  both `requireCompanyAccess()` and the Prisma scoping middleware until `SUPER_ADMIN` explicitly
+  selects a company.
+- RBAC, user, administration, organization detail/mutations, and all other tenant operations use
+  the selected-company boundary. A `SUPER_ADMIN` can select any company, but cannot query tenant
+  data globally.
+- Kept only the group/company platform registry required to discover or provision tenants.
+  Company lists expose a safe projection without tax, address, or contact data; existing-company
+  detail and mutation calls are tenant-scoped, while platform mutations retain entity audits.
+- Added dedicated audit events: `SUPER_ADMIN_TENANT_ACCESS` for selected-company tenant requests
+  and `SUPER_ADMIN_PLATFORM_DIRECTORY_ACCESS` for the narrow directory exception. Metadata is
+  limited to method/path rather than request body or credentials.
+- Regression tests cover missing/malformed company selection, server-context propagation,
+  database fail-closed behavior, employee/user/workflow boundaries, and audit logging.
+- GitHub Actions run `35846232651` passed all jobs: backend type-check/build/lint, migration
+  chain/rehearsal/drift checks, **110 suites / 979 tests**, frontend build/lint, security checks,
+  mobile smoke/HTTPS validation, and repository hygiene.
+
 ---
 
 ### 📊 Status Temuan Per Tanggal 2026-08-22 (Living Document — Akhir Minggu 6 FULL CLOSE 19/19 ✔)

@@ -8,6 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 // Security secrets are REQUIRED with no fallback — the app must refuse to start
 // rather than run on a guessable default key.
 const csv = (val?: string) => (val ? val.split(',').map((s) => s.trim()).filter(Boolean) : undefined);
+const envBoolean = z.enum(['true', 'false']).transform((value) => value === 'true');
 
 const envSchema = z.object({
   // App
@@ -27,7 +28,7 @@ const envSchema = z.object({
   READ_REPLICA_DATABASE_URL: z.string().optional(), // Task 2.9: optional read replica
 
   // Redis
-  REDIS_ENABLED: z.coerce.boolean().default(true),
+  REDIS_ENABLED: envBoolean.default('true'),
   REDIS_URL: z.string().default(''),
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().int().default(6379),
@@ -40,10 +41,10 @@ const envSchema = z.object({
   RABBITMQ_EXCHANGE: z.string().default('hrms.domain-events'),
   RABBITMQ_QUEUE_PREFIX: z.string().default('hrms'),
   RABBITMQ_PREFETCH: z.coerce.number().int().default(20),
-  RABBITMQ_ENABLED: z.coerce.boolean().default(true),
+  RABBITMQ_ENABLED: envBoolean.default('true'),
 
   // Queue
-  QUEUE_ENABLED: z.coerce.boolean().optional(),
+  QUEUE_ENABLED: envBoolean.optional(),
   QUEUE_DEFAULT_ATTEMPTS: z.coerce.number().int().default(3),
   QUEUE_DEFAULT_BACKOFF_MS: z.coerce.number().int().default(5000),
 
@@ -70,12 +71,16 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
 
   // Mail
+  SMTP_ENABLED: z.enum(['true', 'false']).transform((value) => value === 'true').default('false'),
   SMTP_HOST: z.string().default('smtp.mailtrap.io'),
   SMTP_PORT: z.coerce.number().int().default(2525),
+  SMTP_SECURE: z.enum(['true', 'false']).transform((value) => value === 'true').default('false'),
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
   SMTP_FROM: z.string().default('noreply@hrms.com'),
   SMTP_FROM_NAME: z.string().default('HRMS Enterprise'),
+  PASSWORD_RESET_URL: z.string().url().default('http://localhost:5173/reset-password'),
+  PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(60).default(15),
 
   // Upload
   UPLOAD_MAX_FILE_SIZE: z.coerce.number().int().default(5242880),
@@ -178,12 +183,18 @@ export function buildConfig(env: Env) {
     },
     cors: { origins: csv(env.CORS_ORIGINS) ?? ['http://localhost:5173'] },
     mail: {
+      enabled: env.SMTP_ENABLED,
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,
+      secure: env.SMTP_SECURE,
       user: env.SMTP_USER,
       pass: env.SMTP_PASS,
       from: env.SMTP_FROM,
       fromName: env.SMTP_FROM_NAME,
+    },
+    passwordReset: {
+      url: env.PASSWORD_RESET_URL,
+      ttlMinutes: env.PASSWORD_RESET_TTL_MINUTES,
     },
     upload: {
       maxFileSize: env.UPLOAD_MAX_FILE_SIZE,

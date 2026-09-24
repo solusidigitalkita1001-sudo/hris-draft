@@ -566,8 +566,8 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
     });
   });
 
-  describe('Super Admin Bypass (SUPER_ADMIN/GROUP_ADMIN)', () => {
-    it('SUPER_ADMIN access findLeaveRequestById company B → TIDAK throw NotFound', async () => {
+  describe('SUPER_ADMIN/GROUP_ADMIN selected-company access', () => {
+    it('SUPER_ADMIN with company B active can read leave company B', async () => {
       const mock = {
         id: 'leave-B-002',
         companyId: COMPANY_B_ID,
@@ -575,7 +575,7 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
       };
       jest.spyOn(prisma.leaveRequest, 'findFirst').mockResolvedValue(mock as any);
 
-      const result = await runAs(userSuperAdmin(), () =>
+      const result = await runAs(userSuperAdmin(COMPANY_B_ID), () =>
         leaveService.findLeaveRequestById('leave-B-002')
       );
       expect(result).toBeDefined();
@@ -592,7 +592,7 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
       expect(result).toBeDefined();
     });
 
-    it('SUPER_ADMIN access findInstanceById company B → TIDAK throw NotFound', async () => {
+    it('SUPER_ADMIN with company B active can read workflow company B', async () => {
       const wf = buildWorkflowInstance({ id: 'wf-B-sa', companyId: COMPANY_B_ID });
       jest.spyOn(prisma.workflowInstance, 'findUnique').mockResolvedValue({
         ...wf,
@@ -601,7 +601,7 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
         logs: [],
       } as any);
 
-      const result = await runAs(userSuperAdmin(), () =>
+      const result = await runAs(userSuperAdmin(COMPANY_B_ID), () =>
         workflowEngineRepository.findInstanceById('wf-B-sa')
       );
       expect(result).toBeDefined();

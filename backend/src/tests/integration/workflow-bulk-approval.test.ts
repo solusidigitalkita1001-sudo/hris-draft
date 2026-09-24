@@ -377,15 +377,15 @@ describe('Workflow Bulk Approval Partial Result Semantics (A.5 cross-verificatio
     });
   });
 
-  describe('SUPER_ADMIN bulk cross company + self', () => {
-    it('SUPER_ADMIN bulk: other requests succeed; own request remains forbidden', async () => {
+  describe('SUPER_ADMIN bulk remains inside the selected company', () => {
+    it('rejects a foreign-company item and self approval while allowing a local item', async () => {
       (jest
         .spyOn(prisma.workflowInstance, 'findUnique') as any)
         .mockImplementation((opts: any) => {
           const id = opts?.where?.id;
-          let companyId = COMPANY_A_ID;
+          if (id.includes('B')) return Promise.resolve(null);
+          const companyId = COMPANY_A_ID;
           let requesterId = USER_B_ID;
-          if (id.includes('B')) companyId = COMPANY_B_ID;
           if (id.includes('self')) requesterId = USER_SUPERADMIN_ID;
           return Promise.resolve({
             ...buildWorkflowInstance({ id, companyId, requesterId }),
@@ -411,7 +411,8 @@ describe('Workflow Bulk Approval Partial Result Semantics (A.5 cross-verificatio
       );
 
       expect(results).toHaveLength(3);
-      expect(results.filter(result => result.instanceId !== 'wf-self').every(result => result.success)).toBe(true);
+      expect(results.find(result => result.instanceId === 'wf-A')).toEqual(expect.objectContaining({ success: true }));
+      expect(results.find(result => result.instanceId === 'wf-B')).toEqual(expect.objectContaining({ success: false, errorCode: 'NOT_FOUND' }));
       expect(results.find(result => result.instanceId === 'wf-self')).toEqual(expect.objectContaining({ success: false, errorCode: 'FORBIDDEN' }));
     });
   });

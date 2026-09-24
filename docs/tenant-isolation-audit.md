@@ -1,5 +1,10 @@
 # Tenant Isolation Audit (Sprint 2 · item #8)
 
+> 2026-09-23 re-audit: the canonical current-tree 27-module matrix, complete
+> `runInSystemContext` inventory, T2.6 router-boundary fix, explicit `SUPER_ADMIN` tenant-mode
+> decision, and fresh test evidence now live in `.docs/tenant-isolation-audit.md`. Historical
+> findings below are retained for provenance and clearly marked where superseded.
+
 Systematic module-by-module verification of multi-company (tenant) isolation, done by
 reading the code — not sampling. Verdicts below are grounded in `file:line` evidence.
 
@@ -13,7 +18,8 @@ reading the code — not sampling. Verdicts below are grounded in `file:line` ev
 - **DB layer enforces.** A Prisma `$use` middleware (`prisma.ts` → `tenant-scope.ts`) intersects
   every read on a `COMPANY_SCOPED_MODELS` model with `{ companyId: getCurrentCompanyId() }` and
   rejects writes that carry a different `companyId`. Fail-closed: a scoped query with no context
-  **throws**, except for explicit `runInSystemContext()` (seeds/workers) and `SUPER_ADMIN`.
+  **throws**, except for explicit `runInSystemContext()` (seeds/workers). `SUPER_ADMIN` requests
+  are tenant-scoped too and require an explicitly selected active company.
 - **Structural weakness: it is an allowlist.** A model absent from `COMPANY_SCOPED_MODELS` (and
   from `PARENT_SCOPES`) gets **zero** middleware enforcement; its safety then rests entirely on
   every call site remembering to filter by hand. The middleware also does **not** recurse into
@@ -72,27 +78,28 @@ negative test today): BranchAttendancePolicy, asset assignment (foreign employee
 enrollment (foreign employee), daily-activity (foreign employee), approval delegation
 (foreign delegate), and the leave raw-SQL `company_id` predicate.
 
-## Item #9 — SUPER_ADMIN global mode
+## Item #9 — explicit `SUPER_ADMIN` tenant mode
 
-**Audited behavior:** a SUPER_ADMIN with no company selected was an implicit, always-on,
-read-**write** global mode — triggered by the mere *absence* of a company param. A
-company-less `updateMany`/`deleteMany` could touch every tenant.
+**Historical behavior (superseded):** absence of a company once created an implicit global mode;
+the first hardening pass reduced that mode to read-only. That interim behavior is no longer the
+current contract.
 
-**Decision taken:** keep implicit global **reads** (platform oversight, matches the UI which
-auto-selects a company for scoped calls), but make the mode **read-only**.
+**Final product decision (2026-09-23): option 1, mandatory active company.** A `SUPER_ADMIN`
+must explicitly select a company for all tenant endpoints. `requireCompanyAccess()` rejects a
+missing or malformed selection and propagates the validated choice; the Prisma middleware also
+fails closed for company-scoped reads and writes without company context. System jobs retain the
+only general unscoped bypass through a bounded, reasoned `runInSystemContext()` callback.
 
-**Done (this branch):** the Prisma tenant middleware's no-company branch now splits — system
-context (seeds/workers/migrations) still writes unscoped, but a no-company SUPER_ADMIN may only
-read; any write action throws `ForbiddenError` until a company is selected
-(`assertGlobalSuperAdminReadOnly` in `tenant-scope.ts`, unit-tested). Selecting a company scopes
-normally.
+The organization group/company registry remains a narrow platform surface so a `SUPER_ADMIN` can
+discover or provision a tenant. Its company list projection excludes address, tax, and contact
+fields; existing-company detail/mutations and all tenant-domain data require active-company
+context. Directory reads emit `SUPER_ADMIN_PLATFORM_DIRECTORY_ACCESS`, platform mutations keep
+their entity-specific audit events, and successful selected-company tenant requests emit
+`SUPER_ADMIN_TENANT_ACCESS` with method/path metadata only.
 
-**Follow-up (not in this branch):** six tenant modules never mount `requireCompanyAccess`
-(`/api/performance`, `/api/work-calendars`, `/api/company-settings`, `/api/permission-requests`,
-`/api/notifications`, `/api/audit-logs`; `administration` mounts it per-route). There, a request
-never populates context `companyId`, so (a) a SUPER_ADMIN cannot scope to a company even with
-`?companyId`, and (b) OWN_* data-scope is not applied for restricted users. Mounting the
-middleware router-wide on those modules is a separate, broader change deserving its own review.
+**Verified:** company-less super-admin denial, explicit selection and downstream propagation,
+malformed parameter denial, Prisma backstop, selected-company user/workflow boundaries, and audit
+append coverage pass in GitHub Actions run `35846232651` (**110 suites / 979 tests passed**).
 
 ## Status
 
@@ -111,5 +118,6 @@ middleware router-wide on those modules is a separate, broader change deserving 
   by-id reads (payroll THR, work-calendar employee calendar); `getTeamCalendar` requires the
   requested manager to be in scope; attendance clock-in and overtime creation switched from a
   "pure EMPLOYEE" denylist to a positive elevated-capability gate so custom roles can no longer
-  set an arbitrary employeeId. The enforcement is a no-op for SUPER_ADMIN/system and for
-  ALL/COMPANY_ONLY scopes — only already-restricted users are tightened. Verified green in CI.
+  set an arbitrary employeeId. This employee-level check is a no-op for SUPER_ADMIN/system and
+  for ALL/COMPANY_ONLY scopes — only already-restricted users are tightened. The SUPER_ADMIN
+  exemption never bypasses the selected-company database boundary. Verified green in CI.

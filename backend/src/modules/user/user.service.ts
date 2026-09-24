@@ -22,10 +22,10 @@ const logger = new WinstonLogger('UserService');
 export class UserService {
   async findAll(page: number, limit: number, filters?: { companyId?: string; search?: string }) {
     const allowed = requesterCompanyIds();
-    if (allowed !== null && filters?.companyId && !allowed.includes(filters.companyId)) {
+    if (filters?.companyId && !allowed.includes(filters.companyId)) {
       throw new ForbiddenError('Cannot list users outside your company scope');
     }
-    return userRepository.findAll(page, limit, filters, allowed ?? undefined);
+    return userRepository.findAll(page, limit, filters, allowed);
   }
 
   async findById(id: string) {

@@ -54,6 +54,7 @@ import administrationRoutes from '@/modules/administration/administration.routes
 import companySettingsRoutes from '@/modules/company-settings/company-settings.routes';
 import ewaRoutes from '@/modules/ewa/ewa.routes';
 import dailyActivityRoutes from '@/modules/daily-activity/daily-activity.routes';
+import announcementRoutes from '@/modules/announcement/announcement.routes';
 
 const app = express();
 
@@ -234,6 +235,7 @@ app.use(`${apiPrefix}/administration`, administrationRoutes);
 app.use(`${apiPrefix}/company-settings`, companySettingsRoutes);
 app.use(`${apiPrefix}/ewa`, ewaRoutes);
 app.use(`${apiPrefix}/daily-activities`, dailyActivityRoutes);
+app.use(`${apiPrefix}/announcements`, announcementRoutes);
 
 // ==================== API Inventory (for mobile/integration teams) ====================
 // Full route inventory (method + path + middleware names). Admin-gated: the

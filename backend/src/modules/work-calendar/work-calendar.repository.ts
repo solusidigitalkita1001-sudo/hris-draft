@@ -430,6 +430,26 @@ function validateShiftFormulaDays(days: Array<{
 }
 
 export class WorkCalendarRepository {
+  async findMyOfficeClock(userId: string, now = new Date()) {
+    const user = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        employee: {
+          select: {
+            id: true,
+            company: { select: { timezone: true } },
+          },
+        },
+      },
+    });
+    if (!user?.employee) throw new NotFoundError('User tidak terhubung ke data employee');
+    const timezone = user.employee.company.timezone || 'Asia/Jakarta';
+    return {
+      timezone,
+      serverDate: toDateKeyInTimezone(now, timezone),
+    };
+  }
+
   // ─── Calendars ───────────────────────────────────────────
   async findAll(companyId: string) {
     return prisma.workCalendar.findMany({

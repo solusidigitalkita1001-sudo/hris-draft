@@ -1,10 +1,14 @@
 import prisma from '@/shared/database/prisma';
 import { assetRepository } from './asset.repository';
-import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO } from './asset.dto';
+import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO, MyAssetsQueryDTO } from './asset.dto';
 import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
 import { generateSystemCode } from '@/shared/utils/system-code';
 
 export class AssetService {
+  async findMine(companyId: string, employeeId: string, query: MyAssetsQueryDTO) {
+    return assetRepository.findMine(companyId, employeeId, query);
+  }
+
   async findAll(companyId: string, status?: string) {
     return assetRepository.findAll(companyId, status);
   }

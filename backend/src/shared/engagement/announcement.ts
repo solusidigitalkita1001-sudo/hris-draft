@@ -38,7 +38,11 @@ export interface AnnouncementRow {
 
 function toDate(v: unknown): Date | null {
   if (!v) return null;
-  const d = v instanceof Date ? v : new Date(v as any);
+  let d: Date;
+  if (v instanceof Date) d = v;
+  else if (typeof v === 'string') d = new Date(v);
+  else if (typeof v === 'number') d = new Date(v);
+  else return null;
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -143,17 +147,19 @@ function isPinnedActive(row: AnnouncementRow, now?: Date): boolean {
   return n.getTime() <= until.getTime();
 }
 
-export function sortAnnouncementsForDashboard(
-  rows: AnnouncementRow[],
+export function sortAnnouncementsForDashboard<T extends AnnouncementRow>(
+  rows: T[],
   nowOverride?: Date | string | number,
-): AnnouncementRow[] {
+): T[] {
   const now = nowOverride ? (toDate(nowOverride) ?? new Date()) : new Date();
   return [...rows].sort((a, b) => {
     const pinnedA = isPinnedActive(a, now);
     const pinnedB = isPinnedActive(b, now);
     if (pinnedA !== pinnedB) return pinnedA ? -1 : 1;
-    const prA = priorityRank(a.priority);
-    const prB = priorityRank(b.priority);
+    // Expired pins fall back to normal priority instead of remaining above all
+    // current NORMAL announcements forever.
+    const prA = pinnedA ? 3 : (priorityRank(a.priority) === 1 ? 1 : 2);
+    const prB = pinnedB ? 3 : (priorityRank(b.priority) === 1 ? 1 : 2);
     if (prA !== prB) return prB - prA;
     const ca = toDate(a.createdAt)?.getTime() ?? 0;
     const cb = toDate(b.createdAt)?.getTime() ?? 0;

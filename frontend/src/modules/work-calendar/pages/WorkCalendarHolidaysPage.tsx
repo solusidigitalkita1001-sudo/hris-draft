@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 
 // ─── Modal ──────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -125,7 +126,7 @@ export function WorkCalendarHolidaysPage() {
   const [search, setSearch] = useState('');
   const [yearFilter, setYearFilter] = useState(dayjs().year());
   const [typeFilter, setTypeFilter] = useState<'all' | 'NH' | 'JL'>('all');
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
   // Modal states
   const [showCreate, setShowCreate] = useState(false);
@@ -133,7 +134,11 @@ export function WorkCalendarHolidaysPage() {
   const [deletingHoliday, setDeletingHoliday] = useState<Holiday | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!companyId) return;
+    if (!companyId) {
+      setHolidays([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await workCalendarService.findAllHolidays(companyId, yearFilter);

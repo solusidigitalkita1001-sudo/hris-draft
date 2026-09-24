@@ -14,6 +14,7 @@ import { ewaController } from './ewa.controller';
 import { auditLog } from '@/shared/middleware/AuditLog';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
+import { idempotency } from '@/shared/middleware/Idempotency';
 import { EWA_AUDIT_REDACTIONS } from './ewa-access';
 
 const router = Router();
@@ -41,6 +42,7 @@ router.post(
   '/',
   authorize({ resource: 'ewa', action: 'create' }),
   validate(createEWARequestSchema),
+  idempotency(),
   auditLog({ action: 'create', entity: 'EWA_Request', model: 'earnedWageAccess', redactFields: EWA_AUDIT_REDACTIONS }),
   ewaController.createRequest.bind(ewaController),
 );
@@ -54,6 +56,7 @@ router.post(
   '/:id/cancel',
   authorize({ resource: 'ewa', action: 'update' }),
   validate(ewaIdParamSchema, 'params'),
+  idempotency(),
   auditLog({ action: 'cancel', entity: 'EWA_Request', model: 'earnedWageAccess', redactFields: EWA_AUDIT_REDACTIONS }),
   ewaController.cancelRequest.bind(ewaController),
 );
@@ -62,6 +65,7 @@ router.post(
   authorize({ resource: 'ewa', action: 'approve' }),
   validate(ewaIdParamSchema, 'params'),
   validate(approveEWARequestSchema),
+  idempotency(),
   auditLog({ action: 'approve', entity: 'EWA_Request', model: 'earnedWageAccess', redactFields: EWA_AUDIT_REDACTIONS }),
   ewaController.approveRequest.bind(ewaController),
 );
@@ -70,6 +74,7 @@ router.post(
   authorize({ resource: 'ewa', action: 'approve' }),
   validate(ewaIdParamSchema, 'params'),
   validate(rejectEWARequestSchema),
+  idempotency(),
   auditLog({ action: 'reject', entity: 'EWA_Request', model: 'earnedWageAccess', redactFields: EWA_AUDIT_REDACTIONS }),
   ewaController.rejectRequest.bind(ewaController),
 );
@@ -78,6 +83,7 @@ router.post(
   authorize({ resource: 'ewa', action: 'disburse' }),
   validate(ewaIdParamSchema, 'params'),
   validate(markPaidEWARequestSchema),
+  idempotency(),
   auditLog({ action: 'disburse', entity: 'EWA_Request', model: 'earnedWageAccess', redactFields: EWA_AUDIT_REDACTIONS }),
   ewaController.markPaid.bind(ewaController),
 );

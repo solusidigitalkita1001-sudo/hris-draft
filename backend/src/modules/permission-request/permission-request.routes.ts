@@ -7,9 +7,11 @@ import { permissionRequestController } from './permission-request.controller';
 import { createPermissionSchema, approvePermissionSchema } from './permission-request.dto';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 import { idempotency } from '@/shared/middleware/Idempotency';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/', authorize({ resource: 'permission-request', action: 'read' }), permissionRequestController.findAll.bind(permissionRequestController));
 router.get('/my', permissionRequestController.findMyRequests.bind(permissionRequestController));

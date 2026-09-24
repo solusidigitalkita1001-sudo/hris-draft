@@ -23,6 +23,7 @@ import {
   type Division,
   type Position,
 } from '@/services/organization.service';
+import { useCompanyStore } from '@/stores/company.store';
 
 type OrgNodeType = 'company' | 'division' | 'department' | 'position';
 
@@ -435,7 +436,7 @@ export function OrganizationChartPage() {
   const [people, setPeople] = useState<Employee[]>([]);
   const [peopleTotal, setPeopleTotal] = useState(0);
 
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
   const flattenedDepartments = useMemo(() => flattenDepartments(hierarchy), [hierarchy]);
 

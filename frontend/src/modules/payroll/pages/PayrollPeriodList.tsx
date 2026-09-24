@@ -9,6 +9,7 @@ import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, CalendarDays, Pencil, Lock, X } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null;
@@ -181,6 +182,7 @@ function PeriodForm({
 }
 
 export function PayrollPeriodList() {
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -189,9 +191,13 @@ export function PayrollPeriodList() {
   const [closing, setClosing] = useState<PayrollPeriod | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (!companyId) {
+      setPeriods([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const companyId = localStorage.getItem('companyId') || '';
       const data = await payrollService.getPayrollPeriods(companyId);
       setPeriods(data);
     } catch (error) {
@@ -200,7 +206,7 @@ export function PayrollPeriodList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     fetchData();
@@ -211,7 +217,6 @@ export function PayrollPeriodList() {
   );
 
   const handleCreate = async (data: Partial<PayrollPeriod>) => {
-    const companyId = localStorage.getItem('companyId') || '';
     if (!companyId) {
       toast.error('companyId tidak tersedia. Silakan login ulang.');
       throw new Error('companyId missing');

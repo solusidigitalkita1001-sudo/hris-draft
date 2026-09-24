@@ -27,6 +27,7 @@ jobs:
 
         env:
           ROLLBACK_REF: ${{ github.event.inputs.rollback_ref }}
+          HTTPS_ENABLED: ${{ vars.HTTPS_ENABLED || 'false' }}
 
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -34,7 +35,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
 
-          envs: ROLLBACK_REF
+          envs: ROLLBACK_REF,HTTPS_ENABLED
 
           timeout: 60s
           command_timeout: 35m
@@ -109,6 +110,7 @@ jobs:
 
             export DEPLOY_COMMIT="$CURRENT_COMMIT"
             export PREVIOUS_COMMIT="$PREVIOUS_COMMIT"
+            export COMPOSE_ENV_FILE="$ENV_FILE"
 
             echo "🚀 Starting deployment..."
 

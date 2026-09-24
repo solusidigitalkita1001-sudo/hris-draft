@@ -1,7 +1,7 @@
 # Implementasi Gap API Mobile
 
 Tanggal implementasi: 17 September 2026
-Verifikasi terakhir: 18 September 2026
+Verifikasi terakhir: 20 September 2026
 
 Dokumen ini mencatat bagian `gap_api_mobile.md` yang dapat ditutup langsung
 di source backend tanpa menebak keputusan produk, credential, atau konfigurasi
@@ -33,6 +33,10 @@ deployment.
   hash unik mencegah satu token tetap terikat ke dua akun.
 - Mutasi mobile utama mendukung `Idempotency-Key` selama 24 jam, dengan replay
   response yang sama dan `409` untuk key yang dipakai dengan payload berbeda.
+  Hanya response `2xx` yang dipersist; error melepas key agar dapat dicoba ulang,
+  fingerprint tidak bergantung pada urutan key JSON, dan response sukses baru
+  dikirim setelah persistence Redis selesai. Cakupan termasuk loan, EWA, daily
+  activity, trip/expense, serta action statusnya.
 - Fake-GPS yang dilaporkan perangkat sebagai confirmed fake ditolak pada
   check-in maupun check-out; evidence checkout ikut masuk policy snapshot.
 - Payroll self-service sekarang memakai list periode tanpa nominal,
@@ -52,6 +56,27 @@ deployment.
   staging tersedia di `scripts/mobile-api-smoke.mjs` dan
   `docs/mobile-staging-acceptance.md`.
 - Kontrak `docs/mobile-api.md` sudah diperbarui agar sesuai implementasi.
+- Password recovery tersedia melalui `/auth/forgot-password` dan
+  `/auth/reset-password`: response anti-enumeration, token acak 256-bit yang
+  hanya disimpan sebagai digest, expiry/single-use, throttle, SMTP opt-in, dan
+  revokasi seluruh refresh session setelah reset. Session version pada JWT juga
+  membuat access token lama langsung ditolak. Deployment dan acceptance dijelaskan
+  di `docs/password-recovery.md`.
+- Announcement self-service tersedia dengan audience company/department/branch/
+  position/employee, platform announcement, pagination, unread count, detail,
+  dan read-state idempotent. Reporting line self-service memakai hierarchy
+  `Position.reportsToId` dengan urutan holder deterministik. Next shift memakai
+  timezone company dan resolver kalender yang sama hingga lintas bulan.
+- Kontrak Approval Center, loan, EWA, daily activity, travel/expense, attendance
+  pagination, dan notification pagination/schema sudah dirinci. Approval Center
+  memakai workflow-engine action sebagai jalur utama; route action domain tetap
+  compatibility-only. Session management, MFA settings, dan delete notification
+  UI ditunda dari rilis mobile awal tanpa menghapus endpoint backend.
+- Asset employee sekarang memiliki inbox self-service terpaginasikan melalui
+  `GET /assets/my`, di-scope ke company/employee dari sesi dan tidak mengekspos
+  nilai finansial atau assignment employee lain. Kontrak attendance offline juga
+  diputuskan live-only: retry memakai idempotency key, sedangkan punch yang tidak
+  pernah mencapai server harus masuk melalui koreksi absensi.
 
 ## Migration
 
@@ -61,7 +86,9 @@ baru:
 - `20260917120000_mobile_device_registrations`;
 - `20260918100000_payroll_unlock_sessions`;
 - `20260918110000_push_notification_deliveries`;
-- `20260918120000_mobile_permission_matrix`.
+- `20260918120000_mobile_permission_matrix`;
+- `20260920090000_password_reset_tokens`;
+- `20260920093000_auth_session_version`.
 
 ## Tetap memerlukan keputusan/konfigurasi eksternal
 
@@ -70,9 +97,11 @@ baru:
   environment deployment. Kode provider/worker sudah tersedia.
 - Source Flutter/mobile tidak ada di repository ini, sehingga pemanggilan API
   dari aplikasi mobile tetap harus dikerjakan di repository client.
-- Kontrak produk baru untuk chat, password recovery, dan announcement dashboard
-  belum dapat diputuskan dari source backend. Employee document dan kalender
-  tim yang ternyata sudah tersedia kini dicatat dalam kontrak mobile.
+- Chat ditunda eksplisit dari scope rilis mobile awal; client tidak boleh
+  membuat data contoh atau menebak endpoint. Kontrak chat baru tetap memerlukan
+  keputusan produk pada versi berikutnya. Announcement dashboard, reporting
+  line, next shift, employee document, password recovery, dan kalender tim kini
+  dicatat dalam kontrak mobile.
 - Acceptance live untuk geofence, liveness, tenant isolation, token replay,
   push provider, dan timezone boundary tetap memerlukan deployment, akun
   sintetis, serta perangkat; runner dan checklist sudah disediakan.
@@ -81,11 +110,15 @@ baru:
 
 - `npm run check`
 - `npx prisma validate`
-- Seluruh 96 suite Jest lulus: 904 test lulus dan 89 test dilewati sesuai
+- Seluruh 106 suite Jest lulus: 961 test lulus dan 89 test dilewati sesuai
   konfigurasi integrasi opsional.
-- Seluruh migration berhasil diterapkan dari nol pada MySQL temporer dan
-  `prisma migrate status` melaporkan schema terbaru.
+- Seluruh 63 migration berhasil diterapkan dari nol pada MySQL temporer;
+  `session_version` dan tabel `password_reset_tokens` ikut diverifikasi.
 - `npm audit --omit=dev` melaporkan 0 vulnerability.
-- Fixture JSON dan syntax runner smoke test tervalidasi. Smoke test live belum
-  dijalankan karena URL HTTPS, akun staging, credential provider, dan perangkat
-  belum tersedia di workspace ini.
+- Sembilan suite terfokus password recovery, session-version, konfigurasi,
+  idempotency, CSRF, dan EWA lulus dengan 80 test; compile TypeScript final juga
+  lulus di container.
+- Smoke live 24 operasi sudah dijalankan: 13 respons sukses, 7 mutation menolak
+  payload invalid sesuai kontrak, 2 endpoint aktif tanpa positive fixture, dan
+  2 operasi terblokir karena kalender/shift akun uji. Acceptance HTTPS, provider
+  push/email, dan perangkat nyata tetap belum selesai.

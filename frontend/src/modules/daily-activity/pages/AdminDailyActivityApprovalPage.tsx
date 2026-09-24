@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select2 } from '@/components/ui/select2';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 import {
   RefreshCw, Eye, MapPin, Clock, CheckCircle2, AlertTriangle, XCircle, UserRound,
 } from 'lucide-react';
@@ -45,7 +46,7 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 }
 
 export function AdminDailyActivityApprovalPage() {
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [activities, setActivities] = useState<DailyActivity[]>([]);
   const [loading, setLoading] = useState(false);
   const [typeFilter, setTypeFilter] = useState<DailyActivityType | 'ALL'>('ALL');
@@ -61,7 +62,11 @@ export function AdminDailyActivityApprovalPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetch = async () => {
-    if (!companyId) return;
+    if (!companyId) {
+      setActivities([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await dailyActivityService.findAll(companyId, {

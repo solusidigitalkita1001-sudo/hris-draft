@@ -11,10 +11,12 @@ import {
 } from './user.dto';
 import { assignUserRolesSchema } from '@/modules/rbac/rbac.dto';
 import { auditLog } from '@/shared/middleware/AuditLog';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/', authorize({ resource: 'user', action: 'read' }), userController.findAll.bind(userController));
 router.get('/:id', authorize({ resource: 'user', action: 'read' }), userController.findById.bind(userController));

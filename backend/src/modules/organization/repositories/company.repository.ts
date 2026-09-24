@@ -21,7 +21,17 @@ export class CompanyRepository {
 
     return prisma.company.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        groupId: true,
+        name: true,
+        code: true,
+        timezone: true,
+        currency: true,
+        status: true,
+        group: {
+          select: { id: true, name: true, code: true, status: true },
+        },
         _count: {
           select: {
             branches: true,

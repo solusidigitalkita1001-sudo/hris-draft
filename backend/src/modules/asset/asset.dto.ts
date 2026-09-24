@@ -23,6 +23,13 @@ export const returnAssetSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const myAssetsQuerySchema = z.object({
+  status: z.enum(['ACTIVE', 'RETURNED', 'ALL']).default('ACTIVE'),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export type CreateAssetDTO = z.infer<typeof createAssetSchema>;
 export type AssignAssetDTO = z.infer<typeof assignAssetSchema>;
 export type ReturnAssetDTO = z.infer<typeof returnAssetSchema>;
+export type MyAssetsQueryDTO = z.infer<typeof myAssetsQuerySchema>;

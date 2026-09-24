@@ -8,13 +8,14 @@ import {
 } from '@/shared/context/RequestContext';
 
 /**
- * Company ids the requester administers. `null` means unrestricted
- * (SUPER_ADMIN). User/RBAC admin models are not company-scoped in Prisma,
- * so this guard is the authority boundary for the user module.
+ * Company ids the requester administers. SUPER_ADMIN is intentionally limited
+ * to the explicitly selected active company (checklist #9, option 1). User/RBAC
+ * admin models are not all company-scoped in Prisma, so this guard is the
+ * authority boundary for the user module.
  */
-export function requesterCompanyIds(): string[] | null {
-  if (isSuperAdmin()) return null;
+export function requesterCompanyIds(): string[] {
   const user = getCurrentUser();
+  if (isSuperAdmin()) return user?.companyId ? [user.companyId] : [];
   const scope = new Set(user?.companyScope ?? []);
   if (user?.companyId) scope.add(user.companyId);
   return [...scope];
@@ -29,10 +30,10 @@ export function assertCompanyAccessAuthority(
   opts: { groupId?: string | null; accessScope?: string } = {},
 ): void {
   const allowed = requesterCompanyIds();
-  if (allowed === null) return;
   if (!allowed.includes(targetCompanyId)) {
     throw new ForbiddenError('Cannot manage company access outside your company scope');
   }
+  if (isSuperAdmin()) return;
   if (opts.accessScope === 'GROUP_WIDE' || opts.groupId) {
     const requester = getCurrentUser();
     if (!isGroupAdmin() || !requester?.groupId || (opts.groupId && opts.groupId !== requester.groupId)) {
@@ -53,7 +54,6 @@ interface ScopeCheckableUser {
  */
 export function assertUserWithinScope(user: ScopeCheckableUser): void {
   const allowed = requesterCompanyIds();
-  if (allowed === null) return;
   const companyIds = [
     user.employee?.company?.id,
     ...(user.companyAccesses ?? []).map((access) => access.companyId),
@@ -73,7 +73,7 @@ export async function assertEmployeeWithinScope(employeeId: string): Promise<voi
     prisma.employee.findFirst({ where: { id: employeeId, deletedAt: null }, select: { companyId: true } }));
   if (!employee) throw new NotFoundError('Employee not found');
   const allowed = requesterCompanyIds();
-  if (allowed !== null && !allowed.includes(employee.companyId)) {
+  if (!allowed.includes(employee.companyId)) {
     throw new ForbiddenError('Employee belongs to a company outside your scope');
   }
 }

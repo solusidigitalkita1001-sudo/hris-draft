@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from './auth.service';
+import { passwordResetService } from './password-reset.service';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { Result } from '@/shared/core/Result';
-import { LoginDTO, ChangePasswordDTO, MfaCodeDTO } from './auth.dto';
+import { LoginDTO, ChangePasswordDTO, MfaCodeDTO, ForgotPasswordDTO, ResetPasswordDTO } from './auth.dto';
 import config from '@/config';
 import { clearCsrfToken, issueCsrfToken } from '@/shared/middleware/CsrfProtection';
 
@@ -185,6 +186,32 @@ export class AuthController {
           'Token refreshed successfully'
         )
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/v1/auth/forgot-password */
+  async forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await passwordResetService.requestPasswordReset(req.body as ForgotPasswordDTO, req.ip);
+      res.status(202).json(Result.success(
+        null,
+        'If the account is eligible, password reset instructions will be sent.',
+      ));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/v1/auth/reset-password */
+  async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await passwordResetService.resetPassword(req.body as ResetPasswordDTO);
+      clearAccessCookie(res);
+      clearRefreshCookie(res);
+      clearCsrfToken(res);
+      res.status(200).json(Result.success(null, 'Password reset successful. Please log in again.'));
     } catch (error) {
       next(error);
     }

@@ -68,12 +68,12 @@ export function userEmployeeB(): RequestUserContext {
   });
 }
 
-export function userSuperAdmin(): RequestUserContext {
+export function userSuperAdmin(companyId: string = COMPANY_A_ID): RequestUserContext {
   return makeUserContext({
     id: USER_SUPERADMIN_ID,
     email: 'superadmin@system.com',
     employeeId: null,
-    companyId: COMPANY_A_ID,
+    companyId,
     companyScope: [COMPANY_A_ID, COMPANY_B_ID],
     roles: ['SUPER_ADMIN'],
   });

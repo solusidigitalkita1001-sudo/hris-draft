@@ -35,19 +35,18 @@ const PARENT_SCOPES: Record<string, { relation: string; foreignKey: string }> = 
   AnnouncementRead: { relation: 'announcement', foreignKey: 'announcementId' },
 };
 
-// Mutating Prisma actions. A no-company SUPER_ADMIN (implicit global mode) may
-// read across tenants but must select a company before any of these (#9), so a
-// company-less updateMany/deleteMany can never touch every tenant at once.
 export const TENANT_WRITE_ACTIONS = new Set([
   'create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert',
 ]);
 
-/** Throws when a no-company SUPER_ADMIN attempts a write; reads pass through. */
-export function assertGlobalSuperAdminReadOnly(model: string, action: string): void {
-  if (TENANT_WRITE_ACTIONS.has(action)) {
-    throw new ForbiddenError(
-      `Select a company before modifying tenant data — global SUPER_ADMIN mode is read-only (${model}.${action})`
-    );
+/** No authenticated role may read or write tenant data without a company. */
+export function assertTenantCompanyContext(
+  companyId: string | undefined,
+  model: string,
+  action: string,
+): asserts companyId is string {
+  if (!companyId) {
+    throw new ForbiddenError(`Select an active company before accessing tenant data (${model}.${action})`);
   }
 }
 
@@ -77,10 +76,18 @@ export async function enforceTenantScope(params: Prisma.MiddlewareParams, compan
   const parent = params.model ? PARENT_SCOPES[params.model] : undefined;
   const args: Data = params.args ?? {};
   params.args = args;
-  const tenant = parent
-    ? parent.relation.split('.').reduceRight<Data>((acc, key) => ({ [key]: acc }), { companyId })
-    : { companyId };
+  // Published platform announcements intentionally use companyId=null and are
+  // visible to every authenticated tenant. All other company-scoped models
+  // remain exact-company only. AnnouncementRead follows the same parent rule.
   const filteredActions = new Set(['findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate', 'groupBy', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
+  const mayAccessPlatformAnnouncement = params.model === 'AnnouncementRead'
+    || (params.model === 'Announcement' && !TENANT_WRITE_ACTIONS.has(params.action));
+  const companyConstraint: Data = mayAccessPlatformAnnouncement
+    ? { OR: [{ companyId }, { companyId: null }] }
+    : { companyId };
+  const tenant = parent
+    ? parent.relation.split('.').reduceRight<Data>((acc, key) => ({ [key]: acc }), companyConstraint)
+    : companyConstraint;
   if (filteredActions.has(params.action)) {
     const where = args.where ? object(args.where) : {};
     // Keep unique selectors at top level for Prisma WhereUniqueInput.

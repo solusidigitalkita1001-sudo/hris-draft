@@ -12,6 +12,7 @@ export class AuthRepository {
         id: true,
         email: true,
         passwordHash: true,
+        sessionVersion: true,
         status: true,
         mustChangePassword: true,
         lastLoginAt: true,
@@ -77,6 +78,7 @@ export class AuthRepository {
       select: {
         id: true,
         email: true,
+        sessionVersion: true,
         status: true,
         mustChangePassword: true,
         lastLoginAt: true,
@@ -219,8 +221,118 @@ export class AuthRepository {
       data: {
         passwordHash,
         passwordVersion: 2,
+        sessionVersion: { increment: 1 },
         mustChangePassword: false,
       },
+    });
+  }
+
+  async findPasswordResetUserByEmail(email: string) {
+    return prisma.user.findFirst({
+      where: { email, deletedAt: null },
+      select: { id: true, email: true, status: true },
+    });
+  }
+
+  async findRecentPasswordResetToken(userId: string, since: Date) {
+    return prisma.passwordResetToken.findFirst({
+      // Count every recent request, including a grant disabled after an SMTP
+      // failure. Otherwise a broken provider would bypass the per-account
+      // throttle and allow an unbounded request loop.
+      where: { userId, createdAt: { gte: since } },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createPasswordResetToken(data: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    requestedIp?: string;
+  }) {
+    const now = new Date();
+    return prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.updateMany({
+        where: { userId: data.userId, usedAt: null },
+        data: { usedAt: now },
+      });
+      return tx.passwordResetToken.create({
+        data: {
+          userId: data.userId,
+          tokenHash: data.tokenHash,
+          expiresAt: data.expiresAt,
+          requestedIp: data.requestedIp?.substring(0, 50),
+        },
+      });
+    });
+  }
+
+  async markPasswordResetTokenUsed(id: string) {
+    return prisma.passwordResetToken.updateMany({
+      where: { id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+  }
+
+  async findValidPasswordResetToken(tokenHash: string) {
+    return prisma.passwordResetToken.findFirst({
+      where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
+      select: {
+        id: true,
+        userId: true,
+        user: { select: { passwordHash: true, status: true, deletedAt: true } },
+      },
+    });
+  }
+
+  async consumePasswordResetToken(tokenHash: string, passwordHash: string): Promise<string | null> {
+    const now = new Date();
+    return prisma.$transaction(async (tx) => {
+      const token = await tx.passwordResetToken.findFirst({
+        where: { tokenHash, usedAt: null, expiresAt: { gt: now } },
+        select: {
+          id: true,
+          userId: true,
+          user: { select: { status: true, deletedAt: true } },
+        },
+      });
+      if (!token) return null;
+
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: { id: token.id, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+      if (claimed.count !== 1) return null;
+
+      if (token.user.deletedAt || ['INACTIVE', 'SUSPENDED'].includes(token.user.status)) {
+        return null;
+      }
+
+      await tx.user.update({
+        where: { id: token.userId },
+        data: {
+          passwordHash,
+          passwordVersion: 2,
+          sessionVersion: { increment: 1 },
+          mustChangePassword: false,
+          failedAttempts: 0,
+          lockedUntil: null,
+          status: 'ACTIVE',
+        },
+      });
+      await Promise.all([
+        tx.refreshToken.updateMany({
+          where: { userId: token.userId, isRevoked: false },
+          data: { isRevoked: true },
+        }),
+        tx.passwordResetToken.updateMany({
+          where: { userId: token.userId, usedAt: null },
+          data: { usedAt: now },
+        }),
+        tx.loginAttempt.deleteMany({ where: { userId: token.userId } }),
+      ]);
+      return token.userId;
     });
   }
 

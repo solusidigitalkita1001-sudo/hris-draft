@@ -5,7 +5,7 @@
 > dan konvensi `employeeId` via query yang sudah tidak berlaku).
 > Panduan auth ringkas juga ada di `api-mobile-integration.md`.
 >
-> Baseline: branch `main`, per 12 September 2026.
+> Baseline: branch `feat/mobile-api-gap`, per 21 September 2026.
 
 ---
 
@@ -18,6 +18,13 @@ Local dev     : http://localhost:3000/api/v1
 ```
 
 Semua path di dokumen ini sudah termasuk prefix `/api/v1`.
+
+**Scope rilis mobile awal:** kontrak ini mencakup capability yang tercantum pada
+bagian 4. Chat/messaging, Training/LMS, Performance, onboarding/offboarding,
+pengelolaan MFA, daftar/revoke sesi, dan delete notifikasi tidak termasuk scope
+rilis awal. Client harus menampilkan state “belum tersedia” dan tidak membuat
+data contoh atau menebak endpoint. Penambahan capability tersebut memerlukan
+kontrak produk/API versi berikutnya; ketiadaannya bukan fallback diam-diam.
 
 ---
 
@@ -73,7 +80,9 @@ Tidak butuh access token hidup. Seluruh keluarga refresh token sesi itu di-revok
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | GET | `/auth/me` | Bearer | Profil user + roles/permissions saat ini |
-| POST | `/auth/change-password` | Bearer | Ganti password (`oldPassword`, `newPassword`) |
+| POST | `/auth/change-password` | Bearer | Ganti password (`currentPassword`, `newPassword`) |
+| POST | `/auth/forgot-password` | — | Minta email reset (`email`); selalu `202` agar akun tidak dapat dienumerasi |
+| POST | `/auth/reset-password` | — | Pakai grant sekali pakai (`token`, `password`) dalam 15 menit |
 | POST | `/auth/mfa/setup` | Bearer | Mulai setup TOTP (balas QR/secret) |
 | POST | `/auth/mfa/enable` | Bearer | Aktifkan MFA (`code`) |
 | POST | `/auth/mfa/disable` | Bearer | Nonaktifkan MFA (`code`) |
@@ -92,7 +101,8 @@ Content-Type: application/json
 ```
 
 Untuk mutasi yang aman di-retry (check-in, check-out, pengajuan cuti/izin,
-koreksi, lembur, dan registrasi device), kirim header opsional:
+koreksi, lembur, loan, EWA, aktivitas harian, trip/expense, dan registrasi
+device), kirim header opsional:
 
 ```text
 Idempotency-Key: <16-128 karakter ASCII unik>
@@ -101,7 +111,10 @@ Idempotency-Key: <16-128 karakter ASCII unik>
 Key disimpan 24 jam dan di-scope ke company, user, method, dan path. Request
 ulang dengan key dan payload yang sama mengembalikan response pertama serta
 header `Idempotency-Replayed: true`; payload berbeda atau request yang masih
-diproses menghasilkan `409`.
+diproses menghasilkan `409`. Hanya response sukses `2xx` yang disimpan;
+response validasi/permission/conflict/server-error melepas reservation sehingga
+request yang sudah diperbaiki dapat memakai key yang sama. Urutan key object JSON
+tidak mengubah fingerprint request.
 
 **Envelope sukses:**
 ```json
@@ -144,7 +157,7 @@ Endpoint **self-service** untuk karyawan absen sendiri (tidak butuh permission a
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | GET | `/attendance/me/today` | self | Status absen hari ini + policy (metode diizinkan, wajib GPS/selfie, sudah check-in/out?) |
-| GET | `/attendance/me?month=YYYY-MM` | self | Riwayat absensi sendiri (default bulan berjalan) |
+| GET | `/attendance/me?month=YYYY-MM&page=1&limit=20` | self | Riwayat absensi sendiri (default bulan berjalan), paginated |
 | POST | `/attendance/me/check-in` | self | Clock-in (lihat **§5 payload capture**) |
 | PATCH | `/attendance/me/check-out` | self | Clock-out hari ini (server isi waktu kalau tidak dikirim) |
 
@@ -199,6 +212,12 @@ Endpoint admin/HR (butuh `attendance:read/create/update`):
 
 > Catatan: sebagian endpoint cuti masih pakai permission `leave:read/create`. Untuk employee self-service, pastikan role employee punya izin baca cuti miliknya; kalau di lapangan ketemu 403 buat "cuti saya", itu kandidat perbaikan (pola sama seperti `/me` di modul lain).
 
+Untuk manager Approval Center, action utama leave adalah
+`POST /workflow-engine/instances/:id/actions`. Route domain
+`PATCH /leave/:id/approve|reject|workflow-action` dipertahankan untuk
+kompatibilitas, tetapi client baru tidak boleh mencampur kedua jalur untuk satu
+aksi.
+
 ### 4.4 Izin — `/api/v1/permission-requests`
 
 | Method | Path | Auth | Fungsi |
@@ -209,12 +228,22 @@ Endpoint admin/HR (butuh `attendance:read/create/update`):
 | GET | `/permission-requests` · `/:id` | perm | List/detail (approver) |
 | PATCH | `/permission-requests/:id/approve` \| `/reject` \| `/workflow-action` | approver | Proses |
 
+Untuk manager Approval Center, action utama permission juga memakai
+`POST /workflow-engine/instances/:id/actions`; generic controller tetap
+memanggil handler domain sehingga efek akhirnya tidak dilewati.
+
 ### 4.5 Kalender Kerja / Shift — `/api/v1/work-calendars`
 
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | GET | `/work-calendars/me/resolved?year=YYYY&month=M` | self | Kalender kerja + shift + absence milik sendiri (untuk tampilan jadwal) |
+| GET | `/work-calendars/me/next-shift?from=YYYY-MM-DD` | self | Shift kerja berikutnya pada/selepas tanggal `from`, menyeberang bulan dan melewati cuti/izin penuh |
 | GET | `/work-calendars/holidays/list` | read | Daftar hari libur |
+
+`from` bersifat inklusif dan default-nya adalah tanggal server pada timezone
+company. Pencarian dibatasi 92 hari. Response membawa `timezone`, `serverDate`,
+`fromDate`, `throughDate`, `employee`, dan `shift`; `shift=null` berarti tidak ada
+jadwal kerja dalam horizon tersebut.
 
 **Tukar shift (shift swap) — self-service:**
 
@@ -230,12 +259,26 @@ Endpoint admin/HR (butuh `attendance:read/create/update`):
 
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
-| GET | `/employee-loans/types` | self | Tipe pinjaman |
+| GET | `/employee-loans/types?companyId=` | self | Tipe pinjaman pada company aktif |
 | GET | `/employee-loans/my` | self | Pinjaman milik sendiri |
-| POST | `/employee-loans` | self | Ajukan pinjaman (`loanTypeId`, `amount`, `tenorMonths`, …) |
+| POST | `/employee-loans` | self | Ajukan pinjaman (`loanTypeId`, `amount`, `totalInstallments`, `installmentAmount`, `reason`) |
 | GET | `/employee-loans/:id/installments` · `/amortization` | read | Jadwal cicilan / amortisasi |
 | PATCH | `/employee-loans/:id/cancel` | self | Batalkan (PENDING) |
 | PATCH | `/employee-loans/:id/approve` \| `/reject` \| `/workflow-action` | approver | Proses |
+
+Kontrak data pinjaman:
+
+- `GET /types` mengembalikan array langsung pada `data`; item berisi `id`,
+  `name`, `maxAmount`, `maxInstallments`, `interestRate`, `description`, dan
+  `status`.
+- `GET /my` juga berupa array langsung, bukan `data.items`. Item utamanya
+  mempunyai `id`, `loanTypeId`, `amount`, `totalInstallments`,
+  `installmentAmount`, `remainingBalance`, `reason`, `status`, `notes`,
+  `approvedAt`, `createdAt`, `updatedAt`, relasi `loanType.name`, dan
+  `_count.installments`.
+- Status pinjaman: `PENDING`, `APPROVED`, `REJECTED`, `ACTIVE`, `PAID`, atau
+  `CANCELLED`. Status cicilan: `PENDING`, `PAID`, atau `OVERDUE`. Nilai Decimal
+  harus diperlakukan client sebagai decimal string, bukan floating-point uang.
 
 ### 4.7 Tarik Gaji Awal (EWA) — `/api/v1/ewa`
 
@@ -251,13 +294,35 @@ Endpoint admin/HR (butuh `attendance:read/create/update`):
 
 > Catatan: `POST /ewa` (ajukan) butuh permission `ewa:create`. Kalau role employee belum punya izin itu dan dapat 403 saat mengajukan, itu kandidat perbaikan (samakan dengan pola self-service `/my`).
 
+Kontrak data EWA:
+
+- `GET /my` mengembalikan array langsung. Field stabil meliputi `id`,
+  `requestCode`, `payrollPeriodId`, `periodStart`, `periodEnd`,
+  `earnedGrossReference`, `maxAllowedPercent`, `maxAllowedAtRequest`,
+  `totalApprovedSamePeriod`, `amountRequested`, `adminFee`, `amountPaidOut`,
+  `amountDeductedPayroll`, `status`, `reason`, `approvedAt`, `paidOutAt`,
+  `deductedAt`, `rejectReason`, `cancelledAt`, `createdAt`, dan `updatedAt`.
+- Status: `PENDING`, `APPROVED`, `PAID`, `DEDUCTED`, `REJECTED`, `CANCELLED`.
+  `employeeId`, `companyId`, earned gross, dan batas periode ditentukan server.
+- `GET /my/limit` mengembalikan `max`, `remaining`, `totalApproved`,
+  `totalReserved`, `earnedGrossToDate`, serta `breakdown` (`baseSalary`,
+  `presentDays`, `workDaysInPeriod`, `dailyRate`, `overtimePay`).
+
 ### 4.8 Aktivitas Harian — `/api/v1/daily-activities`
 
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | GET | `/daily-activities/my?startDate=&endDate=` | self | Aktivitas milik sendiri |
-| POST | `/daily-activities` | self | Catat aktivitas (`title`, `activityType`, `startTime`, `endTime`, GPS opsional) — divalidasi geo-radius & overlap jam |
+| POST | `/daily-activities` | `daily-activity:create` | Catat aktivitas (`branchId`, `activityDate`, `activityType`, `title`, `latitude`, `longitude`, `startTime`, `endTime`) — divalidasi geo-radius & overlap jam |
 | GET | `/daily-activities/:id` · PUT `/:id` · DELETE `/:id` | self/perm | Detail/ubah/hapus |
+
+`GET /my` mengembalikan array langsung. Item berisi `id`, `branchId`,
+`activityDate`, `activityType` (`WORK`, `SITE_VISIT`, `SITE_INSPECTION`,
+`MEETING`, `OTHER`), `title`, `description`, `photoUrl`, koordinat,
+`geoAccuracyMeters`, `startTime`, `endTime`, `durationMinutes`,
+`isOutsideRadius`, `distanceFromBranchMeters`, `notes`, timestamp, dan relasi
+`branch` minimal. Identity employee/company, durasi, jarak, dan verdict radius
+selalu berasal dari server. List ini belum paginated.
 
 ### 4.9 Perjalanan & Klaim — `/api/v1/travel-expenses`
 
@@ -281,6 +346,23 @@ Endpoint admin/HR (butuh `attendance:read/create/update`):
 | GET | `/travel-expenses/claims/:id/workflow` | approver | Timeline workflow klaim |
 | PATCH | `/travel-expenses/claims/:id/workflow-action` | approver | Aksi workflow klaim |
 | POST | `/travel-expenses/claims/:id/reimburse` | approver | Catat pembayaran reimbursement |
+
+Kontrak create dan list self-service:
+
+- Trip create: `destination`, `purpose`, `startDate`, `endDate`,
+  `estimatedCost`, `notes?`. Item trip membawa field tersebut ditambah `id`,
+  `status`, `approvedBy`, `approvedAt`, timestamp, `travelAdvances`, dan
+  `_count.expenseClaims`. Status: `REQUESTED`, `APPROVED`, `REJECTED`,
+  `COMPLETED`, `CANCELLED`.
+- Claim create: `tripId?`, `category`, `amount`, `description?`, `expenseDate`,
+  `receiptFilePath?`, `ocrExtractedAmount?`, `notes?`. Kategori:
+  `TRANSPORTATION`, `HOTEL`, `MEAL`, `ENTERTAINMENT`, `OPERATIONAL`; status:
+  `SUBMITTED`, `APPROVED`, `REJECTED`, `REIMBURSED`, `CANCELLED`.
+- Upload receipt adalah `multipart/form-data` field `receipt`; response `data`
+  berisi `fileName`, `originalName`, `mimeType`, `size`, `filePath`, dan `url`.
+  Hanya `filePath` hasil upload milik sesi yang boleh direferensikan create.
+- `GET /trips/my` dan `/claims/my` menerima `status?`, mengembalikan array
+  langsung, dan belum paginated. Identity employee/company ditentukan server.
 
 ### 4.10 Notifikasi — `/api/v1/notifications`
 
@@ -318,6 +400,11 @@ menonaktifkan token agar tidak dicoba terus. FCM memakai HTTP v1; APNs memakai
 token authentication. Credential provider wajib disuplai lewat environment
 worker dan tidak pernah disimpan di database.
 
+Item inbox berisi `id`, `title`, `message`, `type` (`INFO`, `SUCCESS`,
+`WARNING`, `ERROR`), `resource`, `action`, `referenceId`, `isRead`, `readAt`,
+dan `createdAt`. List berada langsung pada `data` dengan metadata `page`,
+`limit`, `total`, `totalPages`, `hasNextPage`, dan `hasPreviousPage`.
+
 ### 4.11 Approval (untuk Manager/Approver) — `/api/v1/workflow-engine`
 
 | Method | Path | Auth | Fungsi |
@@ -327,6 +414,29 @@ worker dan tidak pernah disimpan di database.
 | POST | `/workflow-engine/instances/bulk-approve` | approver | Approve massal |
 | GET/POST | `/workflow-engine/delegations` | self | Lihat/buat delegasi approval (out-of-office) |
 | PATCH | `/workflow-engine/delegations/:id/revoke` | self | Cabut delegasi |
+
+Kontrak Approval Center:
+
+- Queue berada langsung pada `data` dan memakai `meta` pagination standar.
+  Setiap item adalah current `WorkflowInstanceStep`: `id`, `instanceId`,
+  `name`, `level`, `approverType`, approver/backup ID atau role nullable,
+  `status`, `isCurrent`, `actedBy`, `actedAt`, `comment`, dan timestamp.
+- Nested `instance` membawa `id`, `approvalType`, `referenceType`,
+  `referenceId`, `requesterId`, `payload`, `status`, `currentLevel`, timestamp,
+  serta `template { id, name, approvalType }`. Status instance:
+  `PENDING|APPROVED|REJECTED|ESCALATED|CANCELLED`; status step:
+  `PENDING|APPROVED|REJECTED|ESCALATED|SKIPPED`.
+- Single action menerima `{ "action": "APPROVE|REJECT|ESCALATE",
+  "comment"?: string }`. Untuk reference type yang dikenal, `data` adalah
+  hasil domain handler; client wajib refresh queue/detail setelah sukses dan
+  tidak bergantung pada satu shape domain generik.
+- Bulk menerima `instanceIds` (1–100), `action`, dan `comment?`; response
+  `data` stabil: `{ total, successful, failed, results: [{ instanceId,
+  success, error? }] }`. Bulk dapat sukses parsial.
+- Error standar: `400 BAD_REQUEST` untuk transisi/payload domain yang tidak
+  berlaku, `401 AUTHENTICATION_FAILED`, `403 FORBIDDEN`, `404 NOT_FOUND`, `409
+  CONFLICT` untuk action stale/race, dan `422 VALIDATION_ERROR` dengan array
+  `errors`. Self-approval tetap ditolak, termasuk untuk super admin.
 
 ### 4.12 Payslip / Payroll (self) — `/api/v1/payroll`
 
@@ -364,6 +474,7 @@ redirect, atau file sementara dan dibatasi maksimum 5 MB.
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | GET | `/auth/me` | self | Cara termudah ambil profil ringkas (id, roles, permissions, employeeId, companyId) |
+| GET | `/employees/me/reporting-line` | self | Posisi atasan, supervisor utama, dan supervisor alternatif berdasarkan `Position.reportsToId` |
 | GET | `/employees/:id` | perm | Detail karyawan (data sensitif ter-mask sesuai izin) |
 | GET | `/employees/:id/attachments` | perm/self-scope | Metadata lampiran employee |
 
@@ -382,6 +493,36 @@ redirect, atau file sementara dan dibatasi maksimum 5 MB.
 |---|---|---|---|
 | GET | `/work-calendars/team/:managerId?year=&month=` | `work-calendar:read` | Status kalender tim yang dibatasi data scope manager |
 | GET | `/work-calendars/employee/:employeeId?year=&month=` | `work-calendar:read` | Kalender employee yang berada dalam data scope pemanggil |
+
+### 4.16 Announcement — `/api/v1/announcements`
+
+| Method | Path | Auth | Fungsi |
+|---|---|---|---|
+| GET | `/announcements?page=1&limit=20&unreadOnly=false` | self | Announcement visible untuk company/audience pemanggil |
+| GET | `/announcements/unread-count` | self | Jumlah announcement visible yang belum dibaca |
+| GET | `/announcements/:id` | self | Detail announcement; ID di luar audience menghasilkan 404 |
+| PUT | `/announcements/:id/read` | self | Tandai dibaca secara idempotent |
+
+Audience resmi: `ALL`, `COMPANY_WIDE`, `DEPARTMENT_ONLY`, `BRANCH_ONLY`,
+`POSITION_ONLY`, dan `EMPLOYEE_SPECIFIC`. Hanya status `PUBLISHED` dalam jendela
+`publishFrom`/`publishUntil` yang muncul. Pin aktif berada di atas; pin kedaluwarsa
+kembali ke urutan normal. List mengembalikan `contentPreview`, author minimal,
+`isRead`, dan `readAt`; detail menambahkan `content`, `allowComment`, dan
+`totalViews`. Announcement platform `companyId=null` dapat dibaca semua tenant,
+tetapi announcement tenant lain tetap tidak terlihat.
+
+### 4.17 Aset Employee — `/api/v1/assets`
+
+| Method | Path | Auth | Fungsi |
+|---|---|---|---|
+| GET | `/assets/my?status=ACTIVE&page=1&limit=20` | self | Aset yang sedang atau pernah ditugaskan kepada employee dari sesi |
+
+`status` menerima `ACTIVE` (default), `RETURNED`, atau `ALL`. Response memakai
+pagination standar dan hanya memuat identitas aset, serial number, status,
+branch, waktu assignment/return, serta kondisi serah-terima. Nilai pembelian,
+nilai buku, catatan internal aset, dan assignment employee lain tidak pernah
+dikembalikan dari endpoint self-service ini. Route admin `/assets` tetap
+memerlukan permission employee yang sesuai.
 
 ---
 
@@ -419,6 +560,12 @@ POST /api/v1/attendance/me/check-in
 - **Rate limit face:** 5x gagal / 15 menit per karyawan → `429` (HR dinotifikasi). Tampilkan sisa waktu retry ke user.
 - Liveness menolak foto galeri/manipulasi/blur; GPS palsu (mock location) → `400`.
 - Di luar radius: sesuai policy branch → bisa ditandai `requiresReview` (tetap tercatat) atau ditolak.
+- Check-in/check-out adalah operasi **online dan live-only**. Client tidak boleh
+  mengantre punch offline atau mengirim waktu capture perangkat; waktu final
+  selalu waktu server ketika request diterima. Bila jaringan gagal setelah
+  request dikirim, retry request yang sama dengan `Idempotency-Key` yang sama.
+  Bila punch memang tidak pernah mencapai server, gunakan pengajuan koreksi
+  absensi setelah koneksi pulih.
 
 ---
 
@@ -438,6 +585,11 @@ Pakai ini sebagai sumber kebenaran mutlak kalau ada perbedaan versi.
 - **Production masih HTTP polos.** Sampai HTTPS terpasang, token bisa disadap. Pasang HTTPS + certificate pinning sebelum rilis mobile publik.
 - Access token 15 menit → implementasi auto-refresh saat `401` (retry sekali, antrekan request paralel selama refresh).
 - Rate limit login: 10 gagal / 15 menit per IP & per email; 5 gagal → akun terkunci 15 menit.
+- Forgot-password dibatasi 5 request/IP/15 menit dan satu email/user/menit.
+  Token reset 256-bit hanya disimpan sebagai SHA-256, sekali pakai, dan seluruh
+  refresh session user dicabut setelah reset. Access token membawa session
+  version yang diperiksa pada setiap protected request, sehingga token sebelum
+  perubahan password langsung ditolak. SMTP harus diaktifkan eksplisit.
 - Simpan token di Keychain (iOS) / Keystore/EncryptedSharedPreferences (Android), bukan storage polos.
 
 ---
@@ -447,7 +599,7 @@ Pakai ini sebagai sumber kebenaran mutlak kalau ada perbedaan versi.
 1. `POST /auth/login` (header `X-Client-Type: mobile`) → simpan `accessToken` + `refreshToken`.
 2. Semua request berikut: `Authorization: Bearer <accessToken>`.
 3. `GET /auth/me` → tahu roles/permissions untuk atur menu.
-4. Dashboard karyawan: `GET /attendance/me/today`, `GET /notifications/unread-count`, `GET /leave/balances/employee`, `GET /ewa/my/limit`.
+4. Dashboard karyawan: `GET /attendance/me/today`, `GET /work-calendars/me/next-shift`, `GET /notifications/unread-count`, `GET /announcements`, `GET /announcements/unread-count`, `GET /leave/balances/employee`, `GET /ewa/my/limit`.
 5. Absen: `GET /attendance/me/today` → tampilkan metode yang diizinkan → `POST /attendance/me/check-in` → nanti `PATCH /attendance/me/check-out`.
 6. Saat dapat `401`: `POST /auth/refresh` → ganti token → ulangi request. Gagal refresh → paksa login ulang.
 </content>

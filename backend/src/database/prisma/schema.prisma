@@ -2202,6 +2202,7 @@ model User {
   email                  String     @unique @db.VarChar(255)
   passwordHash           String     @map("password_hash") @db.VarChar(255)
   passwordVersion        Int        @default(1) @map("password_version")
+  sessionVersion         Int        @default(1) @map("session_version")
   employeeId             String?    @unique @map("employee_id") @db.VarChar(36)
   status                 UserStatus @default(ACTIVE)
   mustChangePassword     Boolean    @default(true) @map("must_change_password")
@@ -2218,6 +2219,7 @@ model User {
   employee                   Employee?                   @relation("EmployeeUser", fields: [employeeId], references: [id], onDelete: SetNull)
   userRoles                  UserRole[]
   refreshTokens              RefreshToken[]
+  passwordResetTokens        PasswordResetToken[]
   loginLogs                  LoginLog[]
   loginAttempts              LoginAttempt[]
   auditLogs                  AuditLog[]
@@ -2766,6 +2768,24 @@ model RefreshToken {
   @@index([tokenHash])
   @@index([family])
   @@map("refresh_tokens")
+}
+
+/// Single-use password reset grants. Only a SHA-256 digest is persisted; the
+/// raw token exists solely in the email sent to the account owner.
+model PasswordResetToken {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  userId      String    @map("user_id") @db.VarChar(36)
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  requestedIp String?   @map("requested_ip") @db.VarChar(50)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 /// Login logs

@@ -9,10 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { ArrowLeft, Loader2, Play } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useCompanyStore } from '@/stores/company.store';
 
 export function PayrollRunCreate() {
   const navigate = useNavigate();
-  const companyId = localStorage.getItem('companyId') || '';
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
   const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
   const [loadingPeriods, setLoadingPeriods] = useState(true);
@@ -162,4 +163,3 @@ export function PayrollRunCreate() {
     </div>
   );
 }
-

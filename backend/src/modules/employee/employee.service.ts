@@ -84,6 +84,15 @@ export class EmployeeService {
     if (!employee) throw new NotFoundError('Employee not found');
   }
 
+  async getMyReportingLine(employeeId?: string, companyId?: string) {
+    if (!employeeId || !companyId) {
+      throw new NotFoundError('User tidak terhubung ke employee dalam company aktif');
+    }
+    const reportingLine = await employeeRepository.findMyReportingLine(employeeId, companyId);
+    if (!reportingLine) throw new NotFoundError('Employee tidak ditemukan');
+    return reportingLine;
+  }
+
   async getFaceProfile(id: string) {
     const employee = await this.findScopedEmployee(id);
     const profile = await prisma.employeeFaceProfile.findUnique({

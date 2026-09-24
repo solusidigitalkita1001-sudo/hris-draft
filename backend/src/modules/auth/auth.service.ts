@@ -29,6 +29,27 @@ import {
 
 const logger = new WinstonLogger('AuthService');
 
+type AuthContext = AuthResponse['user'] & {
+  sessionVersion: number;
+  hasGlobalRole: boolean;
+  maxRolePriority: number;
+};
+
+function publicAuthUser(context: AuthContext): AuthResponse['user'] {
+  return {
+    id: context.id,
+    email: context.email,
+    employeeId: context.employeeId,
+    name: context.name,
+    roles: context.roles,
+    permissions: context.permissions,
+    companyId: context.companyId,
+    companyScope: context.companyScope,
+    groupId: context.groupId,
+    mustChangePassword: context.mustChangePassword,
+  };
+}
+
 export class AuthService {
   /** Lazily-built Argon2 hash of a random value, for timing-equalized compares. */
   private dummyHash: string | null = null;
@@ -101,6 +122,7 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
+      sessionVersion: user.sessionVersion,
       employeeId: user.employeeId || undefined,
       name: user.employee?.fullName,
       roles,
@@ -220,7 +242,7 @@ export class AuthService {
 
     // Build response
     return {
-      user: authUser,
+      user: publicAuthUser(authUser),
       tokens,
     };
   }
@@ -388,7 +410,7 @@ export class AuthService {
     });
 
     return {
-      user: authUser,
+      user: publicAuthUser(authUser),
       tokens,
     };
   }
@@ -471,7 +493,7 @@ export class AuthService {
     const authUser = await this.buildAuthContext(user);
 
     return {
-      ...authUser,
+      ...publicAuthUser(authUser),
       companyName: user.employee?.company?.name || undefined,
       lastLoginAt: user.lastLoginAt,
     };
@@ -480,18 +502,7 @@ export class AuthService {
   // ==================== Private Methods ====================
 
   private async generateTokens(
-    user: {
-      id: string;
-      email: string;
-      employeeId?: string;
-      companyId?: string;
-      companyScope: string[];
-      groupId?: string;
-      permissions: string[];
-      roles: string[];
-      hasGlobalRole: boolean;
-      maxRolePriority: number;
-    },
+    user: AuthContext,
     ipAddress?: string,
     userAgent?: string,
     existingFamily?: string
@@ -500,6 +511,7 @@ export class AuthService {
     const accessToken = jwtHandler.generateAccessToken({
       sub: user.id,
       email: user.email,
+      sessionVersion: user.sessionVersion,
       employeeId: user.employeeId,
       companyId: user.companyId,
       companyScope: user.companyScope,

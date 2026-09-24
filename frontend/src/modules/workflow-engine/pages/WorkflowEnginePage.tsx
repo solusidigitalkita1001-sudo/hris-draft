@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useCompanyStore } from '@/stores/company.store';
 import { apiErrorMessage } from '@/lib/errors';
 import {
   workflowEngineService,
@@ -537,6 +538,7 @@ function StartInstanceForm({
 
 export function WorkflowEnginePage() {
   const { user } = useAuthStore();
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [activeTab, setActiveTab] = useState<'templates' | 'approvals' | 'instances'>('templates');
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
@@ -548,7 +550,6 @@ export function WorkflowEnginePage() {
   const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplate | null>(null);
   const [deletingTemplate, setDeletingTemplate] = useState<WorkflowTemplate | null>(null);
 
-  const companyId = user?.companyId || localStorage.getItem('companyId') || '';
   const isConfigAdmin = useMemo(
     () => !!user && user.roles.some((role) => ['SUPER_ADMIN', 'GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER'].includes(role)),
     [user]

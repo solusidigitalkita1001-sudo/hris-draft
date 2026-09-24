@@ -292,10 +292,10 @@ describe('CompanyScope Cross-Tenant — Employee Module (Task 1.1)', () => {
     });
   });
 
-  describe('SUPER_ADMIN / GROUP_ADMIN Bypass Company Scope', () => {
-    it('SUPER_ADMIN findById employee company B → sukses', async () => {
+  describe('SUPER_ADMIN / GROUP_ADMIN selected-company access', () => {
+    it('SUPER_ADMIN with company B active can read employee company B', async () => {
       jest.spyOn(prisma.employee, 'findFirst').mockResolvedValue(mockEmployeeB);
-      const res = await runAs(userSuperAdmin(), () => employeeService.findById(EMPLOYEE_B_ID));
+      const res = await runAs(userSuperAdmin(COMPANY_B_ID), () => employeeService.findById(EMPLOYEE_B_ID));
       expect(res.id).toBe(EMPLOYEE_B_ID);
       expect(res.companyId).toBe(COMPANY_B_ID);
     });

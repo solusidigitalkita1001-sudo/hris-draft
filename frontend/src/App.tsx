@@ -1,20 +1,10 @@
 import { RouterProvider } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { router } from '@/routes';
 import { I18nProvider } from '@/i18n/provider';
 import { PopupHost } from '@/components/ui/popup-host';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 30 * 60 * 1000, // 30 minutes
-    },
-  },
-});
+import { queryClient } from '@/lib/query-client';
 
 export function App() {
   return (

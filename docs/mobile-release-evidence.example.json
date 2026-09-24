@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "targetBaseUrl": "https://staging.example.test/api/v1",
+  "deployment": {
+    "apiVersion": "replace-with-deployed-commit",
+    "workerVersion": "replace-with-deployed-commit"
+  },
+  "migration": {
+    "status": "PENDING"
+  },
+  "providerEnvironment": "staging",
+  "device": {
+    "os": "replace-with-device-os",
+    "appVersion": "replace-with-app-version"
+  },
+  "syntheticRecordIds": [
+    "replace-with-synthetic-employee-id"
+  ],
+  "manualCases": {
+    "geofenceInside": { "status": "PENDING", "evidence": "" },
+    "geofenceOutside": { "status": "PENDING", "evidence": "" },
+    "fakeGps": { "status": "PENDING", "evidence": "" },
+    "liveness": { "status": "PENDING", "evidence": "" },
+    "galleryImage": { "status": "PENDING", "evidence": "" },
+    "idempotentRetry": { "status": "PENDING", "evidence": "" },
+    "changedReplay": { "status": "PENDING", "evidence": "" },
+    "tenantIsolation": { "status": "PENDING", "evidence": "" },
+    "timezoneBoundary": { "status": "PENDING", "evidence": "" },
+    "pushDelivery": { "status": "PENDING", "evidence": "" },
+    "invalidPushToken": { "status": "PENDING", "evidence": "" },
+    "payrollLocked": { "status": "PENDING", "evidence": "" },
+    "payrollUnlock": { "status": "PENDING", "evidence": "" },
+    "payrollLockout": { "status": "PENDING", "evidence": "" }
+  }
+}

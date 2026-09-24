@@ -1,15 +1,15 @@
-import { Router } from 'express';
+import { NextFunction, Response, Router } from 'express';
 import { groupController } from './controllers/group.controller';
 import { companyController } from './controllers/company.controller';
 import { branchController } from './controllers/branch.controller';
 import { divisionController } from './controllers/division.controller';
 import { departmentController } from './controllers/department.controller';
 import { positionController } from './controllers/position.controller';
-import { authenticate } from '@/shared/middleware/Authenticate';
+import { authenticate, AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
-import { auditLog } from '@/shared/middleware/AuditLog';
+import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import {
   createGroupSchema,
   updateGroupSchema,
@@ -27,29 +27,43 @@ import {
 } from './organization.dto';
 
 const router = Router();
+const selectCompanyFromPath = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+  req.params.companyId = req.params.id;
+  next();
+};
+const auditSuperAdminPlatformDirectory = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  if (!req.user?.roles?.includes('SUPER_ADMIN')) {
+    next();
+    return;
+  }
+  auditView({ action: 'SUPER_ADMIN_PLATFORM_DIRECTORY_ACCESS', entity: 'OrganizationDirectory' })(req, res, next);
+};
 
 // All organization routes require authentication
 router.use(authenticate);
-router.use(requireCompanyAccess());
 
 // ==================== Company Groups ====================
-router.get('/groups', authorize({ resource: 'organization', action: 'read' }), groupController.findAll.bind(groupController));
-router.get('/groups/:id', authorize({ resource: 'organization', action: 'read' }), groupController.findById.bind(groupController));
+router.get('/groups', auditSuperAdminPlatformDirectory, authorize({ resource: 'organization', action: 'read' }), groupController.findAll.bind(groupController));
+router.get('/groups/:id', auditSuperAdminPlatformDirectory, authorize({ resource: 'organization', action: 'read' }), groupController.findById.bind(groupController));
 router.post('/groups', authorize({ resource: 'organization', action: 'create' }), auditLog({ action: 'CREATE', entity: 'CompanyGroup' }), validate(createGroupSchema), groupController.create.bind(groupController));
 router.put('/groups/:id', authorize({ resource: 'organization', action: 'update' }), auditLog({ action: 'UPDATE', entity: 'CompanyGroup', model: 'companyGroup' }), validate(updateGroupSchema), groupController.update.bind(groupController));
 router.delete('/groups/:id', authorize({ resource: 'organization', action: 'delete' }), auditLog({ action: 'DELETE', entity: 'CompanyGroup', model: 'companyGroup' }), groupController.delete.bind(groupController));
 
 // ==================== Companies ====================
-router.get('/companies', authorize({ resource: 'organization', action: 'read' }), companyController.findAll.bind(companyController));
-router.get('/companies/:id', authorize({ resource: 'organization', action: 'read' }), companyController.findById.bind(companyController));
+router.get('/companies', auditSuperAdminPlatformDirectory, authorize({ resource: 'organization', action: 'read' }), companyController.findAll.bind(companyController));
 router.post('/companies', authorize({ resource: 'organization', action: 'create' }), auditLog({ action: 'CREATE', entity: 'Company' }), validate(createCompanySchema), companyController.create.bind(companyController));
-router.put('/companies/:id', authorize({ resource: 'organization', action: 'update' }), auditLog({ action: 'UPDATE', entity: 'Company', model: 'company' }), validate(updateCompanySchema), companyController.update.bind(companyController));
-router.delete('/companies/:id', authorize({ resource: 'organization', action: 'delete' }), auditLog({ action: 'DELETE', entity: 'Company', model: 'company' }), companyController.delete.bind(companyController));
-router.get('/companies/:id/attendance-policy', authorize({ resource: 'organization', action: 'read' }), companyController.getDefaultAttendancePolicy.bind(companyController));
-router.put('/companies/:id/attendance-policy', authorize({ resource: 'organization', action: 'update' }), auditLog({ action: 'UPSERT_ATTENDANCE_POLICY', entity: 'Company' }), validate(upsertBranchAttendancePolicySchema), companyController.upsertDefaultAttendancePolicy.bind(companyController));
-router.delete('/companies/:id/attendance-policy', authorize({ resource: 'organization', action: 'delete' }), auditLog({ action: 'DELETE_ATTENDANCE_POLICY', entity: 'Company' }), companyController.deleteDefaultAttendancePolicy.bind(companyController));
+router.get('/companies/:id', selectCompanyFromPath, requireCompanyAccess(), authorize({ resource: 'organization', action: 'read' }), companyController.findById.bind(companyController));
+router.put('/companies/:id', selectCompanyFromPath, requireCompanyAccess(), authorize({ resource: 'organization', action: 'update' }), auditLog({ action: 'UPDATE', entity: 'Company', model: 'company' }), validate(updateCompanySchema), companyController.update.bind(companyController));
+router.delete('/companies/:id', selectCompanyFromPath, requireCompanyAccess(), authorize({ resource: 'organization', action: 'delete' }), auditLog({ action: 'DELETE', entity: 'Company', model: 'company' }), companyController.delete.bind(companyController));
+router.get('/companies/:id/attendance-policy', selectCompanyFromPath, requireCompanyAccess(), authorize({ resource: 'organization', action: 'read' }), companyController.getDefaultAttendancePolicy.bind(companyController));
+router.put('/companies/:id/attendance-policy', selectCompanyFromPath, requireCompanyAccess(), authorize({ resource: 'organization', action: 'update' }), auditLog({ action: 'UPSERT_ATTENDANCE_POLICY', entity: 'Company' }), validate(upsertBranchAttendancePolicySchema), companyController.upsertDefaultAttendancePolicy.bind(companyController));
+router.delete('/companies/:id/attendance-policy', selectCompanyFromPath, requireCompanyAccess(), authorize({ resource: 'organization', action: 'delete' }), auditLog({ action: 'DELETE_ATTENDANCE_POLICY', entity: 'Company' }), companyController.deleteDefaultAttendancePolicy.bind(companyController));
 
 // ==================== Branches ====================
+// Group/company registry endpoints above are the tenant-neutral discovery and
+// provisioning surface. Every tenant-owned endpoint below requires an active
+// company, including SUPER_ADMIN.
+router.use(requireCompanyAccess());
 router.get('/branches', authorize({ resource: 'organization', action: 'read' }), branchController.findAll.bind(branchController));
 router.get('/branches/:id', authorize({ resource: 'organization', action: 'read' }), branchController.findById.bind(branchController));
 router.post('/branches', authorize({ resource: 'organization', action: 'create' }), auditLog({ action: 'CREATE', entity: 'Branch' }), validate(createBranchSchema), branchController.create.bind(branchController));

@@ -3,9 +3,11 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { auditLogController } from './audit-log.controller';
 import { auditView } from '@/shared/middleware/AuditLog';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
 router.use(authenticate);
+router.use(requireCompanyAccess());
 
 router.get('/', authorize({ resource: 'audit-log', action: 'read' }), auditLogController.findAll.bind(auditLogController));
 router.get('/verify-integrity', authorize({ resource: 'audit-log', action: 'read' }), auditLogController.verifyIntegrity.bind(auditLogController));

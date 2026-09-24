@@ -136,4 +136,52 @@ describe('API CSRF bootstrap and session rotation', () => {
     await api.post('/auth/login');
     expect(bootstrap).toHaveBeenCalledTimes(2);
   });
+
+  it('takes company context from the central store and overwrites stale request params', async () => {
+    const { useCompanyStore } = await import('@/stores/company.store');
+    useCompanyStore.getState().setActiveCompany({
+      id: 'company-b', groupId: 'group-1', name: 'Company B', code: 'B',
+      timezone: 'Asia/Jakarta', currency: 'IDR', status: 'ACTIVE',
+    });
+    const seen: InternalAxiosRequestConfig[] = [];
+    api.defaults.adapter = async (config) => {
+      seen.push(config);
+      return response(config, {});
+    };
+
+    await api.get('/employees', { params: { companyId: 'stale-company-a' } });
+    await api.get('/organization/companies');
+
+    expect(seen[0].params).toMatchObject({ companyId: 'company-b' });
+    expect(seen[1].params?.companyId).toBeUndefined();
+  });
+
+  it('aborts a pending tenant request before sending requests for the next company', async () => {
+    const { useCompanyStore } = await import('@/stores/company.store');
+    useCompanyStore.getState().setActiveCompany({
+      id: 'company-a', groupId: 'group-1', name: 'Company A', code: 'A',
+      timezone: 'Asia/Jakarta', currency: 'IDR', status: 'ACTIVE',
+    });
+    let firstConfig: InternalAxiosRequestConfig | undefined;
+    api.defaults.adapter = (config) => new Promise((_resolve, reject) => {
+      firstConfig = config;
+      config.signal?.addEventListener?.('abort', () => reject(new axios.CanceledError()));
+    });
+
+    const pending = api.get('/employees').catch((error) => error);
+    await vi.waitFor(() => expect(firstConfig?.params).toMatchObject({ companyId: 'company-a' }));
+
+    useCompanyStore.getState().setActiveCompany({
+      id: 'company-b', groupId: 'group-1', name: 'Company B', code: 'B',
+      timezone: 'Asia/Jakarta', currency: 'IDR', status: 'ACTIVE',
+    });
+
+    expect(axios.isCancel(await pending)).toBe(true);
+    expect(firstConfig?.signal?.aborted).toBe(true);
+
+    api.defaults.adapter = async (config) => response(config, {});
+    const next = await api.get('/employees');
+    expect(next.config.params).toMatchObject({ companyId: 'company-b' });
+    expect(next.config.signal?.aborted).toBe(false);
+  });
 });

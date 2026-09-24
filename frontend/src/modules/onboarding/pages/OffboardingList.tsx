@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Plus, LogOut, UserRound, X } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { useCompanyStore } from '@/stores/company.store';
 
 const STYLES: Record<string, string> = {
   SUBMITTED: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
@@ -15,6 +16,7 @@ const STYLES: Record<string, string> = {
 
 export function OffboardingList() {
   const navigate = useNavigate();
+  const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [resignations, setResignations] = useState<Resignation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -26,13 +28,17 @@ export function OffboardingList() {
   });
 
   const fetchData = useCallback(async () => {
+    if (!companyId) {
+      setResignations([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const cid = localStorage.getItem('companyId') || '';
-      const data = await onboardingService.getResignations(cid);
+      const data = await onboardingService.getResignations(companyId);
       setResignations(data);
     } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, []);
+  }, [companyId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -45,12 +51,11 @@ export function OffboardingList() {
     if (!formData.employeeId || !formData.resignationDate) return;
     setSubmitting(true);
     try {
-      const cid = localStorage.getItem('companyId') || '';
       await onboardingService.createResignation({
         employeeId: formData.employeeId,
         reason: formData.reason,
         resignDate: formData.resignationDate,
-        companyId: cid,
+        companyId,
       });
       setShowModal(false);
       setFormData({ employeeId: '', reason: '', resignationDate: '' });
