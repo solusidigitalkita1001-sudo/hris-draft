@@ -1,40 +1,37 @@
 import { cn } from '@/utils/cn';
 import { useI18n } from '@/i18n/provider';
-import type { Language } from '@/i18n/translations';
 
-export function LanguageSwitcher({ compact = false, className }: { compact?: boolean; className?: string }) {
+/**
+ * Switch bilingual ID/EN sesuai handoff: track pill dengan knob yang
+ * meluncur (.28s cubic-bezier(.22,.9,.3,1)).
+ */
+export function LanguageSwitcher({ className }: { compact?: boolean; className?: string }) {
   const { language, setLanguage, t } = useI18n();
-
-  const languages: Array<{ code: Language; label: string }> = [
-    { code: 'id', label: 'ID' },
-    { code: 'en', label: 'EN' },
-  ];
+  const isEn = language === 'en';
 
   return (
-    <div
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isEn}
+      aria-label={t('common.language')}
+      onClick={() => setLanguage(isEn ? 'id' : 'en')}
       className={cn(
-        'inline-flex items-center rounded-md border border-border bg-background p-1',
-        compact ? 'gap-1' : 'gap-2',
+        'relative inline-flex h-8 w-[76px] shrink-0 items-center rounded-full border border-border bg-muted text-[11px] font-semibold',
         className
       )}
-      aria-label={t('common.language')}
     >
-      {!compact && <span className="px-2 text-xs text-muted-foreground">{t('common.language')}</span>}
-      {languages.map((item) => (
-        <button
-          key={item.code}
-          type="button"
-          onClick={() => setLanguage(item.code)}
-          className={cn(
-            'rounded px-2.5 py-1 text-xs font-medium transition-colors',
-            language === item.code
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          )}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
+      <span
+        aria-hidden="true"
+        className="absolute top-0.5 h-[26px] w-[34px] rounded-full bg-card shadow-card transition-transform duration-[280ms] ease-[cubic-bezier(.22,.9,.3,1)]"
+        style={{ transform: isEn ? 'translateX(38px)' : 'translateX(3px)' }}
+      />
+      <span className={cn('relative z-10 flex-1 text-center transition-colors', !isEn ? 'text-foreground' : 'text-muted-foreground')}>
+        ID
+      </span>
+      <span className={cn('relative z-10 flex-1 text-center transition-colors', isEn ? 'text-foreground' : 'text-muted-foreground')}>
+        EN
+      </span>
+    </button>
   );
 }

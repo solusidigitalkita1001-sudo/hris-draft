@@ -17,16 +17,17 @@ export function DashboardLayout() {
   const activeCompanyId = useCompanyStore((s) => s.activeCompanyId);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="anim-shell-enter min-h-screen bg-background">
       <Sidebar />
       <div
         className={cn(
-          'transition-all duration-300 ease-in-out',
-          sidebarCollapsed ? 'lg:ml-[64px]' : 'lg:ml-[260px]'
+          'transition-all duration-300 ease-[cubic-bezier(.22,.9,.3,1)]',
+          // Sidebar "Melayang": lebar panel (246/78) + margin kiri 14px
+          sidebarCollapsed ? 'lg:ml-[92px]' : 'lg:ml-[260px]'
         )}
       >
         <TopNavigation />
-        <main className="min-w-0 p-4 lg:p-6">
+        <main className="min-w-0 p-4 pb-24 lg:p-7 lg:pb-7">
           <Suspense fallback={
             <div className="flex min-h-[40vh] items-center justify-center gap-3" role="status" aria-live="polite">
               <Loader2 className="animate-spin text-primary" size={20} aria-hidden="true" />

@@ -13,6 +13,7 @@ import {
 import { useI18n } from '@/i18n/provider';
 import type { TranslationKey } from '@/i18n/translations';
 import { cn } from '@/utils/cn';
+import { getInitials } from '@/utils/format';
 import {
   LayoutDashboard,
   Users,
@@ -23,7 +24,6 @@ import {
   Calendar,
   LogOut,
   ChevronLeft,
-  ChevronRight,
   UserSquare2,
   Banknote,
   ClipboardList,
@@ -48,8 +48,11 @@ import {
   Menu as MenuIcon,
   ShieldCheck,
   Wallet,
+  Receipt,
+  X,
 } from 'lucide-react';
 import { administrationService } from '@/services/administration.service';
+import { SidebarAttendanceCard } from './SidebarAttendanceCard';
 
 interface NavItem {
   labelKey: TranslationKey;
@@ -62,13 +65,13 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     labelKey: 'sidebar.dashboard',
-    icon: <LayoutDashboard size={18} />,
+    icon: <LayoutDashboard size={17} />,
     path: '/dashboard',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.organization',
-    icon: <Building2 size={18} />,
+    icon: <Building2 size={17} />,
     access: {
       requireAuth: true,
       requiredPermissions: [{ resource: 'organization', action: 'read' }],
@@ -85,37 +88,43 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.selfService',
-    icon: <UserCheck size={18} />,
+    icon: <UserCheck size={17} />,
     path: '/self-service',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
+    labelKey: 'sidebar.myPayslips',
+    icon: <Receipt size={17} />,
+    path: '/my-payslips',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
     labelKey: 'sidebar.loan',
-    icon: <Banknote size={18} />,
+    icon: <Banknote size={17} />,
     path: '/employee-loans',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.ewa',
-    icon: <Wallet size={18} />,
+    icon: <Wallet size={17} />,
     path: '/ewa',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.dailyActivity',
-    icon: <MapPin size={18} />,
+    icon: <MapPin size={17} />,
     path: '/daily-activity',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.travelExpense',
-    icon: <Plane size={18} />,
+    icon: <Plane size={17} />,
     path: '/travel-expenses',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.workflow',
-    icon: <Workflow size={18} />,
+    icon: <Workflow size={17} />,
     path: '/workflow-engine',
     access: {
       requireAuth: true,
@@ -125,7 +134,7 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.documents',
-    icon: <FileText size={18} />,
+    icon: <FileText size={17} />,
     path: '/documents',
     access: {
       requireAuth: true,
@@ -135,7 +144,7 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.employees',
-    icon: <Users size={18} />,
+    icon: <Users size={17} />,
     path: '/employees',
     access: {
       requireAuth: true,
@@ -145,17 +154,18 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.attendance',
-    icon: <Clock size={18} />,
+    icon: <Clock size={17} />,
     path: '/attendance',
     access: {
       requireAuth: true,
       requiredPermissions: [{ resource: 'attendance', action: 'read' }],
-      requiredRoles: OPERATIONAL_ROLES,
+      // Karyawan biasa juga melihat menu ini untuk self check-in & riwayat sendiri.
+      requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES,
     },
   },
   {
     labelKey: 'sidebar.workCalendar',
-    icon: <CalendarDays size={18} />,
+    icon: <CalendarDays size={17} />,
     access: {
       requireAuth: true,
       requiredPermissions: [{ resource: 'work-calendar', action: 'read' }],
@@ -169,7 +179,7 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.leave',
-    icon: <Calendar size={18} />,
+    icon: <Calendar size={17} />,
     path: '/leave',
     access: {
       requireAuth: true,
@@ -179,7 +189,7 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.offboarding',
-    icon: <LogOut size={18} />,
+    icon: <LogOut size={17} />,
     path: '/offboarding',
     access: {
       requireAuth: true,
@@ -189,7 +199,7 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.assets',
-    icon: <Package size={18} />,
+    icon: <Package size={17} />,
     path: '/assets',
     access: {
       requireAuth: true,
@@ -199,19 +209,19 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.payroll',
-    icon: <Banknote size={18} />,
+    icon: <Banknote size={17} />,
     path: '/payroll',
     access: { requireAuth: true, requiredPermissions: [{ resource: 'payroll', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
   },
   {
     labelKey: 'sidebar.benefits',
-    icon: <Heart size={18} />,
+    icon: <Heart size={17} />,
     path: '/benefits',
     access: { requireAuth: true, requiredPermissions: [{ resource: 'benefit', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
   },
   {
     labelKey: 'sidebar.recruitment',
-    icon: <UserSquare2 size={18} />,
+    icon: <UserSquare2 size={17} />,
     access: { requireAuth: true, requiredPermissions: [{ resource: 'recruitment', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
     children: [
       { labelKey: 'sidebar.recruitment.jobs', icon: <Briefcase size={16} />, path: '/recruitment' },
@@ -222,7 +232,7 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.performance',
-    icon: <BarChart3 size={18} />,
+    icon: <BarChart3 size={17} />,
     access: { requireAuth: true, requiredPermissions: [{ resource: 'performance', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
     children: [
       { labelKey: 'sidebar.performance.dashboard', icon: <BarChart3 size={16} />, path: '/performance' },
@@ -233,13 +243,13 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.lms',
-    icon: <GraduationCap size={18} />,
+    icon: <GraduationCap size={17} />,
     path: '/lms',
     access: { requireAuth: true, requiredPermissions: [{ resource: 'training', action: 'read' }], requiredRoles: OPERATIONAL_ROLES },
   },
   {
     labelKey: 'sidebar.reports',
-    icon: <FileText size={18} />,
+    icon: <FileText size={17} />,
     path: '/reports',
     access: {
       requireAuth: true,
@@ -249,7 +259,7 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'sidebar.administration',
-    icon: <Shield size={18} />,
+    icon: <Shield size={17} />,
     access: { requireAuth: true, requiredRoles: ADMIN_ROLES },
     children: [
       {
@@ -339,78 +349,185 @@ function filterNavItems(
   }, []);
 }
 
-function NavItemComponent({
+function isItemActive(item: NavItem, pathname: string): boolean {
+  if (item.path) {
+    if (item.path === '/recruitment' || item.path === '/performance' || item.path === '/work-calendar') {
+      return pathname === item.path;
+    }
+    return pathname === item.path || pathname.startsWith(`${item.path}/`);
+  }
+  return (item.children ?? []).some((child) => isItemActive(child, pathname));
+}
+
+function NavEntry({
   item,
   collapsed,
-  depth = 0,
+  isOpen,
+  onToggleGroup,
+  onNavigate,
+  onExpandSidebar,
 }: {
   item: NavItem;
   collapsed: boolean;
-  depth?: number;
+  isOpen: boolean;
+  onToggleGroup: (key: string) => void;
+  onNavigate: (path: string) => void;
+  onExpandSidebar: (groupKey: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
   const { t } = useI18n();
-  const isActive = item.path ? location.pathname.startsWith(item.path) : false;
-  const hasChildren = item.children && item.children.length > 0;
+  const hasChildren = !!item.children?.length;
+  const active = isItemActive(item, location.pathname);
+  const selfActive = item.path
+    ? location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+    : false;
 
-  const handleClick = useCallback(() => {
+  const handleClick = () => {
     if (hasChildren) {
-      setExpanded(!expanded);
+      if (collapsed) {
+        onExpandSidebar(item.labelKey);
+        return;
+      }
+      onToggleGroup(item.labelKey);
+      return;
     }
-    if (item.path) {
-      navigate(item.path);
-    }
-  }, [hasChildren, expanded, item.path, navigate]);
+    if (item.path) onNavigate(item.path);
+  };
 
   return (
-    <div>
+    <div className="flex flex-col gap-0.5">
       <button
         onClick={handleClick}
+        title={collapsed ? t(item.labelKey) : undefined}
         className={cn(
-          'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
-          isActive
-            ? 'bg-sidebar-active text-white'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground',
+          'relative flex w-full items-center gap-3 whitespace-nowrap rounded-[14px] px-3 py-[11px] text-[12.5px] transition-colors',
+          selfActive || (hasChildren && active && !isOpen)
+            ? 'bg-accent font-semibold text-primary'
+            : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground',
           collapsed && 'justify-center px-2'
         )}
-        title={collapsed ? t(item.labelKey) : undefined}
+        aria-expanded={hasChildren ? isOpen : undefined}
       >
-        <span className="shrink-0">{item.icon}</span>
-        {!collapsed && (
-          <>
-            <span className="flex-1 text-left">{t(item.labelKey)}</span>
-            {hasChildren && (
-              <ChevronDown
-                size={14}
-                className={cn('transition-transform', expanded && 'rotate-180')}
-              />
-            )}
-          </>
+        {/* Bar aksen kiri — menyala saat item (atau salah satu child-nya) aktif */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-r-[3px] bg-primary transition-all duration-[220ms] ease-[cubic-bezier(.22,.9,.3,1)]',
+            active ? 'h-[18px]' : 'h-0'
+          )}
+        />
+        <span className="flex h-[18px] w-[18px] flex-none items-center justify-center">{item.icon}</span>
+        {!collapsed && <span className="min-w-0 flex-1 overflow-hidden text-left">{t(item.labelKey)}</span>}
+        {!collapsed && hasChildren && (
+          <ChevronDown
+            size={12}
+            aria-hidden="true"
+            className={cn('transition-transform duration-[240ms] ease-[cubic-bezier(.22,.9,.3,1)]', isOpen && 'rotate-180')}
+          />
+        )}
+        {collapsed && hasChildren && (
+          <span
+            aria-hidden="true"
+            className={cn('absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full', active ? 'bg-primary' : 'bg-sidebar-muted/50')}
+          />
         )}
       </button>
 
-      {!collapsed && expanded && hasChildren && (
-        <div className="ml-6 mt-1 space-y-1">
-          {item.children!.map((child, idx) => (
-            <NavItemComponent key={idx} item={child} collapsed={collapsed} depth={depth + 1} />
-          ))}
+      {!collapsed && hasChildren && isOpen && (
+        <div className="my-0.5 ml-[21px] flex flex-col gap-px border-l-[1.5px] border-sidebar-border pl-[11px]">
+          {item.children!.map((child) => {
+            const childActive = child.path
+              ? location.pathname === child.path || location.pathname.startsWith(`${child.path}/`)
+              : false;
+            return (
+              <button
+                key={child.labelKey}
+                onClick={() => child.path && onNavigate(child.path)}
+                className={cn(
+                  'flex w-full items-center gap-2.5 whitespace-nowrap rounded-[11px] px-[11px] py-[9px] text-[11.5px] transition-colors',
+                  childActive
+                    ? 'bg-accent font-semibold text-primary'
+                    : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground'
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn('h-[5px] w-[5px] flex-none rounded-full', childActive ? 'bg-primary' : 'bg-sidebar-muted/50')}
+                />
+                <span className="min-w-0 flex-1 overflow-hidden text-ellipsis text-left">{t(child.labelKey)}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
+/** Bottom nav mobile sesuai handoff: tujuan utama ESS + Profil. */
+function MobileBottomNav({ visiblePaths }: { visiblePaths: Set<string> }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuthStore();
+
+  const items = [
+    { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
+    { path: '/self-service', label: 'Self', icon: <UserCheck size={19} /> },
+    { path: '/employee-loans', label: 'Pinjaman', icon: <Banknote size={19} /> },
+    { path: '/notifications', label: 'Notifikasi', icon: <Bell size={19} /> },
+  ].filter((item) => item.path === '/notifications' || visiblePaths.has(item.path));
+
+  return (
+    <nav
+      className="fixed bottom-[14px] left-[14px] right-[14px] z-40 flex h-[68px] items-stretch rounded-[24px] border border-border bg-card/95 shadow-nav backdrop-blur-md lg:hidden"
+      aria-label="Navigasi utama"
+    >
+      {items.map((item) => {
+        const active = location.pathname.startsWith(item.path);
+        return (
+          <button
+            key={item.path}
+            onClick={() => navigate(item.path)}
+            className={cn(
+              'flex flex-1 flex-col items-center justify-center gap-1 text-[9.5px]',
+              active ? 'font-semibold text-primary' : 'text-muted-foreground'
+            )}
+          >
+            {item.icon}
+            {item.label}
+          </button>
+        );
+      })}
+      <button
+        onClick={() => navigate('/profile')}
+        className={cn(
+          'flex flex-1 flex-col items-center justify-center gap-1 text-[9.5px]',
+          location.pathname.startsWith('/profile') ? 'font-semibold text-primary' : 'text-muted-foreground'
+        )}
+      >
+        <span
+          className={cn(
+            'flex h-[22px] w-[22px] items-center justify-center rounded-full text-[9px] font-semibold',
+            location.pathname.startsWith('/profile') ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'
+          )}
+        >
+          {user?.name ? getInitials(user.name) : 'U'}
+        </span>
+        Profil
+      </button>
+    </nav>
+  );
+}
+
 export function Sidebar() {
   const navigate = useNavigate();
-  const { sidebarCollapsed, toggleSidebar, sidebarMobileOpen, setSidebarMobileOpen } = useUIStore();
-  const { logout, user } = useAuthStore();
+  const { sidebarCollapsed, setSidebarCollapsed, sidebarMobileOpen, setSidebarMobileOpen } = useUIStore();
+  const { user } = useAuthStore();
   const { activeCompany } = useCompanyStore();
   const { t } = useI18n();
 
   const [deniedMenuPaths, setDeniedMenuPaths] = useState<Set<string>>(new Set());
-  const [_denyLoading, setDenyLoading] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -423,7 +540,6 @@ export function Sidebar() {
         setDeniedMenuPaths(new Set());
         return;
       }
-      setDenyLoading(true);
       try {
         const res = await administrationService.getMyMenuAccess(activeCompany.id);
         if (!cancelled) {
@@ -433,8 +549,6 @@ export function Sidebar() {
         if (!cancelled) {
           setDeniedMenuPaths(new Set());
         }
-      } finally {
-        if (!cancelled) setDenyLoading(false);
       }
     }
     loadDeniedPaths();
@@ -448,116 +562,126 @@ export function Sidebar() {
     [user, deniedMenuPaths]
   );
 
-  const handleLogout = useCallback(async () => {
-    await logout();
-    window.location.href = '/login';
-  }, [logout]);
+  const visiblePaths = useMemo(() => {
+    const paths = new Set<string>();
+    const walk = (items: NavItem[]) => {
+      for (const item of items) {
+        if (item.path) paths.add(item.path);
+        if (item.children) walk(item.children);
+      }
+    };
+    walk(visibleNavItems);
+    return paths;
+  }, [visibleNavItems]);
+
+  const handleNavigate = useCallback(
+    (path: string) => {
+      navigate(path);
+      setSidebarMobileOpen(false);
+    },
+    [navigate, setSidebarMobileOpen]
+  );
+
+  const handleToggleGroup = useCallback((key: string) => {
+    setOpenGroup((current) => (current === key ? null : key));
+  }, []);
+
+  const handleExpandSidebar = useCallback(
+    (groupKey: string) => {
+      setSidebarCollapsed(false);
+      setOpenGroup(groupKey);
+    },
+    [setSidebarCollapsed]
+  );
+
+  const navList = (collapsed: boolean) => (
+    <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
+      {!collapsed && (
+        <p className="px-3 pb-1 text-[9.5px] font-semibold uppercase tracking-[1px] text-sidebar-muted">Menu</p>
+      )}
+      {visibleNavItems.map((item) => (
+        <NavEntry
+          key={item.labelKey}
+          item={item}
+          collapsed={collapsed}
+          isOpen={openGroup === item.labelKey}
+          onToggleGroup={handleToggleGroup}
+          onNavigate={handleNavigate}
+          onExpandSidebar={handleExpandSidebar}
+        />
+      ))}
+    </div>
+  );
+
+  const logoHeader = (collapsed: boolean, withClose = false) => (
+    <div className={cn('flex flex-none items-center gap-[11px] px-1', collapsed && 'flex-col gap-3')}>
+      <div className="flex h-10 w-10 flex-none items-center justify-center rounded-[14px] bg-primary text-[15px] font-semibold text-primary-foreground shadow-primary-btn">
+        H
+      </div>
+      {!collapsed && (
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.3px] text-sidebar-foreground">HRIS</p>
+          <p className="whitespace-nowrap text-[10.5px] text-sidebar-muted">Enterprise</p>
+        </div>
+      )}
+      {!collapsed && !withClose && (
+        <button
+          onClick={() => setSidebarCollapsed(true)}
+          title={t('sidebar.collapse')}
+          aria-label={t('sidebar.collapse')}
+          className="flex h-7 w-7 flex-none items-center justify-center rounded-[10px] bg-sidebar-hover text-sidebar-muted transition-colors hover:text-sidebar-foreground"
+        >
+          <ChevronLeft size={14} />
+        </button>
+      )}
+      {withClose && (
+        <button
+          onClick={() => setSidebarMobileOpen(false)}
+          aria-label="Tutup menu"
+          className="flex h-8 w-8 flex-none items-center justify-center rounded-[10px] bg-sidebar-hover text-sidebar-muted"
+        >
+          <X size={16} />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <>
-      {sidebarMobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarMobileOpen(false)}
-        />
-      )}
-
+      {/* Desktop — panel "Melayang" */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full bg-sidebar flex flex-col',
-          'transition-all duration-300 ease-in-out',
-          sidebarCollapsed ? 'w-[64px]' : 'w-[260px]',
-          'hidden lg:flex'
+          'fixed left-0 top-0 z-40 hidden lg:flex',
+          'm-[14px] h-[calc(100vh-28px)] flex-col gap-5 overflow-hidden',
+          'rounded-[26px] border border-sidebar-border bg-sidebar shadow-float',
+          'px-[14px] py-[22px] transition-[width] duration-300 ease-[cubic-bezier(.22,.9,.3,1)]',
+          sidebarCollapsed ? 'w-[78px]' : 'w-[246px]'
         )}
       >
-        <div
-          className={cn(
-            'flex items-center h-16 px-4 border-b border-sidebar-border',
-            sidebarCollapsed && 'justify-center px-2'
-          )}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-sm font-bold text-primary-foreground">H</span>
-            </div>
-            {!sidebarCollapsed && (
-              <div>
-                <span className="text-sm font-semibold text-sidebar-foreground">HRMS</span>
-                <span className="text-[10px] text-sidebar-foreground/50 block leading-tight">
-                  Enterprise
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin">
-          {visibleNavItems.map((item, idx) => (
-            <NavItemComponent key={idx} item={item} collapsed={sidebarCollapsed} />
-          ))}
-        </nav>
-
-        <div className="border-t border-sidebar-border p-3 space-y-1">
-          <button
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground transition-colors"
-            onClick={() => navigate('/notifications')}
-          >
-            <Bell size={18} />
-            {!sidebarCollapsed && <span className="flex-1 text-left">{t('sidebar.notifications')}</span>}
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground transition-colors"
-          >
-            <LogOut size={18} />
-            {!sidebarCollapsed && <span className="flex-1 text-left">{t('sidebar.signOut')}</span>}
-          </button>
-
-          <button
-            onClick={toggleSidebar}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/50 hover:bg-sidebar-hover transition-colors"
-          >
-            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            {!sidebarCollapsed && <span className="flex-1 text-left">{t('sidebar.collapse')}</span>}
-          </button>
-        </div>
+        {logoHeader(sidebarCollapsed)}
+        {navList(sidebarCollapsed)}
+        <SidebarAttendanceCard collapsed={sidebarCollapsed} />
       </aside>
 
+      {/* Mobile — drawer menu lengkap */}
+      {sidebarMobileOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 lg:hidden" onClick={() => setSidebarMobileOpen(false)} />
+      )}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full bg-sidebar flex flex-col',
-          'transition-transform duration-300 ease-in-out w-[260px]',
+          'fixed left-0 top-0 z-50 flex h-full w-[268px] flex-col gap-5 bg-sidebar px-[14px] py-[22px]',
+          'rounded-r-[26px] border-r border-sidebar-border shadow-float transition-transform duration-300 ease-[cubic-bezier(.22,.9,.3,1)]',
           sidebarMobileOpen ? 'translate-x-0' : '-translate-x-full',
           'lg:hidden'
         )}
       >
-        <div className="flex items-center h-16 px-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-sm font-bold text-primary-foreground">H</span>
-            </div>
-            <div>
-              <span className="text-sm font-semibold text-sidebar-foreground">HRMS</span>
-              <span className="text-[10px] text-sidebar-foreground/50 block leading-tight">Enterprise</span>
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {visibleNavItems.map((item, idx) => (
-            <NavItemComponent key={idx} item={item} collapsed={false} />
-          ))}
-        </nav>
-        <div className="border-t border-sidebar-border p-3">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-hover transition-colors"
-          >
-            <LogOut size={18} />
-            <span>{t('sidebar.signOut')}</span>
-          </button>
-        </div>
+        {logoHeader(false, true)}
+        {navList(false)}
+        <SidebarAttendanceCard collapsed={false} />
       </aside>
+
+      {/* Mobile — bottom nav 5 tujuan utama */}
+      <MobileBottomNav visiblePaths={visiblePaths} />
     </>
   );
 }

@@ -7,6 +7,7 @@ import { ProtectedRoute } from './ProtectedRoute';
 // Pages
 import { LoginPage } from '@/modules/auth/LoginPage';
 import { ForgotPasswordPage } from '@/modules/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from '@/modules/auth/ResetPasswordPage';
 import { ProfilePage } from '@/modules/auth/ProfilePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
@@ -31,6 +32,7 @@ import { PayrollRunList } from '@/modules/payroll/pages/PayrollRunList';
 import { PayrollRunCreate } from '@/modules/payroll/pages/PayrollRunCreate';
 import { PayrollRunDetail } from '@/modules/payroll/pages/PayrollRunDetail';
 import { PayslipDetail } from '@/modules/payroll/pages/PayslipDetail';
+const MyPayslipsPage = lazy(() => import('@/modules/payroll/pages/MyPayslipsPage').then((m) => ({ default: m.MyPayslipsPage })));
 
 // Benefit Pages
 import { BenefitPlanList } from '@/modules/benefit/pages/BenefitPlanList';
@@ -140,6 +142,13 @@ export const router = createBrowserRouter([
     element: <AuthLayout />,
     children: [
       { index: true, element: <ForgotPasswordPage /> },
+    ],
+  },
+  {
+    path: '/reset-password',
+    element: <AuthLayout />,
+    children: [
+      { index: true, element: <ResetPasswordPage /> },
     ],
   },
   {
@@ -543,12 +552,14 @@ export const router = createBrowserRouter([
         ),
       },
       // Attendance Routes
+      // Karyawan biasa juga boleh masuk (self check-in + riwayat sendiri via /attendance/me);
+      // fitur admin di dalam halaman tetap dibatasi berdasarkan role operasional.
       {
         path: 'attendance',
         element: (
           <ProtectedRoute
             requiredPermissions={[{ resource: 'attendance', action: 'read' }]}
-            requiredRoles={OPERATIONAL_ROLES}
+            requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}
           >
             <AttendanceList />
           </ProtectedRoute>
@@ -618,6 +629,15 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
             <SelfServicePage />
+          </ProtectedRoute>
+        ),
+      },
+      // My Payslips (self-service)
+      {
+        path: 'my-payslips',
+        element: (
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
+            <MyPayslipsPage />
           </ProtectedRoute>
         ),
       },

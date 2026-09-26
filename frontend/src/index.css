@@ -2,195 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens — HRIS Web Redesign handoff.
+ * Primary #315B8C, Plus Jakarta Sans, dua tema (light/dark).
+ * Dark: chrome (sidebar/topbar) lebih gelap dari konten — jaga hirarki ini.
+ */
 @layer base {
   :root {
-    /* Light Mode */
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    /* Light */
+    --background: 220 14% 96%;        /* appBg  #F3F4F6 */
+    --foreground: 222 47% 11%;        /* ink    #0F172A */
 
-    --card: 0 0% 100%;
+    --card: 0 0% 100%;                /* cardBg #FFFFFF */
     --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 212 48% 37%;           /* acc    #315B8C */
+    --primary-hover: 211 49% 29%;     /* #26496F */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
+    --secondary: 220 14% 96%;         /* chipBg #F3F4F6 */
     --secondary-foreground: 222 47% 11%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 218 31% 95%;             /* trackBg #EEF1F6 */
+    --muted-foreground: 220 9% 46%;   /* muted  #6B7280 */
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 212 45% 94%;            /* tintBg #E7EEF6 */
+    --accent-foreground: 212 48% 37%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 42%;         /* danger fg #B91C1C */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --success: 142 71% 29%;           /* #15803D */
+    --success-bg: 141 84% 93%;        /* #DCFCE7 */
+    --warning: 26 90% 37%;            /* #B45309 */
+    --warning-bg: 48 96% 89%;         /* #FEF3C7 */
+    --danger: 0 74% 42%;              /* #B91C1C */
+    --danger-bg: 0 93% 94%;           /* #FEE2E2 */
 
-    --radius: 0.5rem;
+    --border: 218 26% 92%;            /* line   #E4E8EF */
+    --input: 218 26% 92%;
+    --ring: 212 48% 37%;
 
-    /* Sidebar */
-    --sidebar: 222 47% 11%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-muted: 217 33% 17%;
-    --sidebar-hover: 217 33% 22%;
-    --sidebar-active: 221 83% 53%;
-    --sidebar-border: 217 33% 17%;
+    --radius: 0.875rem;
+
+    /* Sidebar — panel kartu terang (gaya "Melayang") */
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-muted: 220 9% 46%;
+    --sidebar-hover: 220 14% 96%;
+    --sidebar-active: 212 48% 37%;
+    --sidebar-border: 218 26% 92%;
+
+    /* Topbar translucent (dipakai langsung, bukan lewat hsl(var())) */
+    --topbar-bg: rgba(243, 244, 246, 0.88);
+    --topbar-line: 218 26% 92%;
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 218 38% 11%;        /* appBg  #121A28 */
+    --foreground: 216 42% 95%;        /* ink    #EEF2F8 */
 
-    --card: 222 47% 14%;
-    --card-foreground: 210 40% 98%;
+    --card: 217 33% 15%;              /* cardBg #1A2434 */
+    --card-foreground: 216 42% 95%;
 
-    --popover: 222 47% 14%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 217 33% 15%;
+    --popover-foreground: 216 42% 95%;
 
-    --primary: 24 95% 53%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 211 52% 71%;           /* acc    #8FB4DC */
+    --primary-hover: 211 52% 78%;
+    --primary-foreground: 218 38% 11%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 218 31% 20%;         /* chipBg #232F43 */
+    --secondary-foreground: 216 42% 95%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 218 31% 20%;             /* trackBg #232F43 */
+    --muted-foreground: 216 20% 66%;  /* #97A5BA */
 
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 213 40% 22%;            /* tintBg #22364F */
+    --accent-foreground: 211 52% 71%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 91% 71%;         /* #F87171 */
+    --destructive-foreground: 218 38% 11%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 24 95% 53%;
+    --success: 142 69% 58%;           /* #4ADE80 */
+    --success-bg: 137 41% 15%;        /* #16351F */
+    --warning: 45 96% 56%;            /* #FBBF24 */
+    --warning-bg: 42 53% 15%;         /* #3A2E12 */
+    --danger: 0 91% 71%;              /* #F87171 */
+    --danger-bg: 0 35% 17%;           /* #3A1C1C */
 
-    --sidebar: 222 47% 9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-muted: 217 33% 14%;
-    --sidebar-hover: 217 33% 18%;
-    --sidebar-active: 24 95% 53%;
-    --sidebar-border: 217 33% 14%;
-  }
+    --border: 217 31% 25%;            /* line   #2B3A52 */
+    --input: 217 31% 25%;
+    --ring: 211 52% 71%;
 
-  :root[data-theme='ocean'] {
-    --background: 204 100% 98%;
-    --foreground: 215 41% 15%;
-    --card: 0 0% 100%;
-    --card-foreground: 215 41% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 215 41% 15%;
-    --primary: 199 89% 48%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 204 94% 94%;
-    --secondary-foreground: 215 41% 15%;
-    --muted: 204 94% 95%;
-    --muted-foreground: 215 20% 40%;
-    --accent: 199 100% 94%;
-    --accent-foreground: 215 41% 15%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 201 72% 88%;
-    --input: 201 72% 88%;
-    --ring: 199 89% 48%;
-    --sidebar: 201 88% 93%;
-    --sidebar-foreground: 215 41% 15%;
-    --sidebar-muted: 201 79% 88%;
-    --sidebar-hover: 199 86% 84%;
-    --sidebar-active: 199 89% 48%;
-    --sidebar-border: 201 72% 82%;
-  }
+    /* Sidebar — chrome lebih gelap dari konten */
+    --sidebar: 217 47% 7%;            /* sideBg #0A111C */
+    --sidebar-foreground: 216 42% 95%;
+    --sidebar-muted: 216 20% 66%;
+    --sidebar-hover: 218 31% 20%;
+    --sidebar-active: 211 52% 71%;
+    --sidebar-border: 216 33% 17%;    /* #1D2839 */
 
-  :root[data-theme='forest'] {
-    --background: 138 43% 98%;
-    --foreground: 155 30% 15%;
-    --card: 0 0% 100%;
-    --card-foreground: 155 30% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 155 30% 15%;
-    --primary: 160 84% 32%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 138 38% 94%;
-    --secondary-foreground: 155 30% 15%;
-    --muted: 138 30% 94%;
-    --muted-foreground: 155 16% 38%;
-    --accent: 142 44% 92%;
-    --accent-foreground: 155 30% 15%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 141 30% 85%;
-    --input: 141 30% 85%;
-    --ring: 160 84% 32%;
-    --sidebar: 145 34% 92%;
-    --sidebar-foreground: 155 30% 15%;
-    --sidebar-muted: 145 28% 87%;
-    --sidebar-hover: 145 31% 82%;
-    --sidebar-active: 160 84% 32%;
-    --sidebar-border: 141 25% 80%;
-  }
-
-  .dark[data-theme='sunset'] {
-    --background: 20 18% 10%;
-    --foreground: 32 33% 96%;
-    --card: 20 16% 13%;
-    --card-foreground: 32 33% 96%;
-    --popover: 20 16% 13%;
-    --popover-foreground: 32 33% 96%;
-    --primary: 35 92% 57%;
-    --primary-foreground: 24 9% 10%;
-    --secondary: 20 14% 18%;
-    --secondary-foreground: 32 33% 96%;
-    --muted: 20 14% 18%;
-    --muted-foreground: 29 18% 68%;
-    --accent: 20 16% 22%;
-    --accent-foreground: 32 33% 96%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 20 14% 20%;
-    --input: 20 14% 20%;
-    --ring: 35 92% 57%;
-    --sidebar: 18 18% 8%;
-    --sidebar-foreground: 32 33% 96%;
-    --sidebar-muted: 18 14% 13%;
-    --sidebar-hover: 18 14% 18%;
-    --sidebar-active: 35 92% 57%;
-    --sidebar-border: 18 14% 14%;
-  }
-
-  .dark[data-theme='midnight'] {
-    --background: 229 39% 9%;
-    --foreground: 220 40% 96%;
-    --card: 229 34% 12%;
-    --card-foreground: 220 40% 96%;
-    --popover: 229 34% 12%;
-    --popover-foreground: 220 40% 96%;
-    --primary: 262 83% 67%;
-    --primary-foreground: 220 40% 96%;
-    --secondary: 230 28% 16%;
-    --secondary-foreground: 220 40% 96%;
-    --muted: 230 28% 16%;
-    --muted-foreground: 221 20% 70%;
-    --accent: 230 28% 19%;
-    --accent-foreground: 220 40% 96%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 230 26% 18%;
-    --input: 230 26% 18%;
-    --ring: 262 83% 67%;
-    --sidebar: 230 45% 7%;
-    --sidebar-foreground: 220 40% 96%;
-    --sidebar-muted: 230 30% 12%;
-    --sidebar-hover: 230 30% 16%;
-    --sidebar-active: 262 83% 67%;
-    --sidebar-border: 230 30% 12%;
+    --topbar-bg: rgba(10, 17, 28, 0.82);
+    --topbar-line: 216 33% 17%;
   }
 }
 
@@ -264,7 +181,7 @@
 
   /* Table utilities */
   .table-container {
-    @apply w-full overflow-auto rounded-lg border border-border;
+    @apply w-full overflow-auto rounded-2xl border border-border bg-card;
   }
 
   .table-header {
@@ -274,4 +191,55 @@
   .table-row-hover {
     @apply transition-colors hover:bg-muted/30;
   }
+
+  /* Topbar translucent sesuai handoff (blur 16px + hairline) */
+  .topbar-blur {
+    background: var(--topbar-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid hsl(var(--topbar-line));
+  }
 }
+
+/* Momen login sesuai handoff: centang pop + ring ekspansi + dot berdenyut */
+@keyframes login-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  70% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes login-ring {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+@keyframes login-progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+@keyframes shell-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-login-pop,
+  .anim-login-ring,
+  .anim-pulse-dot,
+  .anim-login-progress,
+  .anim-shell-enter {
+    animation: none !important;
+  }
+}
+
+.anim-login-pop { animation: login-pop 0.45s cubic-bezier(0.22, 1.5, 0.36, 1) both; }
+.anim-login-ring { animation: login-ring 1.5s ease-out 0.45s infinite; }
+.anim-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+.anim-login-progress { animation: login-progress 0.9s linear both; }
+.anim-shell-enter { animation: shell-enter 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) both; }

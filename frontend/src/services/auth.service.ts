@@ -90,6 +90,14 @@ class AuthService {
     await api.post('/auth/change-password', { currentPassword, newPassword });
   }
 
+  async forgotPassword(email: string): Promise<void> {
+    await api.post('/auth/forgot-password', { email });
+  }
+
+  async resetPassword(token: string, password: string): Promise<void> {
+    await api.post('/auth/reset-password', { token, password });
+  }
+
   getAccessToken(): string | null {
     // Access token lives in httpOnly cookie - not accessible from JS (XSS-safe).
     // Return null - callers should rely on isAuthenticated via auth store / profile load.

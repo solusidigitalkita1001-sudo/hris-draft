@@ -481,6 +481,37 @@ class EmployeeService {
   async deleteAttachment(employeeId: string, attachmentId: string): Promise<void> {
     await api.delete(`/employees/${employeeId}/attachments/${attachmentId}`);
   }
+
+  // ============================================================
+  // Reporting line (self-service): atasan langsung user saat ini
+  // ============================================================
+  async getMyReportingLine(): Promise<MyReportingLine> {
+    const response = await api.get('/employees/me/reporting-line');
+    return response.data.data;
+  }
+}
+
+export interface ReportingLinePerson {
+  id: string;
+  employeeNumber: string;
+  fullName: string;
+  email?: string;
+  avatar?: string | null;
+  position?: { id: string; name: string } | null;
+  department?: { id: string; name: string } | null;
+}
+
+export interface MyReportingLine {
+  source: 'POSITION_REPORTS_TO';
+  employee: {
+    id: string;
+    employeeNumber: string;
+    fullName: string;
+    position: { id: string; name: string } | null;
+  };
+  reportsToPosition: { id: string; name: string } | null;
+  primarySupervisor: ReportingLinePerson | null;
+  alternateSupervisors: ReportingLinePerson[];
 }
 
 export const employeeService = new EmployeeService();
