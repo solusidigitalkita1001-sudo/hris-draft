@@ -114,6 +114,18 @@ export type Env = z.infer<typeof envSchema>;
  * Parse and validate environment. Throws a descriptive Error listing every
  * missing/invalid variable. Exported so tests can assert failure behavior.
  */
+const GUARDED_SECRET_KEYS = [
+  'JWT_ACCESS_SECRET',
+  'JWT_REFRESH_SECRET',
+  'SESSION_SECRET',
+  'CSRF_SECRET',
+  'ENCRYPTION_KEY',
+] as const;
+
+// Placeholder shapes shipped in .env/.env.example; length checks alone let
+// them straight through to production, so reject them explicitly there.
+const PLACEHOLDER_SECRET_PATTERN = /^(dev-|your-|test-|example|change[-_]?me)/i;
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const result = envSchema.safeParse(source);
   if (!result.success) {
@@ -121,6 +133,15 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
       .join('\n');
     throw new Error(`Invalid environment configuration:\n${details}`);
+  }
+  if (result.data.NODE_ENV === 'production') {
+    const offenders = GUARDED_SECRET_KEYS.filter((key) => PLACEHOLDER_SECRET_PATTERN.test(result.data[key]));
+    if (offenders.length) {
+      const details = offenders
+        .map((key) => `  - ${key}: placeholder/dev value is not allowed in production; set a strong random secret`)
+        .join('\n');
+      throw new Error(`Invalid environment configuration:\n${details}`);
+    }
   }
   return result.data;
 }
