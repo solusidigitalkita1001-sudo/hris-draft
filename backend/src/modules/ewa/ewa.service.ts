@@ -18,6 +18,7 @@ import { prisma } from '@/shared/database/prisma';
 import { payrollRepository } from '@/modules/payroll/payroll.repository';
 import { workCalendarRepository } from '@/modules/work-calendar/work-calendar.repository';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
+import { companySettingsService } from '@/modules/company-settings/company-settings.service';
 import { withDatabaseAdvisoryLock } from '@/shared/database/advisory-lock';
 
 function parse<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
@@ -116,13 +117,14 @@ export class EWAService {
       where: { companyId, employeeId, status: 'APPROVED', date: { gte: periodStart, lte: effectiveEnd }, deletedAt: null },
       select: { durationHours: true, date: true },
     });
+    const workweekDays = await companySettingsService.getWorkweekDays(companyId);
     let overtimePay = 0;
     for (const ot of approvedOt) {
       const h = Number(ot.durationHours) || 0;
       if (h <= 0) continue;
       const dow = new Date(ot.date).getDay();
       const dayType: 'WORKDAY' | 'HOLIDAY' = dow === 0 || dow === 6 ? 'HOLIDAY' : 'WORKDAY';
-      overtimePay += calculateOvertimePay({ monthlyWage: baseSalary, hours: h, dayType }).amount;
+      overtimePay += calculateOvertimePay({ monthlyWage: baseSalary, hours: h, dayType, workweekDays }).amount;
     }
 
     const dailyRate = baseSalary / workDaysInPeriod;

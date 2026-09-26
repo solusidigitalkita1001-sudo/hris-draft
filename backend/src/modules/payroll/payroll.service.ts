@@ -507,6 +507,7 @@ export class PayrollService {
       }
     }
     const lateCfg = await companySettingsService.getLateDeductionConfig(run.companyId, database);
+    const workweekDays = await companySettingsService.getWorkweekDays(run.companyId, database);
     // Tax/BPJS reference tables (per company, per year); statutory code
     // defaults apply when no rows exist for the period's year.
     const payrollPolicy = await loadPayrollPolicyConfig(database, run.companyId, new Date(run.period.startDate).getUTCFullYear());
@@ -523,6 +524,7 @@ export class PayrollService {
           },
           bpjs: payrollPolicy.bpjs,
           lateConfig: lateCfg,
+          workweekDays,
         })),
       },
     });
@@ -618,10 +620,10 @@ export class PayrollService {
       // is paid at the statutory holiday bands (2x/3x/4x), not workday bands.
       const overtimePayAmount =
         (attd.overtimeWorkday > 0
-          ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: attd.overtimeWorkday, dayType: 'WORKDAY' }).amount
+          ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: attd.overtimeWorkday, dayType: 'WORKDAY', workweekDays }).amount
           : 0) +
         (attd.overtimeHoliday > 0
-          ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: attd.overtimeHoliday, dayType: 'HOLIDAY' }).amount
+          ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: attd.overtimeHoliday, dayType: 'HOLIDAY', workweekDays }).amount
           : 0);
 
       // Task 4.2 — Hitung nominal potongan keterlambatan (dengan daily cap persentase gaji pokok)
