@@ -87,6 +87,12 @@ class LeaveService {
     return r.data.data;
   }
 
+  /** Batalkan pengajuan cuti sendiri yang masih pending (PATCH /leave/:id/cancel). */
+  async cancelRequest(id: string): Promise<LeaveRequest> {
+    const r = await api.patch(`/leave/${id}/cancel`);
+    return r.data.data;
+  }
+
   async approveRequest(id: string): Promise<LeaveRequest> {
     const r = await api.patch(`/leave/${id}/approve`);
     return r.data.data;

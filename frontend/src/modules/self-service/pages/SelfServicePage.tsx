@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { permissionRequestService, type PermissionRequest, type PermissionType, type RequestStatus, PERMISSION_TYPE_LABELS, REQUEST_STATUS_LABELS } from '@/services/permission-request.service';
 import { leaveService } from '@/services/leave.service';
+import { LeaveRequestForm } from '@/modules/leave/components/LeaveRequestForm';
 import { attendanceService } from '@/services/attendance.service';
 import { workCalendarService, type MyWorkCalendarDay, type MyWorkCalendarMonth, type ShiftSwapCandidateResponse, type ShiftSwapRequest, type ShiftSwapSchedulePreview } from '@/services/work-calendar.service';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -590,7 +591,7 @@ export function SelfServicePage() {
 
       {/* ─── LEAVE TAB ────────────────────────────────── */}
       {!loading && activeTab === 'leave' && (
-        <LeaveTabView companyId={companyId} />
+        <LeaveTabView companyId={companyId} employeeId={employeeId} />
       )}
 
       {/* ─── OVERTIME TAB ─────────────────────────────── */}
@@ -1045,47 +1046,114 @@ function ShiftSwapTabView({
 }
 
 // ─── Leave Tab ──────────────────────────────────────────
-function LeaveTabView({ companyId }: { companyId: string }) {
+function LeaveTabView({ companyId, employeeId }: { companyId: string; employeeId: string }) {
   const [leaves, setLeaves] = useState<Awaited<ReturnType<typeof leaveService.getRequests>>>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await leaveService.getRequests(companyId);
-        setLeaves(data);
-      } catch { /* ignore */ }
-      finally { setLoading(false); }
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
+  const fetchLeaves = useCallback(async () => {
+    if (!companyId) {
+      setLeaves([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      // Tab self-service hanya menampilkan pengajuan milik sendiri.
+      const data = await leaveService.getRequests(companyId, employeeId ? { employeeId } : undefined);
+      setLeaves(data);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, [companyId, employeeId]);
+
+  useEffect(() => { void fetchLeaves(); }, [fetchLeaves]);
+
+  const handleCancelLeave = async (id: string) => {
+    const confirmed = await popup.confirm({
+      title: 'Batalkan Pengajuan Cuti',
+      description: 'Pengajuan cuti yang masih pending ini akan dibatalkan. Lanjutkan?',
+      confirmText: 'Ya, Batalkan',
+      cancelText: 'Kembali',
+      intent: 'destructive',
+    });
+    if (!confirmed) return;
+    try {
+      await leaveService.cancelRequest(id);
+      toast.success('Pengajuan cuti dibatalkan');
+      fetchLeaves();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal membatalkan pengajuan cuti'));
+    }
+  };
+
+  const openForm = () => {
+    if (!employeeId) {
+      toast.error('Akun ini tidak tertaut ke data karyawan sehingga tidak bisa mengajukan cuti');
+      return;
+    }
+    setShowForm(true);
+  };
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data cuti...</div></div>;
 
-  if (leaves.length === 0) return (
-    <div className="flex flex-col items-center py-20 gap-3">
-      <CalendarDays size={48} className="text-muted-foreground/40" />
-      <p className="text-sm text-muted-foreground">Belum ada pengajuan cuti</p>
-    </div>
-  );
-
   return (
-    <div className="space-y-3">
-      {leaves.map((l) => (
-        <div key={l.id} className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-              l.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' :
-              l.status === 'REJECTED' ? 'bg-red-50 text-red-700' :
-              'bg-amber-50 text-amber-700'
-            }`}>{l.status}</span>
-            <span className="text-xs text-muted-foreground">{l.leaveType?.name || 'Cuti'}</span>
-          </div>
-          <p className="text-sm mt-1">{l.reason}</p>
-          <div className="text-xs text-muted-foreground mt-2">
-            {formatDate(l.startDate)} — {formatDate(l.endDate)} ({l.totalDays} hari)
-          </div>
+    <div>
+      <div className="flex justify-end mb-4">
+        <Button size="sm" onClick={openForm}>
+          <Plus size={16} className="mr-2" /> Ajukan Cuti
+        </Button>
+      </div>
+
+      {leaves.length === 0 ? (
+        <div className="flex flex-col items-center py-20 gap-3">
+          <CalendarDays size={48} className="text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">Belum ada pengajuan cuti</p>
+          <Button size="sm" onClick={openForm}>
+            <Plus size={16} className="mr-2" /> Ajukan Cuti
+          </Button>
         </div>
-      ))}
+      ) : (
+        <div className="space-y-3">
+          {leaves.map((l) => (
+            <div key={l.id} className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      l.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' :
+                      l.status === 'REJECTED' ? 'bg-red-50 text-red-700' :
+                      l.status === 'CANCELLED' ? 'bg-gray-50 text-gray-500' :
+                      'bg-amber-50 text-amber-700'
+                    }`}>{l.status}</span>
+                    <span className="text-xs text-muted-foreground">{l.leaveType?.name || 'Cuti'}</span>
+                  </div>
+                  <p className="text-sm mt-1">{l.reason}</p>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    {formatDate(l.startDate)} — {formatDate(l.endDate)} ({l.totalDays} hari)
+                  </div>
+                </div>
+                {l.status === 'PENDING' && l.employeeId === employeeId && (
+                  <button
+                    onClick={() => handleCancelLeave(l.id)}
+                    className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    Batalkan
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Ajukan Cuti">
+        <LeaveRequestForm
+          companyId={companyId}
+          employeeId={employeeId}
+          onSuccess={fetchLeaves}
+          onClose={() => setShowForm(false)}
+        />
+      </Modal>
     </div>
   );
 }

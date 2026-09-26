@@ -6,8 +6,11 @@ import {
   type AttendanceRecord,
   type CreateAttendancePayload,
   type AttendanceCaptureMethod,
+  type MyAttendanceToday,
 } from '@/services/attendance.service';
 import { employeeService } from '@/services/employee.service';
+import { useAuthStore } from '@/stores/auth.store';
+import { hasAnyRole, OPERATIONAL_ROLES } from '@/lib/access-control';
 import {
   createLivenessChallengeSession,
   CHALLENGE_INSTRUCTIONS,
@@ -83,13 +86,16 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 }
 
 /* ---------- Check-In form ---------- */
-function CheckInForm({ employees, companyId, onSave, onClose }: {
+function CheckInForm({ employees, companyId, selfEmployeeId, onSave, onClose }: {
   employees: { id: string; fullName: string }[];
   companyId: string;
+  /** Mode self-service: employee terkunci ke user login, tanggal & jam ditentukan server. */
+  selfEmployeeId?: string;
   onSave: (data: CreateAttendancePayload) => Promise<void>;
   onClose: () => void;
 }) {
-  const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
+  const isSelf = Boolean(selfEmployeeId);
+  const [employeeId, setEmployeeId] = useState(selfEmployeeId || employees[0]?.id || '');
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date().toTimeString().slice(0, 5);
   const [date, setDate] = useState(today);
@@ -331,24 +337,33 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Employee *</label>
-          <Select2
-            value={employeeId}
-            onValueChange={setEmployeeId}
-            options={employees.map((e) => ({ value: e.id, label: e.fullName }))}
-            placeholder="Select employee"
-            className="h-9"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Date *</label>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Time *</label>
-          <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
-        </div>
+        {!isSelf && (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Employee *</label>
+              <Select2
+                value={employeeId}
+                onValueChange={setEmployeeId}
+                options={employees.map((e) => ({ value: e.id, label: e.fullName }))}
+                placeholder="Select employee"
+                className="h-9"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Date *</label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Time *</label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
+            </div>
+          </>
+        )}
+        {isSelf && (
+          <p className="text-xs text-muted-foreground">
+            Check-in dilakukan untuk hari ini. Jam check-in dicatat otomatis oleh server.
+          </p>
+        )}
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">Method *</label>
           <Select2
@@ -594,20 +609,44 @@ function OvertimeForm({ employees, onSave, onClose }: {
 
 export function AttendanceList() {
   const { activeCompany } = useCompanyStore();
+  const { user } = useAuthStore();
+  // Pengguna operasional (HR/admin/manager) memakai jalur admin; pengguna biasa memakai jalur self-service /attendance/me.
+  const isOperational = hasAnyRole(user, OPERATIONAL_ROLES);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [employees, setEmployees] = useState<{ id: string; fullName: string }[]>([]);
+  const [myToday, setMyToday] = useState<MyAttendanceToday | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
 
   // Modal state
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showOvertime, setShowOvertime] = useState(false);
+  const [selfCheckingOut, setSelfCheckingOut] = useState(false);
 
   const companyId = activeCompany?.id || '';
 
   const fetchData = useCallback(async () => {
+    if (!isOperational) {
+      // Jalur self-service: riwayat sendiri + status hari ini dari server.
+      setLoading(true);
+      try {
+        const [mine, today] = await Promise.all([
+          attendanceService.getMyAttendance({ month: monthFilter || undefined, limit: 100 }),
+          attendanceService.getMyToday().catch(() => null),
+        ]);
+        setRecords(mine.items);
+        setMyToday(today);
+      } catch (error) {
+        console.error('Failed to fetch my attendance:', error);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!companyId) {
       setRecords([]);
       setLoading(false);
@@ -627,10 +666,10 @@ export function AttendanceList() {
     } finally {
       setLoading(false);
     }
-  }, [companyId, statusFilter, dateFilter]);
+  }, [companyId, statusFilter, dateFilter, monthFilter, isOperational]);
 
   const fetchEmployees = useCallback(async () => {
-    if (!companyId) {
+    if (!companyId || !isOperational) {
       setEmployees([]);
       return;
     }
@@ -641,16 +680,20 @@ export function AttendanceList() {
     } catch {
       // silent
     }
-  }, [companyId]);
+  }, [companyId, isOperational]);
 
   useEffect(() => {
     fetchData();
     fetchEmployees();
   }, [fetchData, fetchEmployees]);
 
-  const filtered = records.filter(
-    (r) => r.employee?.fullName.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = records.filter((r) => {
+    if (isOperational) {
+      return r.employee?.fullName.toLowerCase().includes(search.toLowerCase());
+    }
+    // Self-service: filter status dilakukan di sisi klien.
+    return !statusFilter || r.status === statusFilter;
+  });
 
   const present = records.filter((r) => r.status === 'PRESENT').length;
   const late = records.filter((r) => r.status === 'LATE').length;
@@ -660,11 +703,23 @@ export function AttendanceList() {
 
   const handleCheckIn = async (data: CreateAttendancePayload) => {
     try {
-      await attendanceService.createRecord(data);
+      if (isOperational) {
+        await attendanceService.createRecord(data);
+      } else {
+        // Self check-in: identitas, tanggal, dan jam ditentukan server dari sesi.
+        await attendanceService.selfCheckIn({
+          method: data.method,
+          notes: data.notes,
+          checkInLatitude: data.checkInLatitude,
+          checkInLongitude: data.checkInLongitude,
+          faceRecognition: data.faceRecognition,
+        });
+      }
       toast.success('Check-in recorded');
       fetchData();
     } catch (err) {
       toast.error(apiErrorMessage(err, 'Failed to check in'));
+      throw err;
     }
   };
 
@@ -678,16 +733,35 @@ export function AttendanceList() {
         location = await getCurrentLocation();
       }
 
-      await attendanceService.checkout(record.id, {
-        checkOut: new Date().toISOString(),
-        method: record.method,
-        checkOutLatitude: location?.latitude,
-        checkOutLongitude: location?.longitude,
-      });
+      if (isOperational) {
+        await attendanceService.checkout(record.id, {
+          checkOut: new Date().toISOString(),
+          method: record.method,
+          checkOutLatitude: location?.latitude,
+          checkOutLongitude: location?.longitude,
+        });
+      } else {
+        // Self check-out: server mencari record terbuka milik user & mengisi jam sendiri.
+        await attendanceService.selfCheckOut({
+          method: record.method,
+          checkOutLatitude: location?.latitude,
+          checkOutLongitude: location?.longitude,
+        });
+      }
       toast.success('Check-out recorded');
       fetchData();
     } catch (err) {
       toast.error(apiErrorMessage(err, 'Failed to check out'));
+    }
+  };
+
+  const handleSelfCheckOutToday = async () => {
+    if (!myToday?.record) return;
+    setSelfCheckingOut(true);
+    try {
+      await handleCheckOut(myToday.record);
+    } finally {
+      setSelfCheckingOut(false);
     }
   };
 
@@ -713,17 +787,37 @@ export function AttendanceList() {
     <div>
       <PageHeader
         title="Attendance"
-        description="Track employee daily attendance"
+        description={isOperational ? 'Track employee daily attendance' : 'Riwayat kehadiran dan check-in Anda'}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowOvertime(true)}>
-              <Clock9 size={16} className="mr-2" />
-              Overtime
-            </Button>
-            <Button size="sm" onClick={() => setShowCheckIn(true)}>
-              <LogIn size={16} className="mr-2" />
-              Check In
-            </Button>
+            {isOperational && (
+              <Button variant="outline" size="sm" onClick={() => setShowOvertime(true)}>
+                <Clock9 size={16} className="mr-2" />
+                Overtime
+              </Button>
+            )}
+            {(isOperational || !myToday || myToday.canCheckIn) && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!isOperational && !user?.employeeId) {
+                    toast.error('Akun ini tidak tertaut ke data karyawan sehingga tidak bisa check-in');
+                    return;
+                  }
+                  setShowCheckIn(true);
+                }}
+                disabled={!isOperational && myToday !== null && !myToday.canCheckIn}
+              >
+                <LogIn size={16} className="mr-2" />
+                Check In
+              </Button>
+            )}
+            {!isOperational && myToday?.canCheckOut && (
+              <Button size="sm" variant="outline" onClick={handleSelfCheckOutToday} disabled={selfCheckingOut}>
+                <LogOut size={16} className="mr-2" />
+                {selfCheckingOut ? 'Checking out...' : 'Check Out'}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
               Refresh
@@ -731,6 +825,31 @@ export function AttendanceList() {
           </div>
         }
       />
+
+      {/* Info hari ini (self-service) */}
+      {!isOperational && myToday && (
+        <div className="mb-6 rounded-xl border border-border bg-white dark:bg-gray-800 p-4 text-sm">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5">
+            <p><span className="text-xs text-muted-foreground">Tanggal server:</span> <span className="font-medium">{formatDate(myToday.serverDate)}</span></p>
+            <p>
+              <span className="text-xs text-muted-foreground">Jadwal:</span>{' '}
+              <span className="font-medium">
+                {myToday.context.schedule.workStart || '-'} - {myToday.context.schedule.workEnd || '-'}
+              </span>
+            </p>
+            <p>
+              <span className="text-xs text-muted-foreground">Status hari ini:</span>{' '}
+              <span className="font-medium">
+                {myToday.record
+                  ? myToday.record.checkOut
+                    ? 'Sudah check-out'
+                    : `Sudah check-in ${myToday.record.checkIn ? formatTime(myToday.record.checkIn) : ''}`
+                  : 'Belum check-in'}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -756,12 +875,19 @@ export function AttendanceList() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search employee..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
-        </div>
-        <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
-          className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground" />
+        {isOperational ? (
+          <>
+            <div className="relative flex-1 max-w-xs">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search employee..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+            </div>
+            <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
+              className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground" />
+          </>
+        ) : (
+          <input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}
+            className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground" />
+        )}
         <div className="flex gap-1">
           {['', 'PRESENT', 'ABSENT', 'LATE', 'EXCUSED'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
@@ -804,7 +930,7 @@ export function AttendanceList() {
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-1">{STATUS_ICONS[r.status]}</div>
                       <div>
-                        <p className="text-sm font-medium">{r.employee?.fullName || '-'}</p>
+                        <p className="text-sm font-medium">{r.employee?.fullName || (!isOperational ? user?.name || user?.email || '-' : '-')}</p>
                         <p className="text-xs text-muted-foreground font-mono">{r.employee?.employeeNumber}</p>
                       </div>
                     </div>
@@ -857,6 +983,7 @@ export function AttendanceList() {
         <CheckInForm
           employees={employees}
           companyId={companyId}
+          selfEmployeeId={isOperational ? undefined : user?.employeeId}
           onSave={handleCheckIn}
           onClose={() => setShowCheckIn(false)}
         />

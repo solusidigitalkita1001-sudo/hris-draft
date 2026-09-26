@@ -113,6 +113,30 @@ export interface Payslip {
   createdAt: string;
 }
 
+/** Ringkasan payslip self-service: tanpa angka finansial (backend hanya
+ * mengirim id, status, createdAt, payrollRun.period + flag locked). */
+export interface MyPayslipSummary {
+  id: string;
+  status: string;
+  createdAt: string;
+  locked?: boolean;
+  payrollRun?: {
+    id: string;
+    name: string;
+    runNumber: number;
+    status: string;
+    period?: {
+      id: string;
+      name: string;
+      code: string;
+      frequency: string;
+      startDate: string;
+      endDate: string;
+      payDate: string;
+    };
+  };
+}
+
 class PayrollService {
   // Salary Components
   async getSalaryComponents(companyId: string): Promise<SalaryComponent[]> {
@@ -205,9 +229,21 @@ class PayrollService {
     return response.data.data;
   }
 
-  async getMyPayslips(employeeId: string): Promise<Payslip[]> {
-    const response = await api.get('/payroll/payslips', { params: { employeeId } });
+  /**
+   * Daftar payslip milik sendiri (GET /payroll/payslips).
+   * Identitas karyawan diambil backend dari sesi; response hanya berisi
+   * ringkasan periode tanpa angka finansial (locked: true) — detail finansial
+   * butuh payroll unlock token terpisah.
+   */
+  async getMyPayslips(): Promise<MyPayslipSummary[]> {
+    const response = await api.get('/payroll/payslips');
     return response.data.data;
+  }
+
+  /** Unduh PDF slip gaji (GET /payroll/payslips/:id/pdf). */
+  async downloadPayslipPdf(id: string): Promise<Blob> {
+    const response = await api.get(`/payroll/payslips/${id}/pdf`, { responseType: 'blob' });
+    return response.data;
   }
 }
 

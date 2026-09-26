@@ -89,6 +89,51 @@ export interface CheckoutAttendancePayload {
   notes?: string;
 }
 
+/** Payload self check-in (POST /attendance/me/check-in). Identitas karyawan,
+ * tanggal, dan jam diambil server dari sesi — jangan dikirim dari klien. */
+export interface SelfCheckInPayload {
+  method: AttendanceCaptureMethod;
+  notes?: string;
+  checkInLatitude?: number;
+  checkInLongitude?: number;
+  faceRecognition?: {
+    selfieImage: string;
+  };
+  liveness?: Record<string, unknown>;
+  deviceGps?: Record<string, unknown>;
+}
+
+/** Payload self check-out (PATCH /attendance/me/check-out). checkOut time diisi server. */
+export interface SelfCheckOutPayload {
+  method?: AttendanceCaptureMethod;
+  checkOutLatitude?: number;
+  checkOutLongitude?: number;
+  notes?: string;
+}
+
+export interface MyAttendanceToday {
+  serverTime: string;
+  serverDate: string;
+  timezone: string;
+  record: AttendanceRecord | null;
+  context: AttendanceContext;
+  canCheckIn: boolean;
+  canCheckOut: boolean;
+}
+
+export interface MyAttendanceQuery {
+  month?: string; // YYYY-MM
+  page?: number;
+  limit?: number;
+}
+
+export interface MyAttendanceResult {
+  items: AttendanceRecord[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface OvertimeRequest {
   id: string;
   employeeId: string;
@@ -137,6 +182,33 @@ class AttendanceService {
 
   async getContext(params: { employeeId: string; date: string; companyId?: string }): Promise<AttendanceContext> {
     const r = await api.get('/attendance/context', { params });
+    return r.data.data;
+  }
+
+  // ===== Employee self-service (jalur /attendance/me) =====
+
+  async getMyToday(): Promise<MyAttendanceToday> {
+    const r = await api.get('/attendance/me/today');
+    return r.data.data;
+  }
+
+  async getMyAttendance(params?: MyAttendanceQuery): Promise<MyAttendanceResult> {
+    const r = await api.get('/attendance/me', { params });
+    return {
+      items: r.data.data ?? [],
+      total: r.data.meta?.total ?? (r.data.data?.length || 0),
+      page: r.data.meta?.page ?? params?.page ?? 1,
+      limit: r.data.meta?.limit ?? params?.limit ?? 20,
+    };
+  }
+
+  async selfCheckIn(payload: SelfCheckInPayload): Promise<AttendanceRecord> {
+    const r = await api.post('/attendance/me/check-in', payload);
+    return r.data.data;
+  }
+
+  async selfCheckOut(payload: SelfCheckOutPayload): Promise<AttendanceRecord> {
+    const r = await api.patch('/attendance/me/check-out', payload);
     return r.data.data;
   }
 

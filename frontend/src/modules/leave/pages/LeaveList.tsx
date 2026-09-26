@@ -9,6 +9,9 @@ import { Search, RefreshCw, Plus, CalendarDays, CheckCircle2, XCircle, Clock, Al
 import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
 import { useCompanyStore } from '@/stores/company.store';
+import { useAuthStore } from '@/stores/auth.store';
+import { popup } from '@/stores/popup.store';
+import { LeaveRequestForm } from '@/modules/leave/components/LeaveRequestForm';
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PENDING: <Clock size={14} className="text-amber-500" />,
@@ -29,10 +32,12 @@ const STATUS_STYLES: Record<string, string> = {
 export function LeaveList() {
   const navigate = useNavigate();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
+  const { user } = useAuthStore();
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [showNewRequest, setShowNewRequest] = useState(false);
 
   const [approvAction, setApprovAction] = useState<{ type: 'APPROVE' | 'REJECT'; id: string } | null>(null);
   const [actionComment, setActionComment] = useState('');
@@ -85,6 +90,24 @@ export function LeaveList() {
     }
   };
 
+  const handleCancelOwn = async (id: string) => {
+    const confirmed = await popup.confirm({
+      title: 'Batalkan Pengajuan Cuti',
+      description: 'Pengajuan cuti yang masih pending ini akan dibatalkan. Lanjutkan?',
+      confirmText: 'Ya, Batalkan',
+      cancelText: 'Kembali',
+      intent: 'destructive',
+    });
+    if (!confirmed) return;
+    try {
+      await leaveService.cancelRequest(id);
+      toast.success('Pengajuan cuti dibatalkan');
+      fetchData();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal membatalkan pengajuan'));
+    }
+  };
+
   const filtered = requests.filter(
     (r) => r.employee?.fullName.toLowerCase().includes(search.toLowerCase())
   );
@@ -103,7 +126,16 @@ export function LeaveList() {
               <RefreshCw size={16} className="mr-2" />
               Refresh
             </Button>
-            <Button size="sm">
+            <Button
+              size="sm"
+              onClick={() => {
+                if (!user?.employeeId) {
+                  toast.error('Akun ini tidak tertaut ke data karyawan sehingga tidak bisa mengajukan cuti');
+                  return;
+                }
+                setShowNewRequest(true);
+              }}
+            >
               <Plus size={16} className="mr-2" />
               New Request
             </Button>
@@ -209,6 +241,20 @@ export function LeaveList() {
                           <XCircle size={12} className="mr-1" />
                           Reject
                         </Button>
+                        {user?.employeeId && r.employeeId === user.employeeId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2.5 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleCancelOwn(r.id);
+                            }}
+                          >
+                            <AlertCircle size={12} className="mr-1" />
+                            Batalkan
+                          </Button>
+                        )}
                       </div>
                     )}
                   </td>
@@ -218,6 +264,27 @@ export function LeaveList() {
           </tbody>
         </table>
       </div>
+
+      {showNewRequest && user?.employeeId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowNewRequest(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h2 className="text-base font-semibold">Ajukan Cuti</h2>
+              <button onClick={() => setShowNewRequest(false)} className="text-muted-foreground hover:text-foreground p-1">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="p-5">
+              <LeaveRequestForm
+                companyId={companyId}
+                employeeId={user.employeeId}
+                onSuccess={fetchData}
+                onClose={() => setShowNewRequest(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {approvAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setApprovAction(null)}>

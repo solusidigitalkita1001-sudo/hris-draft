@@ -1,15 +1,51 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { payrollService, type Payslip } from '@/services/payroll.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Printer, Download } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/errors';
+
+/** Error dari request responseType:'blob' membawa body JSON sebagai Blob —
+ * baca dulu supaya pesan backend (mis. 403 payroll terkunci) tetap muncul. */
+async function pdfErrorMessage(error: unknown): Promise<string> {
+  const data = (error as { response?: { data?: unknown } } | null)?.response?.data;
+  if (data instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await data.text()) as { message?: string; error?: string };
+      if (parsed.message || parsed.error) return (parsed.message || parsed.error) as string;
+    } catch { /* bukan JSON — pakai fallback */ }
+  }
+  return apiErrorMessage(error, 'Gagal mengunduh PDF slip gaji');
+}
 
 export function PayslipDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [payslip, setPayslip] = useState<Payslip | null>(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadPdf = useCallback(async () => {
+    if (!id) return;
+    setDownloading(true);
+    try {
+      const blob = await payrollService.downloadPayslipPdf(id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `payslip-${id}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(await pdfErrorMessage(err));
+    } finally {
+      setDownloading(false);
+    }
+  }, [id]);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -55,9 +91,9 @@ export function PayslipDetail() {
               <Printer size={16} className="mr-2" />
               Print
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={downloading}>
               <Download size={16} className="mr-2" />
-              PDF
+              {downloading ? 'Mengunduh...' : 'PDF'}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft size={16} className="mr-2" />
