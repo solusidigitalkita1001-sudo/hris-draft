@@ -2458,16 +2458,23 @@ export async function seedTestData(): Promise<void> {
   });
 
   if (annualLeave && sitiUser) {
+    // referenceId harus menunjuk LeaveRequest, bukan LeaveType: sebelumnya
+    // diisi annualLeave.id sehingga instance ini menggantung tanpa dokumen,
+    // dan referenceType lowercase membuatnya jatuh ke jalur "tipe tak dikenal".
+    // `update` ikut diisi agar baris lama di DB dev ikut diperbaiki saat re-seed.
     await prisma.workflowInstance.upsert({
       where: { id: 'wf-inst-001' },
-      update: {},
+      update: {
+        referenceType: 'LEAVE_REQUEST',
+        referenceId: 'leave-001',
+      },
       create: {
         id: 'wf-inst-001',
         templateId: workflowTemplate.id,
         companyId: company.id,
         approvalType: 'LEAVE_APPROVAL',
-        referenceType: 'leave_request',
-        referenceId: annualLeave.id,
+        referenceType: 'LEAVE_REQUEST',
+        referenceId: 'leave-001',
         requesterId: sitiUser.id,
         payload: { days: 3, employeeNumber: 'EMP002', leaveType: 'ANNUAL' },
         status: 'PENDING',
