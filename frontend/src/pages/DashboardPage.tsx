@@ -24,7 +24,13 @@ import { Button } from '@/components/ui/button';
 import { apiErrorMessage } from '@/lib/errors';
 import { canAccess, EMPLOYEE_SELF_SERVICE_ROLES } from '@/lib/access-control';
 import type { AuthUser } from '@/services/auth.service';
-import { reportsService, type AttendanceReport, type DashboardSummary } from '@/services/reports.service';
+import {
+  reportsService,
+  type AttendanceReport,
+  type DashboardSummary,
+  type HeadcountReport,
+  type TurnoverReport,
+} from '@/services/reports.service';
 import { workflowEngineService, type WorkflowInstanceStep } from '@/services/workflow-engine.service';
 import { leaveService, type LeaveBalance, type LeaveRequest } from '@/services/leave.service';
 import { employeeService, type MyReportingLine } from '@/services/employee.service';
@@ -38,6 +44,7 @@ import { AttendanceHistoryCard } from './dashboard/AttendanceHistoryCard';
 import { RecentActivityCard } from './dashboard/RecentActivityCard';
 import { QuickActionsCard, type QuickAction } from './dashboard/QuickActionsCard';
 import { MyRequestsCard } from './dashboard/MyRequestsCard';
+import { AnalyticsRow } from './dashboard/AnalyticsRow';
 
 /**
  * Persona dashboard: kartu yang tampil mengikuti kebutuhan role.
@@ -69,6 +76,8 @@ interface DashboardData {
   myMonthRecords: AttendanceRecord[] | null;
   myToday: MyAttendanceToday | null;
   myRequests: LeaveRequest[];
+  headcount: HeadcountReport | null;
+  turnover: TurnoverReport | null;
 }
 
 const EMPTY_DATA: DashboardData = {
@@ -82,6 +91,8 @@ const EMPTY_DATA: DashboardData = {
   myMonthRecords: null,
   myToday: null,
   myRequests: [],
+  headcount: null,
+  turnover: null,
 };
 
 async function settle<T>(promise: Promise<T> | null): Promise<{ value: T | null; error: unknown | null }> {
@@ -120,7 +131,7 @@ export function DashboardPage() {
     setLoading(true);
     const today = dayjs().format('YYYY-MM-DD');
 
-    const [summary, approvals, balances, reportingLine, teamRecords, report, myMonth, myToday, myRequests] =
+    const [summary, approvals, balances, reportingLine, teamRecords, report, myMonth, myToday, myRequests, headcount, turnover] =
       await Promise.all([
         settle(wantsCompanyStats && companyId ? reportsService.getDashboardSummary(companyId) : null),
         settle(wantsApprovals && companyId ? workflowEngineService.findMyApprovals(companyId) : null),
@@ -139,6 +150,16 @@ export function DashboardPage() {
         ),
         settle(wantsPersonal ? attendanceService.getMyToday() : null),
         settle(wantsMyRequests && companyId ? leaveService.getRequests(companyId) : null),
+        settle(wantsCompanyStats && companyId ? reportsService.getHeadcount(companyId) : null),
+        settle(
+          wantsCompanyStats && companyId
+            ? reportsService.getTurnover(
+                companyId,
+                dayjs().subtract(5, 'month').startOf('month').format('YYYY-MM-DD'),
+                dayjs().endOf('month').format('YYYY-MM-DD')
+              )
+            : null
+        ),
       ]);
 
     setData({
@@ -159,6 +180,8 @@ export function DashboardPage() {
       myRequests: (myRequests.value ?? [])
         .filter((request) => request.employeeId === user?.employeeId)
         .sort((a, b) => dayjs(b.createdAt).valueOf() - dayjs(a.createdAt).valueOf()),
+      headcount: headcount.error ? null : headcount.value,
+      turnover: turnover.error ? null : turnover.value,
     });
     setLoading(false);
   }, [companyId, user?.employeeId, wantsCompanyStats, wantsApprovals, wantsTeamToday, wantsPersonal, wantsMyRequests]);
@@ -259,6 +282,9 @@ export function DashboardPage() {
               <QuickActionsCard title="Kelola HR" actions={quickActions} className="flex-1" compact />
             )}
           </div>
+
+          {/* ── Analitik workforce (admin & HR) ── */}
+          {wantsCompanyStats && <AnalyticsRow headcount={data.headcount} turnover={data.turnover} />}
 
           {/* ── Tim ── */}
           {showTeam && (
