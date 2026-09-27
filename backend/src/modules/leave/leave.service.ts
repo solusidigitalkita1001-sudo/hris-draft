@@ -5,6 +5,7 @@ import { assertPayrollRangeOpen } from '@/shared/payroll/payroll-period-guard';
 import { logger } from '@/shared/logger/WinstonLogger';
 import prisma from '@/shared/database/prisma';
 import { calculateOpeningBalance } from '@/shared/leave/accrual';
+import { leaveNeedsAttachment } from '@/shared/leave/attachment-policy';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
@@ -72,6 +73,12 @@ export class LeaveService {
     const end = new Date(data.endDate);
     if (end.getTime() < start.getTime()) {
       throw new BadRequestError('Tanggal selesai cuti harus setelah atau sama dengan tanggal mulai');
+    }
+
+    // Kebijakan H-7: pengajuan kurang dari 7 hari kalender sebelum tanggal
+    // mulai wajib menyertakan lampiran (aturan murni di shared/leave/attachment-policy).
+    if (leaveNeedsAttachment(start, new Date()) && !data.attachment) {
+      throw new BadRequestError('Pengajuan cuti kurang dari H-7 wajib menyertakan lampiran');
     }
 
     // LeaveType rules (checklist §13): per-request cap and attachment flag.

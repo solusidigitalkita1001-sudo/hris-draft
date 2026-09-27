@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { appConfig } from '@/config/app';
 
 function getStepIcon(status: string, isCurrent: boolean) {
   if (status === 'APPROVED') {
@@ -262,7 +263,7 @@ export function LeaveDetail() {
           {request.attachment && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <h3 className="text-sm font-medium mb-2">Attachment</h3>
-              <a href={request.attachment} target="_blank" rel="noopener noreferrer"
+              <a href={`${appConfig.apiUrl}/private-files/leave-attachments/${request.id}`} target="_blank" rel="noopener noreferrer"
                 className="text-sm text-primary hover:underline flex items-center gap-1">
                 <FileText size={14} /> View Document
               </a>
