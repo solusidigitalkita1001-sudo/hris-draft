@@ -46,7 +46,14 @@ export const createBranchSchema = z.object({
 
 export const updateBranchSchema = createBranchSchema.partial().omit({ companyId: true });
 
-export const branchAttendancePolicyMethodSchema = z.enum(['FINGERPRINT', 'MOBILE_GPS', 'BOTH', 'MANUAL']);
+export const branchAttendancePolicyMethodSchema = z.enum([
+  'FINGERPRINT',
+  'MOBILE_GPS',
+  'BOTH',
+  'MANUAL',
+  'FACE_RECOGNITION',
+  'FACE_GPS',
+]);
 export const branchOutsideRadiusActionSchema = z.enum(['REJECT', 'FLAG', 'REVIEW']);
 
 export const upsertBranchAttendancePolicySchema = z.object({

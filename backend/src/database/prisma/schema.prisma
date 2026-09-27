@@ -3851,6 +3851,8 @@ enum AttendancePolicyMethod {
   MOBILE_GPS
   BOTH
   MANUAL
+  FACE_RECOGNITION
+  FACE_GPS
 }
 
 enum AttendanceCaptureMethod {

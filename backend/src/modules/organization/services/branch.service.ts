@@ -125,6 +125,7 @@ export class BranchService {
     const needsGpsConfiguration =
       merged.attendanceMethod === AttendancePolicyMethod.MOBILE_GPS ||
       merged.attendanceMethod === AttendancePolicyMethod.BOTH ||
+      merged.attendanceMethod === AttendancePolicyMethod.FACE_GPS ||
       merged.requiresLocation;
 
     const effectiveLatitude = merged.gpsLatitude ?? branch.latitude ?? undefined;

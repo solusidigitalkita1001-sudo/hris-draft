@@ -176,10 +176,20 @@ function resolveAllowedMethods(policyMethod: string): AttendanceCaptureMethod[] 
         AttendanceCaptureMethod.MOBILE_GPS,
         AttendanceCaptureMethod.FACE_RECOGNITION,
       ];
+    // FACE_RECOGNITION: wajah wajib (geofence opsional, mengikuti requiresLocation/koordinat).
+    // FACE_GPS: wajah wajib + geofence wajib (dikonfigurasi saat menyimpan policy).
+    case 'FACE_RECOGNITION':
+    case 'FACE_GPS':
+      return [AttendanceCaptureMethod.FACE_RECOGNITION];
     case 'MANUAL':
     default:
       return [AttendanceCaptureMethod.MANUAL, AttendanceCaptureMethod.FACE_RECOGNITION];
   }
+}
+
+/** Kebijakan bermetode FACE_* mewajibkan verifikasi wajah walau toggle selfie mati. */
+function policyRequiresFace(policyMethod: string): boolean {
+  return policyMethod === 'FACE_RECOGNITION' || policyMethod === 'FACE_GPS';
 }
 
 function isHolidayLikeDayType(dayType: string) {
@@ -215,7 +225,13 @@ function evaluateGpsAttendance(options: {
     phaseLabel = 'attendance',
   } = options;
 
-  const mustEvaluateLocation = method === AttendanceCaptureMethod.MOBILE_GPS || method === AttendanceCaptureMethod.FACE_RECOGNITION || requiresLocation;
+  // FACE_RECOGNITION: geofence dievaluasi bila diwajibkan policy ATAU geofence
+  // memang terkonfigurasi — kebijakan FACE tanpa koordinat (kerja remote) tetap sah.
+  const policyHasGeofence = policyLatitude !== null && policyLongitude !== null && policyRadiusMeters !== null;
+  const mustEvaluateLocation =
+    method === AttendanceCaptureMethod.MOBILE_GPS ||
+    requiresLocation ||
+    (method === AttendanceCaptureMethod.FACE_RECOGNITION && policyHasGeofence);
   if (!mustEvaluateLocation) {
     return {
       distanceMeters: null as number | null,
@@ -293,7 +309,9 @@ export class AttendanceService {
       lateToleranceMinutes: context.policy.lateToleranceMinutes,
       earlyCheckoutToleranceMinutes: context.policy.earlyCheckoutToleranceMinutes,
       requiresLocation: context.policy.requiresLocation,
-      requiresSelfie: context.policy.requiresSelfie,
+      // Efektif: metode FACE_* mewajibkan selfie walau toggle policy mati,
+      // supaya klien (web/mobile) langsung menyalakan alur kamera.
+      requiresSelfie: context.policy.requiresSelfie || policyRequiresFace(context.policy.attendanceMethod),
       gpsLatitude: context.policy.gpsLatitude,
       gpsLongitude: context.policy.gpsLongitude,
       gpsRadiusMeters: context.policy.gpsRadiusMeters,
@@ -466,7 +484,9 @@ export class AttendanceService {
 
     const faceInput = data.faceRecognition as any;
     const requiresFaceVerification =
-      method === AttendanceCaptureMethod.FACE_RECOGNITION || context.policy.requiresSelfie;
+      method === AttendanceCaptureMethod.FACE_RECOGNITION ||
+      context.policy.requiresSelfie ||
+      policyRequiresFace(context.policy.attendanceMethod);
     const hasFacePayload = requiresFaceVerification || !!faceInput;
 
     const employeeForFace = hasFacePayload
@@ -490,7 +510,7 @@ export class AttendanceService {
       method,
       faceInput,
       Boolean(employeeForFace?.faceProfile),
-      context.policy.requiresSelfie,
+      context.policy.requiresSelfie || policyRequiresFace(context.policy.attendanceMethod),
     );
 
     let similarity = 0;
