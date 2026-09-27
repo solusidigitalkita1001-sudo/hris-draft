@@ -1,10 +1,16 @@
+import { essDictionary } from './dictionaries/ess';
+import { financeDictionary } from './dictionaries/finance';
+import { workforceDictionary } from './dictionaries/workforce';
+import { operationsDictionary } from './dictionaries/operations';
+import { adminDictionary } from './dictionaries/admin';
+
 export type Language = 'id' | 'en';
 
 export type TranslationParams = Record<string, string | number>;
 
 export const defaultLanguage: Language = 'id';
 
-export const translations = {
+const base = {
   id: {
     'common.language': 'Bahasa',
     'common.indonesian': 'Indonesia',
@@ -692,6 +698,27 @@ export const translations = {
     'error.403.title': 'Access denied',
     'error.403.description': 'You do not have permission to access this page.',
     'error.backToDashboard': 'Go to Dashboard',
+  },
+} as const;
+
+// Gabungan kamus dasar + kamus per-modul. Kunci per-modul memakai prefix unik
+// (ess.*, fin.*, wf.*, ops.*, adm.*) sehingga tidak mungkin bertabrakan.
+export const translations = {
+  id: {
+    ...base.id,
+    ...essDictionary.id,
+    ...financeDictionary.id,
+    ...workforceDictionary.id,
+    ...operationsDictionary.id,
+    ...adminDictionary.id,
+  },
+  en: {
+    ...base.en,
+    ...essDictionary.en,
+    ...financeDictionary.en,
+    ...workforceDictionary.en,
+    ...operationsDictionary.en,
+    ...adminDictionary.en,
   },
 } as const;
 
