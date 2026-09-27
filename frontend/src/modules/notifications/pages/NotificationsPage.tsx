@@ -5,6 +5,7 @@ import { Bell, CheckCheck, Info, AlertCircle, XCircle, Trash2, Loader2 } from 'l
 import { timeAgo } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
 import { cn } from '@/utils/cn';
+import { useI18n } from '@/i18n/provider';
 
 /** Ikon bertone sesuai handoff: kotak radius kecil dengan pasangan fg/bg semantik. */
 const TYPE_TONES: Record<string, { icon: React.ReactNode; box: string }> = {
@@ -15,6 +16,7 @@ const TYPE_TONES: Record<string, { icon: React.ReactNode; box: string }> = {
 };
 
 export function NotificationsPage() {
+  const { t } = useI18n();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,11 +34,11 @@ export function NotificationsPage() {
       setNotifications(data);
       setUnreadCount(countRes.count);
     } catch (err) {
-      setError(apiErrorMessage(err, 'Gagal memuat notifikasi'));
+      setError(apiErrorMessage(err, t('ops.notif.errors.load')));
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, t]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -45,7 +47,7 @@ export function NotificationsPage() {
       await notificationService.markAllAsRead();
       fetchData();
     } catch (err) {
-      setError(apiErrorMessage(err, 'Gagal menandai semua terbaca'));
+      setError(apiErrorMessage(err, t('ops.notif.errors.markAll')));
     }
   };
 
@@ -57,7 +59,7 @@ export function NotificationsPage() {
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (err) {
-      setError(apiErrorMessage(err, 'Gagal menandai notifikasi terbaca'));
+      setError(apiErrorMessage(err, t('ops.notif.errors.markRead')));
     }
   };
 
@@ -66,7 +68,7 @@ export function NotificationsPage() {
       await notificationService.delete(id);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     } catch (err) {
-      setError(apiErrorMessage(err, 'Gagal menghapus notifikasi'));
+      setError(apiErrorMessage(err, t('ops.notif.errors.delete')));
     }
   };
 
@@ -78,14 +80,14 @@ export function NotificationsPage() {
     <div className="mx-auto max-w-3xl">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.9px]">Notifikasi</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.9px]">{t('ops.notif.title')}</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {unreadCount > 0 ? `${unreadCount} belum dibaca` : 'Semua sudah terbaca'}
+            {unreadCount > 0 ? t('ops.notif.unreadCount', { count: unreadCount }) : t('ops.notif.allRead')}
           </p>
         </div>
         {unreadCount > 0 && (
           <Button variant="outline" size="sm" onClick={handleMarkAllRead}>
-            <CheckCheck size={16} className="mr-2" /> Tandai semua terbaca
+            <CheckCheck size={16} className="mr-2" /> {t('ops.notif.markAllRead')}
           </Button>
         )}
       </div>
@@ -101,7 +103,7 @@ export function NotificationsPage() {
               filter === tab ? 'bg-card text-foreground shadow-card' : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {tab === 'all' ? 'Semua' : `Belum dibaca (${unreadCount})`}
+            {tab === 'all' ? t('ops.notif.filter.all') : t('ops.notif.filter.unread', { count: unreadCount })}
           </button>
         ))}
       </div>
@@ -115,13 +117,13 @@ export function NotificationsPage() {
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-20 text-sm text-muted-foreground" role="status">
-          <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Memuat notifikasi…
+          <Loader2 size={16} className="animate-spin" aria-hidden="true" /> {t('ops.notif.loading')}
         </div>
       ) : displayData.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-card border border-border bg-card py-20">
           <Bell size={44} className="text-muted-foreground/40" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
-            {filter === 'unread' ? 'Tidak ada notifikasi yang belum dibaca' : 'Belum ada notifikasi'}
+            {filter === 'unread' ? t('ops.notif.empty.unread') : t('ops.notif.empty.all')}
           </p>
         </div>
       ) : (
@@ -142,7 +144,7 @@ export function NotificationsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className={cn('text-sm', n.isRead ? 'font-normal' : 'font-semibold')}>{n.title}</p>
-                    {!n.isRead && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Belum dibaca" />}
+                    {!n.isRead && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label={t('ops.notif.unreadLabel')} />}
                   </div>
                   {n.message && (
                     <p className="mt-1 text-xs text-muted-foreground">{n.message}</p>
@@ -154,8 +156,8 @@ export function NotificationsPage() {
                     <button
                       onClick={() => handleMarkRead(n.id)}
                       className="rounded-[10px] p-1.5 text-primary transition-colors hover:bg-accent"
-                      title="Tandai terbaca"
-                      aria-label="Tandai terbaca"
+                      title={t('ops.notif.markRead')}
+                      aria-label={t('ops.notif.markRead')}
                     >
                       <CheckCheck size={14} />
                     </button>
@@ -163,8 +165,8 @@ export function NotificationsPage() {
                   <button
                     onClick={() => handleDelete(n.id)}
                     className="rounded-[10px] p-1.5 text-muted-foreground transition-colors hover:bg-danger-bg hover:text-danger"
-                    title="Hapus"
-                    aria-label="Hapus notifikasi"
+                    title={t('common.delete')}
+                    aria-label={t('ops.notif.deleteLabel')}
                   >
                     <Trash2 size={14} />
                   </button>

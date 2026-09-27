@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useI18n } from '@/i18n/provider';
 
 /**
  * Modal standar redesign: kartu radius 26, animasi popIn ringan,
@@ -21,6 +22,8 @@ export function AppModal({
   children: ReactNode;
   maxWidth?: string;
 }) {
+  const { t } = useI18n();
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -54,7 +57,7 @@ export function AppModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Tutup dialog"
+            aria-label={t('adm.modal.close')}
             className="flex h-9 w-9 flex-none items-center justify-center rounded-[11px] bg-secondary text-muted-foreground transition-colors hover:text-foreground"
           >
             <X size={14} strokeWidth={2.4} />

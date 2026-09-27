@@ -3,6 +3,7 @@ import { financeDictionary } from './dictionaries/finance';
 import { workforceDictionary } from './dictionaries/workforce';
 import { operationsDictionary } from './dictionaries/operations';
 import { adminDictionary } from './dictionaries/admin';
+import { performanceDictionary } from './dictionaries/performance';
 
 export type Language = 'id' | 'en';
 
@@ -711,6 +712,7 @@ export const translations = {
     ...workforceDictionary.id,
     ...operationsDictionary.id,
     ...adminDictionary.id,
+    ...performanceDictionary.id,
   },
   en: {
     ...base.en,
@@ -719,6 +721,7 @@ export const translations = {
     ...workforceDictionary.en,
     ...operationsDictionary.en,
     ...adminDictionary.en,
+    ...performanceDictionary.en,
   },
 } as const;
 

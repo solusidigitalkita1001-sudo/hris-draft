@@ -12,6 +12,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { useI18n } from '@/i18n/provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
@@ -84,6 +85,7 @@ function TripForm({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useI18n();
   const [destination, setDestination] = useState('');
   const [purpose, setPurpose] = useState('');
   const [startDate, setStartDate] = useState(dayjs().format('YYYY-MM-DD'));
@@ -95,28 +97,28 @@ function TripForm({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!employeeId || !companyId) {
-      toast.error('Profil employee atau company belum tersedia');
+      toast.error(t('ops.travel.toast.profileMissing'));
       return;
     }
 
     if (!destination.trim()) {
-      toast.error('Tujuan wajib diisi');
+      toast.error(t('ops.travel.trip.validation.destinationRequired'));
       return;
     }
 
     if (!purpose.trim()) {
-      toast.error('Tujuan perjalanan wajib diisi');
+      toast.error(t('ops.travel.trip.validation.purposeRequired'));
       return;
     }
 
     if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) {
-      toast.error('Tanggal selesai tidak boleh lebih kecil dari tanggal mulai');
+      toast.error(t('ops.travel.trip.validation.endBeforeStart'));
       return;
     }
 
     const parsedEstimated = Number(estimatedCost);
     if (!Number.isFinite(parsedEstimated) || parsedEstimated < 0) {
-      toast.error('Estimasi biaya tidak valid');
+      toast.error(t('ops.travel.trip.validation.invalidEstimate'));
       return;
     }
 
@@ -130,11 +132,11 @@ function TripForm({
         estimatedCost: parsedEstimated,
         notes: notes || undefined,
       });
-      toast.success('Travel request berhasil dibuat');
+      toast.success(t('ops.travel.trip.toast.created'));
       onSuccess();
       onClose();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal membuat travel request'));
+      toast.error(apiErrorMessage(error, t('ops.travel.trip.toast.createFailed')));
     } finally {
       setSaving(false);
     }
@@ -144,11 +146,11 @@ function TripForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tujuan *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.trip.form.destination')}</label>
           <Input value={destination} onChange={(event) => setDestination(event.target.value)} required />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Estimasi Biaya *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.trip.form.estimatedCost')}</label>
           <Input
             type="number"
             min={0}
@@ -161,16 +163,16 @@ function TripForm({
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tanggal Mulai *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.trip.form.startDate')}</label>
           <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tanggal Selesai *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.trip.form.endDate')}</label>
           <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
         </div>
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tujuan Perjalanan *</label>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.trip.form.purpose')}</label>
         <textarea
           rows={4}
           value={purpose}
@@ -180,7 +182,7 @@ function TripForm({
         />
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Catatan</label>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.trip.form.notes')}</label>
         <textarea
           rows={3}
           value={notes}
@@ -190,10 +192,10 @@ function TripForm({
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>
-          Batal
+          {t('common.cancel')}
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? 'Menyimpan...' : 'Kirim Request'}
+          {saving ? t('ops.travel.form.saving') : t('ops.travel.trip.form.submit')}
         </Button>
       </div>
     </form>
@@ -215,6 +217,7 @@ function ClaimForm({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useI18n();
   const [tripId, setTripId] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('TRANSPORTATION');
   const [amount, setAmount] = useState('0');
@@ -228,18 +231,18 @@ function ClaimForm({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!employeeId || !companyId) {
-      toast.error('Profil employee atau company belum tersedia');
+      toast.error(t('ops.travel.toast.profileMissing'));
       return;
     }
 
     const parsedAmount = Number(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      toast.error('Nominal harus > 0');
+      toast.error(t('ops.travel.claim.validation.amountPositive'));
       return;
     }
 
     if (tripId && !selectableTrips.some((trip) => trip.id === tripId)) {
-      toast.error('Trip yang dipilih tidak valid');
+      toast.error(t('ops.travel.claim.validation.invalidTrip'));
       return;
     }
 
@@ -260,11 +263,11 @@ function ClaimForm({
         description: description.trim() || undefined,
         receiptFilePath,
       });
-      toast.success('Expense claim berhasil dikirim');
+      toast.success(t('ops.travel.claim.toast.submitted'));
       onSuccess();
       onClose();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal membuat expense claim'));
+      toast.error(apiErrorMessage(error, t('ops.travel.claim.toast.createFailed')));
     } finally {
       setSaving(false);
     }
@@ -274,49 +277,49 @@ function ClaimForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Trip Terkait</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.claim.form.relatedTrip')}</label>
           <Select2
             value={tripId}
             onValueChange={setTripId}
             options={[
-              { value: '', label: 'Tanpa trip spesifik' },
+              { value: '', label: t('ops.travel.claim.form.noSpecificTrip') },
               ...selectableTrips.map((trip) => ({
                 value: trip.id,
                 label: `${trip.destination} (${dayjs(trip.startDate).format('DD MMM YYYY')})`,
               })),
             ]}
-            placeholder="Pilih trip"
+            placeholder={t('ops.travel.claim.form.selectTrip')}
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Kategori *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.claim.form.category')}</label>
           <Select2
             value={category}
             onValueChange={(value) => setCategory(value as ExpenseCategory)}
             options={categories}
-            placeholder="Pilih kategori"
+            placeholder={t('ops.travel.claim.form.selectCategory')}
           />
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Nominal *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.claim.form.amount')}</label>
           <Input type="number" min={0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tanggal Expense *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.claim.form.expenseDate')}</label>
           <Input type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} required />
         </div>
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Upload Receipt</label>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.claim.form.uploadReceipt')}</label>
         <Input
           type="file"
           accept=".jpg,.jpeg,.png,.gif,.pdf"
           onChange={(event) => {
             const file = event.target.files?.[0] || null;
             if (file && file.size > 5 * 1024 * 1024) {
-              toast.error('Ukuran file receipt maksimal 5MB');
+              toast.error(t('ops.travel.claim.validation.receiptTooLarge'));
               event.target.value = '';
               setReceiptFile(null);
               return;
@@ -325,16 +328,16 @@ function ClaimForm({
           }}
         />
         <p className="mt-1 text-xs text-muted-foreground">
-          Format: JPG, PNG, GIF, atau PDF. Maks 5MB.
+          {t('ops.travel.claim.form.receiptFormats')}
         </p>
         {receiptFile && (
           <p className="mt-2 text-xs text-muted-foreground">
-            File terpilih: {receiptFile.name}
+            {t('ops.travel.claim.form.selectedFile', { name: receiptFile.name })}
           </p>
         )}
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Deskripsi</label>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.travel.claim.form.description')}</label>
         <textarea
           rows={4}
           value={description}
@@ -344,10 +347,10 @@ function ClaimForm({
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>
-          Batal
+          {t('common.cancel')}
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? 'Menyimpan...' : 'Kirim Claim'}
+          {saving ? t('ops.travel.form.saving') : t('ops.travel.claim.form.submit')}
         </Button>
       </div>
     </form>
@@ -355,6 +358,7 @@ function ClaimForm({
 }
 
 export function TravelExpensePage() {
+  const { t } = useI18n();
   const { user } = useAuthStore();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [activeTab, setActiveTab] = useState<'trips' | 'claims'>('trips');
@@ -380,9 +384,9 @@ export function TravelExpensePage() {
       const data = await travelExpenseService.getCategories();
       setCategories(data);
     } catch {
-      toast.error('Gagal memuat kategori expense');
+      toast.error(t('ops.travel.toast.loadCategoriesFailed'));
     }
-  }, []);
+  }, [t]);
 
   const loadTrips = useCallback(async () => {
     if (isApprover) {
@@ -413,11 +417,11 @@ export function TravelExpensePage() {
     try {
       await Promise.all([loadCategories(), loadTrips(), loadClaims()]);
     } catch {
-      toast.error('Gagal memuat data travel & expense');
+      toast.error(t('ops.travel.toast.loadDataFailed'));
     } finally {
       setLoading(false);
     }
-  }, [loadCategories, loadTrips, loadClaims]);
+  }, [loadCategories, loadTrips, loadClaims, t]);
 
   useEffect(() => {
     refresh();
@@ -425,44 +429,44 @@ export function TravelExpensePage() {
 
   const handleTripApproval = async (id: string, action: 'approve' | 'reject') => {
     const notes = await popup.prompt({
-      title: action === 'approve' ? 'Approval Travel Request' : 'Reject Travel Request',
-      description: action === 'approve' ? 'Tambahkan catatan approval bila perlu.' : 'Masukkan alasan penolakan.',
-      placeholder: action === 'approve' ? 'Catatan approval (opsional)' : 'Alasan reject',
+      title: action === 'approve' ? t('ops.travel.trip.approval.approveTitle') : t('ops.travel.trip.approval.rejectTitle'),
+      description: action === 'approve' ? t('ops.travel.approval.approveNotesDescription') : t('ops.travel.approval.rejectReasonDescription'),
+      placeholder: action === 'approve' ? t('ops.travel.approval.approveNotesPlaceholder') : t('ops.travel.approval.rejectReasonPlaceholder'),
       required: action === 'reject',
-      confirmText: action === 'approve' ? 'Approve' : 'Reject',
+      confirmText: action === 'approve' ? t('ops.travel.actions.approve') : t('ops.travel.actions.reject'),
       intent: action === 'reject' ? 'destructive' : 'default',
     });
     if (action === 'reject' && !notes) return;
     try {
       if (action === 'approve') {
         await travelExpenseService.submitTripWorkflowAction(id, 'APPROVE', notes || undefined);
-        toast.success('Travel request disetujui via workflow');
+        toast.success(t('ops.travel.trip.toast.approved'));
       } else {
         await travelExpenseService.submitTripWorkflowAction(id, 'REJECT', notes || undefined);
-        toast.success('Travel request ditolak via workflow');
+        toast.success(t('ops.travel.trip.toast.rejected'));
       }
       await refresh();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Aksi gagal diproses'));
+      toast.error(apiErrorMessage(error, t('ops.travel.toast.actionFailed')));
     }
   };
 
   const handleCreateAdvance = async (tripId: string) => {
     const amount = await popup.prompt({
-      title: 'Cash Advance',
-      description: 'Masukkan nominal cash advance untuk trip ini.',
-      placeholder: 'Contoh: 1500000',
+      title: t('ops.travel.cashAdvance.title'),
+      description: t('ops.travel.cashAdvance.description'),
+      placeholder: t('ops.travel.cashAdvance.placeholder'),
       required: true,
-      confirmText: 'Simpan',
+      confirmText: t('common.save'),
     });
     if (!amount) return;
 
     try {
       await travelExpenseService.createAdvance(tripId, { companyId, amount: Number(amount) });
-      toast.success('Cash advance berhasil dicatat');
+      toast.success(t('ops.travel.cashAdvance.success'));
       await refresh();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal mencatat cash advance'));
+      toast.error(apiErrorMessage(error, t('ops.travel.cashAdvance.failed')));
     }
   };
 
@@ -470,62 +474,62 @@ export function TravelExpensePage() {
     try {
       if (action === 'approve') {
         const notes = await popup.prompt({
-          title: 'Approve Expense Claim',
-          description: 'Tambahkan catatan approval bila perlu.',
-          placeholder: 'Catatan approval (opsional)',
-          confirmText: 'Approve',
+          title: t('ops.travel.claim.approval.approveTitle'),
+          description: t('ops.travel.approval.approveNotesDescription'),
+          placeholder: t('ops.travel.approval.approveNotesPlaceholder'),
+          confirmText: t('ops.travel.actions.approve'),
         });
         await travelExpenseService.submitClaimWorkflowAction(id, 'APPROVE', notes || undefined);
-        toast.success('Expense claim disetujui via workflow');
+        toast.success(t('ops.travel.claim.toast.approved'));
       } else if (action === 'reject') {
         const notes = await popup.prompt({
-          title: 'Reject Expense Claim',
-          description: 'Masukkan alasan penolakan claim.',
-          placeholder: 'Alasan reject',
+          title: t('ops.travel.claim.approval.rejectTitle'),
+          description: t('ops.travel.claim.approval.rejectReasonDescription'),
+          placeholder: t('ops.travel.approval.rejectReasonPlaceholder'),
           required: true,
-          confirmText: 'Reject',
+          confirmText: t('ops.travel.actions.reject'),
           intent: 'destructive',
         });
         if (!notes) return;
         await travelExpenseService.submitClaimWorkflowAction(id, 'REJECT', notes || undefined);
-        toast.success('Expense claim ditolak via workflow');
+        toast.success(t('ops.travel.claim.toast.rejected'));
       } else {
         const method = (await popup.select({
-          title: 'Metode Reimbursement',
-          description: 'Pilih metode reimbursement untuk claim ini.',
+          title: t('ops.travel.reimburse.title'),
+          description: t('ops.travel.reimburse.description'),
           value: 'TRANSFER',
           options: [
             { value: 'TRANSFER', label: 'TRANSFER' },
             { value: 'PAYROLL', label: 'PAYROLL' },
           ],
           required: true,
-          confirmText: 'Proses',
+          confirmText: t('ops.travel.reimburse.confirm'),
         })) as ReimbursementMethod | null;
         if (!method) return;
         await travelExpenseService.reimburseClaim(id, { companyId, method });
-        toast.success('Reimbursement berhasil dicatat');
+        toast.success(t('ops.travel.reimburse.success'));
       }
       await refresh();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Aksi gagal diproses'));
+      toast.error(apiErrorMessage(error, t('ops.travel.toast.actionFailed')));
     }
   };
 
   return (
     <div>
       <PageHeader
-        title="Travel & Expense"
-        description="Kelola pengajuan perjalanan dinas dan klaim biaya operasional"
+        title={t('ops.travel.title')}
+        description={t('ops.travel.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={refresh}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+              <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
             </Button>
             <Button size="sm" variant="outline" onClick={() => setShowTripForm(true)}>
-              <Plus size={16} className="mr-2" /> Travel Request
+              <Plus size={16} className="mr-2" /> {t('ops.travel.actions.travelRequest')}
             </Button>
             <Button size="sm" onClick={() => setShowClaimForm(true)}>
-              <Plus size={16} className="mr-2" /> Expense Claim
+              <Plus size={16} className="mr-2" /> {t('ops.travel.actions.expenseClaim')}
             </Button>
           </>
         }
@@ -538,7 +542,7 @@ export function TravelExpensePage() {
             activeTab === 'trips' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
           }`}
         >
-          <Plane size={16} /> Business Trip
+          <Plane size={16} /> {t('ops.travel.tabs.businessTrip')}
         </button>
         <button
           onClick={() => setActiveTab('claims')}
@@ -546,7 +550,7 @@ export function TravelExpensePage() {
             activeTab === 'claims' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
           }`}
         >
-          <ReceiptText size={16} /> Expense Claim
+          <ReceiptText size={16} /> {t('ops.travel.actions.expenseClaim')}
         </button>
       </div>
 
@@ -560,7 +564,7 @@ export function TravelExpensePage() {
                 tripStatus === status ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground'
               }`}
             >
-              {status ? BUSINESS_TRIP_STATUS_LABELS[status as keyof typeof BUSINESS_TRIP_STATUS_LABELS] : 'Semua'}
+              {status ? BUSINESS_TRIP_STATUS_LABELS[status as keyof typeof BUSINESS_TRIP_STATUS_LABELS] : t('ops.travel.filters.all')}
             </button>
           ))}
         </div>
@@ -576,7 +580,7 @@ export function TravelExpensePage() {
                 claimStatus === status ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground'
               }`}
             >
-              {status ? EXPENSE_CLAIM_STATUS_LABELS[status as keyof typeof EXPENSE_CLAIM_STATUS_LABELS] : 'Semua'}
+              {status ? EXPENSE_CLAIM_STATUS_LABELS[status as keyof typeof EXPENSE_CLAIM_STATUS_LABELS] : t('ops.travel.filters.all')}
             </button>
           ))}
         </div>
@@ -584,13 +588,13 @@ export function TravelExpensePage() {
 
       {loading ? (
         <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          Memuat data...
+          {t('ops.travel.loadingData')}
         </div>
       ) : activeTab === 'trips' ? (
         <div className="space-y-4">
           {trips.length === 0 && (
             <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              Belum ada data business trip.
+              {t('ops.travel.trips.empty')}
             </div>
           )}
           {trips.map((trip) => (
@@ -606,31 +610,31 @@ export function TravelExpensePage() {
                   </div>
                   <p className="mb-2 text-sm text-muted-foreground">{trip.purpose}</p>
                   <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                    <span>Periode: {dayjs(trip.startDate).format('DD MMM YYYY')} - {dayjs(trip.endDate).format('DD MMM YYYY')}</span>
-                    <span>Estimasi: Rp {Number(trip.estimatedCost).toLocaleString('id-ID')}</span>
-                    <span>Expense claim: {trip._count?.expenseClaims || 0}</span>
-                    {trip.employee && <span>Pemohon: {trip.employee.fullName}</span>}
+                    <span>{t('ops.travel.trip.period', { start: dayjs(trip.startDate).format('DD MMM YYYY'), end: dayjs(trip.endDate).format('DD MMM YYYY') })}</span>
+                    <span>{t('ops.travel.trip.estimate', { amount: Number(trip.estimatedCost).toLocaleString('id-ID') })}</span>
+                    <span>{t('ops.travel.trip.claimCount', { count: trip._count?.expenseClaims || 0 })}</span>
+                    {trip.employee && <span>{t('ops.travel.requester', { name: trip.employee.fullName })}</span>}
                   </div>
                   {!!trip.travelAdvances?.length && (
                     <div className="mt-3 rounded-lg bg-muted/50 p-3 text-sm">
-                      Advance terakhir: Rp {Number(trip.travelAdvances[0].amount).toLocaleString('id-ID')}
+                      {t('ops.travel.trip.lastAdvance', { amount: Number(trip.travelAdvances[0].amount).toLocaleString('id-ID') })}
                     </div>
                   )}
                 </div>
                 {isApprover && trip.status === 'REQUESTED' && (
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => handleTripApproval(trip.id, 'approve')}>
-                      <CheckCircle2 size={15} className="mr-1.5" /> Approve
+                      <CheckCircle2 size={15} className="mr-1.5" /> {t('ops.travel.actions.approve')}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => handleTripApproval(trip.id, 'reject')}>
-                      <XCircle size={15} className="mr-1.5" /> Reject
+                      <XCircle size={15} className="mr-1.5" /> {t('ops.travel.actions.reject')}
                     </Button>
                   </div>
                 )}
                 {isApprover && trip.status === 'APPROVED' && (
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => handleCreateAdvance(trip.id)}>
-                      <Wallet size={15} className="mr-1.5" /> Cash Advance
+                      <Wallet size={15} className="mr-1.5" /> {t('ops.travel.cashAdvance.title')}
                     </Button>
                   </div>
                 )}
@@ -642,7 +646,7 @@ export function TravelExpensePage() {
         <div className="space-y-4">
           {claims.length === 0 && (
             <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              Belum ada expense claim.
+              {t('ops.travel.claims.empty')}
             </div>
           )}
           {claims.map((claim) => (
@@ -663,32 +667,32 @@ export function TravelExpensePage() {
                     />
                   </div>
                   <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                    <span>Nominal: Rp {Number(claim.amount).toLocaleString('id-ID')}</span>
-                    <span>Tanggal: {dayjs(claim.expenseDate).format('DD MMM YYYY')}</span>
-                    {claim.employee && <span>Pemohon: {claim.employee.fullName}</span>}
-                    {claim.trip && <span>Trip: {claim.trip.destination}</span>}
+                    <span>{t('ops.travel.claim.amountLabel', { amount: Number(claim.amount).toLocaleString('id-ID') })}</span>
+                    <span>{t('ops.travel.claim.dateLabel', { date: dayjs(claim.expenseDate).format('DD MMM YYYY') })}</span>
+                    {claim.employee && <span>{t('ops.travel.requester', { name: claim.employee.fullName })}</span>}
+                    {claim.trip && <span>{t('ops.travel.claim.tripLabel', { destination: claim.trip.destination })}</span>}
                   </div>
                   {claim.description && <p className="mt-2 text-sm text-muted-foreground">{claim.description}</p>}
                   {claim.receiptFilePath && (
                     <a href={`${appConfig.apiUrl}/private-files/receipts/${claim.id}`} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-primary hover:underline">
-                      Lihat receipt
+                      {t('ops.travel.claim.viewReceipt')}
                     </a>
                   )}
                 </div>
                 {isApprover && claim.status === 'SUBMITTED' && (
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => handleClaimAction(claim.id, 'approve')}>
-                      <CheckCircle2 size={15} className="mr-1.5" /> Approve
+                      <CheckCircle2 size={15} className="mr-1.5" /> {t('ops.travel.actions.approve')}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => handleClaimAction(claim.id, 'reject')}>
-                      <XCircle size={15} className="mr-1.5" /> Reject
+                      <XCircle size={15} className="mr-1.5" /> {t('ops.travel.actions.reject')}
                     </Button>
                   </div>
                 )}
                 {isApprover && claim.status === 'APPROVED' && (
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => handleClaimAction(claim.id, 'reimburse')}>
-                      <Wallet size={15} className="mr-1.5" /> Reimburse
+                      <Wallet size={15} className="mr-1.5" /> {t('ops.travel.actions.reimburse')}
                     </Button>
                   </div>
                 )}
@@ -698,11 +702,11 @@ export function TravelExpensePage() {
         </div>
       )}
 
-      <Modal open={showTripForm} onClose={() => setShowTripForm(false)} title="Ajukan Business Trip">
+      <Modal open={showTripForm} onClose={() => setShowTripForm(false)} title={t('ops.travel.trip.form.title')}>
         <TripForm employeeId={employeeId} companyId={companyId} onClose={() => setShowTripForm(false)} onSuccess={refresh} />
       </Modal>
 
-      <Modal open={showClaimForm} onClose={() => setShowClaimForm(false)} title="Ajukan Expense Claim">
+      <Modal open={showClaimForm} onClose={() => setShowClaimForm(false)} title={t('ops.travel.claim.form.title')}>
         <ClaimForm
           employeeId={employeeId}
           companyId={companyId}

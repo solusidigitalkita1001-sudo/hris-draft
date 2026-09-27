@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatDateTime } from '@/utils/format';
 import { apiErrorMessage, apiErrorStatus } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
 
 /**
  * Slip Gaji Saya — alur 3 tahap sesuai handoff:
@@ -28,6 +29,7 @@ import { apiErrorMessage, apiErrorStatus } from '@/lib/errors';
  *    detail (kartu take home pay, Pendapatan & Potongan, unduh PDF).
  */
 export function MyPayslipsPage() {
+  const { t } = useI18n();
   const [payslips, setPayslips] = useState<MyPayslipSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinStatus, setPinStatus] = useState<PayslipPinStatus | null>(null);
@@ -58,11 +60,11 @@ export function MyPayslipsPage() {
       relock();
       return;
     }
-    expiryTimer.current = setTimeout(() => relock('Sesi buka slip gaji berakhir. Masukkan PIN kembali.'), remaining);
+    expiryTimer.current = setTimeout(() => relock(t('fin.myslips.sessionExpired')), remaining);
     return () => {
       if (expiryTimer.current) clearTimeout(expiryTimer.current);
     };
-  }, [grant, relock]);
+  }, [grant, relock, t]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -74,11 +76,11 @@ export function MyPayslipsPage() {
       setPayslips(list);
       setPinStatus(status);
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal memuat slip gaji'));
+      toast.error(apiErrorMessage(err, t('fin.myslips.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchData();
@@ -96,14 +98,14 @@ export function MyPayslipsPage() {
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') nextDetails[result.value.id] = result.value;
       else if (apiErrorStatus(result.reason) === 403) expired = true;
-      else if (payslips[index]) toast.error(apiErrorMessage(result.reason, 'Gagal memuat detail slip gaji'));
+      else if (payslips[index]) toast.error(apiErrorMessage(result.reason, t('fin.myslips.detailLoadFailed')));
     });
     if (expired) {
-      relock('Sesi buka slip gaji berakhir. Masukkan PIN kembali.');
+      relock(t('fin.myslips.sessionExpired'));
       return;
     }
     setDetails(nextDetails);
-  }, [payslips, relock]);
+  }, [payslips, relock, t]);
 
   const handleDownloadPdf = useCallback(async (id: string) => {
     if (!grant) return;
@@ -119,12 +121,12 @@ export function MyPayslipsPage() {
       anchor.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      if (apiErrorStatus(err) === 403) relock('Sesi buka slip gaji berakhir. Masukkan PIN kembali.');
-      else toast.error(apiErrorMessage(err, 'Gagal mengunduh PDF slip gaji'));
+      if (apiErrorStatus(err) === 403) relock(t('fin.myslips.sessionExpired'));
+      else toast.error(apiErrorMessage(err, t('fin.myslips.pdfDownloadFailed')));
     } finally {
       setDownloadingId(null);
     }
-  }, [grant, relock]);
+  }, [grant, relock, t]);
 
   const selectedDetail = selectedId ? details[selectedId] : null;
   const selectedSummary = useMemo(
@@ -137,18 +139,18 @@ export function MyPayslipsPage() {
   return (
     <div>
       <PageHeader
-        title="Slip Gaji Saya"
-        description="Daftar slip gaji Anda per periode payroll"
+        title={t('fin.myslips.title')}
+        description={t('fin.myslips.description')}
         actions={
           <div className="flex flex-wrap gap-2">
             {pinReady && (
               <Button variant="outline" size="sm" onClick={() => setDialog('set')}>
-                <KeyRound size={14} className="mr-2" /> Ubah PIN
+                <KeyRound size={14} className="mr-2" /> {t('fin.myslips.changePin')}
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
           </div>
         }
@@ -159,16 +161,14 @@ export function MyPayslipsPage() {
         <div className="mb-4 flex items-start gap-2.5 rounded-card-sm border border-success/25 bg-success-bg p-3.5">
           <LockOpen size={14} className="mt-0.5 shrink-0 text-success" />
           <p className="text-xs text-success">
-            Nominal terbuka sampai {grant ? formatDateTime(grant.expiresAt) : '-'}. Setelah itu halaman
-            terkunci otomatis dan PIN diminta kembali.
+            {t('fin.myslips.unlockedBanner', { time: grant ? formatDateTime(grant.expiresAt) : '-' })}
           </p>
         </div>
       ) : (
         <div className="mb-4 flex items-start gap-2.5 rounded-card-sm border border-border bg-muted/30 p-3.5">
           <Lock size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
-            Untuk keamanan, nominal slip gaji disembunyikan dan hanya dikirim server setelah PIN
-            6 digit Anda terverifikasi.
+            {t('fin.myslips.lockedBanner')}
           </p>
         </div>
       )}
@@ -180,25 +180,25 @@ export function MyPayslipsPage() {
             <ShieldCheck size={18} className="text-primary" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-foreground">PIN slip gaji belum diatur</p>
+            <p className="text-[13px] font-semibold text-foreground">{t('fin.myslips.pinNotSetTitle')}</p>
             <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-              Atur PIN 6 digit sekali saja untuk bisa membuka nominal slip gaji Anda.
+              {t('fin.myslips.pinNotSetDesc')}
             </p>
           </div>
           <Button size="sm" onClick={() => setDialog('set')}>
-            <KeyRound size={14} className="mr-1.5" /> Atur PIN
+            <KeyRound size={14} className="mr-1.5" /> {t('fin.myslips.setPin')}
           </Button>
         </div>
       )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <p className="text-sm text-muted-foreground">Memuat slip gaji...</p>
+          <p className="text-sm text-muted-foreground">{t('fin.myslips.loading')}</p>
         </div>
       ) : payslips.length === 0 ? (
         <div className="flex flex-col items-center py-20 gap-3">
           <Receipt size={48} className="text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Belum ada slip gaji yang diterbitkan</p>
+          <p className="text-sm text-muted-foreground">{t('fin.myslips.empty')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -214,12 +214,12 @@ export function MyPayslipsPage() {
                   <div className="min-w-0 flex-[1_1_200px]">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold text-foreground">
-                        {p.payrollRun?.period?.name || p.payrollRun?.name || 'Periode payroll'}
+                        {p.payrollRun?.period?.name || p.payrollRun?.name || t('fin.myslips.periodFallback')}
                       </p>
                       <StatusChip tone={statusTone(p.status)}>{p.status}</StatusChip>
                       {!isOpen && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          <Lock size={11} /> Terkunci
+                          <Lock size={11} /> {t('fin.common.locked')}
                         </span>
                       )}
                     </div>
@@ -231,7 +231,7 @@ export function MyPayslipsPage() {
                         </span>
                       )}
                       {p.payrollRun?.period?.payDate && (
-                        <span>Tanggal bayar: {formatDate(p.payrollRun.period.payDate)}</span>
+                        <span>{t('fin.myslips.payDateLabel', { date: formatDate(p.payrollRun.period.payDate) })}</span>
                       )}
                     </div>
                   </div>
@@ -243,11 +243,11 @@ export function MyPayslipsPage() {
                     ) : (
                       <p className="text-[13px] font-semibold tracking-[1px] text-muted-foreground">Rp ••••••••</p>
                     )}
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">take home pay</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">{t('fin.myslips.thpCaption')}</p>
                   </div>
                   {isOpen ? (
                     <Button size="sm" variant="outline" className="flex-none rounded-[13px]" onClick={() => setSelectedId(p.id)}>
-                      Lihat detail
+                      {t('fin.myslips.viewDetail')}
                     </Button>
                   ) : (
                     <Button
@@ -255,7 +255,7 @@ export function MyPayslipsPage() {
                       className="flex-none rounded-[13px]"
                       onClick={() => setDialog(pinReady ? 'unlock' : 'set')}
                     >
-                      <Lock size={12} className="mr-1.5" /> Buka
+                      <Lock size={12} className="mr-1.5" /> {t('fin.myslips.unlock')}
                     </Button>
                   )}
                 </div>
@@ -280,7 +280,7 @@ export function MyPayslipsPage() {
       <AppModal
         open={Boolean(selectedDetail)}
         onClose={() => setSelectedId(null)}
-        title={selectedSummary?.payrollRun?.period?.name || selectedSummary?.payrollRun?.name || 'Detail slip gaji'}
+        title={selectedSummary?.payrollRun?.period?.name || selectedSummary?.payrollRun?.name || t('fin.myslips.detailTitle')}
         description={
           selectedSummary?.payrollRun?.period
             ? `${formatDate(selectedSummary.payrollRun.period.startDate)} — ${formatDate(selectedSummary.payrollRun.period.endDate)}`
@@ -293,22 +293,22 @@ export function MyPayslipsPage() {
             {/* Kartu take home pay gradien primary → #26496F */}
             <div className="relative overflow-hidden rounded-card bg-gradient-to-br from-primary to-[#26496F] p-5 text-white">
               <div className="absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/[.08]" aria-hidden="true" />
-              <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-white/70">Take home pay</p>
+              <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-white/70">{t('fin.myslips.thpLabel')}</p>
               <p className="mt-1.5 text-[26px] font-semibold leading-none tracking-[-1px]">
                 {formatCurrency(selectedDetail.breakdown.takeHomePay)}
               </p>
               <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 text-[11px] text-white/80">
-                <span>Pendapatan {formatCurrency(selectedDetail.breakdown.totalEarnings)}</span>
-                <span>Potongan {formatCurrency(selectedDetail.breakdown.totalDeductions)}</span>
+                <span>{t('fin.myslips.earningsAmount', { amount: formatCurrency(selectedDetail.breakdown.totalEarnings) })}</span>
+                <span>{t('fin.myslips.deductionsAmount', { amount: formatCurrency(selectedDetail.breakdown.totalDeductions) })}</span>
                 {selectedSummary?.payrollRun?.period?.payDate && (
-                  <span>Dibayar {formatDate(selectedSummary.payrollRun.period.payDate)}</span>
+                  <span>{t('fin.myslips.paidOn', { date: formatDate(selectedSummary.payrollRun.period.payDate) })}</span>
                 )}
               </div>
             </div>
 
             {/* Pendapatan */}
             <div className="rounded-card-sm border border-border bg-background p-4">
-              <h4 className="text-[12.5px] font-semibold text-foreground">Pendapatan</h4>
+              <h4 className="text-[12.5px] font-semibold text-foreground">{t('fin.common.earnings')}</h4>
               <div className="mt-2.5 space-y-2">
                 {selectedDetail.breakdown.earnings.map((row, index) => (
                   <div key={row.id ?? `${row.name}-${index}`} className="flex items-center justify-between gap-3">
@@ -317,7 +317,7 @@ export function MyPayslipsPage() {
                   </div>
                 ))}
                 <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
-                  <span className="text-xs font-semibold text-foreground">Total pendapatan</span>
+                  <span className="text-xs font-semibold text-foreground">{t('fin.myslips.totalEarnings')}</span>
                   <span className="text-xs font-semibold text-foreground">
                     {formatCurrency(selectedDetail.breakdown.totalEarnings)}
                   </span>
@@ -327,10 +327,10 @@ export function MyPayslipsPage() {
 
             {/* Potongan */}
             <div className="rounded-card-sm border border-border bg-background p-4">
-              <h4 className="text-[12.5px] font-semibold text-foreground">Potongan</h4>
+              <h4 className="text-[12.5px] font-semibold text-foreground">{t('fin.common.deductions')}</h4>
               <div className="mt-2.5 space-y-2">
                 {selectedDetail.breakdown.deductions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Tidak ada potongan pada periode ini.</p>
+                  <p className="text-xs text-muted-foreground">{t('fin.myslips.noDeductions')}</p>
                 ) : (
                   selectedDetail.breakdown.deductions.map((row, index) => (
                     <div key={row.id ?? `${row.name}-${index}`} className="flex items-center justify-between gap-3">
@@ -340,7 +340,7 @@ export function MyPayslipsPage() {
                   ))
                 )}
                 <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
-                  <span className="text-xs font-semibold text-foreground">Total potongan</span>
+                  <span className="text-xs font-semibold text-foreground">{t('fin.myslips.totalDeductions')}</span>
                   <span className="text-xs font-semibold text-danger">
                     -{formatCurrency(selectedDetail.breakdown.totalDeductions)}
                   </span>
@@ -355,7 +355,7 @@ export function MyPayslipsPage() {
                 disabled={downloadingId === selectedDetail.id}
               >
                 <Download size={14} className="mr-1.5" />
-                {downloadingId === selectedDetail.id ? 'Menyiapkan PDF...' : 'Unduh PDF'}
+                {downloadingId === selectedDetail.id ? t('fin.myslips.preparingPdf') : t('fin.common.downloadPdf')}
               </Button>
             </div>
           </div>

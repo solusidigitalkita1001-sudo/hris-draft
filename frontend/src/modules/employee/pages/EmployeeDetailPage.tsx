@@ -446,7 +446,7 @@ export function EmployeeDetailPage() {
         setFaceProfileError(null);
       } catch (error) {
         console.error('Failed to fetch face profile:', error);
-        setFaceProfileError('Status profil wajah belum dapat dimuat. Coba muat ulang halaman.');
+        setFaceProfileError(t('wf.employees.face.loadFailed'));
       }
     } catch (error) {
       console.error('Failed to fetch employee:', error);
@@ -492,11 +492,11 @@ export function EmployeeDetailPage() {
     event.target.value = '';
     if (!id || !photo) return;
     if (!['image/jpeg', 'image/png'].includes(photo.type)) {
-      toast.error('Gunakan foto JPEG atau PNG.');
+      toast.error(t('wf.employees.face.invalidType'));
       return;
     }
     if (photo.size > 5 * 1024 * 1024) {
-      toast.error('Ukuran foto maksimal 5 MB.');
+      toast.error(t('wf.employees.face.tooLarge'));
       return;
     }
 
@@ -505,24 +505,24 @@ export function EmployeeDetailPage() {
       const status = await employeeService.enrollFaceProfile(id, photo);
       setFaceProfile(status);
       setFaceProfileError(null);
-      toast.success('Profil wajah berhasil didaftarkan.');
+      toast.success(t('wf.employees.face.enrollSuccess'));
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Registrasi wajah gagal.'));
+      toast.error(apiErrorMessage(error, t('wf.employees.face.enrollFailed')));
     } finally {
       setSavingFaceProfile(false);
     }
   };
 
   const handleDeleteFaceProfile = async () => {
-    if (!id || !window.confirm('Hapus profil wajah karyawan ini? Face recognition tidak bisa dipakai sampai registrasi ulang.')) return;
+    if (!id || !window.confirm(t('wf.employees.face.deleteConfirm'))) return;
     try {
       setSavingFaceProfile(true);
       await employeeService.deleteFaceProfile(id);
       setFaceProfile({ enrolled: false });
       setFaceProfileError(null);
-      toast.success('Profil wajah dihapus.');
+      toast.success(t('wf.employees.face.deleteSuccess'));
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal menghapus profil wajah.'));
+      toast.error(apiErrorMessage(error, t('wf.employees.face.deleteFailed')));
     } finally {
       setSavingFaceProfile(false);
     }
@@ -721,8 +721,8 @@ export function EmployeeDetailPage() {
                     </DetailCard>
 
                     <DetailCard
-                      title="Profil face recognition"
-                      subtitle="Template biometrik untuk verifikasi check-in. Foto sumber tidak disimpan."
+                      title={t('wf.employees.face.cardTitle')}
+                      subtitle={t('wf.employees.face.cardSubtitle')}
                     >
                       <div className="space-y-4">
                         <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/15 p-4">
@@ -737,15 +737,15 @@ export function EmployeeDetailPage() {
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold text-foreground">
                               {faceProfileError
-                                ? 'Status profil tidak tersedia'
+                                ? t('wf.employees.face.statusUnavailable')
                                 : faceProfile.enrolled
-                                  ? 'Wajah sudah terdaftar'
-                                  : 'Belum ada profil wajah'}
+                                  ? t('wf.employees.face.enrolled')
+                                  : t('wf.employees.face.notEnrolled')}
                             </p>
                             <p className="mt-1 text-xs leading-5 text-muted-foreground">
                               {faceProfileError ?? (faceProfile.enrolled
-                                ? `Diperbarui ${faceProfile.updatedAt ? formatDateTime(faceProfile.updatedAt) : '-'}. Template disimpan terenkripsi.`
-                                : 'Unggah atau ambil satu foto frontal dengan pencahayaan yang jelas.')}
+                                ? t('wf.employees.face.updatedAt', { date: faceProfile.updatedAt ? formatDateTime(faceProfile.updatedAt) : '-' })
+                                : t('wf.employees.face.uploadHint'))}
                             </p>
                           </div>
                         </div>
@@ -756,7 +756,7 @@ export function EmployeeDetailPage() {
                           accept="image/jpeg,image/png"
                           capture="user"
                           className="sr-only"
-                          aria-label="Pilih foto untuk registrasi wajah"
+                          aria-label={t('wf.employees.face.photoInputLabel')}
                           onChange={handleFacePhoto}
                         />
                         <div className="flex flex-wrap gap-2">
@@ -768,7 +768,7 @@ export function EmployeeDetailPage() {
                             onClick={() => facePhotoInputRef.current?.click()}
                           >
                             {savingFaceProfile ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Upload size={15} className="mr-2" />}
-                            {faceProfile.enrolled ? 'Daftarkan ulang' : 'Daftarkan wajah'}
+                            {faceProfile.enrolled ? t('wf.employees.face.reenroll') : t('wf.employees.face.enroll')}
                           </Button>
                           {faceProfile.enrolled ? (
                             <Button
@@ -780,7 +780,7 @@ export function EmployeeDetailPage() {
                               className="text-destructive hover:text-destructive"
                             >
                               <Trash2 size={15} className="mr-2" />
-                              Hapus profil
+                              {t('wf.employees.face.deleteProfile')}
                             </Button>
                           ) : null}
                         </div>

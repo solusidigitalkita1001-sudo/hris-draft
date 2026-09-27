@@ -8,6 +8,8 @@ import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, MessageSquare } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import toast from 'react-hot-toast';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -16,15 +18,26 @@ const STATUS_STYLES: Record<string, string> = {
   COMPLETED: 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
 };
 
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.status.draft',
+  SUBMITTED: 'perf.status.submitted',
+  APPROVED: 'perf.status.approved',
+  COMPLETED: 'perf.status.completed',
+};
+
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n();
+  const labelKey = STATUS_LABEL_KEYS[status];
+
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[status] || STATUS_STYLES.DRAFT}`}>
-      {status}
+      {labelKey ? t(labelKey) : status}
     </span>
   );
 }
 
 export function ReviewList() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const [reviews, setReviews] = useState<PerformanceReview[]>([]);
   const [cycles, setCycles] = useState<ReviewCycle[]>([]);
@@ -56,11 +69,11 @@ export function ReviewList() {
       setCycles(cycleData);
     } catch (error) {
       console.error('Failed to fetch reviews:', error);
-      toast.error('Gagal memuat data review');
+      toast.error(t('perf.reviewList.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [activeCompany?.id, cycleFilter, statusFilter]);
+  }, [activeCompany?.id, cycleFilter, statusFilter, t]);
 
   useEffect(() => {
     fetchData();
@@ -75,12 +88,12 @@ export function ReviewList() {
   return (
     <div>
       <PageHeader
-        title="Performance Reviews"
-        description="Create and manage employee performance reviews"
+        title={t('perf.reviewList.title')}
+        description={t('perf.reviewList.description')}
         actions={
           <Button variant="outline" size="sm" onClick={fetchData}>
             <RefreshCw size={16} className="mr-2" />
-            Refresh
+            {t('common.refresh')}
           </Button>
         }
       />
@@ -90,7 +103,7 @@ export function ReviewList() {
         <div className="relative flex-1 max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search reviews..."
+            placeholder={t('perf.reviewList.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -101,7 +114,7 @@ export function ReviewList() {
           value={cycleFilter}
           onValueChange={setCycleFilter}
           options={[
-            { value: '', label: 'All Cycles' },
+            { value: '', label: t('perf.reviewList.allCycles') },
             ...cycles.map((c) => ({ value: c.id, label: c.name })),
           ]}
           className="h-9 text-xs"
@@ -118,7 +131,7 @@ export function ReviewList() {
                   : 'bg-background text-muted-foreground border-border hover:border-primary/50'
               }`}
             >
-              {s || 'All'}
+              {s ? t(STATUS_LABEL_KEYS[s]) : t('perf.filter.all')}
             </button>
           ))}
         </div>
@@ -128,27 +141,27 @@ export function ReviewList() {
         <table className="w-full">
           <thead className="table-header">
             <tr>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Review</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Employee</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Cycle</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Type</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Score</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Date</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('perf.reviewList.th.review')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('perf.reviewList.th.employee')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('perf.reviewList.th.cycle')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('perf.reviewList.th.type')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('perf.reviewList.th.score')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('perf.reviewList.th.status')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('perf.reviewList.th.date')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-sm text-muted-foreground">Loading...</td>
+                <td colSpan={7} className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <MessageSquare size={32} className="text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">No reviews found</p>
-                    <p className="text-xs text-muted-foreground">Start a review cycle to begin performance evaluations</p>
+                    <p className="text-sm text-muted-foreground">{t('perf.reviewList.empty.title')}</p>
+                    <p className="text-xs text-muted-foreground">{t('perf.reviewList.empty.description')}</p>
                   </div>
                 </td>
               </tr>

@@ -7,8 +7,20 @@ import { Input } from '@/components/ui/input';
 import { Plus, Search, RefreshCw, ScrollText } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+/** Label status payroll run; status di luar peta ditampilkan mentah dari server. */
+const RUN_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'fin.status.draft',
+  PROCESSING: 'fin.status.processing',
+  COMPLETED: 'fin.status.completed',
+  APPROVED: 'fin.common.approved',
+  DISBURSED: 'fin.status.disbursed',
+};
 
 export function PayrollRunList() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [runs, setRuns] = useState<PayrollRun[]>([]);
@@ -43,17 +55,17 @@ export function PayrollRunList() {
   return (
     <div>
       <PageHeader
-        title="Payroll Runs"
-        description="Process, approve, and manage payroll runs"
+        title={t('fin.run.title')}
+        description={t('fin.run.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => navigate('/payroll/runs/new')}>
               <Plus size={16} className="mr-2" />
-              New Run
+              {t('fin.run.new')}
             </Button>
           </>
         }
@@ -62,7 +74,7 @@ export function PayrollRunList() {
       <div className="relative mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search runs..."
+          placeholder={t('fin.run.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 h-9 max-w-xs"
@@ -73,28 +85,28 @@ export function PayrollRunList() {
         <table className="w-full">
           <thead className="table-header">
             <tr>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Run</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Period</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Employees</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Earnings</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Deductions</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Net Pay</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Date</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.run')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.period')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.employees')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.earnings')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.deductions')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.netPay')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.status')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.date')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-sm text-muted-foreground">Loading...</td>
+                <td colSpan={8} className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <ScrollText size={32} className="text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">No payroll runs yet</p>
-                    <p className="text-xs text-muted-foreground">Create a payroll period and run payroll to get started</p>
+                    <p className="text-sm text-muted-foreground">{t('fin.run.empty')}</p>
+                    <p className="text-xs text-muted-foreground">{t('fin.run.emptyHint')}</p>
                   </div>
                 </td>
               </tr>
@@ -129,6 +141,7 @@ export function PayrollRunList() {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n();
   const styles: Record<string, string> = {
     DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
     PROCESSING: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
@@ -137,9 +150,11 @@ function StatusBadge({ status }: { status: string }) {
     DISBURSED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
   };
 
+  const labelKey = RUN_STATUS_LABEL_KEYS[status];
+
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.DRAFT}`}>
-      {status}
+      {labelKey ? t(labelKey) : status}
     </span>
   );
 }

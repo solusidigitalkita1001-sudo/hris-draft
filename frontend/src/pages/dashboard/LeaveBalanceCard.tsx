@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import type { LeaveBalance } from '@/services/leave.service';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/i18n/provider';
 import { cn } from '@/utils/cn';
 import { CardTitle, DashCard, EmptyHint } from './shared';
 
@@ -25,6 +26,7 @@ interface Segment {
 
 /** Kartu "Saldo Cuti" — donut SVG 132px interaktif + legend tappable. */
 export function LeaveBalanceCard({ balances }: { balances: LeaveBalance[] }) {
+  const { t } = useI18n();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const segments = useMemo<Segment[]>(() => {
@@ -37,7 +39,7 @@ export function LeaveBalanceCard({ balances }: { balances: LeaveBalance[] }) {
       const arc = Math.max(share * CIRCUMFERENCE - (rows.length > 1 ? SEGMENT_GAP : 0), 0);
       const seg: Segment = {
         id: b.id,
-        label: b.leaveType?.name || b.leaveType?.code || 'Cuti',
+        label: b.leaveType?.name || b.leaveType?.code || t('ops.dashboard.leave.typeFallback'),
         remaining,
         used: b.usedDays,
         total: b.totalDays,
@@ -49,22 +51,22 @@ export function LeaveBalanceCard({ balances }: { balances: LeaveBalance[] }) {
       cursor += share * CIRCUMFERENCE;
       return seg;
     });
-  }, [balances]);
+  }, [balances, t]);
 
   if (!segments.length) {
     return (
       <DashCard className="flex-1 flex flex-col">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle>Saldo Cuti</CardTitle>
+          <CardTitle>{t('ops.dashboard.leave.title')}</CardTitle>
         </div>
         <div className="flex flex-1 items-center justify-center">
           <EmptyHint
             icon={<CalendarDays size={26} />}
-            title="Belum ada saldo cuti tercatat"
-            note="Hubungi HR bila saldo Anda seharusnya sudah tersedia, atau ajukan permohonan lewat Self Service."
+            title={t('ops.dashboard.leave.emptyTitle')}
+            note={t('ops.dashboard.leave.emptyNote')}
             action={(
               <Button asChild size="sm" className="mt-1">
-                <Link to="/self-service">Ajukan</Link>
+                <Link to="/self-service">{t('ops.dashboard.leave.apply')}</Link>
               </Button>
             )}
           />
@@ -79,9 +81,9 @@ export function LeaveBalanceCard({ balances }: { balances: LeaveBalance[] }) {
   return (
     <DashCard className="flex-1 flex flex-col">
       <div className="flex items-center justify-between gap-3">
-        <CardTitle>Saldo Cuti</CardTitle>
+        <CardTitle>{t('ops.dashboard.leave.title')}</CardTitle>
         <Link to="/self-service" className="text-[11.5px] font-medium text-primary hover:underline whitespace-nowrap">
-          Ajukan
+          {t('ops.dashboard.leave.apply')}
         </Link>
       </div>
 
@@ -113,7 +115,7 @@ export function LeaveBalanceCard({ balances }: { balances: LeaveBalance[] }) {
               {active.remaining}
             </span>
             <span className="mt-1 max-w-[90px] truncate text-[10.5px] text-muted-foreground">
-              hari tersisa
+              {t('ops.dashboard.leave.daysRemaining')}
             </span>
           </div>
         </div>
@@ -131,14 +133,14 @@ export function LeaveBalanceCard({ balances }: { balances: LeaveBalance[] }) {
             >
               <span className="h-2 w-2 shrink-0 rounded" style={{ background: seg.color }} />
               <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground">{seg.label}</span>
-              <span className="text-[11.5px] font-semibold text-foreground">{seg.remaining}h</span>
+              <span className="text-[11.5px] font-semibold text-foreground">{t('ops.dashboard.leave.daysShort', { count: seg.remaining })}</span>
             </button>
           ))}
         </div>
       </div>
 
       <p className="mt-auto pt-3 text-[11px] text-muted-foreground">
-        {active.label}: {active.used} terpakai dari {active.total} hari · tahun {active.year}
+        {t('ops.dashboard.leave.usageSummary', { label: active.label, used: active.used, total: active.total, year: active.year })}
       </p>
     </DashCard>
   );

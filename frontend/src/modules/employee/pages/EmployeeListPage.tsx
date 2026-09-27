@@ -14,6 +14,7 @@ import { Plus, Search, RefreshCw, Users, ChevronLeft, ChevronRight, UserRound, U
 import { formatDate } from '@/utils/format';
 import { cn } from '@/utils/cn';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
@@ -40,6 +41,7 @@ function ImportModal({
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }) {
+  const { t } = useI18n();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -48,7 +50,7 @@ function ImportModal({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0] || null;
     if (selected && !selected.name.endsWith('.csv')) {
-      toast.error('Please select a CSV file');
+      toast.error(t('wf.employees.list.import.selectCsv'));
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
@@ -58,7 +60,7 @@ function ImportModal({
 
   const handleImport = async () => {
     if (!file) {
-      toast.error('Please select a CSV file first');
+      toast.error(t('wf.employees.list.import.selectCsvFirst'));
       return;
     }
 
@@ -70,14 +72,17 @@ function ImportModal({
       const result = await employeeService.importCsv(formData, companyId);
 
       toast.success(
-        `Import complete: ${result.imported} imported, ${result.skipped} skipped`
+        t('wf.employees.list.import.complete', { imported: result.imported, skipped: result.skipped })
       );
 
       if (result.errors?.length > 0) {
         // Show first few errors in a second toast
         const errorSummary = result.errors.slice(0, 3).join('; ');
         toast.error(
-          `${result.errors.length} error(s): ${errorSummary}${result.errors.length > 3 ? '...' : ''}`,
+          t('wf.employees.list.import.errors', {
+            count: result.errors.length,
+            summary: `${errorSummary}${result.errors.length > 3 ? '...' : ''}`,
+          }),
           { duration: 5000 }
         );
       }
@@ -87,7 +92,7 @@ function ImportModal({
       onOpenChange(false);
       onSuccess();
     } catch (err) {
-      const message = apiErrorMessage(err, 'Import failed');
+      const message = apiErrorMessage(err, t('wf.employees.list.import.failed'));
       toast.error(message);
     } finally {
       setImporting(false);
@@ -113,9 +118,9 @@ function ImportModal({
         >
           <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div>
-              <Dialog.Title className="text-base font-semibold">Import Employees</Dialog.Title>
+              <Dialog.Title className="text-base font-semibold">{t('wf.employees.list.import.title')}</Dialog.Title>
               <Dialog.Description className="mt-1 text-sm text-muted-foreground">
-                Upload a CSV file to bulk-import employee records.
+                {t('wf.employees.list.import.description')}
               </Dialog.Description>
             </div>
             <button
@@ -130,7 +135,7 @@ function ImportModal({
 
           <div className="space-y-4 px-5 py-4">
             <div className="space-y-2">
-              <Label htmlFor="csv-file">CSV File</Label>
+              <Label htmlFor="csv-file">{t('wf.employees.list.import.csvFile')}</Label>
               <Input
                 ref={fileInputRef}
                 id="csv-file"
@@ -143,18 +148,18 @@ function ImportModal({
             </div>
             {file && (
               <p className="text-xs text-muted-foreground">
-                Selected: <span className="font-medium text-foreground">{file.name}</span> ({(file.size / 1024).toFixed(1)} KB)
+                {t('wf.employees.list.import.selected')}: <span className="font-medium text-foreground">{file.name}</span> ({(file.size / 1024).toFixed(1)} KB)
               </p>
             )}
           </div>
 
           <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
             <Button type="button" variant="outline" onClick={handleCancel} disabled={importing}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="button" onClick={handleImport} disabled={!file || importing}>
               {importing && <Loader2 size={16} className="mr-2 animate-spin" />}
-              {importing ? 'Importing...' : 'Import'}
+              {importing ? t('wf.employees.list.import.importing') : t('wf.employees.list.import.action')}
             </Button>
           </div>
         </Dialog.Content>
@@ -165,6 +170,7 @@ function ImportModal({
 
 export function EmployeeListPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   // Reactive active company: the list must re-fetch when the company is
   // selected/switched (e.g. SUPER_ADMIN picking a tenant), not read a stale
   // localStorage value once on mount.
@@ -236,9 +242,9 @@ export function EmployeeListPage() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      toast.success('Employees exported successfully');
+      toast.success(t('wf.employees.list.export.success'));
     } catch (err) {
-      const message = apiErrorMessage(err, 'Export failed');
+      const message = apiErrorMessage(err, t('wf.employees.list.export.failed'));
       toast.error(message);
     }
   };
@@ -246,25 +252,25 @@ export function EmployeeListPage() {
   return (
     <div>
       <PageHeader
-        title="Employees"
-        description="Manage employee master data"
+        title={t('wf.employees.list.title')}
+        description={t('wf.employees.list.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => setShowImportModal(true)}>
               <Upload size={16} className="mr-2" />
-              Import CSV
+              {t('wf.employees.list.importCsv')}
             </Button>
             <Button variant="outline" size="sm" onClick={handleExport}>
               <Download size={16} className="mr-2" />
-              Export CSV
+              {t('wf.employees.list.exportCsv')}
             </Button>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => navigate('/employees/new')}>
               <Plus size={16} className="mr-2" />
-              Add Employee
+              {t('wf.employees.list.add')}
             </Button>
           </>
         }
@@ -275,7 +281,7 @@ export function EmployeeListPage() {
         <div className="relative flex-1 max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search employees..."
+            placeholder={t('wf.employees.list.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -286,7 +292,7 @@ export function EmployeeListPage() {
           value={deptFilter}
           onValueChange={setDeptFilter}
           options={[
-            { value: '', label: 'All Departments' },
+            { value: '', label: t('wf.employees.list.allDepartments') },
             ...departments.map((d) => ({ value: d.id, label: d.name })),
           ]}
           className="h-9 text-xs"
@@ -303,7 +309,7 @@ export function EmployeeListPage() {
                   : 'bg-background text-muted-foreground border-border hover:border-primary/50'
               }`}
             >
-              {s || 'All'}
+              {s || t('wf.common.all')}
             </button>
           ))}
         </div>
@@ -314,26 +320,26 @@ export function EmployeeListPage() {
         <table className="w-full">
           <thead className="table-header">
             <tr>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Employee</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Number</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Department</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Position</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Type</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Join Date</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('wf.employees.list.table.employee')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('wf.employees.list.table.number')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('employees.detail.fields.department')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('employees.detail.fields.position')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('wf.common.type')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('wf.common.status')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('employees.detail.fields.joinDate')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-sm text-muted-foreground">Loading...</td>
+                <td colSpan={7} className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</td>
               </tr>
             ) : employees.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Users size={32} className="text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">No employees found</p>
+                    <p className="text-sm text-muted-foreground">{t('wf.employees.list.empty')}</p>
                   </div>
                 </td>
               </tr>
@@ -383,7 +389,7 @@ export function EmployeeListPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-4">
-          <p className="text-xs text-muted-foreground">Page {page} of {totalPages}</p>
+          <p className="text-xs text-muted-foreground">{t('wf.employees.list.pagination', { page, totalPages })}</p>
           <div className="flex gap-1">
             <Button
               variant="outline"

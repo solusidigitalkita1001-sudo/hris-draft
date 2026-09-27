@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, List, Network, Users } from 'lucide-react';
 import type { AttendanceRecord } from '@/services/attendance.service';
 import type { MyReportingLine } from '@/services/employee.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 import { cn } from '@/utils/cn';
 import { CardTitle, DashCard, EmptyHint, InitialAvatar, StatusChip, type ChipTone } from './shared';
 import { formatDuration } from './format';
@@ -26,16 +28,18 @@ interface Member {
   workDuration: number | null;
 }
 
-const STATE_META: Record<MemberState, { chip: string; tone: ChipTone; dot: string; bar: string }> = {
-  done: { chip: 'Selesai', tone: 'success', dot: 'bg-success', bar: 'bg-success' },
-  running: { chip: 'Bekerja', tone: 'primary', dot: 'bg-primary', bar: 'bg-primary' },
-  late: { chip: 'Telat', tone: 'warning', dot: 'bg-warning', bar: 'bg-warning' },
-  excused: { chip: 'Izin', tone: 'neutral', dot: 'bg-muted-foreground', bar: '' },
-  absent: { chip: 'Absen', tone: 'danger', dot: 'bg-danger', bar: '' },
-  none: { chip: 'Belum absen', tone: 'neutral', dot: 'bg-muted-foreground', bar: '' },
+type Translate = (key: TranslationKey, params?: TranslationParams) => string;
+
+const STATE_META: Record<MemberState, { chip: TranslationKey; tone: ChipTone; dot: string; bar: string }> = {
+  done: { chip: 'ops.dashboard.team.state.done', tone: 'success', dot: 'bg-success', bar: 'bg-success' },
+  running: { chip: 'ops.dashboard.team.state.running', tone: 'primary', dot: 'bg-primary', bar: 'bg-primary' },
+  late: { chip: 'ops.dashboard.team.state.late', tone: 'warning', dot: 'bg-warning', bar: 'bg-warning' },
+  excused: { chip: 'ops.dashboard.team.state.excused', tone: 'neutral', dot: 'bg-muted-foreground', bar: '' },
+  absent: { chip: 'ops.dashboard.team.state.absent', tone: 'danger', dot: 'bg-danger', bar: '' },
+  none: { chip: 'ops.dashboard.team.state.none', tone: 'neutral', dot: 'bg-muted-foreground', bar: '' },
 };
 
-function toMember(record: AttendanceRecord): Member {
+function toMember(record: AttendanceRecord, t: Translate): Member {
   const checkIn = record.checkIn ? dayjs(record.checkIn) : null;
   const checkOut = record.checkOut ? dayjs(record.checkOut) : null;
   const late = record.lateMinutes ?? 0;
@@ -49,7 +53,7 @@ function toMember(record: AttendanceRecord): Member {
 
   return {
     id: record.id,
-    name: record.employee?.fullName || 'Karyawan',
+    name: record.employee?.fullName || t('ops.dashboard.team.memberFallback'),
     subtitle: record.employee?.employeeNumber || record.branch?.name || '—',
     checkIn,
     checkOut,
@@ -74,24 +78,27 @@ function barGeometry(member: Member): { left: number; width: number } | null {
   };
 }
 
-function barNote(member: Member): string {
+function barNote(member: Member, t: Translate): string {
   switch (member.state) {
     case 'done':
-      return `Selesai · ${formatDuration(member.workDuration ?? (member.checkIn && member.checkOut ? member.checkOut.diff(member.checkIn, 'minute') : null))}`;
+      return t('ops.dashboard.team.bar.done', {
+        duration: formatDuration(member.workDuration ?? (member.checkIn && member.checkOut ? member.checkOut.diff(member.checkIn, 'minute') : null)),
+      });
     case 'late':
-      return `Telat ${member.lateMinutes || '—'}m · sedang berjalan`;
+      return t('ops.dashboard.team.bar.late', { minutes: member.lateMinutes || '—' });
     case 'running':
-      return 'Sedang berjalan';
+      return t('ops.dashboard.team.bar.running');
     case 'excused':
-      return 'Izin / cuti hari ini';
+      return t('ops.dashboard.team.bar.excused');
     case 'absent':
-      return 'Tidak hadir';
+      return t('ops.dashboard.team.bar.absent');
     default:
-      return 'Belum ada catatan masuk';
+      return t('ops.dashboard.team.bar.none');
   }
 }
 
 function SupervisorCard({ line }: { line: MyReportingLine }) {
+  const { t } = useI18n();
   const boss = line.primarySupervisor;
   if (!boss) {
     return (
@@ -100,9 +107,11 @@ function SupervisorCard({ line }: { line: MyReportingLine }) {
           <Users size={16} />
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-foreground">Atasan langsung belum diatur</p>
+          <p className="text-xs font-medium text-foreground">{t('ops.dashboard.team.supervisor.notSet')}</p>
           <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
-            {line.reportsToPosition ? `Posisi tujuan: ${line.reportsToPosition.name}` : 'Struktur pelaporan belum lengkap'}
+            {line.reportsToPosition
+              ? t('ops.dashboard.team.supervisor.targetPosition', { name: line.reportsToPosition.name })
+              : t('ops.dashboard.team.supervisor.incomplete')}
           </p>
         </div>
       </div>
@@ -115,7 +124,7 @@ function SupervisorCard({ line }: { line: MyReportingLine }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[12.5px] font-semibold text-foreground">{boss.fullName}</span>
           <span className="rounded-full bg-card px-2 py-0.5 text-[8.5px] font-semibold uppercase tracking-[0.6px] text-primary">
-            Atasan
+            {t('ops.dashboard.team.supervisor.badge')}
           </span>
         </div>
         <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
@@ -135,6 +144,7 @@ interface TeamCardProps {
 
 /** Kartu "Tim Saya" — atasan langsung + kehadiran anggota hari ini (mode Daftar / Bagan). */
 export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId }: TeamCardProps) {
+  const { t } = useI18n();
   const [view, setView] = useState<'list' | 'chart'>('list');
   const [filter, setFilter] = useState<'all' | 'present' | 'pending'>('all');
   const [showAll, setShowAll] = useState(false);
@@ -144,9 +154,9 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
     if (!records) return [];
     return records
       .filter((r) => !selfEmployeeId || r.employeeId !== selfEmployeeId)
-      .map(toMember)
+      .map((r) => toMember(r, t))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [records, selfEmployeeId]);
+  }, [records, selfEmployeeId, t]);
 
   const hasTeamData = isOperational && members.length > 0;
 
@@ -184,17 +194,22 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
       <div className="flex flex-wrap items-start justify-between gap-3.5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle>Tim Saya</CardTitle>
+            <CardTitle>{t('ops.dashboard.team.title')}</CardTitle>
             {hasTeamData && (
               <span className="rounded-full bg-accent px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.5px] text-primary">
-                Live
+                {t('ops.dashboard.team.live')}
               </span>
             )}
           </div>
           <p className="mt-1 text-[11.5px] text-muted-foreground">
             {hasTeamData
-              ? `${counts.total} anggota tercatat · ${counts.present} hadir · ${counts.late} telat · ${counts.pending} belum absen`
-              : 'Atasan langsung dan struktur pelaporan Anda'}
+              ? t('ops.dashboard.team.summary', {
+                  total: counts.total,
+                  present: counts.present,
+                  late: counts.late,
+                  pending: counts.pending,
+                })
+              : t('ops.dashboard.team.subtitle')}
           </p>
         </div>
 
@@ -202,8 +217,8 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="flex gap-0.5 rounded-[14px] bg-secondary p-[3px]">
               {([
-                { key: 'list', label: 'Daftar', icon: List },
-                { key: 'chart', label: 'Bagan', icon: Network },
+                { key: 'list', label: t('ops.dashboard.team.view.list'), icon: List },
+                { key: 'chart', label: t('ops.dashboard.team.view.chart'), icon: Network },
               ] as const).map((v) => (
                 <button
                   key={v.key}
@@ -222,9 +237,9 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
             {view === 'list' && (
               <div className="flex gap-0.5 rounded-[14px] bg-secondary p-[3px]">
                 {([
-                  { key: 'all', label: 'Semua' },
-                  { key: 'present', label: 'Hadir' },
-                  { key: 'pending', label: 'Belum' },
+                  { key: 'all', label: t('ops.dashboard.team.filter.all') },
+                  { key: 'present', label: t('ops.dashboard.team.filter.present') },
+                  { key: 'pending', label: t('ops.dashboard.team.filter.pending') },
                 ] as const).map((f) => (
                   <button
                     key={f.key}
@@ -241,7 +256,7 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
               </div>
             )}
             <Link to="/attendance" className="whitespace-nowrap text-[11.5px] font-medium text-primary hover:underline">
-              Rekap tim
+              {t('ops.dashboard.team.recap')}
             </Link>
           </div>
         )}
@@ -261,7 +276,7 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
                       {reportingLine.primarySupervisor.fullName}
                     </p>
                     <p className="mt-0.5 whitespace-nowrap text-[10.5px] text-muted-foreground">
-                      {reportingLine.primarySupervisor.position?.name || 'Atasan langsung'}
+                      {reportingLine.primarySupervisor.position?.name || t('ops.dashboard.team.supervisor.role')}
                     </p>
                   </div>
                 </>
@@ -270,7 +285,7 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
                   <span className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-card text-primary">
                     <Users size={16} />
                   </span>
-                  <p className="whitespace-nowrap text-[12.5px] font-semibold text-foreground">Struktur tim</p>
+                  <p className="whitespace-nowrap text-[12.5px] font-semibold text-foreground">{t('ops.dashboard.team.structure')}</p>
                 </>
               )}
             </div>
@@ -295,20 +310,20 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
                         </div>
                         <div className="flex w-full justify-center gap-2.5 border-t border-border pt-2">
                           <div className="text-center">
-                            <p className="text-[8.5px] text-muted-foreground">Masuk</p>
+                            <p className="text-[8.5px] text-muted-foreground">{t('ops.dashboard.team.checkIn')}</p>
                             <p className="mt-0.5 text-[11px] font-semibold text-foreground">
                               {m.checkIn ? m.checkIn.format('HH.mm') : '—'}
                             </p>
                           </div>
                           <div className="w-px bg-border" />
                           <div className="text-center">
-                            <p className="text-[8.5px] text-muted-foreground">Pulang</p>
+                            <p className="text-[8.5px] text-muted-foreground">{t('ops.dashboard.team.checkOut')}</p>
                             <p className="mt-0.5 text-[11px] font-semibold text-foreground">
                               {m.checkOut ? m.checkOut.format('HH.mm') : '—'}
                             </p>
                           </div>
                         </div>
-                        <StatusChip tone={meta.tone} className="text-[8.5px]">{meta.chip}</StatusChip>
+                        <StatusChip tone={meta.tone} className="text-[8.5px]">{t(meta.chip)}</StatusChip>
                       </div>
                     </div>
                   );
@@ -345,15 +360,15 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
                     <span className="text-[15px] font-semibold leading-none tracking-[-0.6px] text-foreground">
                       {counts.present}/{counts.total}
                     </span>
-                    <span className="mt-0.5 text-[8.5px] text-muted-foreground">hadir</span>
+                    <span className="mt-0.5 text-[8.5px] text-muted-foreground">{t('ops.dashboard.team.presentLabel')}</span>
                   </span>
                 </div>
                 <div className="grid min-w-0 flex-1 gap-x-3 gap-y-1.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' }}>
                   {[
-                    { label: 'Hadir', n: counts.present - counts.late, dot: 'bg-success' },
-                    { label: 'Telat', n: counts.late, dot: 'bg-warning' },
-                    { label: 'Izin / cuti', n: counts.excused, dot: 'bg-muted-foreground' },
-                    { label: 'Belum absen', n: counts.pending, dot: 'bg-danger' },
+                    { label: t('ops.dashboard.team.legend.present'), n: counts.present - counts.late, dot: 'bg-success' },
+                    { label: t('ops.dashboard.team.legend.late'), n: counts.late, dot: 'bg-warning' },
+                    { label: t('ops.dashboard.team.legend.excused'), n: counts.excused, dot: 'bg-muted-foreground' },
+                    { label: t('ops.dashboard.team.legend.pending'), n: counts.pending, dot: 'bg-danger' },
                   ].map((c) => (
                     <div key={c.label} className="flex min-w-0 items-center gap-1.5">
                       <span className={cn('h-[7px] w-[7px] shrink-0 rounded', c.dot)} />
@@ -369,15 +384,15 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
               <SupervisorCard line={reportingLine} />
             ) : (
               <div className="rounded-2xl bg-secondary px-3.5 py-3 text-[11px] text-muted-foreground">
-                Struktur pelaporan Anda belum tersedia.
+                {t('ops.dashboard.team.reportingUnavailable')}
               </div>
             )}
 
             {!hasTeamData && (
               <p className="px-1 text-[10.5px] text-muted-foreground">
                 {isOperational
-                  ? 'Belum ada catatan kehadiran tim untuk hari ini.'
-                  : 'Detail kehadiran anggota tim hanya tersedia untuk atasan dan HR.'}
+                  ? t('ops.dashboard.team.emptyOperational')
+                  : t('ops.dashboard.team.restricted')}
               </p>
             )}
           </div>
@@ -386,11 +401,11 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
           {hasTeamData && (
             <div className="min-w-0">
               <div className="flex items-center justify-between px-0.5 pb-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">Anggota</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">{t('ops.dashboard.team.members')}</span>
                 <span className="hidden text-[9.5px] text-muted-foreground sm:block">07.00 &nbsp;·&nbsp; 12.00 &nbsp;·&nbsp; 18.00</span>
               </div>
               {visible.length === 0 && (
-                <EmptyHint title="Tidak ada anggota pada filter ini" note="Ubah filter untuk melihat anggota lain." />
+                <EmptyHint title={t('ops.dashboard.team.filterEmpty.title')} note={t('ops.dashboard.team.filterEmpty.note')} />
               )}
               {visible.map((m, i) => {
                 const meta = STATE_META[m.state];
@@ -414,22 +429,22 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
                           />
                         )}
                       </div>
-                      <p className="truncate text-[9.5px] text-muted-foreground">{barNote(m)}</p>
+                      <p className="truncate text-[9.5px] text-muted-foreground">{barNote(m, t)}</p>
                     </div>
                     <div className="ml-auto flex flex-none items-center gap-3">
                       <div className="min-w-[38px] text-right">
-                        <p className="text-[9px] text-muted-foreground">Masuk</p>
+                        <p className="text-[9px] text-muted-foreground">{t('ops.dashboard.team.checkIn')}</p>
                         <p className={cn('mt-0.5 text-[11.5px] font-semibold', m.state === 'late' ? 'text-warning' : 'text-foreground')}>
                           {m.checkIn ? m.checkIn.format('HH.mm') : '—'}
                         </p>
                       </div>
                       <div className="min-w-[38px] text-right">
-                        <p className="text-[9px] text-muted-foreground">Pulang</p>
+                        <p className="text-[9px] text-muted-foreground">{t('ops.dashboard.team.checkOut')}</p>
                         <p className="mt-0.5 text-[11.5px] font-semibold text-foreground">
                           {m.checkOut ? m.checkOut.format('HH.mm') : '—'}
                         </p>
                       </div>
-                      <StatusChip tone={meta.tone} className="text-[9px]">{meta.chip}</StatusChip>
+                      <StatusChip tone={meta.tone} className="text-[9px]">{t(meta.chip)}</StatusChip>
                     </div>
                   </div>
                 );
@@ -440,7 +455,7 @@ export function TeamCard({ reportingLine, records, isOperational, selfEmployeeId
                   onClick={() => setShowAll((s) => !s)}
                   className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-[13px] bg-secondary py-2 text-[11px] font-medium text-primary transition-colors hover:bg-secondary/70"
                 >
-                  {showAll ? 'Tampilkan lebih sedikit' : `Lihat ${hiddenCount} anggota lainnya`}
+                  {showAll ? t('ops.dashboard.team.showLess') : t('ops.dashboard.team.showMore', { count: hiddenCount })}
                   <ChevronDown size={12} className={cn('transition-transform duration-200', showAll && 'rotate-180')} />
                 </button>
               )}

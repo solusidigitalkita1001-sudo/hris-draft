@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useI18n } from '@/i18n/provider';
 import { recruitmentService, type JobPosting } from '@/services/recruitment.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import { ArrowLeft, Briefcase, Building2, MapPin, Users, CheckCircle, XCircle } 
 import { formatCurrency, formatDateTime } from '@/utils/format';
 
 export function JobPostingDetail() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [posting, setPosting] = useState<JobPosting | null>(null);
@@ -59,7 +61,7 @@ export function JobPostingDetail() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
       </div>
     );
   }
@@ -67,9 +69,9 @@ export function JobPostingDetail() {
   if (!posting) {
     return (
       <div className="text-center py-12">
-        <p className="text-sm text-muted-foreground">Job posting not found</p>
+        <p className="text-sm text-muted-foreground">{t('wf.rec.postingDetail.notFound')}</p>
         <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/recruitment')}>
-          Back to Job Postings
+          {t('wf.rec.postingDetail.backToList')}
         </Button>
       </div>
     );
@@ -84,22 +86,22 @@ export function JobPostingDetail() {
           <>
             <Button variant="outline" size="sm" onClick={() => navigate('/recruitment')}>
               <ArrowLeft size={16} className="mr-2" />
-              Back
+              {t('employees.detail.actions.back')}
             </Button>
             {posting.status === 'DRAFT' && (
               <Button size="sm" onClick={handleApprove} disabled={actionLoading === 'approve'}>
                 <CheckCircle size={16} className="mr-2" />
-                {actionLoading === 'approve' ? 'Publishing...' : 'Publish'}
+                {actionLoading === 'approve' ? t('wf.rec.postingDetail.publishing') : t('wf.rec.postingDetail.publish')}
               </Button>
             )}
             <Button size="sm" variant="outline" onClick={() => navigate(`/recruitment/postings/${posting.id}/apply`)}>
               <Users size={16} className="mr-2" />
-              Add Application
+              {t('wf.rec.postingDetail.addApplication')}
             </Button>
             {(posting.status === 'PUBLISHED' || posting.status === 'ON_HOLD') && (
               <Button size="sm" variant="destructive" onClick={handleClose} disabled={actionLoading === 'close'}>
                 <XCircle size={16} className="mr-2" />
-                {actionLoading === 'close' ? 'Closing...' : 'Close'}
+                {actionLoading === 'close' ? t('wf.rec.postingDetail.closing') : t('wf.common.close')}
               </Button>
             )}
           </>
@@ -114,28 +116,28 @@ export function JobPostingDetail() {
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                 <Building2 size={14} />
-                Department
+                {t('employees.detail.fields.department')}
               </div>
               <p className="text-sm font-medium">{posting.department?.name || '-'}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                 <Briefcase size={14} />
-                Type
+                {t('wf.common.type')}
               </div>
               <p className="text-sm font-medium">{posting.employmentType}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                 <MapPin size={14} />
-                Location
+                {t('wf.common.location')}
               </div>
               <p className="text-sm font-medium">{posting.location || '-'}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                 <Users size={14} />
-                Vacancies
+                {t('wf.rec.postingDetail.vacancies')}
               </div>
               <p className="text-sm font-medium">{posting.vacancies}</p>
             </div>
@@ -143,16 +145,16 @@ export function JobPostingDetail() {
 
           {/* Description */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-            <h3 className="text-sm font-medium mb-2">Description</h3>
+            <h3 className="text-sm font-medium mb-2">{t('wf.common.description')}</h3>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {posting.description || 'No description provided'}
+              {posting.description || t('wf.rec.postingDetail.noDescription')}
             </p>
           </div>
 
           {/* Requirements */}
           {posting.requirements && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-2">Requirements</h3>
+              <h3 className="text-sm font-medium mb-2">{t('wf.rec.postingDetail.requirements')}</h3>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                 {posting.requirements}
               </p>
@@ -162,11 +164,11 @@ export function JobPostingDetail() {
           {/* Salary */}
           {(posting.minSalary || posting.maxSalary) && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-2">Salary Range</h3>
+              <h3 className="text-sm font-medium mb-2">{t('wf.rec.postingDetail.salaryRange')}</h3>
               <p className="text-sm text-muted-foreground">
                 {posting.minSalary
                   ? formatCurrency(Number(posting.minSalary))
-                  : 'Negotiable'}
+                  : t('wf.rec.postingDetail.negotiable')}
                 {posting.maxSalary && ` - ${formatCurrency(Number(posting.maxSalary))}`}
               </p>
             </div>
@@ -176,21 +178,21 @@ export function JobPostingDetail() {
         {/* Right - Sidebar Info */}
         <div className="space-y-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-            <h3 className="text-sm font-medium mb-3">Timeline</h3>
+            <h3 className="text-sm font-medium mb-3">{t('wf.rec.postingDetail.timeline')}</h3>
             <div className="space-y-3 text-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Created</p>
+                <p className="text-xs text-muted-foreground">{t('wf.rec.postingDetail.created')}</p>
                 <p className="text-sm">{formatDateTime(posting.createdAt)}</p>
               </div>
               {posting.postedAt && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Published</p>
+                  <p className="text-xs text-muted-foreground">{t('wf.rec.postingDetail.published')}</p>
                   <p className="text-sm">{formatDateTime(posting.postedAt)}</p>
                 </div>
               )}
               {posting.closedAt && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Closed</p>
+                  <p className="text-xs text-muted-foreground">{t('wf.rec.postingDetail.closed')}</p>
                   <p className="text-sm">{formatDateTime(posting.closedAt)}</p>
                 </div>
               )}
@@ -199,7 +201,7 @@ export function JobPostingDetail() {
 
           {posting.position && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-1">Position</h3>
+              <h3 className="text-sm font-medium mb-1">{t('employees.detail.fields.position')}</h3>
               <p className="text-sm text-muted-foreground">{posting.position.name}</p>
             </div>
           )}

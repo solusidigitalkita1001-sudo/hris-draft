@@ -3,27 +3,29 @@ import { Award, Pencil, Trash2, Plus, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select2, type Select2Option } from '@/components/ui/select2';
+import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { employeeService, type EmployeeSkill } from '@/services/employee.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 interface SkillTabProps {
   employeeId: string;
 }
 
-const CATEGORY_OPTIONS: Select2Option[] = [
-  { value: 'TECHNICAL', label: 'Technical' },
-  { value: 'SOFT_SKILL', label: 'Soft Skill' },
-  { value: 'LANGUAGE', label: 'Language' },
-  { value: 'MANAGEMENT', label: 'Management' },
-  { value: 'OTHER', label: 'Lainnya' },
+const CATEGORY_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'TECHNICAL', labelKey: 'wf.skill.category.technical' },
+  { value: 'SOFT_SKILL', labelKey: 'wf.skill.category.softSkill' },
+  { value: 'LANGUAGE', labelKey: 'wf.skill.category.language' },
+  { value: 'MANAGEMENT', labelKey: 'wf.skill.category.management' },
+  { value: 'OTHER', labelKey: 'wf.skill.category.other' },
 ];
 
-const PROFICIENCY_OPTIONS: Select2Option[] = [
-  { value: 'BEGINNER', label: 'Beginner' },
-  { value: 'INTERMEDIATE', label: 'Intermediate' },
-  { value: 'ADVANCED', label: 'Advanced' },
-  { value: 'EXPERT', label: 'Expert' },
+const PROFICIENCY_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'BEGINNER', labelKey: 'wf.skill.proficiency.beginner' },
+  { value: 'INTERMEDIATE', labelKey: 'wf.skill.proficiency.intermediate' },
+  { value: 'ADVANCED', labelKey: 'wf.skill.proficiency.advanced' },
+  { value: 'EXPERT', labelKey: 'wf.skill.proficiency.expert' },
 ];
 
 const PROFICIENCY_COLORS: Record<string, string> = {
@@ -33,9 +35,9 @@ const PROFICIENCY_COLORS: Record<string, string> = {
   EXPERT: 'bg-purple-100 text-purple-700',
 };
 
-const YES_NO_OPTIONS: Select2Option[] = [
-  { value: 'true', label: 'Ya' },
-  { value: 'false', label: 'Tidak' },
+const YES_NO_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'true', labelKey: 'wf.common.yes' },
+  { value: 'false', labelKey: 'wf.common.no' },
 ];
 
 interface FormData {
@@ -59,6 +61,7 @@ const INITIAL_FORM_DATA: FormData = {
 };
 
 export default function SkillTab({ employeeId }: SkillTabProps) {
+  const { t } = useI18n();
   const [data, setData] = useState<EmployeeSkill[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,7 +80,7 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
       setData(result);
     } catch (error) {
       console.error('Failed to fetch skills:', error);
-      toast.error('Gagal memuat data keahlian');
+      toast.error(t('wf.skill.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -112,7 +115,7 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
 
   async function handleSave() {
     if (!form.skillName.trim()) {
-      toast.error('Nama keahlian harus diisi');
+      toast.error(t('wf.skill.validation.nameRequired'));
       return;
     }
 
@@ -130,17 +133,17 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
 
       if (editingItem) {
         await employeeService.updateSkill(employeeId, editingItem.id, payload);
-        toast.success('Data keahlian berhasil diperbarui');
+        toast.success(t('wf.skill.toast.updateSuccess'));
       } else {
         await employeeService.createSkill(employeeId, payload);
-        toast.success('Data keahlian berhasil ditambahkan');
+        toast.success(t('wf.skill.toast.createSuccess'));
       }
 
       handleCloseDialog();
       await fetchData();
     } catch (error) {
       console.error('Failed to save skill:', error);
-      toast.error('Gagal menyimpan data keahlian');
+      toast.error(t('wf.skill.toast.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -148,21 +151,21 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
 
   async function handleDelete(item: EmployeeSkill) {
     const confirmed = await popup.confirm({
-      title: 'Hapus Skill',
-      description: `Skill ${item.skillName} akan dihapus dari profil employee.`,
-      confirmText: 'Hapus',
-      cancelText: 'Batal',
+      title: t('wf.skill.confirm.title'),
+      description: t('wf.skill.confirm.description', { name: item.skillName }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       intent: 'destructive',
     });
     if (!confirmed) return;
 
     try {
       await employeeService.deleteSkill(employeeId, item.id);
-      toast.success('Data keahlian berhasil dihapus');
+      toast.success(t('wf.skill.toast.deleteSuccess'));
       await fetchData();
     } catch (error) {
       console.error('Failed to delete skill:', error);
-      toast.error('Gagal menghapus data keahlian');
+      toast.error(t('wf.skill.toast.deleteFailed'));
     }
   }
 
@@ -171,7 +174,10 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
     const colorClass = PROFICIENCY_COLORS[level] || 'bg-gray-100 text-gray-700';
     return (
       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
-        {PROFICIENCY_OPTIONS.find((o) => o.value === level)?.label || level}
+        {(() => {
+          const option = PROFICIENCY_OPTIONS.find((o) => o.value === level);
+          return option ? t(option.labelKey) : level;
+        })()}
       </span>
     );
   }
@@ -180,7 +186,10 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
     if (!category) return null;
     return (
       <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-        {CATEGORY_OPTIONS.find((o) => o.value === category)?.label || category}
+        {(() => {
+          const option = CATEGORY_OPTIONS.find((o) => o.value === category);
+          return option ? t(option.labelKey) : category;
+        })()}
       </span>
     );
   }
@@ -206,11 +215,11 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
       <div className="flex items-center justify-between border-b border-border px-6 py-4">
         <div className="flex items-center gap-2">
           <Award size={20} className="text-primary" />
-          <h3 className="text-base font-semibold text-foreground">Data Keahlian</h3>
+          <h3 className="text-base font-semibold text-foreground">{t('wf.skill.title')}</h3>
         </div>
         <Button size="sm" onClick={handleOpenAdd}>
           <Plus size={16} className="mr-1" />
-          Tambah
+          {t('wf.common.add')}
         </Button>
       </div>
 
@@ -221,10 +230,10 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <Award size={24} className="text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">Belum ada data keahlian</p>
+            <p className="text-sm text-muted-foreground">{t('wf.skill.empty.title')}</p>
             <Button variant="outline" size="sm" className="mt-4" onClick={handleOpenAdd}>
               <Plus size={16} className="mr-1" />
-              Tambah Keahlian
+              {t('wf.skill.empty.add')}
             </Button>
           </div>
         ) : (
@@ -242,12 +251,12 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
                   </div>
                   {item.yearsOfExperience != null && (
                     <p className="text-sm text-muted-foreground">
-                      Pengalaman: {item.yearsOfExperience} tahun
+                      {t('wf.skill.experienceYears', { years: item.yearsOfExperience })}
                     </p>
                   )}
                   {item.isCertified != null && (
                     <p className="text-xs text-muted-foreground">
-                      Bersertifikat: {item.isCertified ? 'Ya' : 'Tidak'}
+                      {t('wf.skill.certified')}: {item.isCertified ? t('wf.common.yes') : t('wf.common.no')}
                     </p>
                   )}
                 </div>
@@ -280,7 +289,7 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
             {/* Dialog Header */}
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <h4 className="text-base font-semibold text-foreground">
-                {editingItem ? 'Edit Keahlian' : 'Tambah Keahlian'}
+                {editingItem ? t('wf.skill.dialog.editTitle') : t('wf.skill.dialog.addTitle')}
               </h4>
               <Button variant="ghost" size="icon" onClick={handleCloseDialog} disabled={saving}>
                 &times;
@@ -292,52 +301,52 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
               {/* skillName */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">
-                  Nama Keahlian <span className="text-destructive">*</span>
+                  {t('wf.skill.fields.name')} <span className="text-destructive">*</span>
                 </label>
                 <Input
                   value={form.skillName}
                   onChange={(e) => setForm((prev) => ({ ...prev, skillName: e.target.value }))}
-                  placeholder="Nama keahlian"
+                  placeholder={t('wf.skill.fields.namePlaceholder')}
                 />
               </div>
 
               {/* category */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Kategori</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.common.category')}</label>
                 <Select2
                   value={form.category}
                   onValueChange={(value) => setForm((prev) => ({ ...prev, category: value }))}
-                  options={CATEGORY_OPTIONS}
-                  placeholder="Pilih kategori"
+                  options={CATEGORY_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                  placeholder={t('wf.common.selectCategory')}
                 />
               </div>
 
               {/* proficiencyLevel */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Tingkat Kemahiran</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.skill.fields.proficiency')}</label>
                 <Select2
                   value={form.proficiencyLevel}
                   onValueChange={(value) => setForm((prev) => ({ ...prev, proficiencyLevel: value }))}
-                  options={PROFICIENCY_OPTIONS}
-                  placeholder="Pilih tingkat kemahiran"
+                  options={PROFICIENCY_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                  placeholder={t('wf.skill.fields.selectProficiency')}
                 />
               </div>
 
               {/* yearsOfExperience */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Pengalaman (tahun)</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.skill.fields.years')}</label>
                 <Input
                   type="number"
                   step="0.5"
                   value={form.yearsOfExperience}
                   onChange={(e) => setForm((prev) => ({ ...prev, yearsOfExperience: e.target.value }))}
-                  placeholder="Contoh: 3.5"
+                  placeholder={t('wf.skill.fields.yearsPlaceholder')}
                 />
               </div>
 
               {/* lastUsedDate */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Terakhir Digunakan</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.skill.fields.lastUsed')}</label>
                 <Input
                   type="date"
                   value={form.lastUsedDate}
@@ -347,22 +356,22 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
 
               {/* isCertified */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Bersertifikat</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.skill.certified')}</label>
                 <Select2
                   value={form.isCertified}
                   onValueChange={(value) => setForm((prev) => ({ ...prev, isCertified: value }))}
-                  options={YES_NO_OPTIONS}
-                  placeholder="Pilih"
+                  options={YES_NO_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                  placeholder={t('wf.common.select')}
                 />
               </div>
 
               {/* notes */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Catatan</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.common.notes')}</label>
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Catatan tambahan"
+                  placeholder={t('wf.common.notesPlaceholder')}
                   rows={3}
                   className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -372,11 +381,11 @@ export default function SkillTab({ employeeId }: SkillTabProps) {
             {/* Dialog Footer */}
             <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
               <Button variant="outline" onClick={handleCloseDialog} disabled={saving}>
-                Batal
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleSave} disabled={saving}>
                 {saving && <Loader2 size={16} className="mr-1 animate-spin" />}
-                {editingItem ? 'Simpan' : 'Tambah'}
+                {editingItem ? t('common.save') : t('wf.common.add')}
               </Button>
             </div>
           </div>

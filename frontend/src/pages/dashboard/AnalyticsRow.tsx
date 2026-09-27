@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import 'dayjs/locale/id';
 import {
   Bar,
   BarChart,
@@ -13,7 +12,11 @@ import {
 } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 import type { HeadcountReport, TurnoverReport } from '@/services/reports.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 import { DashCard, CardTitle, EmptyHint } from './shared';
+
+type Translate = (key: TranslationKey, params?: TranslationParams) => string;
 
 /*
  * Chart analitik persona admin/HR.
@@ -50,21 +53,29 @@ function ChartTooltip({
 }
 
 /** Headcount per departemen — bar horizontal, satu seri, top 6 + Lainnya. */
-function HeadcountByDeptChart({ headcount }: { headcount: HeadcountReport }) {
+function HeadcountByDeptChart({ headcount, t }: { headcount: HeadcountReport; t: Translate }) {
   const sorted = [...headcount.byDepartment].sort((a, b) => b.count - a.count);
   const top = sorted.slice(0, 6);
   const restCount = sorted.slice(6).reduce((sum, row) => sum + row.count, 0);
   const rows = [
     ...top.map((row) => ({ name: row.departmentName, jumlah: row.count })),
-    ...(restCount > 0 ? [{ name: 'Lainnya', jumlah: restCount }] : []),
+    ...(restCount > 0 ? [{ name: t('ops.dashboard.analytics.others'), jumlah: restCount }] : []),
   ];
 
   if (!rows.length) {
-    return <EmptyHint icon={<BarChart3 size={28} aria-hidden="true" />} title="Belum ada data departemen" />;
+    return (
+      <EmptyHint
+        icon={<BarChart3 size={28} aria-hidden="true" />}
+        title={t('ops.dashboard.analytics.headcount.empty')}
+      />
+    );
   }
 
   return (
-    <div style={{ height: Math.max(180, rows.length * 38) }} aria-label="Grafik headcount per departemen">
+    <div
+      style={{ height: Math.max(180, rows.length * 38) }}
+      aria-label={t('ops.dashboard.analytics.headcount.chartAria')}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 36, left: 0, bottom: 0 }} barCategoryGap={10}>
           <CartesianGrid horizontal={false} stroke={GRID_STROKE} strokeDasharray="2 4" />
@@ -80,7 +91,7 @@ function HeadcountByDeptChart({ headcount }: { headcount: HeadcountReport }) {
           <Tooltip content={<ChartTooltip />} cursor={{ fill: 'hsl(var(--muted))', opacity: 0.5 }} />
           <Bar
             dataKey="jumlah"
-            name="Karyawan"
+            name={t('ops.dashboard.analytics.headcount.seriesName')}
             fill={SERIES_1}
             barSize={14}
             radius={[0, 4, 4, 0]}
@@ -93,19 +104,24 @@ function HeadcountByDeptChart({ headcount }: { headcount: HeadcountReport }) {
 }
 
 /** Rekrutmen vs resign per bulan — dua seri, legend wajib. */
-function HiringTrendChart({ turnover }: { turnover: TurnoverReport }) {
+function HiringTrendChart({ turnover, t }: { turnover: TurnoverReport; t: Translate }) {
   const rows = turnover.monthly.map((row) => ({
-    name: dayjs(`${row.year}-${String(row.month).padStart(2, '0')}-01`).locale('id').format('MMM'),
+    name: dayjs(`${row.year}-${String(row.month).padStart(2, '0')}-01`).format('MMM'),
     Masuk: row.hires,
     Keluar: row.resigns,
   }));
 
   if (!rows.length) {
-    return <EmptyHint icon={<BarChart3 size={28} aria-hidden="true" />} title="Belum ada data rekrutmen" />;
+    return (
+      <EmptyHint
+        icon={<BarChart3 size={28} aria-hidden="true" />}
+        title={t('ops.dashboard.analytics.turnover.empty')}
+      />
+    );
   }
 
   return (
-    <div className="h-[220px]" aria-label="Grafik karyawan masuk vs keluar per bulan">
+    <div className="h-[220px]" aria-label={t('ops.dashboard.analytics.turnover.chartAria')}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 4, right: 8, left: -18, bottom: 0 }} barCategoryGap="28%" barGap={2}>
           <CartesianGrid vertical={false} stroke={GRID_STROKE} strokeDasharray="2 4" />
@@ -117,8 +133,20 @@ function HiringTrendChart({ turnover }: { turnover: TurnoverReport }) {
             iconSize={8}
             wrapperStyle={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))' }}
           />
-          <Bar dataKey="Masuk" fill={SERIES_1} barSize={12} radius={[4, 4, 0, 0]} />
-          <Bar dataKey="Keluar" fill={SERIES_2} barSize={12} radius={[4, 4, 0, 0]} />
+          <Bar
+            dataKey="Masuk"
+            name={t('ops.dashboard.analytics.turnover.seriesHires')}
+            fill={SERIES_1}
+            barSize={12}
+            radius={[4, 4, 0, 0]}
+          />
+          <Bar
+            dataKey="Keluar"
+            name={t('ops.dashboard.analytics.turnover.seriesResigns')}
+            fill={SERIES_2}
+            barSize={12}
+            radius={[4, 4, 0, 0]}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -133,6 +161,7 @@ export function AnalyticsRow({
   turnover: TurnoverReport | null;
 }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   if (!headcount && !turnover) return null;
 
   return (
@@ -140,40 +169,44 @@ export function AnalyticsRow({
       {headcount && (
         <DashCard>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle>Headcount per Departemen</CardTitle>
+            <CardTitle>{t('ops.dashboard.analytics.headcount.title')}</CardTitle>
             <button
               type="button"
               onClick={() => navigate('/reports')}
               className="text-[11.5px] font-medium text-primary hover:underline"
             >
-              Lihat laporan
+              {t('ops.dashboard.analytics.viewReport')}
             </button>
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Total {headcount.total} karyawan aktif
+            {t('ops.dashboard.analytics.headcount.subtitle', { total: headcount.total })}
           </p>
           <div className="mt-3">
-            <HeadcountByDeptChart headcount={headcount} />
+            <HeadcountByDeptChart headcount={headcount} t={t} />
           </div>
         </DashCard>
       )}
       {turnover && (
         <DashCard>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle>Masuk vs Keluar (6 bulan)</CardTitle>
+            <CardTitle>{t('ops.dashboard.analytics.turnover.title')}</CardTitle>
             <button
               type="button"
               onClick={() => navigate('/reports')}
               className="text-[11.5px] font-medium text-primary hover:underline"
             >
-              Lihat laporan
+              {t('ops.dashboard.analytics.viewReport')}
             </button>
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {turnover.newHires} masuk · {turnover.resignations} keluar · turnover {turnover.turnoverRate}%
+            {t('ops.dashboard.analytics.turnover.subtitle', {
+              hires: turnover.newHires,
+              resigns: turnover.resignations,
+              rate: turnover.turnoverRate,
+            })}
           </p>
           <div className="mt-3">
-            <HiringTrendChart turnover={turnover} />
+            <HiringTrendChart turnover={turnover} t={t} />
           </div>
         </DashCard>
       )}

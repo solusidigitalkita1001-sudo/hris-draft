@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
-import { permissionRequestService, type PermissionRequest, type PermissionType, type RequestStatus, PERMISSION_TYPE_LABELS, REQUEST_STATUS_LABELS } from '@/services/permission-request.service';
+import { permissionRequestService, type PermissionRequest, type PermissionType } from '@/services/permission-request.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 import { leaveService } from '@/services/leave.service';
 import { LeaveRequestForm } from '@/modules/leave/components/LeaveRequestForm';
 import { attendanceService } from '@/services/attendance.service';
@@ -25,18 +27,46 @@ import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
 import { appConfig } from '@/config/app';
 
-const DAY_TYPE_LABELS: Record<string, string> = {
-  WD: 'Kerja',
-  WS: 'Shift',
-  WE: 'Libur',
-  NH: 'Libur Nasional',
-  JL: 'Cuti Bersama',
-  CH: 'Cuti',
-  RH: 'Hari Istimewa',
-  OT: 'Lembur',
+type Translate = (key: TranslationKey, params?: TranslationParams) => string;
+
+const DAY_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  WD: 'ess.selfService.calendar.dayType.wd',
+  WS: 'ess.selfService.calendar.dayType.ws',
+  WE: 'ess.selfService.calendar.dayType.we',
+  NH: 'ess.selfService.calendar.dayType.nh',
+  JL: 'ess.selfService.calendar.dayType.jl',
+  CH: 'ess.selfService.calendar.dayType.ch',
+  RH: 'ess.selfService.calendar.dayType.rh',
+  OT: 'ess.selfService.calendar.dayType.ot',
 };
 
-const WEEKDAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+const WEEKDAY_LABEL_KEYS: TranslationKey[] = [
+  'ess.selfService.calendar.weekday.sun',
+  'ess.selfService.calendar.weekday.mon',
+  'ess.selfService.calendar.weekday.tue',
+  'ess.selfService.calendar.weekday.wed',
+  'ess.selfService.calendar.weekday.thu',
+  'ess.selfService.calendar.weekday.fri',
+  'ess.selfService.calendar.weekday.sat',
+];
+
+const PERMISSION_TYPE_LABEL_KEYS: Record<PermissionType, TranslationKey> = {
+  SICK: 'ess.selfService.permissionType.sick',
+  PERSONAL: 'ess.selfService.permissionType.personal',
+  LATE: 'ess.selfService.permissionType.late',
+  EARLY_LEAVE: 'ess.selfService.permissionType.earlyLeave',
+  LEAVE_OFFICE: 'ess.selfService.permissionType.leaveOffice',
+  BUSINESS_TRIP: 'ess.selfService.permissionType.businessTrip',
+  WORK_FROM_HOME: 'ess.selfService.permissionType.workFromHome',
+  OTHER: 'ess.selfService.permissionType.other',
+};
+
+const REQUEST_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  PENDING: 'ess.status.pending',
+  APPROVED: 'ess.status.approved',
+  REJECTED: 'ess.status.rejected',
+  CANCELLED: 'ess.status.cancelled',
+};
 
 function getCalendarCellTone(day: MyWorkCalendarDay) {
   if (day.overrideSource === 'SHIFT_SWAP') {
@@ -76,12 +106,12 @@ function getAbsenceBadgeTone(category: NonNullable<MyWorkCalendarDay['absence']>
   return 'border-orange-200 bg-orange-100 text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/40 dark:text-orange-300';
 }
 
-function formatShiftSchedule(schedule?: ShiftSwapSchedulePreview | null) {
-  if (!schedule) return 'Jadwal belum tersedia';
+function formatShiftSchedule(t: Translate, schedule?: ShiftSwapSchedulePreview | null) {
+  if (!schedule) return t('ess.selfService.shiftSwap.scheduleUnavailable');
 
   const timeText = schedule.workStart && schedule.workEnd
     ? `${schedule.workStart} - ${schedule.workEnd}`
-    : 'Tidak ada jam kerja';
+    : t('ess.selfService.calendar.noWorkHours');
 
   return schedule.label ? `${schedule.label} • ${timeText}` : timeText;
 }
@@ -126,20 +156,22 @@ function Segmented<T extends string>({
 }
 
 // ─── Tombol batalkan (danger, token semantik) ───────────
-function CancelButton({ onClick, children = 'Batalkan' }: { onClick: () => void; children?: ReactNode }) {
+function CancelButton({ onClick, children }: { onClick: () => void; children?: ReactNode }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
       onClick={onClick}
       className="shrink-0 rounded-[12px] border border-danger/25 px-3 py-1.5 text-[11px] font-medium text-danger transition-colors hover:bg-danger-bg"
     >
-      {children}
+      {children ?? t('ess.actions.cancel')}
     </button>
   );
 }
 
 // ─── Permission Request Form ────────────────────────────
 function PermissionForm({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const [type, setType] = useState<PermissionType>('PERSONAL');
   const [startDate, setStartDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [endDate, setEndDate] = useState(dayjs().format('YYYY-MM-DD'));
@@ -151,14 +183,14 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!employeeId) return toast.error('employeeId tidak tersedia. Silakan login ulang');
-    if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) return toast.error('Tanggal selesai tidak boleh lebih kecil dari tanggal mulai');
-    if (!Number.isFinite(duration) || duration <= 0) return toast.error('Durasi harus lebih dari 0');
+    if (!employeeId) return toast.error(t('ess.selfService.permission.toast.noEmployeeId'));
+    if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) return toast.error(t('ess.selfService.permission.toast.endBeforeStart'));
+    if (!Number.isFinite(duration) || duration <= 0) return toast.error(t('ess.selfService.permission.toast.durationPositive'));
 
     const maxDuration = dayjs(endDate).startOf('day').diff(dayjs(startDate).startOf('day'), 'day') + 1;
-    if (duration > maxDuration) return toast.error(`Durasi melebihi rentang tanggal (maks ${maxDuration} hari)`);
-    if (!reason.trim()) return toast.error('Alasan harus diisi');
-    if (!attachmentFile) return toast.error('Pengajuan izin wajib menyertakan lampiran');
+    if (duration > maxDuration) return toast.error(t('ess.selfService.permission.toast.durationExceeds', { max: maxDuration }));
+    if (!reason.trim()) return toast.error(t('ess.common.reasonRequired'));
+    if (!attachmentFile) return toast.error(t('ess.selfService.permission.toast.attachmentRequired'));
     setSaving(true);
     try {
       const uploaded = await permissionRequestService.uploadAttachment(attachmentFile);
@@ -171,10 +203,10 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
         attachment: uploaded.url,
         employeeId,
       } as Partial<PermissionRequest>);
-      toast.success('Pengajuan berhasil dikirim');
+      toast.success(t('ess.selfService.permission.toast.submitSuccess'));
       onClose();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal mengirim pengajuan'));
+      toast.error(apiErrorMessage(err, t('ess.selfService.permission.toast.submitFailed')));
     } finally {
       setSaving(false);
     }
@@ -183,41 +215,41 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Tipe Izin *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.permission.typeLabel')} *</label>
         <Select2
           value={type}
           onValueChange={(value) => setType(value as PermissionType)}
-          options={Object.entries(PERMISSION_TYPE_LABELS).map(([key, label]) => ({
+          options={(Object.keys(PERMISSION_TYPE_LABEL_KEYS) as PermissionType[]).map((key) => ({
             value: key,
-            label,
+            label: t(PERMISSION_TYPE_LABEL_KEYS[key]),
           }))}
-          placeholder="Pilih tipe izin"
+          placeholder={t('ess.selfService.permission.selectType')}
           className="h-9"
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Tanggal Mulai *</label>
+          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.leave.detail.startDate')} *</label>
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
         </div>
         <div>
-          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Tanggal Selesai *</label>
+          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.leave.detail.endDate')} *</label>
           <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
         </div>
       </div>
 
       <div>
-        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Durasi (hari) *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.permission.durationDays')} *</label>
         <Input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} min={0.5} step={0.5} required />
       </div>
 
       <div>
-        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Alasan *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.common.reason')} *</label>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Jelaskan alasan pengajuan..."
+          placeholder={t('ess.selfService.permission.reasonPlaceholder')}
           rows={3}
           className="w-full resize-none rounded-field border border-border bg-background px-3.5 py-2.5 text-sm text-foreground"
           required
@@ -226,7 +258,7 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
 
       <div>
         <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">
-          Lampiran <span className="text-danger">*</span>
+          {t('ess.common.attachment')} <span className="text-danger">*</span>
         </label>
         <Input
           type="file"
@@ -234,7 +266,7 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
           onChange={(e) => {
             const file = e.target.files?.[0] || null;
             if (file && file.size > 5 * 1024 * 1024) {
-              toast.error('Ukuran file lampiran maksimal 5MB');
+              toast.error(t('ess.common.attachmentTooLarge'));
               e.target.value = '';
               setAttachmentFile(null);
               return;
@@ -243,17 +275,17 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
           }}
         />
         <p className="mt-1.5 text-[11px] text-muted-foreground">
-          Setiap pengajuan izin wajib melampirkan dokumen pendukung. Format: JPG, PNG, GIF, atau PDF. Maks 5MB.
+          {t('ess.selfService.permission.attachmentHint')}
         </p>
         {attachmentFile && (
-          <p className="mt-1 text-[11px] text-muted-foreground">File terpilih: {attachmentFile.name}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{t('ess.common.attachmentSelected', { name: attachmentFile.name })}</p>
         )}
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Batal</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
         <Button type="submit" size="sm" disabled={saving}>
-          <Send size={14} className="mr-1.5" /> {saving ? 'Mengirim...' : 'Kirim Pengajuan'}
+          <Send size={14} className="mr-1.5" /> {saving ? t('ess.common.sending') : t('ess.selfService.permission.submit')}
         </Button>
       </div>
     </form>
@@ -261,6 +293,7 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
 }
 
 function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const [shiftDate, setShiftDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [targetEmployeeId, setTargetEmployeeId] = useState('');
   const [reason, setReason] = useState('');
@@ -275,12 +308,12 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
       setCandidateData(data);
       setTargetEmployeeId((current) => data.candidates.some((candidate) => candidate.id === current) ? current : '');
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal memuat kandidat tukar shift'));
+      toast.error(apiErrorMessage(err, t('ess.selfService.shiftSwap.toast.loadCandidatesFailed')));
       setCandidateData(null);
     } finally {
       setLoadingCandidates(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void fetchCandidates(shiftDate);
@@ -293,12 +326,12 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
     e.preventDefault();
 
     if (!targetEmployeeId) {
-      toast.error('Pilih rekan tukar shift terlebih dahulu');
+      toast.error(t('ess.selfService.shiftSwap.toast.selectPartnerFirst'));
       return;
     }
 
     if (!reason.trim()) {
-      toast.error('Alasan request tukar shift harus diisi');
+      toast.error(t('ess.selfService.shiftSwap.toast.reasonRequired'));
       return;
     }
 
@@ -309,10 +342,10 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
         shiftDate: dayjs(shiftDate).hour(12).minute(0).second(0).millisecond(0).toISOString(),
         reason: reason.trim(),
       });
-      toast.success('Request tukar shift berhasil dikirim ke kepala regu');
+      toast.success(t('ess.selfService.shiftSwap.toast.submitSuccess'));
       onClose();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal mengirim request tukar shift'));
+      toast.error(apiErrorMessage(err, t('ess.selfService.shiftSwap.toast.submitFailed')));
     } finally {
       setSaving(false);
     }
@@ -321,12 +354,12 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Tanggal Shift *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.shiftSwap.shiftDate')} *</label>
         <Input type="date" value={shiftDate} onChange={(e) => setShiftDate(e.target.value)} required />
       </div>
 
       <div className="rounded-field border border-border bg-accent/60 p-4">
-        <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Akan disetujui oleh</p>
+        <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.shiftSwap.approvedBy')}</p>
         <p className="text-sm font-semibold">{candidateData?.approver.fullName || '-'}</p>
         <p className="text-xs text-muted-foreground">
           {candidateData?.approver.employeeNumber || '-'}
@@ -336,60 +369,60 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
 
       {loadingCandidates ? (
         <div className="rounded-field border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-          Memuat kandidat tukar shift...
+          {t('ess.selfService.shiftSwap.loadingCandidates')}
         </div>
       ) : !candidateData ? (
         <div className="rounded-field border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-          Data kandidat belum tersedia.
+          {t('ess.selfService.shiftSwap.noCandidateData')}
         </div>
       ) : !isFactoryRequester ? (
         <div className="rounded-field border border-warning/30 bg-warning-bg p-4 text-sm text-warning">
-          Fitur tukar shift hanya tersedia untuk pegawai pabrik yang memakai formula shifting.
+          {t('ess.selfService.shiftSwap.factoryOnly')}
         </div>
       ) : (
         <>
           <div>
-            <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Rekan Tukar Shift *</label>
+            <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.shiftSwap.partnerLabel')} *</label>
             <Select2
               value={targetEmployeeId}
               onValueChange={setTargetEmployeeId}
               options={[
-                { value: '', label: candidateData.candidates.length > 0 ? 'Pilih rekan regu...' : 'Belum ada kandidat tersedia' },
+                { value: '', label: candidateData.candidates.length > 0 ? t('ess.selfService.shiftSwap.selectPartner') : t('ess.selfService.shiftSwap.noCandidates') },
                 ...candidateData.candidates.map((candidate) => ({
                   value: candidate.id,
                   label: `${candidate.fullName} • ${candidate.employeeNumber}`,
                 })),
               ]}
-              placeholder="Pilih rekan regu..."
+              placeholder={t('ess.selfService.shiftSwap.selectPartner')}
               className="h-9"
             />
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="rounded-field border border-border bg-background p-4">
-              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Shift Saya</p>
+              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.shiftSwap.myShift')}</p>
               <p className="text-sm font-semibold">{candidateData.requester.fullName}</p>
-              <p className="text-xs text-muted-foreground">{formatShiftSchedule(candidateData.requester.schedule)}</p>
+              <p className="text-xs text-muted-foreground">{formatShiftSchedule(t, candidateData.requester.schedule)}</p>
             </div>
             <div className="rounded-field border border-border bg-background p-4">
-              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Shift Rekan</p>
+              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.shiftSwap.partnerShift')}</p>
               {selectedCandidate ? (
                 <>
                   <p className="text-sm font-semibold">{selectedCandidate.fullName}</p>
-                  <p className="text-xs text-muted-foreground">{formatShiftSchedule(selectedCandidate.schedule)}</p>
+                  <p className="text-xs text-muted-foreground">{formatShiftSchedule(t, selectedCandidate.schedule)}</p>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">Pilih rekan terlebih dahulu.</p>
+                <p className="text-sm text-muted-foreground">{t('ess.selfService.shiftSwap.selectPartnerFirst')}</p>
               )}
             </div>
           </div>
 
           <div>
-            <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Alasan Request *</label>
+            <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.shiftSwap.reasonLabel')} *</label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Contoh: ada kebutuhan keluarga dan sudah sepakat tukar dengan rekan satu regu."
+              placeholder={t('ess.selfService.shiftSwap.reasonPlaceholder')}
               rows={3}
               className="w-full resize-none rounded-field border border-border bg-background px-3.5 py-2.5 text-sm text-foreground"
               required
@@ -399,9 +432,9 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
       )}
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Batal</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
         <Button type="submit" size="sm" disabled={saving || loadingCandidates || !candidateData || !isFactoryRequester}>
-          <Send size={14} className="mr-1.5" /> {saving ? 'Mengirim...' : 'Kirim Request'}
+          <Send size={14} className="mr-1.5" /> {saving ? t('ess.common.sending') : t('ess.selfService.shiftSwap.submit')}
         </Button>
       </div>
     </form>
@@ -417,15 +450,17 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 };
 
 function RequestStatusChip({ status }: { status: string }) {
+  const { t } = useI18n();
   return (
     <StatusChip tone={statusTone(status)}>
-      {STATUS_ICONS[status]} {REQUEST_STATUS_LABELS[status as RequestStatus] ?? status}
+      {STATUS_ICONS[status]} {REQUEST_STATUS_LABEL_KEYS[status] ? t(REQUEST_STATUS_LABEL_KEYS[status]) : status}
     </StatusChip>
   );
 }
 
 // ─── Main Component ─────────────────────────────────────
 export function SelfServicePage() {
+  const { t } = useI18n();
   const { user } = useAuthStore();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [permissions, setPermissions] = useState<PermissionRequest[]>([]);
@@ -445,11 +480,11 @@ export function SelfServicePage() {
       const data = await permissionRequestService.findMyRequests(employeeId, statusFilter || undefined);
       setPermissions(data);
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal memuat data'));
+      toast.error(apiErrorMessage(err, t('ess.common.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [employeeId, statusFilter]);
+  }, [employeeId, statusFilter, t]);
 
   useEffect(() => { if (activeTab === 'permissions') fetchPermissions(); }, [fetchPermissions, activeTab]);
 
@@ -492,19 +527,19 @@ export function SelfServicePage() {
 
   const handleCancel = async (id: string) => {
     const confirmed = await popup.confirm({
-      title: 'Batalkan Pengajuan',
-      description: 'Pengajuan ini akan dibatalkan. Lanjutkan?',
-      confirmText: 'Ya, Batalkan',
-      cancelText: 'Kembali',
+      title: t('ess.selfService.confirmCancel.title'),
+      description: t('ess.selfService.confirmCancel.description'),
+      confirmText: t('ess.common.confirmYesCancel'),
+      cancelText: t('ess.common.back'),
       intent: 'destructive',
     });
     if (!confirmed) return;
     try {
       await permissionRequestService.cancel(id, employeeId);
-      toast.success('Pengajuan dibatalkan');
+      toast.success(t('ess.selfService.toast.cancelSuccess'));
       fetchPermissions();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal membatalkan'));
+      toast.error(apiErrorMessage(err, t('ess.selfService.toast.cancelFailed')));
     }
   };
 
@@ -513,17 +548,17 @@ export function SelfServicePage() {
   const rejectedCount = permissions.filter((p) => p.status === 'REJECTED').length;
 
   const table = useTableControls(permissions, (p, q) =>
-    [PERMISSION_TYPE_LABELS[p.type], p.reason, REQUEST_STATUS_LABELS[p.status]]
+    [t(PERMISSION_TYPE_LABEL_KEYS[p.type]), p.reason, REQUEST_STATUS_LABEL_KEYS[p.status] ? t(REQUEST_STATUS_LABEL_KEYS[p.status]) : p.status]
       .join(' ')
       .toLowerCase()
       .includes(q));
 
   const tabs = [
-    { key: 'permissions' as const, label: 'Izin', icon: <FileText size={14} /> },
-    { key: 'leave' as const, label: 'Cuti', icon: <CalendarDays size={14} /> },
-    { key: 'overtime' as const, label: 'Lembur', icon: <Clock size={14} /> },
-    { key: 'shift-swap' as const, label: 'Tukar Shift', icon: <Repeat size={14} /> },
-    { key: 'calendar' as const, label: 'Kalender Kerja', icon: <CalendarDays size={14} /> },
+    { key: 'permissions' as const, label: t('ess.selfService.tab.permissions'), icon: <FileText size={14} /> },
+    { key: 'leave' as const, label: t('ess.selfService.tab.leave'), icon: <CalendarDays size={14} /> },
+    { key: 'overtime' as const, label: t('ess.selfService.tab.overtime'), icon: <Clock size={14} /> },
+    { key: 'shift-swap' as const, label: t('ess.selfService.tab.shiftSwap'), icon: <Repeat size={14} /> },
+    { key: 'calendar' as const, label: t('ess.selfService.tab.calendar'), icon: <CalendarDays size={14} /> },
   ].filter((tab) => hasShiftCalendar || tab.key !== 'shift-swap');
 
   return (
@@ -531,34 +566,34 @@ export function SelfServicePage() {
       {/* Header halaman ala handoff */}
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.9px] text-foreground">Self Service</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.9px] text-foreground">{t('ess.selfService.title')}</h1>
           <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-            Ajukan dan pantau status pengajuan Anda · diurutkan terbaru
+            {t('ess.selfService.subtitle')}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           {activeTab === 'permissions' && (
             <Segmented
-              ariaLabel="Mode tampilan"
+              ariaLabel={t('ess.selfService.viewMode')}
               value={viewMode}
               onChange={setViewMode}
               options={[
-                { key: 'table' as const, label: 'Tabel', icon: <Table2 size={13} /> },
-                { key: 'list' as const, label: 'List', icon: <List size={13} /> },
+                { key: 'table' as const, label: t('ess.selfService.view.table'), icon: <Table2 size={13} /> },
+                { key: 'list' as const, label: t('ess.selfService.view.list'), icon: <List size={13} /> },
               ]}
             />
           )}
           <Button variant="outline" size="sm" onClick={fetchPermissions}>
-            <RefreshCw size={15} className="mr-2" /> Refresh
+            <RefreshCw size={15} className="mr-2" /> {t('common.refresh')}
           </Button>
           {activeTab === 'permissions' && (
             <Button size="sm" className="rounded-[14px]" onClick={() => setActiveModal('permission')}>
-              <Plus size={15} className="mr-2" /> Ajukan Izin
+              <Plus size={15} className="mr-2" /> {t('ess.selfService.action.requestPermission')}
             </Button>
           )}
           {activeTab === 'shift-swap' && hasShiftCalendar && (
             <Button size="sm" className="rounded-[14px]" onClick={() => setActiveModal('shift-swap')}>
-              <Plus size={15} className="mr-2" /> Request Tukar Shift
+              <Plus size={15} className="mr-2" /> {t('ess.selfService.action.requestShiftSwap')}
             </Button>
           )}
         </div>
@@ -567,7 +602,7 @@ export function SelfServicePage() {
       {/* Tab utama */}
       <div className="mt-5">
         <Segmented
-          ariaLabel="Kategori pengajuan"
+          ariaLabel={t('ess.selfService.tabsAria')}
           value={activeTab}
           onChange={setActiveTab}
           options={tabs}
@@ -577,10 +612,10 @@ export function SelfServicePage() {
       {/* Strip stat kecil (radius 20) */}
       {activeTab === 'permissions' && (
         <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3.5">
-          <StatTile label="Total Pengajuan" value={permissions.length} />
-          <StatTile label="Menunggu" value={pendingCount} valueClassName="text-warning" />
-          <StatTile label="Disetujui" value={approvedCount} valueClassName="text-success" />
-          <StatTile label="Ditolak" value={rejectedCount} valueClassName="text-danger" />
+          <StatTile label={t('ess.selfService.stats.total')} value={permissions.length} />
+          <StatTile label={t('ess.status.pending')} value={pendingCount} valueClassName="text-warning" />
+          <StatTile label={t('ess.status.approved')} value={approvedCount} valueClassName="text-success" />
+          <StatTile label={t('ess.status.rejected')} value={rejectedCount} valueClassName="text-danger" />
         </div>
       )}
 
@@ -589,7 +624,7 @@ export function SelfServicePage() {
         <div className="mt-3.5 flex flex-wrap gap-2">
           {['', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].map((s) => (
             <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(s)}>
-              {s ? REQUEST_STATUS_LABELS[s as RequestStatus] : 'Semua'}
+              {s ? (REQUEST_STATUS_LABEL_KEYS[s] ? t(REQUEST_STATUS_LABEL_KEYS[s]) : s) : t('ess.common.all')}
             </FilterChip>
           ))}
         </div>
@@ -598,7 +633,7 @@ export function SelfServicePage() {
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="text-sm text-muted-foreground">Memuat data...</div>
+          <div className="text-sm text-muted-foreground">{t('ess.common.loadingData')}</div>
         </div>
       )}
 
@@ -611,14 +646,14 @@ export function SelfServicePage() {
                 <FileText size={24} className="text-primary" />
               </div>
               <p className="text-sm font-medium text-foreground">
-                {statusFilter ? 'Tidak ada pengajuan dengan status ini' : 'Belum ada pengajuan izin'}
+                {statusFilter ? t('ess.selfService.empty.filtered') : t('ess.selfService.empty.permissions')}
               </p>
               <p className="max-w-[340px] text-center text-[11.5px] leading-relaxed text-muted-foreground">
-                Pengajuan izin Anda akan tampil di sini beserta status persetujuannya.
+                {t('ess.selfService.empty.permissionsHint')}
               </p>
               {!statusFilter && (
                 <Button size="sm" className="rounded-[14px]" onClick={() => setActiveModal('permission')}>
-                  <Plus size={15} className="mr-2" /> Ajukan Izin
+                  <Plus size={15} className="mr-2" /> {t('ess.selfService.action.requestPermission')}
                 </Button>
               )}
             </div>
@@ -632,12 +667,12 @@ export function SelfServicePage() {
               setPage={table.setPage}
               totalPages={table.totalPages}
               totalItems={table.filtered.length}
-              searchPlaceholder="Cari pengajuan…"
+              searchPlaceholder={t('ess.selfService.searchPlaceholder')}
             >
               <table className="w-full min-w-[760px] text-left">
                 <thead>
                   <tr className="bg-secondary/70">
-                    {['Jenis', 'Periode', 'Durasi', 'Diajukan', 'Alasan', 'Lampiran', 'Status', ''].map((h, i) => (
+                    {[t('ess.common.type'), t('ess.common.period'), t('ess.common.duration'), t('ess.selfService.table.submitted'), t('ess.common.reason'), t('ess.common.attachment'), t('ess.common.status'), ''].map((h, i) => (
                       <th key={i} className="px-5 py-3.5 text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
                         {h}
                       </th>
@@ -647,9 +682,9 @@ export function SelfServicePage() {
                 <tbody>
                   {table.paged.map((p) => (
                     <tr key={p.id} className="border-t border-border transition-colors hover:bg-muted/30">
-                      <td className="px-5 py-3.5 text-xs font-medium text-foreground">{PERMISSION_TYPE_LABELS[p.type]}</td>
+                      <td className="px-5 py-3.5 text-xs font-medium text-foreground">{t(PERMISSION_TYPE_LABEL_KEYS[p.type])}</td>
                       <td className="px-5 py-3.5 text-xs text-foreground">{formatDate(p.startDate)} — {formatDate(p.endDate)}</td>
-                      <td className="px-5 py-3.5 text-xs text-muted-foreground">{p.duration} hari</td>
+                      <td className="px-5 py-3.5 text-xs text-muted-foreground">{t('ess.common.daysCount', { count: p.duration })}</td>
                       <td className="px-5 py-3.5 text-xs text-muted-foreground">{formatDate(p.createdAt)}</td>
                       <td className="max-w-[220px] truncate px-5 py-3.5 text-xs text-muted-foreground" title={p.reason}>{p.reason}</td>
                       <td className="px-5 py-3.5 text-xs">
@@ -660,7 +695,7 @@ export function SelfServicePage() {
                             rel="noopener noreferrer"
                             className="text-primary hover:underline"
                           >
-                            Lihat
+                            {t('ess.common.view')}
                           </a>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -684,10 +719,10 @@ export function SelfServicePage() {
                   </span>
                   <div className="min-w-0 flex-[1_1_200px]">
                     <p className="text-[12.5px] font-medium text-foreground">
-                      {PERMISSION_TYPE_LABELS[p.type]} · {p.duration} hari
+                      {t(PERMISSION_TYPE_LABEL_KEYS[p.type])} · {t('ess.common.daysCount', { count: p.duration })}
                     </p>
                     <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-                      {formatDate(p.startDate)} — {formatDate(p.endDate)} · diajukan {formatDate(p.createdAt)}
+                      {formatDate(p.startDate)} — {formatDate(p.endDate)} · {t('ess.selfService.list.submittedAt', { date: formatDate(p.createdAt) })}
                     </p>
                     <p className="mt-1 truncate text-[11.5px] text-muted-foreground" title={p.reason}>{p.reason}</p>
                     {p.attachment && (
@@ -697,7 +732,7 @@ export function SelfServicePage() {
                         rel="noopener noreferrer"
                         className="mt-1 inline-flex items-center gap-1 text-[11.5px] text-primary hover:underline"
                       >
-                        <FileText size={12} /> Lihat lampiran
+                        <FileText size={12} /> {t('ess.selfService.viewAttachment')}
                       </a>
                     )}
                   </div>
@@ -743,10 +778,10 @@ export function SelfServicePage() {
       <AppModal
         open={activeModal !== null}
         onClose={() => setActiveModal(null)}
-        title={activeModal === 'shift-swap' ? 'Request Tukar Shift' : 'Ajukan Izin'}
+        title={activeModal === 'shift-swap' ? t('ess.selfService.action.requestShiftSwap') : t('ess.selfService.action.requestPermission')}
         description={activeModal === 'shift-swap'
-          ? 'Request akan diteruskan ke kepala regu untuk disetujui'
-          : 'Pengajuan akan diteruskan ke atasan langsung Anda'}
+          ? t('ess.selfService.shiftSwapModal.description')
+          : t('ess.selfService.permissionModal.description')}
       >
         {activeModal === 'shift-swap' ? (
           <ShiftSwapRequestForm onClose={() => setActiveModal(null)} />
@@ -759,6 +794,7 @@ export function SelfServicePage() {
 }
 
 function MyWorkCalendarTabView() {
+  const { t } = useI18n();
   const [cursor, setCursor] = useState(dayjs().startOf('month'));
   const [loading, setLoading] = useState(true);
   const [calendar, setCalendar] = useState<MyWorkCalendarMonth | null>(null);
@@ -769,12 +805,12 @@ function MyWorkCalendarTabView() {
       const data = await workCalendarService.getMyResolvedCalendar(target.year(), target.month() + 1);
       setCalendar(data);
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal memuat kalender kerja'));
+      toast.error(apiErrorMessage(error, t('ess.selfService.calendar.toast.loadFailed')));
       setCalendar(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void fetchCalendar(cursor);
@@ -794,33 +830,37 @@ function MyWorkCalendarTabView() {
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-lg font-semibold tracking-tight">{cursor.format('MMMM YYYY')}</h3>
                 <StatusChip tone="neutral">
-                  {calendar?.employee.employeeCategory === 'FACTORY' ? 'Pegawai Pabrik' : 'Kalender Kerja Aktif'}
+                  {calendar?.employee.employeeCategory === 'FACTORY'
+                    ? t('ess.selfService.calendar.chip.factory')
+                    : t('ess.selfService.calendar.chip.active')}
                 </StatusChip>
                 {calendar?.shiftFormula && (
-                  <StatusChip tone="accent">Formula Shift {calendar.shiftFormula.code}</StatusChip>
+                  <StatusChip tone="accent">
+                    {t('ess.selfService.calendar.chip.shiftFormula', { code: calendar.shiftFormula.code })}
+                  </StatusChip>
                 )}
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Jadwal bulanan ini sudah resolve dari work calendar aktif dan otomatis memakai formula shift bila user termasuk pegawai pabrik.
+                {t('ess.selfService.calendar.subtitle')}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setCursor((prev) => prev.subtract(1, 'month'))}>
-                Bulan Sebelumnya
+                {t('ess.selfService.calendar.prevMonth')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => setCursor(dayjs().startOf('month'))}>
-                Bulan Ini
+                {t('ess.selfService.calendar.thisMonth')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => setCursor((prev) => prev.add(1, 'month'))}>
-                Bulan Berikutnya
+                {t('ess.selfService.calendar.nextMonth')}
               </Button>
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-7 gap-2">
-            {WEEKDAY_LABELS.map((label) => (
-              <div key={label} className="px-2 py-2 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">
-                {label}
+            {WEEKDAY_LABEL_KEYS.map((labelKey: TranslationKey) => (
+              <div key={labelKey} className="px-2 py-2 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">
+                {t(labelKey)}
               </div>
             ))}
 
@@ -841,7 +881,9 @@ function MyWorkCalendarTabView() {
                       <div>
                         <div className="text-base font-semibold">{dayjs(day.date).date()}</div>
                         <div className="text-[11px] opacity-70">
-                          {day.absence?.category ? `Approved ${day.absence.category}` : (DAY_TYPE_LABELS[day.dayType] || day.dayType)}
+                          {day.absence?.category
+                            ? t('ess.selfService.calendar.approvedAbsence', { category: day.absence.category })
+                            : (DAY_TYPE_LABEL_KEYS[day.dayType] ? t(DAY_TYPE_LABEL_KEYS[day.dayType]) : day.dayType)}
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
@@ -862,22 +904,22 @@ function MyWorkCalendarTabView() {
 
                     <div className="mt-3 space-y-1.5 text-xs">
                       <div className="font-medium">
-                        {day.workStart && day.workEnd ? `${day.workStart} - ${day.workEnd}` : 'Tidak ada jam kerja'}
+                        {day.workStart && day.workEnd ? `${day.workStart} - ${day.workEnd}` : t('ess.selfService.calendar.noWorkHours')}
                       </div>
                       {day.absence && (
                         <>
                           <div className="font-semibold">{day.absence.label}</div>
                           <div className="line-clamp-2 opacity-80">{day.absence.reason}</div>
-                          {day.absence.partialDay && <div className="opacity-80">Pengajuan parsial / setengah hari</div>}
+                          {day.absence.partialDay && <div className="opacity-80">{t('ess.selfService.calendar.partialDay')}</div>}
                         </>
                       )}
                       {day.label && <div className="opacity-80">{day.label}</div>}
                       {day.swappedWithEmployee && (
                         <div className="opacity-80">
-                          Tukar dengan {day.swappedWithEmployee.fullName}
+                          {t('ess.selfService.shiftSwap.swapWith', { name: day.swappedWithEmployee.fullName })}
                         </div>
                       )}
-                      {day.crossesMidnight && <div className="opacity-80">Lintas tengah malam</div>}
+                      {day.crossesMidnight && <div className="opacity-80">{t('ess.selfService.calendar.crossesMidnight')}</div>}
                       {day.notes && <div className="line-clamp-2 opacity-70">{day.notes}</div>}
                     </div>
                   </>
@@ -889,35 +931,41 @@ function MyWorkCalendarTabView() {
 
         <div className="space-y-4">
           <div className="rounded-card border border-border bg-card p-4 shadow-card">
-            <h3 className="mb-4 text-[15px] font-semibold tracking-[-0.3px]">Profil Jadwal</h3>
+            <h3 className="mb-4 text-[15px] font-semibold tracking-[-0.3px]">{t('ess.selfService.calendar.profile.title')}</h3>
             {!calendar ? (
-              <p className="text-sm text-muted-foreground">Belum ada data kalender kerja.</p>
+              <p className="text-sm text-muted-foreground">{t('ess.selfService.calendar.profile.empty')}</p>
             ) : (
               <div className="space-y-3 text-sm">
                 <div>
-                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Pegawai</p>
+                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.calendar.profile.employee')}</p>
                   <p className="font-medium">{calendar.employee.fullName}</p>
                   <p className="text-muted-foreground">{calendar.employee.employeeNumber}</p>
                 </div>
                 <div>
-                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Posisi Organisasi</p>
+                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.calendar.profile.position')}</p>
                   <p>{calendar.employee.position?.name || '-'}</p>
                   <p className="text-muted-foreground">
                     {[calendar.employee.department?.name, calendar.employee.branch?.name].filter(Boolean).join(' • ') || '-'}
                   </p>
                 </div>
                 <div>
-                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Kalender Kerja Terhubung</p>
+                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.calendar.profile.linkedCalendar')}</p>
                   <p>{calendar.linkedCalendar?.name || '-'}</p>
                   <p className="text-muted-foreground">
-                    {calendar.linkedCalendar ? `${calendar.linkedCalendar.scope} • ${calendar.linkedCalendar.year}` : 'Belum ada calendar aktif'}
+                    {calendar.linkedCalendar
+                      ? `${calendar.linkedCalendar.scope} • ${calendar.linkedCalendar.year}`
+                      : t('ess.selfService.calendar.profile.noActiveCalendar')}
                   </p>
                 </div>
                 <div>
-                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Formula Shift</p>
-                  <p>{calendar.shiftFormula ? `${calendar.shiftFormula.code} - ${calendar.shiftFormula.name}` : 'Tidak menggunakan formula shift'}</p>
+                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">{t('ess.selfService.calendar.profile.shiftFormula')}</p>
+                  <p>{calendar.shiftFormula
+                    ? `${calendar.shiftFormula.code} - ${calendar.shiftFormula.name}`
+                    : t('ess.selfService.calendar.profile.noShiftFormula')}</p>
                   <p className="text-muted-foreground">
-                    {calendar.shiftFormula?.startDate ? `Mulai ${formatDate(calendar.shiftFormula.startDate)}` : 'Mengikuti work calendar biasa'}
+                    {calendar.shiftFormula?.startDate
+                      ? t('ess.selfService.calendar.profile.startsAt', { date: formatDate(calendar.shiftFormula.startDate) })
+                      : t('ess.selfService.calendar.profile.followsCalendar')}
                   </p>
                 </div>
               </div>
@@ -925,50 +973,50 @@ function MyWorkCalendarTabView() {
           </div>
 
           <div className="grid grid-cols-2 gap-3.5">
-            <StatTile label="Hari Kerja" value={calendar?.summary.workingDays || 0} valueClassName="text-success" />
-            <StatTile label="Hari Off" value={calendar?.summary.offDays || 0} valueClassName="text-muted-foreground" />
-            <StatTile label="Hari Calendar" value={calendar?.summary.calendarDays || 0} valueClassName="text-warning" />
-            <StatTile label="Hari Shift" value={calendar?.summary.shiftDays || 0} valueClassName="text-primary" />
-            <StatTile label="Hari Swap" value={calendar?.summary.shiftSwapDays || 0} valueClassName="text-violet-500 dark:text-violet-400" />
-            <StatTile label="Cuti Approved" value={calendar?.summary.approvedLeaveDays || 0} valueClassName="text-fuchsia-500 dark:text-fuchsia-400" />
-            <StatTile label="Izin Approved" value={calendar?.summary.approvedPermissionDays || 0} valueClassName="text-orange-500 dark:text-orange-400" />
-            <StatTile label="Sakit Approved" value={calendar?.summary.approvedSickDays || 0} valueClassName="text-danger" />
+            <StatTile label={t('ess.selfService.calendar.stats.workingDays')} value={calendar?.summary.workingDays || 0} valueClassName="text-success" />
+            <StatTile label={t('ess.selfService.calendar.stats.offDays')} value={calendar?.summary.offDays || 0} valueClassName="text-muted-foreground" />
+            <StatTile label={t('ess.selfService.calendar.stats.calendarDays')} value={calendar?.summary.calendarDays || 0} valueClassName="text-warning" />
+            <StatTile label={t('ess.selfService.calendar.stats.shiftDays')} value={calendar?.summary.shiftDays || 0} valueClassName="text-primary" />
+            <StatTile label={t('ess.selfService.calendar.stats.swapDays')} value={calendar?.summary.shiftSwapDays || 0} valueClassName="text-violet-500 dark:text-violet-400" />
+            <StatTile label={t('ess.selfService.calendar.stats.approvedLeave')} value={calendar?.summary.approvedLeaveDays || 0} valueClassName="text-fuchsia-500 dark:text-fuchsia-400" />
+            <StatTile label={t('ess.selfService.calendar.stats.approvedPermission')} value={calendar?.summary.approvedPermissionDays || 0} valueClassName="text-orange-500 dark:text-orange-400" />
+            <StatTile label={t('ess.selfService.calendar.stats.approvedSick')} value={calendar?.summary.approvedSickDays || 0} valueClassName="text-danger" />
           </div>
 
           <div className="rounded-card border border-border bg-card p-4 shadow-card">
-            <h3 className="mb-3 text-[15px] font-semibold tracking-[-0.3px]">Legenda</h3>
+            <h3 className="mb-3 text-[15px] font-semibold tracking-[-0.3px]">{t('ess.selfService.calendar.legend.title')}</h3>
             <div className="space-y-2 text-xs text-muted-foreground">
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                <span>Hari kerja dari work calendar</span>
+                <span>{t('ess.selfService.calendar.legend.workCalendar')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-blue-400" />
-                <span>Hari kerja dari formula shift</span>
+                <span>{t('ess.selfService.calendar.legend.shiftFormula')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-violet-400" />
-                <span>Hari hasil tukar shift yang sudah disetujui kepala regu</span>
+                <span>{t('ess.selfService.calendar.legend.swap')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-amber-400" />
-                <span>Hari khusus dari calendar seperti libur nasional / cuti bersama</span>
+                <span>{t('ess.selfService.calendar.legend.special')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-fuchsia-400" />
-                <span>Cuti approved yang sudah sinkron ke kalender kerja</span>
+                <span>{t('ess.selfService.calendar.legend.leave')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-orange-400" />
-                <span>Izin approved yang sudah sinkron ke kalender kerja</span>
+                <span>{t('ess.selfService.calendar.legend.permission')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-red-400" />
-                <span>Sakit approved yang sudah sinkron ke kalender kerja</span>
+                <span>{t('ess.selfService.calendar.legend.sick')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-slate-400" />
-                <span>Hari tidak bekerja</span>
+                <span>{t('ess.selfService.calendar.legend.off')}</span>
               </div>
             </div>
           </div>
@@ -985,6 +1033,7 @@ function ShiftSwapTabView({
   canApprove: boolean;
   onCreateRequest: () => void;
 }) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<ShiftSwapRequest[]>([]);
   const [approvals, setApprovals] = useState<ShiftSwapRequest[]>([]);
@@ -999,11 +1048,11 @@ function ShiftSwapTabView({
       setRequests(myRequests);
       setApprovals(myApprovals);
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal memuat request tukar shift'));
+      toast.error(apiErrorMessage(err, t('ess.selfService.shiftSwap.toast.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [canApprove]);
+  }, [canApprove, t]);
 
   useEffect(() => {
     void fetchData();
@@ -1011,10 +1060,10 @@ function ShiftSwapTabView({
 
   const handleCancel = async (id: string) => {
     const confirmed = await popup.confirm({
-      title: 'Batalkan Request Tukar Shift',
-      description: 'Request yang masih pending akan dibatalkan. Lanjutkan?',
-      confirmText: 'Ya, Batalkan',
-      cancelText: 'Kembali',
+      title: t('ess.selfService.shiftSwap.confirmCancel.title'),
+      description: t('ess.selfService.shiftSwap.confirmCancel.description'),
+      confirmText: t('ess.common.confirmYesCancel'),
+      cancelText: t('ess.common.back'),
       intent: 'destructive',
     });
 
@@ -1022,58 +1071,58 @@ function ShiftSwapTabView({
 
     try {
       await workCalendarService.cancelShiftSwapRequest(id);
-      toast.success('Request tukar shift dibatalkan');
+      toast.success(t('ess.selfService.shiftSwap.toast.cancelSuccess'));
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal membatalkan request'));
+      toast.error(apiErrorMessage(err, t('ess.selfService.shiftSwap.toast.cancelFailed')));
     }
   };
 
   const handleReview = async (id: string, action: 'approve' | 'reject') => {
     const approvalNotes = window.prompt(
       action === 'approve'
-        ? 'Catatan persetujuan kepala regu (opsional)'
-        : 'Alasan penolakan kepala regu (opsional)',
+        ? t('ess.selfService.shiftSwap.prompt.approveNotes')
+        : t('ess.selfService.shiftSwap.prompt.rejectNotes'),
       '',
     ) || undefined;
 
     try {
       if (action === 'approve') {
         await workCalendarService.approveShiftSwapRequest(id, approvalNotes);
-        toast.success('Request tukar shift disetujui');
+        toast.success(t('ess.selfService.shiftSwap.toast.approved'));
       } else {
         await workCalendarService.rejectShiftSwapRequest(id, approvalNotes);
-        toast.success('Request tukar shift ditolak');
+        toast.success(t('ess.selfService.shiftSwap.toast.rejected'));
       }
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal memproses request'));
+      toast.error(apiErrorMessage(err, t('ess.selfService.shiftSwap.toast.processFailed')));
     }
   };
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3.5">
-        <StatTile label="Total Request" value={requests.length} />
-        <StatTile label="Menunggu Saya" value={requests.filter((item) => item.status === 'PENDING').length} valueClassName="text-warning" />
-        <StatTile label="Disetujui" value={requests.filter((item) => item.status === 'APPROVED').length} valueClassName="text-success" />
-        <StatTile label="Menunggu Approval" value={approvals.length} valueClassName="text-primary" />
+        <StatTile label={t('ess.selfService.shiftSwap.stats.total')} value={requests.length} />
+        <StatTile label={t('ess.selfService.shiftSwap.stats.myPending')} value={requests.filter((item) => item.status === 'PENDING').length} valueClassName="text-warning" />
+        <StatTile label={t('ess.status.approved')} value={requests.filter((item) => item.status === 'APPROVED').length} valueClassName="text-success" />
+        <StatTile label={t('ess.selfService.shiftSwap.stats.awaitingApproval')} value={approvals.length} valueClassName="text-primary" />
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="text-sm text-muted-foreground">Memuat request tukar shift...</div>
+          <div className="text-sm text-muted-foreground">{t('ess.selfService.shiftSwap.loading')}</div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.1fr)_420px]">
           <div className="rounded-card border border-border bg-card p-5 shadow-card">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-[15px] font-semibold tracking-[-0.3px]">Request Saya</h3>
-                <p className="text-xs text-muted-foreground">Ajukan tukar shift ke kepala regu dan pantau statusnya di sini.</p>
+                <h3 className="text-[15px] font-semibold tracking-[-0.3px]">{t('ess.selfService.shiftSwap.myRequests.title')}</h3>
+                <p className="text-xs text-muted-foreground">{t('ess.selfService.shiftSwap.myRequests.subtitle')}</p>
               </div>
               <Button size="sm" className="rounded-[14px]" onClick={onCreateRequest}>
-                <Plus size={15} className="mr-2" /> Request Baru
+                <Plus size={15} className="mr-2" /> {t('ess.selfService.shiftSwap.newRequest')}
               </Button>
             </div>
 
@@ -1082,7 +1131,7 @@ function ShiftSwapTabView({
                 <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
                   <Repeat size={24} className="text-primary" />
                 </div>
-                <p className="text-sm text-muted-foreground">Belum ada request tukar shift.</p>
+                <p className="text-sm text-muted-foreground">{t('ess.selfService.shiftSwap.empty')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1097,15 +1146,15 @@ function ShiftSwapTabView({
                           </span>
                         </div>
                         <p className="text-sm font-semibold">
-                          Tukar dengan {request.targetEmployee?.fullName || '-'}
+                          {t('ess.selfService.shiftSwap.swapWith', { name: request.targetEmployee?.fullName || '-' })}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {request.targetEmployee?.employeeNumber || '-'} • Approver: {request.approverEmployee?.fullName || '-'}
+                          {request.targetEmployee?.employeeNumber || '-'} • {t('ess.selfService.shiftSwap.approverLabel')}: {request.approverEmployee?.fullName || '-'}
                         </p>
                         <p className="mt-3 text-sm">{request.reason}</p>
                         {request.approvalNotes && (
                           <div className="mt-3 rounded-field border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                            Catatan kepala regu: {request.approvalNotes}
+                            {t('ess.selfService.shiftSwap.leaderNotes', { notes: request.approvalNotes })}
                           </div>
                         )}
                       </div>
@@ -1123,15 +1172,15 @@ function ShiftSwapTabView({
             <div className="rounded-card border border-border bg-card p-5 shadow-card">
               <div className="mb-3 flex items-center gap-2">
                 <Users size={16} className="text-muted-foreground" />
-                <h3 className="text-[15px] font-semibold tracking-[-0.3px]">Approval Kepala Regu</h3>
+                <h3 className="text-[15px] font-semibold tracking-[-0.3px]">{t('ess.selfService.shiftSwap.approvalPanel.title')}</h3>
               </div>
               <p className="mb-4 text-xs text-muted-foreground">
-                Panel ini muncul untuk kepala regu yang menjadi approver resmi request tukar shift.
+                {t('ess.selfService.shiftSwap.approvalPanel.subtitle')}
               </p>
 
               {approvals.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Tidak ada request yang menunggu approval Anda.
+                  {t('ess.selfService.shiftSwap.approvalPanel.empty')}
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -1150,10 +1199,10 @@ function ShiftSwapTabView({
                       <p className="mt-3 text-sm">{request.reason}</p>
                       <div className="mt-4 flex gap-2">
                         <Button size="sm" onClick={() => handleReview(request.id, 'approve')}>
-                          Setujui
+                          {t('ess.actions.approve')}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => handleReview(request.id, 'reject')}>
-                          Tolak
+                          {t('ess.actions.reject')}
                         </Button>
                       </div>
                     </div>
@@ -1170,6 +1219,7 @@ function ShiftSwapTabView({
 
 // ─── Leave Tab ──────────────────────────────────────────
 function LeaveTabView({ companyId, employeeId }: { companyId: string; employeeId: string }) {
+  const { t } = useI18n();
   const [leaves, setLeaves] = useState<Awaited<ReturnType<typeof leaveService.getRequests>>>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -1193,37 +1243,37 @@ function LeaveTabView({ companyId, employeeId }: { companyId: string; employeeId
 
   const handleCancelLeave = async (id: string) => {
     const confirmed = await popup.confirm({
-      title: 'Batalkan Pengajuan Cuti',
-      description: 'Pengajuan cuti yang masih pending ini akan dibatalkan. Lanjutkan?',
-      confirmText: 'Ya, Batalkan',
-      cancelText: 'Kembali',
+      title: t('ess.leave.confirmCancel.title'),
+      description: t('ess.leave.confirmCancel.description'),
+      confirmText: t('ess.common.confirmYesCancel'),
+      cancelText: t('ess.common.back'),
       intent: 'destructive',
     });
     if (!confirmed) return;
     try {
       await leaveService.cancelRequest(id);
-      toast.success('Pengajuan cuti dibatalkan');
+      toast.success(t('ess.leave.toast.cancelSuccess'));
       fetchLeaves();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal membatalkan pengajuan cuti'));
+      toast.error(apiErrorMessage(err, t('ess.leave.toast.cancelFailed')));
     }
   };
 
   const openForm = () => {
     if (!employeeId) {
-      toast.error('Akun ini tidak tertaut ke data karyawan sehingga tidak bisa mengajukan cuti');
+      toast.error(t('ess.leave.toast.notLinked'));
       return;
     }
     setShowForm(true);
   };
 
-  if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data cuti...</div></div>;
+  if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">{t('ess.selfService.leaveTab.loading')}</div></div>;
 
   return (
     <div>
       <div className="mb-4 flex justify-end">
         <Button size="sm" className="rounded-[14px]" onClick={openForm}>
-          <Plus size={15} className="mr-2" /> Ajukan Cuti
+          <Plus size={15} className="mr-2" /> {t('ess.leave.form.title')}
         </Button>
       </div>
 
@@ -1232,12 +1282,12 @@ function LeaveTabView({ companyId, employeeId }: { companyId: string; employeeId
           <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
             <CalendarDays size={24} className="text-primary" />
           </div>
-          <p className="text-sm font-medium text-foreground">Belum ada pengajuan cuti</p>
+          <p className="text-sm font-medium text-foreground">{t('ess.leave.empty')}</p>
           <p className="max-w-[340px] text-center text-[11.5px] leading-relaxed text-muted-foreground">
-            Pengajuan cuti Anda akan tampil di sini beserta status persetujuannya.
+            {t('ess.selfService.leaveTab.emptyHint')}
           </p>
           <Button size="sm" className="rounded-[14px]" onClick={openForm}>
-            <Plus size={15} className="mr-2" /> Ajukan Cuti
+            <Plus size={15} className="mr-2" /> {t('ess.leave.form.title')}
           </Button>
         </div>
       ) : (
@@ -1249,7 +1299,7 @@ function LeaveTabView({ companyId, employeeId }: { companyId: string; employeeId
               </span>
               <div className="min-w-0 flex-[1_1_200px]">
                 <p className="text-[12.5px] font-medium text-foreground">
-                  {l.leaveType?.name || 'Cuti'} · {l.totalDays} hari
+                  {l.leaveType?.name || t('ess.selfService.leaveTab.typeFallback')} · {t('ess.common.daysCount', { count: l.totalDays })}
                 </p>
                 <p className="mt-0.5 text-[11.5px] text-muted-foreground">
                   {formatDate(l.startDate)} — {formatDate(l.endDate)}
@@ -1268,8 +1318,8 @@ function LeaveTabView({ companyId, employeeId }: { companyId: string; employeeId
       <AppModal
         open={showForm}
         onClose={() => setShowForm(false)}
-        title="Ajukan Cuti"
-        description="Saldo cuti terpotong otomatis setelah pengajuan disetujui"
+        title={t('ess.leave.form.title')}
+        description={t('ess.selfService.leaveTab.modalDescription')}
       >
         <LeaveRequestForm
           companyId={companyId}
@@ -1284,6 +1334,7 @@ function LeaveTabView({ companyId, employeeId }: { companyId: string; employeeId
 
 // ─── Overtime Tab ───────────────────────────────────────
 function OvertimeTabView({ companyId }: { companyId: string }) {
+  const { t } = useI18n();
   const [overtimes, setOvertimes] = useState<Awaited<ReturnType<typeof attendanceService.getOvertime>>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -1296,16 +1347,16 @@ function OvertimeTabView({ companyId }: { companyId: string }) {
       finally { setLoading(false); }
   })(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
-  if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data lembur...</div></div>;
+  if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">{t('ess.selfService.overtimeTab.loading')}</div></div>;
 
   if (overtimes.length === 0) return (
     <div className="flex flex-col items-center gap-3.5 rounded-card border border-border bg-card px-6 py-16">
       <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
         <Clock size={24} className="text-primary" />
       </div>
-      <p className="text-sm font-medium text-foreground">Belum ada pengajuan lembur</p>
+      <p className="text-sm font-medium text-foreground">{t('ess.selfService.overtimeTab.empty')}</p>
       <p className="max-w-[340px] text-center text-[11.5px] leading-relaxed text-muted-foreground">
-        Riwayat lembur Anda akan tampil di sini setelah tercatat oleh sistem.
+        {t('ess.selfService.overtimeTab.emptyHint')}
       </p>
     </div>
   );
@@ -1319,7 +1370,7 @@ function OvertimeTabView({ companyId }: { companyId: string }) {
           </span>
           <div className="min-w-0 flex-[1_1_200px]">
             <p className="text-[12.5px] font-medium text-foreground">
-              Lembur {o.durationHours || 0} jam
+              {t('ess.selfService.overtimeTab.hours', { hours: o.durationHours || 0 })}
             </p>
             <p className="mt-0.5 text-[11.5px] text-muted-foreground">{o.date ? formatDate(o.date) : '-'}</p>
             <p className="mt-1 truncate text-[11.5px] text-muted-foreground" title={o.reason}>{o.reason}</p>

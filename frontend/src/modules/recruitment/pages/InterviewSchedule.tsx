@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useI18n } from '@/i18n/provider';
 import { recruitmentService, type Interview } from '@/services/recruitment.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function InterviewSchedule() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { activeCompany } = useCompanyStore();
   const [interviews, setInterviews] = useState<Interview[]>([]);
@@ -62,11 +64,11 @@ export function InterviewSchedule() {
       setInterviews(data);
     } catch (error) {
       console.error('Failed to fetch interviews:', error);
-      toast.error('Gagal memuat data interview');
+      toast.error(t('wf.rec.interviews.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [activeCompany?.id]);
+  }, [activeCompany?.id, t]);
 
   useEffect(() => {
     fetchData();
@@ -92,17 +94,17 @@ export function InterviewSchedule() {
   return (
     <div>
       <PageHeader
-        title="Interview Schedule"
-        description="Manage and track candidate interviews"
+        title={t('wf.rec.interviews.title')}
+        description={t('wf.rec.interviews.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => navigate('/recruitment/interviews/new')}>
               <Plus size={16} className="mr-2" />
-              Schedule Interview
+              {t('wf.rec.interviews.schedule')}
             </Button>
           </>
         }
@@ -115,7 +117,7 @@ export function InterviewSchedule() {
             className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            placeholder="Search interviews..."
+            placeholder={t('wf.rec.interviews.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -133,7 +135,7 @@ export function InterviewSchedule() {
                     : 'bg-background text-muted-foreground border-border hover:border-primary/50'
                 }`}
               >
-                {s || 'All'}
+                {s || t('wf.common.all')}
               </button>
             )
           )}
@@ -141,14 +143,14 @@ export function InterviewSchedule() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">Loading...</div>
+        <div className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12">
           <div className="flex flex-col items-center gap-2">
             <CalendarDays size={32} className="text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">No interviews found</p>
+            <p className="text-sm text-muted-foreground">{t('wf.rec.interviews.empty')}</p>
             <p className="text-xs text-muted-foreground">
-              Schedule interviews for candidates in your pipeline
+              {t('wf.rec.interviews.emptyHint')}
             </p>
           </div>
         </div>
@@ -184,7 +186,7 @@ export function InterviewSchedule() {
                             <p className="text-sm font-medium">
                               {interview.candidate
                                 ? `${interview.candidate.firstName} ${interview.candidate.lastName}`
-                                : 'Unknown'}
+                                : t('wf.common.unknown')}
                             </p>
                             <StatusBadge status={interview.status} />
                           </div>
@@ -201,8 +203,9 @@ export function InterviewSchedule() {
                             <span className="flex items-center gap-1">
                               <Clock size={12} />
                               {formatTime(interview.scheduledAt)}
-                              {interview.durationMinutes &&
-                                ` (${interview.durationMinutes}min)`}
+                              {interview.durationMinutes
+                                ? ` ${t('wf.rec.interviews.duration', { minutes: interview.durationMinutes })}`
+                                : null}
                             </span>
 
                             {interview.type === 'ONLINE' && interview.meetingLink ? (
@@ -214,7 +217,7 @@ export function InterviewSchedule() {
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <Video size={12} />
-                                Join Online
+                                {t('wf.rec.interviews.joinOnline')}
                                 <ExternalLink size={10} />
                               </a>
                             ) : interview.location ? (

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { TranslationKey } from '@/i18n/translations';
 
 /**
  * Chip status semantik sesuai DESIGN.md:
@@ -29,6 +30,30 @@ const STATUS_TONES: Record<string, ChipTone> = {
 // eslint-disable-next-line react-refresh/only-export-components -- helper mapping status→tone sengaja co-located dengan chip
 export function statusTone(status: string): ChipTone {
   return STATUS_TONES[status] ?? 'neutral';
+}
+
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  PENDING: 'adm.status.pending',
+  APPROVED: 'adm.status.approved',
+  REJECTED: 'adm.status.rejected',
+  CANCELLED: 'adm.status.cancelled',
+  ACTIVE: 'adm.status.active',
+  INACTIVE: 'adm.status.inactive',
+  SUSPENDED: 'adm.status.suspended',
+  PAID: 'adm.status.paid',
+  COMPLETED: 'adm.status.completed',
+  OVERDUE: 'adm.status.overdue',
+  SKIPPED: 'adm.status.skipped',
+};
+
+/**
+ * Label status terjemahan via kunci `adm.status.*`. Pemanggil meneruskan `t`
+ * dari `useI18n()`; status tanpa kunci dikembalikan apa adanya.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- helper label status sengaja co-located dengan chip
+export function statusLabel(status: string, t: (key: TranslationKey) => string): string {
+  const key = STATUS_LABEL_KEYS[status];
+  return key ? t(key) : status;
 }
 
 export function StatusChip({

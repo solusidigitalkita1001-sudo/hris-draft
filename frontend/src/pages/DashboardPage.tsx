@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import 'dayjs/locale/id';
 import { useNavigate } from 'react-router-dom';
 import {
   Banknote,
@@ -20,6 +19,7 @@ import {
 import { useAuthStore } from '@/stores/auth.store';
 import { useCompanyStore } from '@/stores/company.store';
 import { useI18n } from '@/i18n/provider';
+import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 import { Button } from '@/components/ui/button';
 import { apiErrorMessage } from '@/lib/errors';
 import { canAccess, EMPLOYEE_SELF_SERVICE_ROLES } from '@/lib/access-control';
@@ -168,7 +168,7 @@ export function DashboardPage() {
       // statistik perusahaan; persona lain terdegradasi tanpa banner merah.
       summaryError:
         summary.error && wantsCompanyStats
-          ? apiErrorMessage(summary.error, 'Gagal memuat ringkasan dashboard')
+          ? apiErrorMessage(summary.error, t('ops.dashboard.page.summaryError'))
           : null,
       approvals: approvals.error ? null : approvals.value,
       balances: balances.value ?? [],
@@ -184,21 +184,21 @@ export function DashboardPage() {
       turnover: turnover.error ? null : turnover.value,
     });
     setLoading(false);
-  }, [companyId, user?.employeeId, wantsCompanyStats, wantsApprovals, wantsTeamToday, wantsPersonal, wantsMyRequests]);
+  }, [companyId, user?.employeeId, wantsCompanyStats, wantsApprovals, wantsTeamToday, wantsPersonal, wantsMyRequests, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const firstName = (user?.name || user?.email || 'Anda').split(' ')[0];
-  const todayLabel = dayjs().locale('id').format('dddd, D MMMM YYYY');
+  const firstName = (user?.name || user?.email || t('ops.dashboard.page.you')).split(' ')[0];
+  const todayLabel = dayjs().format('dddd, D MMMM YYYY');
 
-  const quickActions = buildQuickActions(persona);
+  const quickActions = buildQuickActions(persona, t);
   const personaSubtitle: Record<DashboardPersona, string> = {
-    admin: 'ringkasan perusahaan dan administrasi sistem.',
-    hr: 'ringkasan tenaga kerja dan pengajuan yang perlu Anda proses.',
-    manager: 'kehadiran tim Anda dan pengajuan yang menunggu persetujuan.',
-    employee: 'ringkasan absensi, cuti, dan pengajuan Anda hari ini.',
+    admin: t('ops.dashboard.page.subtitle.admin'),
+    hr: t('ops.dashboard.page.subtitle.hr'),
+    manager: t('ops.dashboard.page.subtitle.manager'),
+    employee: t('ops.dashboard.page.subtitle.employee'),
   };
 
   const showApprovals = data.approvals !== null;
@@ -220,12 +220,12 @@ export function DashboardPage() {
         <div className="flex shrink-0 items-center gap-2.5">
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw size={14} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('common.refresh')}
           </Button>
           {wantsPersonal && (
             <Button size="sm" className="shadow-primary-btn" onClick={() => navigate('/attendance')}>
               <LogIn size={14} className="mr-2" />
-              Clock in
+              {t('ops.dashboard.page.clockIn')}
             </Button>
           )}
         </div>
@@ -235,7 +235,7 @@ export function DashboardPage() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-card-sm bg-danger-bg px-4 py-3 text-xs text-danger">
           <span>{data.summaryError}</span>
           <button type="button" onClick={() => void load()} className="font-semibold underline underline-offset-2">
-            Coba lagi
+            {t('ops.dashboard.page.retry')}
           </button>
         </div>
       )}
@@ -274,10 +274,10 @@ export function DashboardPage() {
             {persona === 'employee' && <MyRequestsCard requests={data.myRequests} />}
             {showLeaveBalance && <LeaveBalanceCard balances={data.balances} />}
             {persona === 'admin' && (
-              <QuickActionsCard title="Administrasi" actions={quickActions} className="flex-1" compact />
+              <QuickActionsCard title={t('ops.dashboard.page.adminActionsTitle')} actions={quickActions} className="flex-1" compact />
             )}
             {persona === 'hr' && (
-              <QuickActionsCard title="Kelola HR" actions={quickActions} className="flex-1" compact />
+              <QuickActionsCard title={t('ops.dashboard.page.hrActionsTitle')} actions={quickActions} className="flex-1" compact />
             )}
           </div>
 
@@ -315,37 +315,40 @@ export function DashboardPage() {
   );
 }
 
-function buildQuickActions(persona: DashboardPersona): QuickAction[] {
+function buildQuickActions(
+  persona: DashboardPersona,
+  t: (key: TranslationKey, params?: TranslationParams) => string
+): QuickAction[] {
   switch (persona) {
     case 'employee':
       return [
-        { label: 'Ajukan Cuti', note: 'Cuti, izin, atau tukar shift', icon: <CalendarDays size={15} />, path: '/self-service' },
-        { label: 'Slip Gaji Saya', note: 'Riwayat slip per periode', icon: <Receipt size={15} />, path: '/my-payslips' },
-        { label: 'Pinjaman', note: 'Ajukan & pantau cicilan', icon: <Banknote size={15} />, path: '/employee-loans' },
-        { label: 'Tarik Gaji Awal', note: 'EWA dari gaji berjalan', icon: <Wallet size={15} />, path: '/ewa' },
+        { label: t('ops.dashboard.quickActions.applyLeave'), note: t('ops.dashboard.quickActions.applyLeaveNote'), icon: <CalendarDays size={15} />, path: '/self-service' },
+        { label: t('ops.dashboard.quickActions.myPayslips'), note: t('ops.dashboard.quickActions.myPayslipsNote'), icon: <Receipt size={15} />, path: '/my-payslips' },
+        { label: t('ops.dashboard.quickActions.loans'), note: t('ops.dashboard.quickActions.loansNote'), icon: <Banknote size={15} />, path: '/employee-loans' },
+        { label: t('ops.dashboard.quickActions.ewa'), note: t('ops.dashboard.quickActions.ewaNote'), icon: <Wallet size={15} />, path: '/ewa' },
       ];
     case 'manager':
       return [
-        { label: 'Persetujuan Tim', note: 'Inbox approval workflow', icon: <ClipboardCheck size={15} />, path: '/workflow-engine' },
-        { label: 'Kehadiran', note: 'Absensi tim & koreksi', icon: <Clock size={15} />, path: '/attendance' },
-        { label: 'Ajukan Cuti', note: 'Pengajuan pribadi Anda', icon: <CalendarDays size={15} />, path: '/self-service' },
-        { label: 'Slip Gaji Saya', note: 'Riwayat slip per periode', icon: <Receipt size={15} />, path: '/my-payslips' },
+        { label: t('ops.dashboard.quickActions.teamApprovals'), note: t('ops.dashboard.quickActions.teamApprovalsNote'), icon: <ClipboardCheck size={15} />, path: '/workflow-engine' },
+        { label: t('ops.dashboard.quickActions.attendance'), note: t('ops.dashboard.quickActions.attendanceTeamNote'), icon: <Clock size={15} />, path: '/attendance' },
+        { label: t('ops.dashboard.quickActions.applyLeave'), note: t('ops.dashboard.quickActions.applyLeavePersonalNote'), icon: <CalendarDays size={15} />, path: '/self-service' },
+        { label: t('ops.dashboard.quickActions.myPayslips'), note: t('ops.dashboard.quickActions.myPayslipsNote'), icon: <Receipt size={15} />, path: '/my-payslips' },
       ];
     case 'hr':
       return [
-        { label: 'Karyawan', note: 'Data & siklus karyawan', icon: <Users size={15} />, path: '/employees' },
-        { label: 'Kehadiran', note: 'Monitoring & lembur', icon: <Clock size={15} />, path: '/attendance' },
-        { label: 'Cuti', note: 'Kelola pengajuan cuti', icon: <CalendarDays size={15} />, path: '/leave' },
-        { label: 'Payroll', note: 'Periode, run, & slip gaji', icon: <Banknote size={15} />, path: '/payroll' },
+        { label: t('ops.dashboard.quickActions.employees'), note: t('ops.dashboard.quickActions.employeesNote'), icon: <Users size={15} />, path: '/employees' },
+        { label: t('ops.dashboard.quickActions.attendance'), note: t('ops.dashboard.quickActions.attendanceHrNote'), icon: <Clock size={15} />, path: '/attendance' },
+        { label: t('ops.dashboard.quickActions.leave'), note: t('ops.dashboard.quickActions.leaveNote'), icon: <CalendarDays size={15} />, path: '/leave' },
+        { label: t('ops.dashboard.quickActions.payroll'), note: t('ops.dashboard.quickActions.payrollNote'), icon: <Banknote size={15} />, path: '/payroll' },
       ];
     case 'admin':
       return [
-        { label: 'Pengguna', note: 'Akun & akses perusahaan', icon: <Users size={15} />, path: '/admin/users' },
-        { label: 'Role & Izin', note: 'RBAC + menu access', icon: <Shield size={15} />, path: '/admin/roles' },
-        { label: 'Audit Log', note: 'Jejak aktivitas sistem', icon: <FileText size={15} />, path: '/admin/audit' },
-        { label: 'Workflow', note: 'Template approval', icon: <Workflow size={15} />, path: '/admin/workflows' },
-        { label: 'Laporan', note: 'Analitik & export', icon: <FileText size={15} />, path: '/reports' },
-        { label: 'Pengaturan', note: 'Konfigurasi perusahaan', icon: <Settings size={15} />, path: '/admin/settings' },
+        { label: t('ops.dashboard.quickActions.users'), note: t('ops.dashboard.quickActions.usersNote'), icon: <Users size={15} />, path: '/admin/users' },
+        { label: t('ops.dashboard.quickActions.roles'), note: t('ops.dashboard.quickActions.rolesNote'), icon: <Shield size={15} />, path: '/admin/roles' },
+        { label: t('ops.dashboard.quickActions.auditLog'), note: t('ops.dashboard.quickActions.auditLogNote'), icon: <FileText size={15} />, path: '/admin/audit' },
+        { label: t('ops.dashboard.quickActions.workflow'), note: t('ops.dashboard.quickActions.workflowNote'), icon: <Workflow size={15} />, path: '/admin/workflows' },
+        { label: t('ops.dashboard.quickActions.reports'), note: t('ops.dashboard.quickActions.reportsNote'), icon: <FileText size={15} />, path: '/reports' },
+        { label: t('ops.dashboard.quickActions.settings'), note: t('ops.dashboard.quickActions.settingsNote'), icon: <Settings size={15} />, path: '/admin/settings' },
       ];
   }
 }

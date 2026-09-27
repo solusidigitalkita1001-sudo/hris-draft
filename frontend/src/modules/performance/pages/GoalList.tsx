@@ -7,6 +7,8 @@ import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, Plus, Target, TrendingUp, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import toast from 'react-hot-toast';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 const PRIORITY_STYLES: Record<string, string> = {
   LOW: 'bg-gray-50 text-gray-600 dark:bg-gray-900 dark:text-gray-400',
@@ -21,7 +23,21 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   CANCELLED: <AlertCircle size={14} className="text-red-500" />,
 };
 
+const PRIORITY_LABEL_KEYS: Record<string, TranslationKey> = {
+  LOW: 'perf.priority.low',
+  MEDIUM: 'perf.priority.medium',
+  HIGH: 'perf.priority.high',
+  CRITICAL: 'perf.priority.critical',
+};
+
+const GOAL_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  IN_PROGRESS: 'perf.status.inProgress',
+  COMPLETED: 'perf.status.completed',
+  CANCELLED: 'perf.status.cancelled',
+};
+
 export function GoalList() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,11 +58,11 @@ export function GoalList() {
       setGoals(data);
     } catch (error) {
       console.error('Failed to fetch goals:', error);
-      toast.error('Gagal memuat data goals');
+      toast.error(t('perf.goalList.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [activeCompany?.id]);
+  }, [activeCompany?.id, t]);
 
   useEffect(() => {
     fetchData();
@@ -68,17 +84,17 @@ export function GoalList() {
   return (
     <div>
       <PageHeader
-        title="Goals & OKRs"
-        description="Track employee goals and objectives"
+        title={t('perf.goalList.title')}
+        description={t('perf.goalList.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm">
               <Plus size={16} className="mr-2" />
-              New Goal
+              {t('perf.goalList.newGoal')}
             </Button>
           </>
         }
@@ -88,19 +104,19 @@ export function GoalList() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Target size={14} /> Total Goals
+            <Target size={14} /> {t('perf.goalList.stats.total')}
           </div>
           <p className="text-xl font-semibold">{goals.length}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <CheckCircle2 size={14} className="text-emerald-500" /> Completed
+            <CheckCircle2 size={14} className="text-emerald-500" /> {t('perf.goalList.stats.completed')}
           </div>
           <p className="text-xl font-semibold">{completedCount}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <TrendingUp size={14} /> Avg Progress
+            <TrendingUp size={14} /> {t('perf.goalList.stats.avgProgress')}
           </div>
           <p className="text-xl font-semibold">{avgProgress}%</p>
         </div>
@@ -111,7 +127,7 @@ export function GoalList() {
         <div className="relative flex-1 max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search goals..."
+            placeholder={t('perf.goalList.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -128,7 +144,7 @@ export function GoalList() {
                   : 'bg-background text-muted-foreground border-border hover:border-primary/50'
               }`}
             >
-              {s ? s.replace(/_/g, ' ') : 'All'}
+              {s ? t(GOAL_STATUS_LABEL_KEYS[s]) : t('perf.filter.all')}
             </button>
           ))}
         </div>
@@ -136,13 +152,13 @@ export function GoalList() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {loading ? (
-          <div className="col-span-full text-center py-12 text-sm text-muted-foreground">Loading...</div>
+          <div className="col-span-full text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <div className="flex flex-col items-center gap-2">
               <Target size={32} className="text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No goals found</p>
-              <p className="text-xs text-muted-foreground">Create goals to track employee objectives</p>
+              <p className="text-sm text-muted-foreground">{t('perf.goalList.empty.title')}</p>
+              <p className="text-xs text-muted-foreground">{t('perf.goalList.empty.description')}</p>
             </div>
           </div>
         ) : (
@@ -167,7 +183,7 @@ export function GoalList() {
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                     PRIORITY_STYLES[goal.priority] || PRIORITY_STYLES.MEDIUM
                   }`}>
-                    {goal.priority}
+                    {PRIORITY_LABEL_KEYS[goal.priority] ? t(PRIORITY_LABEL_KEYS[goal.priority]) : goal.priority}
                   </span>
                   <span className="flex items-center">
                     {STATUS_ICONS[goal.status]}
@@ -178,7 +194,7 @@ export function GoalList() {
               {/* Progress bar */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Progress</span>
+                  <span className="text-muted-foreground">{t('perf.goalList.progress')}</span>
                   <span className="font-medium">{goal.progress}%</span>
                 </div>
                 <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
@@ -198,7 +214,7 @@ export function GoalList() {
               <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
                 <span>{goal.type}</span>
                 {goal.endDate && (
-                  <span>Due: {formatDate(goal.endDate)}</span>
+                  <span>{t('perf.goalList.due', { date: formatDate(goal.endDate) })}</span>
                 )}
                 <span>{formatDate(goal.startDate)}</span>
               </div>

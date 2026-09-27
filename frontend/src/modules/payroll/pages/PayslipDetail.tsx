@@ -6,10 +6,11 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Printer, Download } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
 
 /** Error dari request responseType:'blob' membawa body JSON sebagai Blob —
  * baca dulu supaya pesan backend (mis. 403 payroll terkunci) tetap muncul. */
-async function pdfErrorMessage(error: unknown): Promise<string> {
+async function pdfErrorMessage(error: unknown, fallback: string): Promise<string> {
   const data = (error as { response?: { data?: unknown } } | null)?.response?.data;
   if (data instanceof Blob) {
     try {
@@ -17,10 +18,11 @@ async function pdfErrorMessage(error: unknown): Promise<string> {
       if (parsed.message || parsed.error) return (parsed.message || parsed.error) as string;
     } catch { /* bukan JSON — pakai fallback */ }
   }
-  return apiErrorMessage(error, 'Gagal mengunduh PDF slip gaji');
+  return apiErrorMessage(error, fallback);
 }
 
 export function PayslipDetail() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [payslip, setPayslip] = useState<Payslip | null>(null);
@@ -41,11 +43,11 @@ export function PayslipDetail() {
       anchor.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      toast.error(await pdfErrorMessage(err));
+      toast.error(await pdfErrorMessage(err, t('fin.myslips.pdfDownloadFailed')));
     } finally {
       setDownloading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -65,14 +67,14 @@ export function PayslipDetail() {
   }, [fetchData]);
 
   if (loading) {
-    return <div className="text-center py-12 text-sm text-muted-foreground">Loading...</div>;
+    return <div className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   if (!payslip) {
     return (
       <div className="text-center py-12">
-        <p className="text-sm text-muted-foreground">Payslip not found</p>
-        <Button variant="link" onClick={() => navigate('/payroll/runs')}>Back</Button>
+        <p className="text-sm text-muted-foreground">{t('fin.payslip.notFound')}</p>
+        <Button variant="link" onClick={() => navigate('/payroll/runs')}>{t('fin.common.back')}</Button>
       </div>
     );
   }
@@ -83,31 +85,31 @@ export function PayslipDetail() {
   return (
     <div>
       <PageHeader
-        title="Payslip"
+        title={t('fin.payslip.title')}
         description={`${payslip.employee?.fullName || ''} · ${payslip.employee?.employeeNumber || ''}`}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => window.print()}>
               <Printer size={16} className="mr-2" />
-              Print
+              {t('fin.payslip.print')}
             </Button>
             <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={downloading}>
               <Download size={16} className="mr-2" />
-              {downloading ? 'Mengunduh...' : 'PDF'}
+              {downloading ? t('fin.payslip.downloading') : 'PDF'}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft size={16} className="mr-2" />
-              Back
+              {t('fin.common.back')}
             </Button>
           </div>
         }
       />
 
       {Boolean(payslip.formulaCalculations?.length) && <details className="mx-auto mb-5 max-w-2xl rounded-xl border border-border p-4">
-        <summary className="cursor-pointer text-sm font-medium">Jejak perhitungan formula</summary>
-        <p className="mt-3 text-sm text-muted-foreground">Ekspresi dan input berikut disimpan saat slip dihitung.</p>
+        <summary className="cursor-pointer text-sm font-medium">{t('fin.payslip.formulaTrace')}</summary>
+        <p className="mt-3 text-sm text-muted-foreground">{t('fin.payslip.formulaTraceDesc')}</p>
         {payslip.formulaCalculations?.map(calculation => <div key={calculation.id} className="mt-4 border-t border-border pt-3 text-sm">
-          <p className="font-medium">{payslip.components.find(component => component.salaryComponentId === calculation.componentId)?.name || 'Komponen formula'} · Rp {Number(calculation.amount).toLocaleString('id-ID', { minimumFractionDigits: 2 })}</p>
+          <p className="font-medium">{payslip.components.find(component => component.salaryComponentId === calculation.componentId)?.name || t('fin.payslip.formulaComponentFallback')} · Rp {Number(calculation.amount).toLocaleString('id-ID', { minimumFractionDigits: 2 })}</p>
           <pre className="mt-2 whitespace-pre-wrap break-words">{calculation.expression}</pre>
           <dl className="mt-2 grid gap-2 sm:grid-cols-2">{Object.entries({ ...calculation.inputs, ...calculation.dependencies }).map(([key, value]) => <div key={key} className="min-w-0"><dt className="break-words text-muted-foreground">{key}</dt><dd className="tabular-nums">{value}</dd></div>)}</dl>
         </div>)}
@@ -116,7 +118,7 @@ export function PayslipDetail() {
       <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-xl border border-border shadow-sm">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border text-center">
-          <h2 className="text-lg font-semibold">PAYSLIP</h2>
+          <h2 className="text-lg font-semibold">{t('fin.payslip.header')}</h2>
           <p className="text-xs text-muted-foreground">
             {payslip.payrollRun?.period ? `${payslip.payrollRun.period.name}` : ''}
           </p>
@@ -125,19 +127,19 @@ export function PayslipDetail() {
         {/* Employee Info */}
         <div className="px-6 py-4 border-b border-border grid grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">Employee</p>
+            <p className="text-xs text-muted-foreground">{t('fin.common.employee')}</p>
             <p className="font-medium">{payslip.employee?.fullName || '-'}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Employee ID</p>
+            <p className="text-xs text-muted-foreground">{t('fin.payslip.employeeId')}</p>
             <p className="font-medium">{payslip.employee?.employeeNumber || '-'}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Base Salary</p>
+            <p className="text-xs text-muted-foreground">{t('fin.common.baseSalary')}</p>
             <p className="font-medium">Rp {Number(payslip.baseSalary).toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Status</p>
+            <p className="text-xs text-muted-foreground">{t('fin.common.status')}</p>
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
               {payslip.status}
             </span>
@@ -146,7 +148,7 @@ export function PayslipDetail() {
 
         {/* Earnings */}
         <div className="px-6 py-4 border-b border-border">
-          <h3 className="text-sm font-medium mb-3">Earnings</h3>
+          <h3 className="text-sm font-medium mb-3">{t('fin.common.earnings')}</h3>
           <div className="space-y-2">
             {allowances.map((comp) => (
               <div key={comp.id} className="flex justify-between text-sm">
@@ -155,7 +157,7 @@ export function PayslipDetail() {
               </div>
             ))}
             <div className="flex justify-between text-sm font-medium pt-2 border-t border-border">
-              <span>Total Earnings</span>
+              <span>{t('fin.payslip.totalEarnings')}</span>
               <span className="text-emerald-600">Rp {Number(payslip.totalEarnings).toLocaleString()}</span>
             </div>
           </div>
@@ -163,7 +165,7 @@ export function PayslipDetail() {
 
         {/* Deductions */}
         <div className="px-6 py-4 border-b border-border">
-          <h3 className="text-sm font-medium mb-3">Deductions</h3>
+          <h3 className="text-sm font-medium mb-3">{t('fin.common.deductions')}</h3>
           <div className="space-y-2">
             {deductions.map((comp) => (
               <div key={comp.id} className="flex justify-between text-sm">
@@ -172,7 +174,7 @@ export function PayslipDetail() {
               </div>
             ))}
             <div className="flex justify-between text-sm font-medium pt-2 border-t border-border">
-              <span>Total Deductions</span>
+              <span>{t('fin.payslip.totalDeductions')}</span>
               <span className="text-red-600">Rp {Number(payslip.totalDeductions).toLocaleString()}</span>
             </div>
           </div>
@@ -181,7 +183,7 @@ export function PayslipDetail() {
         {/* Net Pay */}
         <div className="px-6 py-4">
           <div className="flex justify-between text-base font-semibold">
-            <span>Net Pay</span>
+            <span>{t('fin.common.netPay')}</span>
             <span className="text-emerald-600">Rp {Number(payslip.netPay).toLocaleString()}</span>
           </div>
         </div>
@@ -191,23 +193,23 @@ export function PayslipDetail() {
           <div className="grid grid-cols-5 gap-4 text-center text-xs">
             <div>
               <p className="font-medium">{payslip.workDays}</p>
-              <p className="text-muted-foreground">Work Days</p>
+              <p className="text-muted-foreground">{t('fin.payslip.workDays')}</p>
             </div>
             <div>
               <p className="font-medium">{payslip.presentDays}</p>
-              <p className="text-muted-foreground">Present</p>
+              <p className="text-muted-foreground">{t('fin.payslip.present')}</p>
             </div>
             <div>
               <p className="font-medium">{payslip.leaveDays}</p>
-              <p className="text-muted-foreground">Leave</p>
+              <p className="text-muted-foreground">{t('fin.payslip.leave')}</p>
             </div>
             <div>
               <p className="font-medium">{payslip.absentDays}</p>
-              <p className="text-muted-foreground">Absent</p>
+              <p className="text-muted-foreground">{t('fin.payslip.absent')}</p>
             </div>
             <div>
               <p className="font-medium">{payslip.overtimeHours}</p>
-              <p className="text-muted-foreground">Overtime (h)</p>
+              <p className="text-muted-foreground">{t('fin.payslip.overtimeH')}</p>
             </div>
           </div>
         </div>

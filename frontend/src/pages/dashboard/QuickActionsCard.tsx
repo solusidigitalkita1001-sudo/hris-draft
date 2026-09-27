@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
+import { useI18n } from '@/i18n/provider';
 import { DashCard, CardTitle } from './shared';
 
 export interface QuickAction {
@@ -15,7 +16,7 @@ export interface QuickAction {
  * Tiap tile = ikon kotak tint + label + catatan + chevron.
  */
 export function QuickActionsCard({
-  title = 'Aksi cepat',
+  title,
   actions,
   className,
   compact = false,
@@ -26,12 +27,13 @@ export function QuickActionsCard({
   /** Satu kolom — untuk kartu yang berbagi baris sempit agar label tidak terpotong. */
   compact?: boolean;
 }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   if (!actions.length) return null;
 
   return (
     <DashCard className={className}>
-      <CardTitle>{title}</CardTitle>
+      <CardTitle>{title ?? t('ops.dashboard.quickActions.title')}</CardTitle>
       <div className={`mt-4 grid grid-cols-1 gap-2.5 ${compact ? '' : 'sm:grid-cols-2'}`}>
         {actions.map((action) => (
           <button

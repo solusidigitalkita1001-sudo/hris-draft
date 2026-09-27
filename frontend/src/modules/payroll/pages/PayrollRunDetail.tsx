@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { PayrollPaymentPanel } from '../components/PayrollPaymentPanel';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
 
 export function PayrollRunDetail() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const currentUserId = useAuthStore(state => state.user?.id);
@@ -24,11 +26,11 @@ export function PayrollRunDetail() {
       const data = await payrollService.getPayrollRun(id);
       setRun(data);
     } catch (error) {
-      setActionError(apiErrorMessage(error, 'Payroll gagal dimuat. Coba lagi.'));
+      setActionError(apiErrorMessage(error, t('fin.runDetail.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     fetchData();
@@ -42,7 +44,7 @@ export function PayrollRunDetail() {
       await payrollService.approvePayrollRun(id);
       await fetchData();
     } catch (error) {
-      setActionError(apiErrorMessage(error, 'Persetujuan payroll gagal. Coba muat ulang.'));
+      setActionError(apiErrorMessage(error, t('fin.runDetail.approveFailed')));
     } finally {
       setActionLoading(false);
     }
@@ -52,7 +54,7 @@ export function PayrollRunDetail() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
       </div>
     );
   }
@@ -60,9 +62,9 @@ export function PayrollRunDetail() {
   if (!run) {
     return (
       <div className="text-center py-12">
-        <p role="alert" className="text-sm text-muted-foreground">{actionError || 'Payroll run not found'}</p>
-        <Button variant="outline" onClick={() => void fetchData()}>Muat ulang</Button>
-        <Button variant="link" onClick={() => navigate('/payroll/runs')}>Back to Payroll Runs</Button>
+        <p role="alert" className="text-sm text-muted-foreground">{actionError || t('fin.runDetail.notFound')}</p>
+        <Button variant="outline" onClick={() => void fetchData()}>{t('fin.common.reload')}</Button>
+        <Button variant="link" onClick={() => navigate('/payroll/runs')}>{t('fin.runDetail.backToRuns')}</Button>
       </div>
     );
   }
@@ -75,11 +77,11 @@ export function PayrollRunDetail() {
     <div>
       <PageHeader
         title={run.name}
-        description={`Run #${run.runNumber} · ${run.period?.name || ''}`}
+        description={t('fin.runDetail.subtitle', { number: run.runNumber, period: run.period?.name || '' })}
         actions={
           <Button variant="ghost" size="sm" onClick={() => navigate('/payroll/runs')}>
             <ArrowLeft size={16} className="mr-2" />
-            Back
+            {t('fin.common.back')}
           </Button>
         }
       />
@@ -87,19 +89,19 @@ export function PayrollRunDetail() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-          <p className="text-xs text-muted-foreground mb-1">Employees</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('fin.common.employees')}</p>
           <p className="text-2xl font-semibold">{run.totalEmployees}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-          <p className="text-xs text-muted-foreground mb-1">Total Earnings</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('fin.payslip.totalEarnings')}</p>
           <p className="text-2xl font-semibold">Rp {totalEarnings.toLocaleString()}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-          <p className="text-xs text-muted-foreground mb-1">Total Deductions</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('fin.payslip.totalDeductions')}</p>
           <p className="text-2xl font-semibold text-red-600">Rp {totalDeductions.toLocaleString()}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-          <p className="text-xs text-muted-foreground mb-1">Net Pay</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('fin.common.netPay')}</p>
           <p className="text-2xl font-semibold text-emerald-600">Rp {totalNetPay.toLocaleString()}</p>
         </div>
       </div>
@@ -107,7 +109,7 @@ export function PayrollRunDetail() {
       {actionError && <p role="alert" className="mb-4 text-sm text-destructive">{actionError}</p>}
       {run.status === 'COMPLETED' && (!run.createdBy || run.createdBy === currentUserId) && (
         <p className="mb-4 text-sm text-muted-foreground">
-          {!run.createdBy ? 'Identitas pembuat payroll lama belum tercatat. Tinjauan diperlukan sebelum persetujuan.' : 'Payroll harus disetujui pengguna lain dari pembuatnya.'}
+          {!run.createdBy ? t('fin.runDetail.legacyCreatorUnknown') : t('fin.runDetail.selfApproveBlocked')}
         </p>
       )}
       {/* Actions */}
@@ -115,7 +117,7 @@ export function PayrollRunDetail() {
         <div className="flex gap-2 mb-6">
           <Button onClick={handleApprove} disabled={actionLoading || !run.createdBy || run.createdBy === currentUserId}>
             <CheckCircle2 size={16} className="mr-2" />
-            Approve Payroll
+            {t('fin.runDetail.approve')}
           </Button>
         </div>
       )}
@@ -127,35 +129,35 @@ export function PayrollRunDetail() {
 
       {/* Status Timeline */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4 mb-6">
-        <h3 className="text-sm font-medium mb-3">Status</h3>
+        <h3 className="text-sm font-medium mb-3">{t('fin.common.status')}</h3>
         <div className="flex items-center gap-4">
-          <StatusStep label="Draft" active={true} completed={run.status !== 'DRAFT'} />
+          <StatusStep label={t('fin.status.draft')} active={true} completed={run.status !== 'DRAFT'} />
           <div className="h-px flex-1 bg-border" />
-          <StatusStep label="Processing" active={run.status === 'PROCESSING'} completed={['COMPLETED', 'APPROVED', 'DISBURSED'].includes(run.status)} />
+          <StatusStep label={t('fin.status.processing')} active={run.status === 'PROCESSING'} completed={['COMPLETED', 'APPROVED', 'DISBURSED'].includes(run.status)} />
           <div className="h-px flex-1 bg-border" />
-          <StatusStep label="Completed" active={run.status === 'COMPLETED'} completed={['APPROVED', 'DISBURSED'].includes(run.status)} />
+          <StatusStep label={t('fin.status.completed')} active={run.status === 'COMPLETED'} completed={['APPROVED', 'DISBURSED'].includes(run.status)} />
           <div className="h-px flex-1 bg-border" />
-          <StatusStep label="Approved" active={run.status === 'APPROVED'} completed={run.status === 'DISBURSED'} />
+          <StatusStep label={t('fin.common.approved')} active={run.status === 'APPROVED'} completed={run.status === 'DISBURSED'} />
           <div className="h-px flex-1 bg-border" />
-          <StatusStep label="Disbursed" active={run.status === 'DISBURSED'} completed={false} />
+          <StatusStep label={t('fin.status.disbursed')} active={run.status === 'DISBURSED'} completed={false} />
         </div>
       </div>
 
       {/* Payslips Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-border">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <h3 className="text-sm font-medium">Payslips ({run.payslips?.length || 0})</h3>
+          <h3 className="text-sm font-medium">{t('fin.runDetail.payslipsCount', { count: run.payslips?.length || 0 })}</h3>
         </div>
         <div className="table-container">
           <table className="w-full">
             <thead className="table-header">
               <tr>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Employee</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Base Salary</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Earnings</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Deductions</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Net Pay</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.employee')}</th>
+                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.baseSalary')}</th>
+                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.earnings')}</th>
+                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.deductions')}</th>
+                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.netPay')}</th>
+                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -166,7 +168,7 @@ export function PayrollRunDetail() {
                   onClick={() => navigate(`/payroll/payslips/${payslip.id}`)}
                 >
                   <td className="px-4 py-3">
-                    <p className="text-sm font-medium">{payslip.employee?.fullName || 'Unknown'}</p>
+                    <p className="text-sm font-medium">{payslip.employee?.fullName || t('fin.common.unknown')}</p>
                     <p className="text-xs text-muted-foreground">{payslip.employee?.employeeNumber}</p>
                   </td>
                   <td className="px-4 py-3 text-right text-sm">Rp {Number(payslip.baseSalary).toLocaleString()}</td>
@@ -183,7 +185,7 @@ export function PayrollRunDetail() {
               {(!run.payslips || run.payslips.length === 0) && (
                 <tr>
                   <td colSpan={6} className="text-center py-8 text-sm text-muted-foreground">
-                    No payslips generated yet
+                    {t('fin.runDetail.noPayslips')}
                   </td>
                 </tr>
               )}

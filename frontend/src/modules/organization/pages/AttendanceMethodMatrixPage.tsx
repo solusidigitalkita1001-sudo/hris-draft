@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Fingerprint, MapPin, ScanFace, Search, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { employeeService, type EmployeeAttendanceMethods } from '@/services/employee.service';
@@ -13,10 +15,10 @@ const PAGE_SIZE = 20;
 
 type MethodFlag = 'allowFingerprint' | 'allowFaceRecognition' | 'allowMobileGps';
 
-const METHOD_COLUMNS: Array<{ flag: MethodFlag; label: string; icon: React.ReactNode }> = [
-  { flag: 'allowFingerprint', label: 'Fingerprint', icon: <Fingerprint size={13} /> },
-  { flag: 'allowFaceRecognition', label: 'Face Recognition', icon: <ScanFace size={13} /> },
-  { flag: 'allowMobileGps', label: 'Mobile GPS', icon: <MapPin size={13} /> },
+const METHOD_COLUMNS: Array<{ flag: MethodFlag; labelKey: TranslationKey; icon: React.ReactNode }> = [
+  { flag: 'allowFingerprint', labelKey: 'organization.branches.policy.method.fingerprint', icon: <Fingerprint size={13} /> },
+  { flag: 'allowFaceRecognition', labelKey: 'organization.branches.policy.method.faceRecognition', icon: <ScanFace size={13} /> },
+  { flag: 'allowMobileGps', labelKey: 'organization.branches.policy.method.mobileGps', icon: <MapPin size={13} /> },
 ];
 
 function MethodToggle({
@@ -61,6 +63,7 @@ function MethodToggle({
  * kebijakan absensi cabang saat check-in.
  */
 export function AttendanceMethodMatrixPage() {
+  const { t } = useI18n();
   const activeCompanyId = useCompanyStore((s) => s.activeCompanyId);
   const [rows, setRows] = useState<EmployeeAttendanceMethods[]>([]);
   const [total, setTotal] = useState(0);
@@ -97,11 +100,11 @@ export function AttendanceMethodMatrixPage() {
       setRows(result.data);
       setTotal(result.total);
     } catch (err) {
-      setError(apiErrorMessage(err, 'Gagal memuat matriks metode absensi'));
+      setError(apiErrorMessage(err, t('wf.org.attendanceMatrix.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [activeCompanyId, debouncedSearch, page]);
+  }, [activeCompanyId, debouncedSearch, page, t]);
 
   useEffect(() => {
     void load();
@@ -118,7 +121,7 @@ export function AttendanceMethodMatrixPage() {
         await employeeService.updateAttendanceMethods(row.id, { [flag]: next });
       } catch (err) {
         setRows((current) => current.map((r) => (r.id === row.id ? { ...r, [flag]: !next } : r)));
-        toast.error(apiErrorMessage(err, 'Gagal menyimpan perubahan'));
+        toast.error(apiErrorMessage(err, t('wf.org.attendanceMatrix.saveFailed')));
       } finally {
         setSavingIds((current) => {
           const nextSet = new Set(current);
@@ -127,14 +130,14 @@ export function AttendanceMethodMatrixPage() {
         });
       }
     },
-    []
+    [t]
   );
 
   return (
     <div>
       <PageHeader
-        title="Metode Absensi Karyawan"
-        description="Atur metode absensi yang diizinkan per karyawan. Berlaku bersama kebijakan absensi cabang."
+        title={t('wf.org.attendanceMatrix.title')}
+        description={t('wf.org.attendanceMatrix.description')}
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -144,11 +147,11 @@ export function AttendanceMethodMatrixPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="pl-9"
-            placeholder="Cari NIK atau nama karyawan..."
+            placeholder={t('wf.org.attendanceMatrix.searchPlaceholder')}
           />
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[10.5px] font-semibold text-primary">
-          <ShieldCheck size={12} aria-hidden="true" /> Khusus Super Admin
+          <ShieldCheck size={12} aria-hidden="true" /> {t('wf.org.attendanceMatrix.superAdminOnly')}
         </span>
       </div>
 
@@ -156,7 +159,7 @@ export function AttendanceMethodMatrixPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card-sm bg-danger-bg px-4 py-3 text-xs text-danger">
           <span>{error}</span>
           <button type="button" onClick={() => void load()} className="font-semibold underline underline-offset-2">
-            Coba lagi
+            {t('wf.org.attendanceMatrix.retry')}
           </button>
         </div>
       )}
@@ -166,10 +169,10 @@ export function AttendanceMethodMatrixPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-left">
-                <th className="px-4 py-3 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">NIK</th>
-                <th className="px-4 py-3 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">Nama</th>
-                <th className="px-4 py-3 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">Departemen</th>
-                <th className="px-4 py-3 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">Jabatan</th>
+                <th className="px-4 py-3 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">{t('wf.org.attendanceMatrix.table.nik')}</th>
+                <th className="px-4 py-3 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">{t('wf.common.name')}</th>
+                <th className="px-4 py-3 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">{t('employees.detail.fields.department')}</th>
+                <th className="px-4 py-3 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">{t('wf.org.attendanceMatrix.table.position')}</th>
                 {METHOD_COLUMNS.map((column) => (
                   <th
                     key={column.flag}
@@ -177,7 +180,7 @@ export function AttendanceMethodMatrixPage() {
                   >
                     <span className="inline-flex items-center gap-1.5">
                       {column.icon}
-                      {column.label}
+                      {t(column.labelKey)}
                     </span>
                   </th>
                 ))}
@@ -187,13 +190,13 @@ export function AttendanceMethodMatrixPage() {
               {loading ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                    Memuat data karyawan…
+                    {t('wf.org.attendanceMatrix.loading')}
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                    {debouncedSearch ? 'Tidak ada karyawan yang cocok dengan pencarian.' : 'Belum ada karyawan.'}
+                    {debouncedSearch ? t('wf.org.attendanceMatrix.emptyFiltered') : t('wf.org.attendanceMatrix.emptyDefault')}
                   </td>
                 </tr>
               ) : (
@@ -208,7 +211,7 @@ export function AttendanceMethodMatrixPage() {
                         <MethodToggle
                           checked={row[column.flag]}
                           disabled={savingIds.has(row.id)}
-                          label={`${column.label} untuk ${row.fullName}`}
+                          label={t('wf.org.attendanceMatrix.toggleLabel', { method: t(column.labelKey), name: row.fullName })}
                           onChange={(next) => void handleToggle(row, column.flag, next)}
                         />
                       </td>
@@ -221,12 +224,10 @@ export function AttendanceMethodMatrixPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
-          <span>
-            {total} karyawan · halaman {page} dari {totalPages}
-          </span>
+          <span>{t('wf.org.attendanceMatrix.pageSummary', { total, page, totalPages })}</span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)}>
-              Sebelumnya
+              {t('wf.common.previous')}
             </Button>
             <Button
               variant="outline"
@@ -234,7 +235,7 @@ export function AttendanceMethodMatrixPage() {
               disabled={page >= totalPages || loading}
               onClick={() => setPage((p) => p + 1)}
             >
-              Berikutnya
+              {t('wf.common.next')}
             </Button>
           </div>
         </div>

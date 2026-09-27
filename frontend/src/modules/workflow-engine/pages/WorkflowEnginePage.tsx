@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/i18n/provider';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
@@ -75,6 +76,7 @@ function ConfirmDialog({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useI18n();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -85,10 +87,10 @@ function ConfirmDialog({
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
           <Button variant="outline" size="sm" onClick={onClose}>
-            Batal
+            {t('common.cancel')}
           </Button>
           <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={onConfirm}>
-            Hapus
+            {t('common.delete')}
           </Button>
         </div>
       </div>
@@ -143,6 +145,7 @@ function TemplateForm({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(initial?.name || '');
   const [approvalType, setApprovalType] = useState(initial?.approvalType || '');
   const [resource, setResource] = useState(initial?.resource || '');
@@ -221,7 +224,7 @@ function TemplateForm({
     event.preventDefault();
 
     if (!companyId) {
-      toast.error('companyId tidak tersedia');
+      toast.error(t('ops.workflow.engine.form.toast.companyIdMissing'));
       return;
     }
 
@@ -247,16 +250,16 @@ function TemplateForm({
 
       if (initial?.id) {
         await workflowEngineService.updateTemplate(initial.id, payload);
-        toast.success('Template workflow diperbarui');
+        toast.success(t('ops.workflow.engine.form.toast.updated'));
       } else {
         await workflowEngineService.createTemplate(payload);
-        toast.success('Template workflow dibuat');
+        toast.success(t('ops.workflow.engine.form.toast.created'));
       }
 
       await onSaved();
       onClose();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal menyimpan template workflow'));
+      toast.error(apiErrorMessage(error, t('ops.workflow.engine.form.toast.saveFailed')));
     } finally {
       setSaving(false);
     }
@@ -266,30 +269,30 @@ function TemplateForm({
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Nama Template *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.name')}</label>
           <Input value={name} onChange={(event) => setName(event.target.value)} required />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Approval Type *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.approvalType')}</label>
           <Input value={approvalType} onChange={(event) => setApprovalType(event.target.value.toUpperCase())} required />
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Resource</label>
-          <Input value={resource} onChange={(event) => setResource(event.target.value)} placeholder="mis. leave / payroll / expense" />
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.resource')}</label>
+          <Input value={resource} onChange={(event) => setResource(event.target.value)} placeholder={t('ops.workflow.engine.form.resourcePlaceholder')} />
         </div>
         <div className="flex items-end">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
-            Template aktif
+            {t('ops.workflow.engine.form.activeTemplate')}
           </label>
         </div>
       </div>
 
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Deskripsi</label>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.description')}</label>
         <textarea
           rows={3}
           value={description}
@@ -300,73 +303,73 @@ function TemplateForm({
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Approval Stages</h3>
+          <h3 className="text-sm font-semibold">{t('ops.workflow.engine.form.stagesTitle')}</h3>
           <Button type="button" size="sm" variant="outline" onClick={addStage}>
-            <Plus size={14} className="mr-1.5" /> Tambah Stage
+            <Plus size={14} className="mr-1.5" /> {t('ops.workflow.engine.form.addStage')}
           </Button>
         </div>
 
         {stages.map((stage, stageIndex) => (
           <div key={`${stageIndex}-${stage.level}`} className="rounded-xl border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-sm font-semibold">Stage {stageIndex + 1}</h4>
+              <h4 className="text-sm font-semibold">{t('ops.workflow.engine.form.stageTitle', { number: stageIndex + 1 })}</h4>
               {stages.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeStage(stageIndex)}
                   className="text-sm text-red-600 hover:underline"
                 >
-                  Hapus
+                  {t('common.delete')}
                 </button>
               )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Nama Stage *</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.stageName')}</label>
                 <Input value={stage.name} onChange={(event) => updateStage(stageIndex, 'name', event.target.value)} required />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Approver Type *</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.approverType')}</label>
                 <Select2
                   value={stage.approverType}
                   onValueChange={(value) => updateStage(stageIndex, 'approverType', value as WorkflowApproverType)}
                   options={[
-                    { value: 'ROLE', label: 'Role' },
-                    { value: 'USER', label: 'User' },
-                    { value: 'AUTO', label: 'Auto' },
+                    { value: 'ROLE', label: t('ops.workflow.engine.form.approverTypeRole') },
+                    { value: 'USER', label: t('ops.workflow.engine.form.approverTypeUser') },
+                    { value: 'AUTO', label: t('ops.workflow.engine.form.approverTypeAuto') },
                   ]}
-                  placeholder="Pilih approver type"
+                  placeholder={t('ops.workflow.engine.form.approverTypePlaceholder')}
                 />
               </div>
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Approver Role Code</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.approverRoleCode')}</label>
                 <Input
                   value={stage.approverRoleCode || ''}
                   onChange={(event) => updateStage(stageIndex, 'approverRoleCode', event.target.value.toUpperCase())}
-                  placeholder="mis. HR_MANAGER"
+                  placeholder={t('ops.workflow.engine.form.approverRoleCodePlaceholder')}
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Approver User ID</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.approverUserId')}</label>
                 <Input value={stage.approverId || ''} onChange={(event) => updateStage(stageIndex, 'approverId', event.target.value)} />
               </div>
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Backup Role Code</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.backupRoleCode')}</label>
                 <Input
                   value={stage.backupApproverRoleCode || ''}
                   onChange={(event) => updateStage(stageIndex, 'backupApproverRoleCode', event.target.value.toUpperCase())}
-                  placeholder="mis. COMPANY_ADMIN"
+                  placeholder={t('ops.workflow.engine.form.backupRoleCodePlaceholder')}
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Backup User ID</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.backupUserId')}</label>
                 <Input
                   value={stage.backupApproverId || ''}
                   onChange={(event) => updateStage(stageIndex, 'backupApproverId', event.target.value)}
@@ -376,7 +379,7 @@ function TemplateForm({
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">SLA Hours *</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.form.slaHours')}</label>
                 <Input
                   type="number"
                   min={1}
@@ -391,16 +394,16 @@ function TemplateForm({
                     checked={stage.allowEscalation}
                     onChange={(event) => updateStage(stageIndex, 'allowEscalation', event.target.checked)}
                   />
-                  Izinkan eskalasi
+                  {t('ops.workflow.engine.form.allowEscalation')}
                 </label>
               </div>
             </div>
 
             <div className="mt-5 rounded-lg bg-muted/50 p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h5 className="text-sm font-semibold">Condition Rules</h5>
+                <h5 className="text-sm font-semibold">{t('ops.workflow.engine.form.conditionRules')}</h5>
                 <Button type="button" size="sm" variant="outline" onClick={() => addRule(stageIndex)}>
-                  <Plus size={14} className="mr-1.5" /> Tambah Rule
+                  <Plus size={14} className="mr-1.5" /> {t('ops.workflow.engine.form.addRule')}
                 </Button>
               </div>
 
@@ -410,7 +413,7 @@ function TemplateForm({
                     <Input
                       value={rule.field}
                       onChange={(event) => updateRule(stageIndex, ruleIndex, 'field', event.target.value)}
-                      placeholder="field"
+                      placeholder={t('ops.workflow.engine.form.fieldPlaceholder')}
                     />
                     <Select2
                       value={rule.operator}
@@ -419,21 +422,21 @@ function TemplateForm({
                         value: operator,
                         label: operator,
                       }))}
-                      placeholder="Operator"
+                      placeholder={t('ops.workflow.engine.form.operatorPlaceholder')}
                     />
                     <Input
                       value={rule.value}
                       onChange={(event) => updateRule(stageIndex, ruleIndex, 'value', event.target.value)}
-                      placeholder="value"
+                      placeholder={t('ops.workflow.engine.form.valuePlaceholder')}
                     />
                     <Button type="button" variant="outline" onClick={() => removeRule(stageIndex, ruleIndex)}>
-                      Hapus
+                      {t('common.delete')}
                     </Button>
                   </div>
                 ))}
 
                 {!stage.conditionRules?.length && (
-                  <p className="text-sm text-muted-foreground">Stage ini selalu aktif jika tidak ada condition rule.</p>
+                  <p className="text-sm text-muted-foreground">{t('ops.workflow.engine.form.noConditionRules')}</p>
                 )}
               </div>
             </div>
@@ -443,10 +446,10 @@ function TemplateForm({
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onClose}>
-          Batal
+          {t('common.cancel')}
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? 'Menyimpan...' : 'Simpan Template'}
+          {saving ? t('ops.workflow.engine.form.saving') : t('ops.workflow.engine.form.saveTemplate')}
         </Button>
       </div>
     </form>
@@ -464,6 +467,7 @@ function StartInstanceForm({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [templateId, setTemplateId] = useState(templates[0]?.id || '');
   const [referenceType, setReferenceType] = useState('');
   const [referenceId, setReferenceId] = useState('');
@@ -481,11 +485,11 @@ function StartInstanceForm({
         referenceId,
         payload: payloadText ? JSON.parse(payloadText) : undefined,
       });
-      toast.success('Workflow instance berhasil dimulai');
+      toast.success(t('ops.workflow.engine.start.toastStarted'));
       await onSaved();
       onClose();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal memulai workflow instance'));
+      toast.error(apiErrorMessage(error, t('ops.workflow.engine.start.toastFailed')));
     } finally {
       setSaving(false);
     }
@@ -494,7 +498,7 @@ function StartInstanceForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Template *</label>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.start.template')}</label>
         <Select2
           value={templateId}
           onValueChange={setTemplateId}
@@ -502,21 +506,21 @@ function StartInstanceForm({
             value: template.id,
             label: `${template.name} (${template.approvalType})`,
           }))}
-          placeholder="Pilih template"
+          placeholder={t('ops.workflow.engine.start.templatePlaceholder')}
         />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Reference Type *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.start.referenceType')}</label>
           <Input value={referenceType} onChange={(event) => setReferenceType(event.target.value)} required />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Reference ID *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.start.referenceId')}</label>
           <Input value={referenceId} onChange={(event) => setReferenceId(event.target.value)} required />
         </div>
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Payload JSON</label>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.engine.start.payloadJson')}</label>
         <textarea
           rows={8}
           value={payloadText}
@@ -526,10 +530,10 @@ function StartInstanceForm({
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>
-          Batal
+          {t('common.cancel')}
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? 'Memulai...' : 'Start Instance'}
+          {saving ? t('ops.workflow.engine.start.starting') : t('ops.workflow.engine.startInstance')}
         </Button>
       </div>
     </form>
@@ -537,6 +541,7 @@ function StartInstanceForm({
 }
 
 export function WorkflowEnginePage() {
+  const { t } = useI18n();
   const { user } = useAuthStore();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [activeTab, setActiveTab] = useState<'templates' | 'approvals' | 'instances'>('templates');
@@ -578,11 +583,11 @@ export function WorkflowEnginePage() {
     try {
       await Promise.all([loadTemplates(), loadInstances(), loadApprovals()]);
     } catch {
-      toast.error('Gagal memuat data workflow engine');
+      toast.error(t('ops.workflow.engine.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [loadApprovals, loadInstances, loadTemplates]);
+  }, [loadApprovals, loadInstances, loadTemplates, t]);
 
   useEffect(() => {
     refresh();
@@ -592,44 +597,44 @@ export function WorkflowEnginePage() {
     if (!deletingTemplate) return;
     try {
       await workflowEngineService.deleteTemplate(deletingTemplate.id);
-      toast.success('Template workflow dihapus');
+      toast.success(t('ops.workflow.engine.toast.templateDeleted'));
       setDeletingTemplate(null);
       await refresh();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal menghapus template workflow'));
+      toast.error(apiErrorMessage(error, t('ops.workflow.engine.toast.deleteFailed')));
     }
   };
 
   const handleAction = async (instanceId: string, action: WorkflowActionType) => {
     const comment = (await popup.prompt({
-      title: `Workflow Action: ${action}`,
-      description: `Tambahkan komentar untuk aksi ${action.toLowerCase()} bila perlu.`,
-      placeholder: `Komentar untuk aksi ${action} (opsional)`,
-      confirmText: 'Proses',
+      title: t('ops.workflow.engine.actions.promptTitle', { action }),
+      description: t('ops.workflow.engine.actions.promptDescription', { action: action.toLowerCase() }),
+      placeholder: t('ops.workflow.engine.actions.promptPlaceholder', { action }),
+      confirmText: t('ops.workflow.engine.actions.process'),
       intent: action === 'REJECT' ? 'destructive' : 'default',
     })) || undefined;
     try {
       await workflowEngineService.applyAction(instanceId, action, comment);
-      toast.success(`Aksi ${action.toLowerCase()} berhasil diproses`);
+      toast.success(t('ops.workflow.engine.actions.success', { action: action.toLowerCase() }));
       await refresh();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal memproses aksi workflow'));
+      toast.error(apiErrorMessage(error, t('ops.workflow.engine.actions.failed')));
     }
   };
 
   return (
     <div>
       <PageHeader
-        title="Workflow Engine"
-        description="Kelola template approval, condition rule, inbox approval, dan instance workflow lintas modul"
+        title={t('ops.workflow.engine.title')}
+        description={t('ops.workflow.engine.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={refresh}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+              <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
             </Button>
             {isConfigAdmin && (
               <Button variant="outline" size="sm" onClick={() => setShowStartModal(true)}>
-                <GitBranch size={16} className="mr-2" /> Start Instance
+                <GitBranch size={16} className="mr-2" /> {t('ops.workflow.engine.startInstance')}
               </Button>
             )}
             {isConfigAdmin && (
@@ -640,7 +645,7 @@ export function WorkflowEnginePage() {
                   setShowTemplateModal(true);
                 }}
               >
-                <Plus size={16} className="mr-2" /> Template
+                <Plus size={16} className="mr-2" /> {t('ops.workflow.engine.templateButton')}
               </Button>
             )}
           </>
@@ -649,9 +654,9 @@ export function WorkflowEnginePage() {
 
       <div className="mb-6 flex gap-1 border-b border-border">
         {[
-          { key: 'templates', label: 'Templates', icon: <Settings2 size={16} /> },
-          { key: 'approvals', label: 'My Approvals', icon: <CheckCircle2 size={16} /> },
-          { key: 'instances', label: 'Instances', icon: <ClipboardList size={16} /> },
+          { key: 'templates', label: t('ops.workflow.engine.tabs.templates'), icon: <Settings2 size={16} /> },
+          { key: 'approvals', label: t('ops.workflow.engine.tabs.myApprovals'), icon: <CheckCircle2 size={16} /> },
+          { key: 'instances', label: t('ops.workflow.engine.tabs.instances'), icon: <ClipboardList size={16} /> },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -676,7 +681,7 @@ export function WorkflowEnginePage() {
                 instanceStatus === status ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground'
               }`}
             >
-              {status || 'Semua'}
+              {status || t('ops.workflow.engine.filters.all')}
             </button>
           ))}
         </div>
@@ -684,7 +689,7 @@ export function WorkflowEnginePage() {
 
       {loading ? (
         <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          Memuat data workflow engine...
+          {t('ops.workflow.engine.loadingData')}
         </div>
       ) : (
         <>
@@ -692,12 +697,12 @@ export function WorkflowEnginePage() {
             <div className="space-y-4">
               {!isConfigAdmin && (
                 <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-                  Anda hanya memiliki akses monitor/inbox. Konfigurasi template hanya untuk role admin/HR manager.
+                  {t('ops.workflow.engine.templates.monitorOnly')}
                 </div>
               )}
               {templates.length === 0 && (
                 <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                  Belum ada workflow template.
+                  {t('ops.workflow.engine.templates.empty')}
                 </div>
               )}
               {templates.map((template) => (
@@ -706,13 +711,13 @@ export function WorkflowEnginePage() {
                     <div>
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-semibold">{template.name}</h3>
-                        <StatusBadge label={template.isActive ? 'Active' : 'Inactive'} tone={template.isActive ? 'success' : 'neutral'} />
+                        <StatusBadge label={template.isActive ? t('common.active') : t('common.inactive')} tone={template.isActive ? 'success' : 'neutral'} />
                         <StatusBadge label={template.approvalType} tone="warning" />
                       </div>
                       {template.description && <p className="mb-3 text-sm text-muted-foreground">{template.description}</p>}
                       <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                        <span>Resource: {template.resource || '-'}</span>
-                        <span>Total instance: {template._count?.instances || 0}</span>
+                        <span>{t('ops.workflow.engine.templates.resource', { value: template.resource || '-' })}</span>
+                        <span>{t('ops.workflow.engine.templates.totalInstances', { count: template._count?.instances || 0 })}</span>
                       </div>
                       <div className="mt-4 space-y-2">
                         {template.stages.map((stage) => (
@@ -721,15 +726,15 @@ export function WorkflowEnginePage() {
                               <span className="font-medium">L{stage.level} - {stage.name}</span>
                               <span className="text-muted-foreground">
                                 {stage.approverType === 'ROLE'
-                                  ? stage.approverRoleCode || 'Role tidak diisi'
+                                  ? stage.approverRoleCode || t('ops.workflow.engine.templates.roleNotSet')
                                   : stage.approverType === 'USER'
-                                    ? stage.approverId || 'User tidak diisi'
+                                    ? stage.approverId || t('ops.workflow.engine.templates.userNotSet')
                                     : 'AUTO'}
                               </span>
                             </div>
                             {!!stage.conditionRules?.length && (
                               <p className="mt-1 text-xs text-muted-foreground">
-                                Rules: {stage.conditionRules.map((rule) => `${rule.field} ${rule.operator} ${rule.value}`).join(' | ')}
+                                {t('ops.workflow.engine.templates.rules', { rules: stage.conditionRules.map((rule) => `${rule.field} ${rule.operator} ${rule.value}`).join(' | ') })}
                               </p>
                             )}
                           </div>
@@ -746,10 +751,10 @@ export function WorkflowEnginePage() {
                             setShowTemplateModal(true);
                           }}
                         >
-                          Edit
+                          {t('common.edit')}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => setDeletingTemplate(template)}>
-                          <Trash2 size={14} className="mr-1.5" /> Hapus
+                          <Trash2 size={14} className="mr-1.5" /> {t('common.delete')}
                         </Button>
                       </div>
                     )}
@@ -763,7 +768,7 @@ export function WorkflowEnginePage() {
             <div className="space-y-4">
               {approvals.length === 0 && (
                 <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                  Tidak ada approval yang menunggu aksi Anda.
+                  {t('ops.workflow.engine.approvals.empty')}
                 </div>
               )}
               {approvals.map((approval) => (
@@ -773,24 +778,24 @@ export function WorkflowEnginePage() {
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-semibold">{approval.name}</h3>
                         <StatusBadge label={approval.status} tone="warning" />
-                        <StatusBadge label={approval.instance?.template?.approvalType || 'Workflow'} tone="neutral" />
+                        <StatusBadge label={approval.instance?.template?.approvalType || t('ops.workflow.engine.approvals.workflowBadge')} tone="neutral" />
                       </div>
                       <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                        <span>Template: {approval.instance?.template?.name || '-'}</span>
-                        <span>Reference: {approval.instance?.referenceType} / {approval.instance?.referenceId}</span>
-                        <span>Current level: {approval.level}</span>
-                        <span>Dibuat: {dayjs(approval.createdAt).format('DD MMM YYYY HH:mm')}</span>
+                        <span>{t('ops.workflow.engine.approvals.template', { name: approval.instance?.template?.name || '-' })}</span>
+                        <span>{t('ops.workflow.engine.reference', { type: approval.instance?.referenceType ?? '', id: approval.instance?.referenceId ?? '' })}</span>
+                        <span>{t('ops.workflow.engine.currentLevel', { level: approval.level })}</span>
+                        <span>{t('ops.workflow.engine.createdAt', { date: dayjs(approval.createdAt).format('DD MMM YYYY HH:mm') })}</span>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" onClick={() => handleAction(approval.instanceId, 'APPROVE')}>
-                        <CheckCircle2 size={15} className="mr-1.5" /> Approve
+                        <CheckCircle2 size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.approve')}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => handleAction(approval.instanceId, 'REJECT')}>
-                        <XCircle size={15} className="mr-1.5" /> Reject
+                        <XCircle size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.reject')}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => handleAction(approval.instanceId, 'ESCALATE')}>
-                        <ArrowUpCircle size={15} className="mr-1.5" /> Escalate
+                        <ArrowUpCircle size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.escalate')}
                       </Button>
                     </div>
                   </div>
@@ -803,7 +808,7 @@ export function WorkflowEnginePage() {
             <div className="space-y-4">
               {instances.length === 0 && (
                 <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                  Belum ada workflow instance.
+                  {t('ops.workflow.engine.instances.empty')}
                 </div>
               )}
               {instances.map((instance) => (
@@ -824,10 +829,10 @@ export function WorkflowEnginePage() {
                     />
                   </div>
                   <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                    <span>Reference: {instance.referenceType} / {instance.referenceId}</span>
-                    <span>Requester: {instance.requesterId}</span>
-                    <span>Current level: {instance.currentLevel || '-'}</span>
-                    <span>Dibuat: {dayjs(instance.createdAt).format('DD MMM YYYY HH:mm')}</span>
+                    <span>{t('ops.workflow.engine.reference', { type: instance.referenceType, id: instance.referenceId })}</span>
+                    <span>{t('ops.workflow.engine.instances.requester', { id: instance.requesterId })}</span>
+                    <span>{t('ops.workflow.engine.currentLevel', { level: instance.currentLevel || '-' })}</span>
+                    <span>{t('ops.workflow.engine.createdAt', { date: dayjs(instance.createdAt).format('DD MMM YYYY HH:mm') })}</span>
                   </div>
                   <div className="mt-4 space-y-2">
                     {instance.steps.map((step) => (
@@ -846,10 +851,10 @@ export function WorkflowEnginePage() {
                                     : 'neutral'
                             }
                           />
-                          {step.isCurrent && <StatusBadge label="CURRENT" tone="warning" />}
+                          {step.isCurrent && <StatusBadge label={t('ops.workflow.engine.instances.currentBadge')} tone="warning" />}
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Approver: {step.approverRoleCode || step.approverId || step.approverType}
+                          {t('ops.workflow.engine.instances.approver', { approver: step.approverRoleCode || step.approverId || step.approverType })}
                         </p>
                       </div>
                     ))}

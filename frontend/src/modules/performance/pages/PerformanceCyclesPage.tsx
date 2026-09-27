@@ -13,13 +13,22 @@ import { BarChart3, Plus, RefreshCw } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
-const CYCLE_TYPE_OPTIONS: { value: ReviewCyclePayload['type']; label: string }[] = [
-  { value: 'MONTHLY', label: 'Monthly' },
-  { value: 'QUARTERLY', label: 'Quarterly' },
-  { value: 'SEMI_ANNUAL', label: 'Semi Annual' },
-  { value: 'ANNUAL', label: 'Annual' },
+const CYCLE_TYPE_OPTIONS: { value: ReviewCyclePayload['type']; labelKey: TranslationKey }[] = [
+  { value: 'MONTHLY', labelKey: 'perf.cycleType.monthly' },
+  { value: 'QUARTERLY', labelKey: 'perf.cycleType.quarterly' },
+  { value: 'SEMI_ANNUAL', labelKey: 'perf.cycleType.semiAnnual' },
+  { value: 'ANNUAL', labelKey: 'perf.cycleType.annual' },
 ];
+
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.status.draft',
+  ACTIVE: 'perf.status.active',
+  COMPLETED: 'perf.status.completed',
+  ARCHIVED: 'perf.status.archived',
+};
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -35,6 +44,7 @@ function toIsoDateBoundary(value: string, endOfDay = false) {
 }
 
 export function PerformanceCyclesPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
   const [cycles, setCycles] = useState<ReviewCycle[]>([]);
@@ -83,11 +93,11 @@ export function PerformanceCyclesPage() {
       setCycles(data);
     } catch (error) {
       console.error(error);
-      toast.error('Gagal memuat review cycles');
+      toast.error(t('perf.cycles.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     void fetchData();
@@ -95,17 +105,17 @@ export function PerformanceCyclesPage() {
 
   const handleSubmit = useCallback(async () => {
     if (!companyId) {
-      toast.error('Company belum aktif');
+      toast.error(t('perf.cycles.noCompany'));
       return;
     }
 
     if (!form.name.trim() || !form.startDate || !form.endDate) {
-      toast.error('Nama, tanggal mulai, dan tanggal selesai wajib diisi');
+      toast.error(t('perf.cycles.validation.required'));
       return;
     }
 
     if (form.endDate < form.startDate) {
-      toast.error('Tanggal selesai tidak boleh lebih kecil dari tanggal mulai');
+      toast.error(t('perf.cycles.validation.endBeforeStart'));
       return;
     }
 
@@ -121,28 +131,28 @@ export function PerformanceCyclesPage() {
         description: form.description.trim() || undefined,
       };
       await performanceService.createReviewCycle(payload);
-      toast.success('Review cycle berhasil dibuat');
+      toast.success(t('perf.cycles.createSuccess'));
       resetForm();
       setFormOpen(false);
       await fetchData();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal membuat review cycle'));
+      toast.error(apiErrorMessage(error, t('perf.cycles.createFailed')));
     } finally {
       setSaving(false);
     }
-  }, [companyId, fetchData, form, resetForm]);
+  }, [companyId, fetchData, form, resetForm, t]);
 
   return (
     <div>
       <PageHeader
-        title="Performance Cycles"
-        description="Kelola periode review kinerja untuk tiap company aktif."
+        title={t('perf.cycles.title')}
+        description={t('perf.cycles.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button
               size="sm"
@@ -152,7 +162,7 @@ export function PerformanceCyclesPage() {
               }}
             >
               <Plus size={16} className="mr-2" />
-              {formOpen ? 'Tutup Form' : 'New Cycle'}
+              {formOpen ? t('perf.cycles.closeForm') : t('perf.cycles.newCycle')}
             </Button>
           </>
         }
@@ -160,15 +170,15 @@ export function PerformanceCyclesPage() {
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Active Cycles</p>
+          <p className="text-xs text-muted-foreground">{t('perf.cycles.stats.active')}</p>
           <p className="mt-2 text-2xl font-semibold">{stats.activeCount}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Completed Cycles</p>
+          <p className="text-xs text-muted-foreground">{t('perf.cycles.stats.completed')}</p>
           <p className="mt-2 text-2xl font-semibold">{stats.completedCount}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Total Reviews</p>
+          <p className="text-xs text-muted-foreground">{t('perf.cycles.stats.totalReviews')}</p>
           <p className="mt-2 text-2xl font-semibold">{stats.totalReviews}</p>
         </div>
       </div>
@@ -177,33 +187,33 @@ export function PerformanceCyclesPage() {
         <div className="mb-6 rounded-xl border border-border bg-card p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Cycle Name</label>
+              <label className="text-sm font-medium">{t('perf.cycles.form.name')}</label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="2026 Annual Review"
+                placeholder={t('perf.cycles.form.namePlaceholder')}
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Code</label>
+              <label className="text-sm font-medium">{t('perf.cycles.form.code')}</label>
               <Input
                 value=""
-                placeholder="Akan dibuat otomatis oleh sistem"
+                placeholder={t('perf.cycles.form.codePlaceholder')}
                 disabled
               />
-              <p className="text-xs text-muted-foreground">Code cycle digenerate otomatis saat create.</p>
+              <p className="text-xs text-muted-foreground">{t('perf.cycles.form.codeHint')}</p>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Type</label>
+              <label className="text-sm font-medium">{t('perf.cycles.form.type')}</label>
               <Select2
                 value={form.type}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, type: value as ReviewCyclePayload['type'] }))}
-                options={CYCLE_TYPE_OPTIONS}
-                placeholder="Pilih tipe cycle"
+                options={CYCLE_TYPE_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                placeholder={t('perf.cycles.form.typePlaceholder')}
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Review Deadline</label>
+              <label className="text-sm font-medium">{t('perf.cycles.form.reviewDeadline')}</label>
               <Input
                 type="date"
                 value={form.reviewDeadline}
@@ -211,7 +221,7 @@ export function PerformanceCyclesPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Start Date</label>
+              <label className="text-sm font-medium">{t('perf.cycles.form.startDate')}</label>
               <Input
                 type="date"
                 value={form.startDate}
@@ -219,7 +229,7 @@ export function PerformanceCyclesPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">End Date</label>
+              <label className="text-sm font-medium">{t('perf.cycles.form.endDate')}</label>
               <Input
                 type="date"
                 value={form.endDate}
@@ -229,12 +239,12 @@ export function PerformanceCyclesPage() {
           </div>
 
           <div className="mt-4 space-y-2">
-            <label className="text-sm font-medium">Description</label>
+            <label className="text-sm font-medium">{t('perf.cycles.form.description')}</label>
             <textarea
               value={form.description}
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               className="min-h-28 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Tujuan cycle, scope penilaian, dan catatan pelaksanaan."
+              placeholder={t('perf.cycles.form.descriptionPlaceholder')}
             />
           </div>
 
@@ -247,10 +257,10 @@ export function PerformanceCyclesPage() {
                 setFormOpen(false);
               }}
             >
-              Batal
+              {t('common.cancel')}
             </Button>
             <Button size="sm" onClick={handleSubmit} disabled={saving}>
-              {saving ? 'Menyimpan...' : 'Buat Review Cycle'}
+              {saving ? t('perf.common.saving') : t('perf.cycles.form.submit')}
             </Button>
           </div>
         </div>
@@ -258,12 +268,12 @@ export function PerformanceCyclesPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {loading ? (
-          <div className="col-span-full py-12 text-center text-sm text-muted-foreground">Loading...</div>
+          <div className="col-span-full py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>
         ) : cycles.length === 0 ? (
           <div className="col-span-full rounded-xl border border-dashed border-border bg-card py-12 text-center">
             <BarChart3 size={32} className="mx-auto text-muted-foreground/40" />
-            <p className="mt-3 text-sm text-muted-foreground">Belum ada review cycle.</p>
-            <p className="text-xs text-muted-foreground">Buat cycle pertama untuk mulai distribusi review.</p>
+            <p className="mt-3 text-sm text-muted-foreground">{t('perf.cycles.empty.title')}</p>
+            <p className="text-xs text-muted-foreground">{t('perf.cycles.empty.description')}</p>
           </div>
         ) : (
           cycles.map((cycle) => (
@@ -274,14 +284,14 @@ export function PerformanceCyclesPage() {
                   <p className="text-xs text-muted-foreground">{cycle.code}</p>
                 </div>
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[cycle.status] || STATUS_STYLES.DRAFT}`}>
-                  {cycle.status}
+                  {STATUS_LABEL_KEYS[cycle.status] ? t(STATUS_LABEL_KEYS[cycle.status]) : cycle.status}
                 </span>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span>{cycle.type}</span>
                 <span>{formatDate(cycle.startDate)} - {formatDate(cycle.endDate)}</span>
-                <span>{cycle._count?.reviews || 0} reviews</span>
+                <span>{t('perf.cycles.reviewCount', { count: cycle._count?.reviews || 0 })}</span>
               </div>
             </div>
           ))

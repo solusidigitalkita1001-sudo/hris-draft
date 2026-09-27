@@ -12,6 +12,7 @@ import {
 import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
 
 // ─── Modal ──────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -36,6 +37,8 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
   open: boolean; onClose: () => void; onConfirm: () => void;
   title: string; message: string;
 }) {
+  const { t } = useI18n();
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -45,8 +48,8 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">Delete</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">{t('common.delete')}</Button>
         </div>
       </div>
     </div>
@@ -59,6 +62,7 @@ function HolidayForm({ initial, onSave, onClose }: {
   onSave: (data: Partial<Holiday>) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(initial?.name || '');
   const [date, setDate] = useState(initial?.date ? dayjs(initial.date).format('YYYY-MM-DD') : '');
   const [type, setType] = useState<'NH' | 'JL'>(initial?.type || 'NH');
@@ -68,7 +72,7 @@ function HolidayForm({ initial, onSave, onClose }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !date) return toast.error('Name and date are required');
+    if (!name.trim() || !date) return toast.error(t('adm.holidays.form.required'));
     setSaving(true);
     try {
       await onSave({ name: name.trim(), date, type, year, source: source.trim() || undefined });
@@ -80,26 +84,26 @@ function HolidayForm({ initial, onSave, onClose }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Holiday Name *</label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Independence Day" required />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.holidays.form.name')}</label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('adm.holidays.form.namePlaceholder')} required />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Date *</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.holidays.form.date')}</label>
           <Input type="date" value={date} onChange={(e) => {
             setDate(e.target.value);
             if (e.target.value) setYear(dayjs(e.target.value).year());
           }} required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Type *</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.holidays.form.type')}</label>
           <Select2
             value={type}
             onValueChange={(value) => setType(value as 'NH' | 'JL')}
             options={[
-              { value: 'NH', label: 'National Holiday' },
-              { value: 'JL', label: 'Joint Leave' },
+              { value: 'NH', label: t('adm.holidays.typeNational') },
+              { value: 'JL', label: t('adm.holidays.typeJointLeave') },
             ]}
             className="h-9"
           />
@@ -107,13 +111,13 @@ function HolidayForm({ initial, onSave, onClose }: {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Source (optional)</label>
-        <Input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Government regulation" />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.holidays.form.source')}</label>
+        <Input value={source} onChange={(e) => setSource(e.target.value)} placeholder={t('adm.holidays.form.sourcePlaceholder')} />
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('adm.common.saving') : t('common.save')}</Button>
       </div>
     </form>
   );

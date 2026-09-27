@@ -13,6 +13,7 @@ import {
 import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
 
 const DAY_TYPES: DayType[] = ['WD', 'WS', 'WE', 'NH', 'JL', 'CH', 'RH', 'OT'];
 
@@ -94,6 +95,7 @@ function ShiftFormulaForm({
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
+  const { t } = useI18n();
   const [days, setDays] = useState<ShiftFormulaDay[]>(initial?.days?.length ? initial.days : defaultDays());
   const [saving, setSaving] = useState(false);
 
@@ -127,7 +129,7 @@ function ShiftFormulaForm({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim()) {
-      toast.error('Nama formula wajib diisi');
+      toast.error(t('adm.shift.form.nameRequired'));
       return;
     }
 
@@ -159,35 +161,35 @@ function ShiftFormulaForm({
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code</label>
-          <Input value={initial?.code || ''} disabled placeholder="Akan dibuat otomatis oleh sistem" />
-          <p className="mt-1 text-[11px] text-muted-foreground">Code shift formula digenerate sistem saat create.</p>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.shift.form.code')}</label>
+          <Input value={initial?.code || ''} disabled placeholder={t('adm.common.autoCode')} />
+          <p className="mt-1 text-[11px] text-muted-foreground">{t('adm.shift.form.codeHint')}</p>
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Nama Formula *</label>
-          <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="3 Regu Rotasi 8 Hari" required />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.shift.form.name')}</label>
+          <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('adm.shift.form.namePlaceholder')} required />
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr,160px] gap-4">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Deskripsi</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.shift.form.description')}</label>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={2}
             className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
-            placeholder="Contoh: 2 pagi, 2 sore, 2 malam, 2 off"
+            placeholder={t('adm.shift.form.descriptionPlaceholder')}
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Status</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.common.status')}</label>
           <Select2
             value={isActive ? 'ACTIVE' : 'INACTIVE'}
             onValueChange={(value) => setIsActive(value === 'ACTIVE')}
             options={[
-              { value: 'ACTIVE', label: 'ACTIVE' },
-              { value: 'INACTIVE', label: 'INACTIVE' },
+              { value: 'ACTIVE', label: t('adm.status.active') },
+              { value: 'INACTIVE', label: t('adm.status.inactive') },
             ]}
             className="h-10"
           />
@@ -197,11 +199,11 @@ function ShiftFormulaForm({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold">Pola Rotasi</h3>
-            <p className="text-xs text-muted-foreground">Urutan hari ini akan diputar berdasarkan `shift start date` milik employee.</p>
+            <h3 className="text-sm font-semibold">{t('adm.shift.form.rotationPattern')}</h3>
+            <p className="text-xs text-muted-foreground">{t('adm.shift.form.rotationHint')}</p>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={handleAddDay}>
-            <Plus size={14} className="mr-2" /> Add Day
+            <Plus size={14} className="mr-2" /> {t('adm.shift.form.addDay')}
           </Button>
         </div>
 
@@ -211,15 +213,15 @@ function ShiftFormulaForm({
             return (
               <div key={day.sequence} className="grid grid-cols-1 lg:grid-cols-[70px,1.4fr,1fr,1fr,1fr,160px,48px] gap-3 items-end rounded-xl border border-border p-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Hari</label>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">{t('adm.shift.form.day')}</label>
                   <Input value={String(day.sequence)} readOnly className="h-9" />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Label</label>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">{t('adm.shift.form.label')}</label>
                   <Input value={day.label || ''} onChange={(event) => handleDayChange(day.sequence, { label: event.target.value })} className="h-9" />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Tipe Hari</label>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">{t('adm.shift.form.dayType')}</label>
                   <Select2
                     value={day.dayType}
                     onValueChange={(value) => handleDayChange(day.sequence, { dayType: value as DayType })}
@@ -228,7 +230,7 @@ function ShiftFormulaForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Jam Masuk</label>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">{t('adm.shift.form.workStart')}</label>
                   <Input
                     type="time"
                     value={day.workStart || ''}
@@ -238,7 +240,7 @@ function ShiftFormulaForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Jam Pulang</label>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">{t('adm.shift.form.workEnd')}</label>
                   <Input
                     type="time"
                     value={day.workEnd || ''}
@@ -254,7 +256,7 @@ function ShiftFormulaForm({
                     disabled={!isWorkingDay}
                     onChange={(event) => handleDayChange(day.sequence, { crossesMidnight: event.target.checked })}
                   />
-                  Cross midnight
+                  {t('adm.shift.crossMidnight')}
                 </label>
                 <Button type="button" variant="outline" size="icon" onClick={() => handleRemoveDay(day.sequence)} disabled={days.length <= 1}>
                   <Trash2 size={16} />
@@ -266,14 +268,15 @@ function ShiftFormulaForm({
       </div>
 
       <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save Formula'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('adm.common.saving') : t('adm.shift.form.save')}</Button>
       </div>
     </form>
   );
 }
 
 export function ShiftFormulaPage() {
+  const { t } = useI18n();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [formulas, setFormulas] = useState<ShiftFormula[]>([]);
   const [loading, setLoading] = useState(true);
@@ -293,11 +296,11 @@ export function ShiftFormulaPage() {
       setFormulas(data);
     } catch (error) {
       console.error('Failed to fetch shift formulas:', error);
-      toast.error('Failed to load shift formulas');
+      toast.error(t('adm.shift.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     fetchData();
@@ -313,10 +316,10 @@ export function ShiftFormulaPage() {
   }) => {
     try {
       await workCalendarService.createShiftFormula(payload);
-      toast.success('Shift formula created');
+      toast.success(t('adm.shift.created'));
       fetchData();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Failed to create shift formula'));
+      toast.error(apiErrorMessage(error, t('adm.shift.createFailed')));
       throw error;
     }
   };
@@ -332,10 +335,10 @@ export function ShiftFormulaPage() {
     if (!editingFormula) return;
     try {
       await workCalendarService.updateShiftFormula(editingFormula.id, payload);
-      toast.success('Shift formula updated');
+      toast.success(t('adm.shift.updated'));
       fetchData();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Failed to update shift formula'));
+      toast.error(apiErrorMessage(error, t('adm.shift.updateFailed')));
       throw error;
     }
   };
@@ -344,11 +347,11 @@ export function ShiftFormulaPage() {
     if (!deletingFormula) return;
     try {
       await workCalendarService.deleteShiftFormula(deletingFormula.id);
-      toast.success('Shift formula deleted');
+      toast.success(t('adm.shift.deleted'));
       setDeletingFormula(null);
       fetchData();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Failed to delete shift formula'));
+      toast.error(apiErrorMessage(error, t('adm.shift.deleteFailed')));
     }
   };
 
@@ -357,15 +360,15 @@ export function ShiftFormulaPage() {
   return (
     <div>
       <PageHeader
-        title="Shift Formula"
-        description="Kelola formula roster bergilir untuk pegawai pabrik dan operasional shift."
+        title={t('adm.shift.title')}
+        description={t('adm.shift.description')}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={fetchData}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+              <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={16} className="mr-2" /> New Formula
+              <Plus size={16} className="mr-2" /> {t('adm.shift.newFormula')}
             </Button>
           </div>
         }
@@ -373,15 +376,15 @@ export function ShiftFormulaPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
         <div className="rounded-2xl border border-border bg-white dark:bg-gray-900 p-4">
-          <div className="text-xs text-muted-foreground">Total Formula</div>
+          <div className="text-xs text-muted-foreground">{t('adm.shift.stats.total')}</div>
           <div className="text-2xl font-semibold mt-2">{formulas.length}</div>
         </div>
         <div className="rounded-2xl border border-border bg-white dark:bg-gray-900 p-4">
-          <div className="text-xs text-muted-foreground">Formula Aktif</div>
+          <div className="text-xs text-muted-foreground">{t('adm.shift.stats.active')}</div>
           <div className="text-2xl font-semibold mt-2">{activeCount}</div>
         </div>
         <div className="rounded-2xl border border-border bg-white dark:bg-gray-900 p-4">
-          <div className="text-xs text-muted-foreground">Terpasang ke Employee</div>
+          <div className="text-xs text-muted-foreground">{t('adm.shift.stats.assigned')}</div>
           <div className="text-2xl font-semibold mt-2">
             {formulas.reduce((sum, formula) => sum + (formula._count?.employees || 0), 0)}
           </div>
@@ -389,10 +392,10 @@ export function ShiftFormulaPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">Loading shift formulas...</div>
+        <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">{t('adm.shift.loading')}</div>
       ) : formulas.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-white dark:bg-gray-900 p-10 text-center text-sm text-muted-foreground">
-          Belum ada shift formula. Buat formula pertama untuk pekerja pabrik atau tim dengan roster bergilir.
+          {t('adm.shift.empty')}
         </div>
       ) : (
         <div className="space-y-4">
@@ -404,46 +407,46 @@ export function ShiftFormulaPage() {
                     <h3 className="text-lg font-semibold">{formula.name}</h3>
                     <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium">{formula.code}</span>
                     <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${formula.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {formula.isActive ? 'ACTIVE' : 'INACTIVE'}
+                      {formula.isActive ? t('adm.status.active') : t('adm.status.inactive')}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">{formula.description || 'Tanpa deskripsi.'}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{formula.description || t('adm.shift.noDescription')}</p>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => setEditingFormula(formula)}>
-                    <Pencil size={14} className="mr-2" /> Edit
+                    <Pencil size={14} className="mr-2" /> {t('common.edit')}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setDeletingFormula(formula)}>
-                    <Trash2 size={14} className="mr-2" /> Delete
+                    <Trash2 size={14} className="mr-2" /> {t('common.delete')}
                   </Button>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-[220px,1fr] gap-4 mt-4">
                 <div className="rounded-xl border border-border p-4">
-                  <div className="text-xs text-muted-foreground">Cycle Length</div>
-                  <div className="text-xl font-semibold mt-1">{formula.cycleLength} hari</div>
-                  <div className="text-xs text-muted-foreground mt-3">Assigned Employees</div>
+                  <div className="text-xs text-muted-foreground">{t('adm.shift.cycleLength')}</div>
+                  <div className="text-xl font-semibold mt-1">{t('adm.shift.cycleDays', { count: formula.cycleLength })}</div>
+                  <div className="text-xs text-muted-foreground mt-3">{t('adm.shift.assignedEmployees')}</div>
                   <div className="text-xl font-semibold mt-1">{formula._count?.employees || 0}</div>
                 </div>
                 <div className="rounded-xl border border-border overflow-hidden">
                   <div className="grid grid-cols-[72px,1.3fr,90px,110px,110px,140px] gap-3 px-4 py-3 bg-muted/30 text-xs font-medium text-muted-foreground">
-                    <div>Hari</div>
-                    <div>Label</div>
-                    <div>Tipe</div>
-                    <div>Masuk</div>
-                    <div>Pulang</div>
-                    <div>Catatan</div>
+                    <div>{t('adm.shift.th.day')}</div>
+                    <div>{t('adm.shift.th.label')}</div>
+                    <div>{t('adm.shift.th.type')}</div>
+                    <div>{t('adm.shift.th.start')}</div>
+                    <div>{t('adm.shift.th.end')}</div>
+                    <div>{t('adm.shift.th.notes')}</div>
                   </div>
                   <div className="divide-y divide-border">
                     {formula.days.map((day) => (
                       <div key={`${formula.id}-${day.sequence}`} className="grid grid-cols-[72px,1.3fr,90px,110px,110px,140px] gap-3 px-4 py-3 text-sm">
-                        <div>Day {day.sequence}</div>
+                        <div>{t('adm.shift.daySeq', { n: day.sequence })}</div>
                         <div>{day.label || '-'}</div>
                         <div>{day.dayType}</div>
                         <div>{day.workStart || '-'}</div>
                         <div>{day.workEnd || '-'}</div>
-                        <div>{day.crossesMidnight ? 'Cross midnight' : '-'}</div>
+                        <div>{day.crossesMidnight ? t('adm.shift.crossMidnight') : '-'}</div>
                       </div>
                     ))}
                   </div>
@@ -454,11 +457,11 @@ export function ShiftFormulaPage() {
         </div>
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Shift Formula">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('adm.shift.modal.createTitle')}>
         <ShiftFormulaForm companyId={companyId} onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
 
-      <Modal open={!!editingFormula} onClose={() => setEditingFormula(null)} title="Edit Shift Formula">
+      <Modal open={!!editingFormula} onClose={() => setEditingFormula(null)} title={t('adm.shift.modal.editTitle')}>
         <ShiftFormulaForm
           initial={editingFormula}
           companyId={companyId}
@@ -474,14 +477,14 @@ export function ShiftFormulaPage() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="p-5">
-              <h3 className="text-base font-semibold mb-2">Delete Shift Formula</h3>
+              <h3 className="text-base font-semibold mb-2">{t('adm.shift.modal.deleteTitle')}</h3>
               <p className="text-sm text-muted-foreground">
-                Hapus formula <strong>{deletingFormula.name}</strong>? Employee yang masih memakai formula ini akan kehilangan pola shift aktifnya.
+                {t('adm.shift.modal.deletePrefix')} <strong>{deletingFormula.name}</strong>{t('adm.shift.modal.deleteSuffix')}
               </p>
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-              <Button variant="outline" size="sm" onClick={() => setDeletingFormula(null)}>Cancel</Button>
-              <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={handleDelete}>Delete</Button>
+              <Button variant="outline" size="sm" onClick={() => setDeletingFormula(null)}>{t('common.cancel')}</Button>
+              <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={handleDelete}>{t('common.delete')}</Button>
             </div>
           </div>
         </div>

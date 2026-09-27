@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
+import { useI18n } from '@/i18n/provider';
 
 /**
  * Cangkang tabel ala DataTable handoff: kartu radius 22 dengan header
@@ -57,7 +58,7 @@ export function TableShell({
   setPage,
   totalPages,
   totalItems,
-  searchPlaceholder = 'Cari…',
+  searchPlaceholder,
   headerExtra,
   children,
 }: {
@@ -73,6 +74,8 @@ export function TableShell({
   headerExtra?: ReactNode;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
+  const resolvedSearchPlaceholder = searchPlaceholder ?? t('adm.table.searchPlaceholder');
   const from = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(totalItems, page * pageSize);
 
@@ -80,13 +83,13 @@ export function TableShell({
     <div className="overflow-hidden rounded-[22px] border border-border bg-card shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3.5">
         <label className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
-          Tampilkan
+          {t('adm.table.show')}
           <span className="relative inline-flex items-center">
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
               className="appearance-none rounded-[10px] border border-border bg-card py-1.5 pl-3 pr-7 text-[11.5px] font-medium text-foreground"
-              aria-label="Jumlah entri per halaman"
+              aria-label={t('adm.table.pageSizeAria')}
             >
               {[5, 10, 25, 50].map((n) => (
                 <option key={n} value={n}>{n}</option>
@@ -94,7 +97,7 @@ export function TableShell({
             </select>
             <ChevronDown size={11} className="pointer-events-none absolute right-2.5 text-muted-foreground" />
           </span>
-          entri
+          {t('adm.table.entries')}
         </label>
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex min-w-[200px] items-center gap-2 rounded-[12px] border border-border bg-background px-3 py-2">
@@ -102,9 +105,9 @@ export function TableShell({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={searchPlaceholder}
+              placeholder={resolvedSearchPlaceholder}
               className="w-full bg-transparent text-[11.5px] text-foreground outline-none placeholder:text-muted-foreground"
-              aria-label={searchPlaceholder}
+              aria-label={resolvedSearchPlaceholder}
             />
           </div>
           {headerExtra}
@@ -115,7 +118,7 @@ export function TableShell({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3.5">
         <span className="text-[11.5px] text-muted-foreground">
-          Menampilkan {from}–{to} dari {totalItems} entri
+          {t('adm.table.showingRange', { from, to, total: totalItems })}
         </span>
         <div className="flex items-center gap-1.5">
           <button
@@ -124,7 +127,7 @@ export function TableShell({
             onClick={() => setPage(page - 1)}
             className="h-8 rounded-[10px] border border-border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Sebelumnya
+            {t('adm.table.previous')}
           </button>
           {pageWindow(page, totalPages).map((n) => (
             <button
@@ -147,7 +150,7 @@ export function TableShell({
             onClick={() => setPage(page + 1)}
             className="h-8 rounded-[10px] border border-border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Berikutnya
+            {t('adm.table.next')}
           </button>
         </div>
       </div>

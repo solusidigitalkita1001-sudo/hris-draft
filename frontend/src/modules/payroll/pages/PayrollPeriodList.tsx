@@ -10,6 +10,7 @@ import { Plus, Search, RefreshCw, CalendarDays, Pencil, Lock, X } from 'lucide-r
 import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null;
@@ -46,6 +47,7 @@ function ConfirmDialog({
   message: string;
   confirmText: string;
 }) {
+  const { t } = useI18n();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -58,7 +60,7 @@ function ConfirmDialog({
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
           <Button size="sm" onClick={onConfirm}>{confirmText}</Button>
         </div>
       </div>
@@ -79,6 +81,7 @@ function PeriodForm({
   onSave: (data: Partial<PayrollPeriod>) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const isEdit = Boolean(initial?.id);
 
   const [name, setName] = useState(initial?.name || '');
@@ -93,11 +96,11 @@ function PeriodForm({
     event.preventDefault();
 
     const trimmedName = name.trim();
-    if (!trimmedName) return toast.error('Nama period wajib diisi');
+    if (!trimmedName) return toast.error(t('fin.period.errNameRequired'));
 
-    if (!startDate || !endDate || !payDate) return toast.error('Tanggal wajib lengkap');
-    if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) return toast.error('End date tidak boleh lebih kecil dari start date');
-    if (dayjs(payDate).isBefore(dayjs(endDate), 'day')) return toast.error('Pay date tidak boleh lebih kecil dari end date');
+    if (!startDate || !endDate || !payDate) return toast.error(t('fin.period.errDatesRequired'));
+    if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) return toast.error(t('fin.period.errEndBeforeStart'));
+    if (dayjs(payDate).isBefore(dayjs(endDate), 'day')) return toast.error(t('fin.period.errPayBeforeEnd'));
 
     setSaving(true);
     try {
@@ -118,20 +121,20 @@ function PeriodForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Name *</label>
+          <label className="text-sm font-medium">{t('fin.common.name')} *</label>
           <Input value={name} onChange={(event) => setName(event.target.value)} required />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Code</label>
-          <Input value={initial?.code || ''} disabled placeholder="Akan dibuat otomatis oleh sistem" />
-          <p className="text-xs text-muted-foreground">Code payroll period digenerate sistem saat create.</p>
+          <label className="text-sm font-medium">{t('fin.common.code')}</label>
+          <Input value={initial?.code || ''} disabled placeholder={t('fin.common.codeAutoPlaceholder')} />
+          <p className="text-xs text-muted-foreground">{t('fin.period.codeHint')}</p>
         </div>
       </div>
 
       {!isEdit && (
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Frequency *</label>
+            <label className="text-sm font-medium">{t('fin.period.frequency')} *</label>
             <Select2
               value={frequency}
               onValueChange={setFrequency}
@@ -144,7 +147,7 @@ function PeriodForm({
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Pay Date *</label>
+            <label className="text-sm font-medium">{t('fin.period.payDate')} *</label>
             <Input type="date" value={payDate} onChange={(event) => setPayDate(event.target.value)} required />
           </div>
         </div>
@@ -153,18 +156,18 @@ function PeriodForm({
       {!isEdit && (
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Start Date *</label>
+            <label className="text-sm font-medium">{t('fin.common.startDate')} *</label>
             <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">End Date *</label>
+            <label className="text-sm font-medium">{t('fin.common.endDate')} *</label>
             <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
           </div>
         </div>
       )}
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">Notes</label>
+        <label className="text-sm font-medium">{t('fin.common.notes')}</label>
         <textarea
           rows={3}
           value={notes}
@@ -174,8 +177,8 @@ function PeriodForm({
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('fin.common.saving') : t('common.save')}</Button>
       </div>
     </form>
   );

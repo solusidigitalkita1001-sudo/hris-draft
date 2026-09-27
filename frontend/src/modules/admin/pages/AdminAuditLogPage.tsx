@@ -9,6 +9,7 @@ import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, Download, FileText, UserRound, Globe, Eye } from 'lucide-react';
 import { formatDateTime } from '@/utils/format';
 import toast from 'react-hot-toast';
+import { useI18n } from '@/i18n/provider';
 
 const ACTION_STYLES: Record<string, string> = {
   CREATE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
@@ -22,6 +23,7 @@ const ACTION_STYLES: Record<string, string> = {
 };
 
 export function AdminAuditLogPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { activeCompany } = useCompanyStore();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -38,7 +40,7 @@ export function AdminAuditLogPage() {
   const companyId = activeCompany?.id || '';
 
   const actionOptions = [
-    { value: '', label: 'Semua Action' },
+    { value: '', label: t('adm.audit.allActions') },
     { value: 'CREATE', label: 'CREATE' },
     { value: 'UPDATE', label: 'UPDATE' },
     { value: 'DELETE', label: 'DELETE' },
@@ -68,10 +70,11 @@ export function AdminAuditLogPage() {
       setTotalPages(result.meta.totalPages);
     } catch (error) {
       console.error(error);
-      toast.error('Gagal memuat audit log');
+      toast.error(t('adm.audit.loadFailed'));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t stabil terhadap data fetch; deps mengikuti filter
   }, [action, companyId, endDate, entity, entityId, ipAddress, page, search, startDate]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -102,24 +105,24 @@ export function AdminAuditLogPage() {
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error(error);
-      toast.error('Gagal export audit log');
+      toast.error(t('adm.audit.exportFailed'));
     }
   };
 
   return (
     <div>
       <PageHeader
-        title="Audit Log"
-        description="Trail aktivitas sistem lengkap dengan filter lanjutan dan export."
+        title={t('adm.audit.title')}
+        description={t('adm.audit.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" variant="outline" onClick={handleExport}>
               <Download size={16} className="mr-2" />
-              Export
+              {t('adm.common.export')}
             </Button>
           </>
         }
@@ -129,26 +132,26 @@ export function AdminAuditLogPage() {
         <div className="relative xl:col-span-2">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Cari action, entity, entity id, email, IP, payload..."
+            placeholder={t('adm.audit.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
           />
         </div>
-        <Select2 value={action} onValueChange={setAction} options={actionOptions} placeholder="Filter action" />
-        <Input placeholder="Entity" value={entity} onChange={(e) => setEntity(e.target.value)} className="h-9" />
-        <Input placeholder="Entity ID" value={entityId} onChange={(e) => setEntityId(e.target.value)} className="h-9" />
-        <Input placeholder="IP Address" value={ipAddress} onChange={(e) => setIpAddress(e.target.value)} className="h-9" />
+        <Select2 value={action} onValueChange={setAction} options={actionOptions} placeholder={t('adm.audit.filterAction')} />
+        <Input placeholder={t('adm.audit.entity')} value={entity} onChange={(e) => setEntity(e.target.value)} className="h-9" />
+        <Input placeholder={t('adm.audit.entityId')} value={entityId} onChange={(e) => setEntityId(e.target.value)} className="h-9" />
+        <Input placeholder={t('adm.audit.ipAddress')} value={ipAddress} onChange={(e) => setIpAddress(e.target.value)} className="h-9" />
         <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-9" />
         <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-9" />
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">Loading...</div>
+        <div className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
       ) : logs.length === 0 ? (
         <div className="flex flex-col items-center py-12 gap-3">
           <FileText size={40} className="text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Tidak ada audit log yang cocok dengan filter.</p>
+          <p className="text-sm text-muted-foreground">{t('adm.audit.empty')}</p>
         </div>
       ) : (
         <>
@@ -156,13 +159,13 @@ export function AdminAuditLogPage() {
             <table className="w-full">
               <thead className="table-header">
                 <tr>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Time</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">User</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Action</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Entity</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Entity ID</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">IP</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Detail</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.audit.th.time')}</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.audit.th.user')}</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.audit.th.action')}</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.audit.entity')}</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.audit.entityId')}</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.audit.th.ip')}</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.audit.th.detail')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -172,7 +175,7 @@ export function AdminAuditLogPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <UserRound size={14} className="text-muted-foreground shrink-0" />
-                        <span>{l.user?.email || 'System'}</span>
+                        <span>{l.user?.email || t('adm.audit.system')}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -189,7 +192,7 @@ export function AdminAuditLogPage() {
                     <td className="px-4 py-3 text-center">
                       <Button size="sm" variant="outline" onClick={() => navigate(`/admin/audit/${l.id}`)}>
                         <Eye size={14} className="mr-1.5" />
-                        Detail
+                        {t('adm.audit.detail')}
                       </Button>
                     </td>
                   </tr>
@@ -201,9 +204,9 @@ export function AdminAuditLogPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-4">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-              <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t('adm.table.previous')}</Button>
+              <span className="text-xs text-muted-foreground">{t('adm.table.pageOf', { page, total: totalPages })}</span>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>{t('adm.table.next')}</Button>
             </div>
           )}
         </>

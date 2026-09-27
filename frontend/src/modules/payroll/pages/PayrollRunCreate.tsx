@@ -10,8 +10,10 @@ import { Select2 } from '@/components/ui/select2';
 import { ArrowLeft, Loader2, Play } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
 
 export function PayrollRunCreate() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
@@ -35,11 +37,11 @@ export function PayrollRunCreate() {
       const data = await payrollService.getPayrollPeriods(companyId);
       setPeriods(data);
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal memuat payroll periods'));
+      toast.error(apiErrorMessage(err, t('fin.period.loadFailed')));
     } finally {
       setLoadingPeriods(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     void loadPeriods();
@@ -57,18 +59,18 @@ export function PayrollRunCreate() {
     event.preventDefault();
 
     if (!companyId) {
-      toast.error('companyId tidak tersedia. Silakan login ulang.');
+      toast.error(t('fin.common.companyMissing'));
       return;
     }
 
     if (!periodId) {
-      toast.error('Pilih payroll period terlebih dahulu');
+      toast.error(t('fin.runCreate.errSelectPeriod'));
       return;
     }
 
     const trimmedName = name.trim();
     if (!trimmedName) {
-      toast.error('Nama payroll run wajib diisi');
+      toast.error(t('fin.runCreate.errNameRequired'));
       return;
     }
 
@@ -81,10 +83,10 @@ export function PayrollRunCreate() {
         notes: notes.trim() || undefined,
       });
 
-      toast.success('Payroll run berhasil dibuat');
+      toast.success(t('fin.runCreate.created'));
       navigate(`/payroll/runs/${created.id}`);
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal membuat payroll run'));
+      toast.error(apiErrorMessage(err, t('fin.runCreate.createFailed')));
     } finally {
       setSubmitting(false);
     }
@@ -93,12 +95,12 @@ export function PayrollRunCreate() {
   return (
     <div>
       <PageHeader
-        title="Create Payroll Run"
-        description="Pilih period lalu jalankan proses payroll"
+        title={t('fin.runCreate.title')}
+        description={t('fin.runCreate.description')}
         actions={
           <Button variant="ghost" size="sm" onClick={() => navigate('/payroll/runs')}>
             <ArrowLeft size={16} className="mr-2" />
-            Back
+            {t('fin.common.back')}
           </Button>
         }
       />
@@ -107,55 +109,58 @@ export function PayrollRunCreate() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Payroll Period *</label>
+              <label className="text-sm font-medium">{t('fin.runCreate.periodLabel')} *</label>
               <Select2
                 value={periodId}
                 onValueChange={setPeriodId}
                 disabled={loadingPeriods || selectablePeriods.length === 0}
                 options={[
-                  { value: '', label: selectablePeriods.length === 0 ? 'Tidak ada period' : 'Pilih period' },
+                  {
+                    value: '',
+                    label: selectablePeriods.length === 0 ? t('fin.runCreate.noPeriod') : t('fin.runCreate.selectPeriod'),
+                  },
                   ...selectablePeriods.map((p) => ({
                     value: p.id,
                     label: `${p.name} • ${dayjs(p.startDate).format('DD MMM YYYY')} - ${dayjs(p.endDate).format('DD MMM YYYY')} • ${p.status}`,
                   })),
                 ]}
-                placeholder="Pilih period"
+                placeholder={t('fin.runCreate.selectPeriod')}
               />
               {!companyId && (
-                <p className="text-xs text-muted-foreground">companyId kosong. Biasanya ini terjadi kalau session belum terset.</p>
+                <p className="text-xs text-muted-foreground">{t('fin.runCreate.companyEmptyHint')}</p>
               )}
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Nama Run *</label>
+              <label className="text-sm font-medium">{t('fin.runCreate.nameLabel')} *</label>
               <Input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Contoh: Payroll July 2026"
+                placeholder={t('fin.runCreate.namePlaceholder')}
                 required
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Catatan</label>
+            <label className="text-sm font-medium">{t('fin.common.notes')}</label>
             <textarea
               rows={3}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              placeholder="Opsional"
+              placeholder={t('fin.common.optional')}
             />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => navigate('/payroll/runs')} disabled={submitting}>
-              Batal
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={submitting || loadingPeriods || !periodId}>
               {submitting && <Loader2 size={16} className="mr-2 animate-spin" />}
               {!submitting && <Play size={16} className="mr-2" />}
-              {submitting ? 'Memproses...' : 'Create Run'}
+              {submitting ? t('fin.common.processing') : t('fin.runCreate.submit')}
             </Button>
           </div>
         </form>

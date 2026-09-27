@@ -3,18 +3,25 @@ import dayjs from 'dayjs';
 import { BarChart3 } from 'lucide-react';
 import type { AttendanceReport } from '@/services/reports.service';
 import type { AttendanceRecord } from '@/services/attendance.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 import { cn } from '@/utils/cn';
 import { CardTitle, DashCard, EmptyHint } from './shared';
 
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  PRESENT: { label: 'Hadir', className: 'bg-success' },
-  LATE: { label: 'Telat', className: 'bg-warning' },
-  ABSENT: { label: 'Absen', className: 'bg-danger' },
-  EXCUSED: { label: 'Izin', className: 'bg-muted-foreground/60' },
+type Translate = (key: TranslationKey, params?: TranslationParams) => string;
+
+const STATUS_META: Record<string, { label: TranslationKey; className: string }> = {
+  PRESENT: { label: 'ops.dashboard.attendance.status.present', className: 'bg-success' },
+  LATE: { label: 'ops.dashboard.attendance.status.late', className: 'bg-warning' },
+  ABSENT: { label: 'ops.dashboard.attendance.status.absent', className: 'bg-danger' },
+  EXCUSED: { label: 'ops.dashboard.attendance.status.excused', className: 'bg-muted-foreground/60' },
 };
 
-function statusMeta(status: string) {
-  return STATUS_META[status] ?? { label: status, className: 'bg-muted-foreground/40' };
+function statusMeta(status: string, t: Translate): { label: string; className: string } {
+  const meta = STATUS_META[status];
+  return meta
+    ? { label: t(meta.label), className: meta.className }
+    : { label: status, className: 'bg-muted-foreground/40' };
 }
 
 /**
@@ -30,37 +37,39 @@ export function AttendanceHistoryCard({
   report: AttendanceReport | null;
   myRecords: AttendanceRecord[] | null;
 }) {
+  const { t } = useI18n();
   if (report) return <CompanyComposition report={report} />;
   if (myRecords) return <PersonalHeatmap records={myRecords} />;
   return (
     <DashCard>
-      <CardTitle>Kehadiran</CardTitle>
+      <CardTitle>{t('ops.dashboard.attendance.title')}</CardTitle>
       <EmptyHint
         icon={<BarChart3 size={26} />}
-        title="Data kehadiran belum tersedia"
-        note="Ringkasan kehadiran akan muncul di sini setelah ada catatan absensi."
+        title={t('ops.dashboard.attendance.empty.title')}
+        note={t('ops.dashboard.attendance.empty.note')}
       />
     </DashCard>
   );
 }
 
 function CompanyComposition({ report }: { report: AttendanceReport }) {
+  const { t } = useI18n();
   const rows = report.byStatus.filter((s) => s.count > 0);
   const total = report.total || rows.reduce((sum, s) => sum + s.count, 0);
 
   return (
     <DashCard>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <CardTitle>Kehadiran 90 hari</CardTitle>
+        <CardTitle>{t('ops.dashboard.attendance.title90')}</CardTitle>
         <span className="text-[11.5px] text-muted-foreground">
-          {total} catatan · telat {report.lateCount} ({Math.round(report.lateRate)}%)
+          {t('ops.dashboard.attendance.summary90', { total, late: report.lateCount, rate: Math.round(report.lateRate) })}
         </span>
       </div>
 
       {total === 0 ? (
         <EmptyHint
           icon={<BarChart3 size={26} />}
-          title="Belum ada catatan absensi pada 90 hari terakhir"
+          title={t('ops.dashboard.attendance.empty90')}
         />
       ) : (
         <>
@@ -68,15 +77,15 @@ function CompanyComposition({ report }: { report: AttendanceReport }) {
             {rows.map((s) => (
               <span
                 key={s.status}
-                className={statusMeta(s.status).className}
+                className={statusMeta(s.status, t).className}
                 style={{ width: `${(s.count / total) * 100}%` }}
-                title={`${statusMeta(s.status).label}: ${s.count}`}
+                title={`${statusMeta(s.status, t).label}: ${s.count}`}
               />
             ))}
           </div>
           <div className="mt-4 flex flex-col gap-2">
             {rows.map((s) => {
-              const meta = statusMeta(s.status);
+              const meta = statusMeta(s.status, t);
               const pct = Math.round((s.count / total) * 100);
               return (
                 <div key={s.status} className="flex items-center gap-2.5">
@@ -89,7 +98,7 @@ function CompanyComposition({ report }: { report: AttendanceReport }) {
             })}
           </div>
           <p className="mt-4 text-[11px] text-muted-foreground">
-            Komposisi status absensi seluruh karyawan dalam 90 hari terakhir.
+            {t('ops.dashboard.attendance.composition')}
           </p>
         </>
       )}
@@ -97,9 +106,18 @@ function CompanyComposition({ report }: { report: AttendanceReport }) {
   );
 }
 
-const DAY_LABELS = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+const DAY_LABELS: TranslationKey[] = [
+  'ops.dashboard.attendance.day.mon',
+  'ops.dashboard.attendance.day.tue',
+  'ops.dashboard.attendance.day.wed',
+  'ops.dashboard.attendance.day.thu',
+  'ops.dashboard.attendance.day.fri',
+  'ops.dashboard.attendance.day.sat',
+  'ops.dashboard.attendance.day.sun',
+];
 
 function PersonalHeatmap({ records }: { records: AttendanceRecord[] }) {
+  const { t } = useI18n();
   const today = dayjs();
   const monthStart = today.startOf('month');
   const daysInMonth = today.daysInMonth();
@@ -122,12 +140,12 @@ function PersonalHeatmap({ records }: { records: AttendanceRecord[] }) {
     const key = date.format('YYYY-MM-DD');
     const status = byDate.get(key);
     let className = 'bg-muted';
-    if (status) className = statusMeta(status).className;
+    if (status) className = statusMeta(status, t).className;
     else if (date.isAfter(today, 'day')) className = 'bg-muted/40';
     cells.push({
       key,
       className,
-      title: `${date.locale('id').format('D MMM')}${status ? ` · ${statusMeta(status).label}` : ''}`,
+      title: `${date.format('D MMM')}${status ? ` · ${statusMeta(status, t).label}` : ''}`,
     });
   }
 
@@ -136,14 +154,14 @@ function PersonalHeatmap({ records }: { records: AttendanceRecord[] }) {
   return (
     <DashCard>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <CardTitle>Kehadiran Saya</CardTitle>
-        <span className="text-[11.5px] text-muted-foreground">{today.locale('id').format('MMMM YYYY')}</span>
+        <CardTitle>{t('ops.dashboard.attendance.myTitle')}</CardTitle>
+        <span className="text-[11.5px] text-muted-foreground">{today.format('MMMM YYYY')}</span>
       </div>
 
       <div className="mt-5 grid grid-cols-7 gap-1.5">
         {DAY_LABELS.map((d) => (
           <span key={d} className="text-center text-[9px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">
-            {d}
+            {t(d)}
           </span>
         ))}
         {cells.map((cell, i) =>
@@ -158,8 +176,8 @@ function PersonalHeatmap({ records }: { records: AttendanceRecord[] }) {
       <div className="mt-4 flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
         {legend.map((status) => (
           <span key={status} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <span className={cn('h-2 w-2 rounded', statusMeta(status).className)} />
-            {statusMeta(status).label}
+            <span className={cn('h-2 w-2 rounded', statusMeta(status, t).className)} />
+            {statusMeta(status, t).label}
           </span>
         ))}
       </div>

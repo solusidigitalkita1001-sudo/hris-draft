@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useI18n } from '@/i18n/provider';
 import { recruitmentService, type Candidate } from '@/services/recruitment.service';
 import { useCompanyStore } from '@/stores/company.store';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -28,6 +29,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function CandidateList() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { activeCompany } = useCompanyStore();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -62,17 +64,17 @@ export function CandidateList() {
   return (
     <div>
       <PageHeader
-        title="Candidates"
-        description="Manage candidate profiles and talent pool"
+        title={t('wf.rec.candidates.title')}
+        description={t('wf.rec.candidates.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => navigate('/recruitment/candidates/new')}>
               <Plus size={16} className="mr-2" />
-              Add Candidate
+              {t('wf.rec.candidates.add')}
             </Button>
           </>
         }
@@ -84,7 +86,7 @@ export function CandidateList() {
           className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
         />
         <Input
-          placeholder="Search candidates by name, email, position..."
+          placeholder={t('wf.rec.candidates.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 h-9 max-w-md"
@@ -94,15 +96,15 @@ export function CandidateList() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
           <div className="col-span-full text-center py-12 text-sm text-muted-foreground">
-            Loading...
+            {t('common.loading')}
           </div>
         ) : filtered.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <div className="flex flex-col items-center gap-2">
               <UserRound size={32} className="text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No candidates found</p>
+              <p className="text-sm text-muted-foreground">{t('wf.rec.candidates.empty')}</p>
               <p className="text-xs text-muted-foreground">
-                Add candidates or import from applications
+                {t('wf.rec.candidates.emptyHint')}
               </p>
             </div>
           </div>
@@ -127,7 +129,7 @@ export function CandidateList() {
                     <StatusBadge status={candidate.status} />
                     {candidate.source && (
                       <span className="text-xs text-muted-foreground">
-                        via {candidate.source}
+                        {t('wf.rec.candidates.viaSource', { source: candidate.source })}
                       </span>
                     )}
                   </div>

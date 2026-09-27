@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { payrollService, type PayslipUnlockGrant } from '@/services/payroll.service';
 import { apiErrorMessage, apiErrorStatus } from '@/lib/errors';
 import { formatDateTime } from '@/utils/format';
+import { useI18n } from '@/i18n/provider';
 
 const PIN_LENGTH = 6;
 
@@ -31,6 +32,7 @@ function PinInput({
   autoFocus?: boolean;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
 
@@ -50,7 +52,7 @@ function PinInput({
           disabled={disabled || value.length === 0}
           className="inline-flex items-center gap-1 text-[10.5px] font-medium text-muted-foreground transition-colors hover:text-danger disabled:pointer-events-none disabled:opacity-40"
         >
-          <Delete size={12} /> Hapus
+          <Delete size={12} /> {t('fin.pin.clear')}
         </button>
       </div>
       <div
@@ -119,6 +121,7 @@ export function PayslipPinDialog({
   onPinSaved?: () => void;
   onUnlocked?: (grant: PayslipUnlockGrant) => void;
 }) {
+  const { t } = useI18n();
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
@@ -138,17 +141,17 @@ export function PayslipPinDialog({
 
   const handleSetPin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length !== PIN_LENGTH) return setError('PIN harus 6 digit angka');
-    if (pin !== pinConfirm) return setError('Konfirmasi PIN tidak sama');
+    if (pin.length !== PIN_LENGTH) return setError(t('fin.pin.errSixDigits'));
+    if (pin !== pinConfirm) return setError(t('fin.pin.errMismatch'));
     setSubmitting(true);
     setError(null);
     try {
       await payrollService.setPayslipPin(password, pin);
-      toast.success(pinAlreadySet ? 'PIN slip gaji berhasil diubah' : 'PIN slip gaji berhasil diatur');
+      toast.success(pinAlreadySet ? t('fin.pin.changedSuccess') : t('fin.pin.setSuccess'));
       onPinSaved?.();
       onClose();
     } catch (err) {
-      setError(apiErrorMessage(err, 'Gagal menyimpan PIN'));
+      setError(apiErrorMessage(err, t('fin.pin.saveFailed')));
     } finally {
       setSubmitting(false);
     }
@@ -156,18 +159,18 @@ export function PayslipPinDialog({
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length !== PIN_LENGTH) return setError('Masukkan 6 digit PIN');
+    if (pin.length !== PIN_LENGTH) return setError(t('fin.pin.errEnterSix'));
     setSubmitting(true);
     setError(null);
     try {
       const grant = await payrollService.unlockMyPayslips(pin);
-      toast.success('Nominal slip gaji terbuka');
+      toast.success(t('fin.pin.unlockSuccess'));
       onUnlocked?.(grant);
       onClose();
     } catch (err) {
       setPin('');
       const status = apiErrorStatus(err);
-      setError(apiErrorMessage(err, status === 429 ? 'Terlalu banyak percobaan. Coba lagi nanti.' : 'PIN salah'));
+      setError(apiErrorMessage(err, status === 429 ? t('fin.pin.tooManyAttempts') : t('fin.pin.wrongPin')));
     } finally {
       setSubmitting(false);
     }
@@ -178,14 +181,14 @@ export function PayslipPinDialog({
       <AppModal
         open={open}
         onClose={onClose}
-        title={pinAlreadySet ? 'Ubah PIN Slip Gaji' : 'Atur PIN Slip Gaji'}
-        description="PIN 6 digit dibutuhkan untuk membuka nominal slip gaji Anda. Verifikasi dengan kata sandi akun terlebih dahulu."
+        title={pinAlreadySet ? t('fin.pin.changeTitle') : t('fin.pin.setTitle')}
+        description={t('fin.pin.setDescription')}
         maxWidth="max-w-md"
       >
         <form onSubmit={handleSetPin} className="space-y-5">
           <div>
             <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">
-              Kata sandi akun
+              {t('fin.pin.accountPassword')}
             </label>
             <Input
               type="password"
@@ -196,20 +199,19 @@ export function PayslipPinDialog({
               autoFocus
             />
           </div>
-          <PinInput label="PIN baru (6 digit)" value={pin} onChange={setPin} />
-          <PinInput label="Ulangi PIN baru" value={pinConfirm} onChange={setPinConfirm} />
+          <PinInput label={t('fin.pin.newPin')} value={pin} onChange={setPin} />
+          <PinInput label={t('fin.pin.repeatPin')} value={pinConfirm} onChange={setPinConfirm} />
           {error && <p className="text-xs font-medium text-danger">{error}</p>}
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Jangan gunakan angka yang mudah ditebak (tanggal lahir, 123456). PIN disimpan
-            terenkripsi di server dan tidak pernah ditampilkan kembali.
+            {t('fin.pin.advice')}
           </p>
           <div className="flex justify-end gap-2.5">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
-              Batal
+              {t('common.cancel')}
             </Button>
             <Button type="submit" size="sm" disabled={submitting || !password || pin.length !== PIN_LENGTH || pinConfirm.length !== PIN_LENGTH}>
               <KeyRound size={14} className="mr-1.5" />
-              {submitting ? 'Menyimpan...' : 'Simpan PIN'}
+              {submitting ? t('fin.common.saving') : t('fin.pin.savePin')}
             </Button>
           </div>
         </form>
@@ -221,8 +223,8 @@ export function PayslipPinDialog({
     <AppModal
       open={open}
       onClose={onClose}
-      title="Masukkan PIN Slip Gaji"
-      description="Nominal hanya dikirim server setelah PIN terverifikasi. Sesi buka berlaku 15 menit."
+      title={t('fin.pin.unlockTitle')}
+      description={t('fin.pin.unlockDescription')}
       maxWidth="max-w-md"
     >
       <form onSubmit={handleUnlock} className="space-y-5">
@@ -231,19 +233,19 @@ export function PayslipPinDialog({
             <LockKeyhole size={20} className="text-primary" />
           </span>
         </div>
-        <PinInput label="PIN (6 digit)" value={pin} onChange={setPin} autoFocus disabled={isLockedNow} />
+        <PinInput label={t('fin.pin.pinLabel')} value={pin} onChange={setPin} autoFocus disabled={isLockedNow} />
         {isLockedNow && lockedUntil && (
           <p className="rounded-field bg-danger-bg px-3.5 py-2.5 text-xs text-danger">
-            Terlalu banyak percobaan salah. Coba lagi setelah {formatDateTime(lockedUntil)}.
+            {t('fin.pin.lockedUntil', { time: formatDateTime(lockedUntil) })}
           </p>
         )}
         {error && <p className="text-xs font-medium text-danger">{error}</p>}
         <div className="flex justify-end gap-2.5">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Batal
+            {t('common.cancel')}
           </Button>
           <Button type="submit" size="sm" disabled={submitting || isLockedNow || pin.length !== PIN_LENGTH}>
-            {submitting ? 'Memverifikasi...' : 'Buka nominal'}
+            {submitting ? t('fin.pin.verifying') : t('fin.pin.unlockAction')}
           </Button>
         </div>
       </form>

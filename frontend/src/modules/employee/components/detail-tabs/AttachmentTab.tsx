@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select2, Select2Option } from '@/components/ui/select2';
 import { employeeService, EmployeeAttachment } from '@/services/employee.service';
 import { popup } from '@/stores/popup.store';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { formatDate } from '@/utils/format';
 import { cn } from '@/utils/cn';
 
@@ -24,15 +26,15 @@ const CATEGORIES = [
   'OTHER',
 ] as const;
 
-const CATEGORY_OPTIONS: Select2Option[] = CATEGORIES.map((c) => ({
-  value: c,
-  label: c.replace(/_/g, ' '),
-}));
-
-const CATEGORY_FILTER_OPTIONS: Select2Option[] = [
-  { value: '', label: 'All Categories' },
-  ...CATEGORY_OPTIONS,
-];
+const CATEGORY_LABEL_KEYS: Record<string, TranslationKey> = {
+  FAMILY: 'wf.attachment.category.family',
+  EDUCATION: 'wf.attachment.category.education',
+  EMERGENCY_CONTACT: 'wf.attachment.category.emergencyContact',
+  TRAINING: 'wf.attachment.category.training',
+  SKILL: 'wf.attachment.category.skill',
+  EXPERIENCE: 'wf.attachment.category.experience',
+  OTHER: 'wf.attachment.category.other',
+};
 
 const CATEGORY_COLORS: Record<string, string> = {
   FAMILY: 'bg-blue-100 text-blue-800',
@@ -43,10 +45,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   EXPERIENCE: 'bg-cyan-100 text-cyan-800',
   OTHER: 'bg-slate-100 text-slate-800',
 };
-
-function getCategoryLabel(category: string): string {
-  return category.replace(/_/g, ' ');
-}
 
 function getCategoryColor(category: string): string {
   return CATEGORY_COLORS[category] || CATEGORY_COLORS.OTHER;
@@ -82,6 +80,7 @@ interface AttachmentTabProps {
 }
 
 export function AttachmentTab({ employeeId }: AttachmentTabProps) {
+  const { t } = useI18n();
   const [data, setData] = useState<EmployeeAttachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -90,6 +89,21 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
   const [filterCategory, setFilterCategory] = useState('');
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+
+  const categoryOptions: Select2Option[] = CATEGORIES.map((category) => ({
+    value: category,
+    label: t(CATEGORY_LABEL_KEYS[category]),
+  }));
+
+  const categoryFilterOptions: Select2Option[] = [
+    { value: '', label: t('wf.attachment.allCategories') },
+    ...categoryOptions,
+  ];
+
+  function getCategoryLabel(category: string): string {
+    const labelKey = CATEGORY_LABEL_KEYS[category];
+    return labelKey ? t(labelKey) : category.replace(/_/g, ' ');
+  }
 
   // -----------------------------------------------------------------------
   // Data fetching
@@ -104,11 +118,11 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
       );
       setData(result);
     } catch {
-      toast.error('Gagal memuat data lampiran');
+      toast.error(t('wf.attachment.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [employeeId, filterCategory]);
+  }, [employeeId, filterCategory, t]);
 
   useEffect(() => {
     fetchData();
@@ -163,12 +177,12 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
 
   function validateForm(): boolean {
     const errors: Partial<Record<keyof FormState, string>> = {};
-    if (!form.category) errors.category = 'Kategori harus diisi';
-    if (!form.fileName.trim()) errors.fileName = 'Nama file harus diisi';
+    if (!form.category) errors.category = t('wf.attachment.validation.categoryRequired');
+    if (!form.fileName.trim()) errors.fileName = t('wf.attachment.validation.fileNameRequired');
     if (!form.fileUrl.trim()) {
-      errors.fileUrl = 'URL file harus diisi';
+      errors.fileUrl = t('wf.attachment.validation.fileUrlRequired');
     } else if (!/^https?:\/\/.+/.test(form.fileUrl.trim())) {
-      errors.fileUrl = 'URL tidak valid (harus http/https)';
+      errors.fileUrl = t('wf.attachment.validation.fileUrlInvalid');
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -193,16 +207,16 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
 
       if (editingItem) {
         await employeeService.updateAttachment(employeeId, editingItem.id, payload);
-        toast.success('Lampiran berhasil diperbarui');
+        toast.success(t('wf.attachment.toast.updateSuccess'));
       } else {
         await employeeService.createAttachment(employeeId, payload);
-        toast.success('Lampiran berhasil ditambahkan');
+        toast.success(t('wf.attachment.toast.createSuccess'));
       }
 
       closeDialog();
       await fetchData();
     } catch {
-      toast.error(editingItem ? 'Gagal memperbarui lampiran' : 'Gagal menambahkan lampiran');
+      toast.error(editingItem ? t('wf.attachment.toast.updateFailed') : t('wf.attachment.toast.createFailed'));
     } finally {
       setSaving(false);
     }
@@ -210,20 +224,20 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
 
   async function handleDelete(item: EmployeeAttachment) {
     const confirmed = await popup.confirm({
-      title: 'Hapus Lampiran',
-      description: `Lampiran ${item.fileName} akan dihapus dari profil employee dan tidak dapat dikembalikan.`,
-      confirmText: 'Hapus',
-      cancelText: 'Batal',
+      title: t('wf.attachment.confirm.title'),
+      description: t('wf.attachment.confirm.description', { name: item.fileName }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       intent: 'destructive',
     });
     if (!confirmed) return;
 
     try {
       await employeeService.deleteAttachment(employeeId, item.id);
-      toast.success('Lampiran berhasil dihapus');
+      toast.success(t('wf.attachment.toast.deleteSuccess'));
       await fetchData();
     } catch {
-      toast.error('Gagal menghapus lampiran');
+      toast.error(t('wf.attachment.toast.deleteFailed'));
     }
   }
 
@@ -257,19 +271,19 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
           <div className="flex items-center gap-3">
-            <h3 className="text-base font-semibold text-foreground">Lampiran</h3>
+            <h3 className="text-base font-semibold text-foreground">{t('wf.attachment.title')}</h3>
             <div className="w-44">
               <Select2
                 value={filterCategory}
                 onValueChange={setFilterCategory}
-                options={CATEGORY_FILTER_OPTIONS}
-                placeholder="Filter kategori"
+                options={categoryFilterOptions}
+                placeholder={t('wf.attachment.filterPlaceholder')}
               />
             </div>
           </div>
           <Button onClick={openAddDialog} size="sm">
             <Plus size={16} className="mr-1.5" />
-            Tambah Lampiran
+            {t('wf.attachment.add')}
           </Button>
         </div>
 
@@ -278,7 +292,7 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
           {data.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <Paperclip size={40} className="mb-3 opacity-40" />
-              <p className="text-sm">Belum ada lampiran</p>
+              <p className="text-sm">{t('wf.attachment.empty')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -306,14 +320,14 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
 
                     {item.originalName && (
                       <p className="truncate text-xs text-muted-foreground">
-                        Nama asli: {item.originalName}
+                        {t('wf.attachment.originalName', { name: item.originalName })}
                       </p>
                     )}
 
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      <span>Ukuran: {formatFileSize(item.fileSize)}</span>
+                      <span>{t('wf.attachment.size', { size: formatFileSize(item.fileSize) })}</span>
                       {item.createdAt && (
-                        <span>Ditambahkan: {formatDate(item.createdAt)}</span>
+                        <span>{t('wf.attachment.addedAt', { date: formatDate(item.createdAt) })}</span>
                       )}
                     </div>
 
@@ -327,7 +341,7 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      title="Download"
+                      title={t('wf.attachment.download')}
                       onClick={() => window.open(item.fileUrl, '_blank', 'noopener,noreferrer')}
                     >
                       <Download size={16} />
@@ -335,7 +349,7 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      title="Edit"
+                      title={t('common.edit')}
                       onClick={() => openEditDialog(item)}
                     >
                       <Pencil size={16} />
@@ -343,7 +357,7 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      title="Hapus"
+                      title={t('common.delete')}
                       onClick={() => handleDelete(item)}
                     >
                       <Trash2 size={16} className="text-destructive" />
@@ -365,7 +379,7 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
             {/* Modal header */}
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <h4 className="text-base font-semibold text-foreground">
-                {editingItem ? 'Edit Lampiran' : 'Tambah Lampiran'}
+                {editingItem ? t('wf.attachment.dialog.editTitle') : t('wf.attachment.dialog.addTitle')}
               </h4>
               <button
                 type="button"
@@ -373,7 +387,7 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
                 disabled={saving}
                 className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
               >
-                <span className="sr-only">Tutup</span>
+                <span className="sr-only">{t('wf.common.close')}</span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="18"
@@ -396,13 +410,13 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
               {/* Category */}
               <div className="space-y-1.5">
                 <Label htmlFor="attachment-category">
-                  Kategori <span className="text-destructive">*</span>
+                  {t('wf.common.category')} <span className="text-destructive">*</span>
                 </Label>
                 <Select2
                   value={form.category}
                   onValueChange={(val) => handleFormChange('category', val)}
-                  options={CATEGORY_OPTIONS}
-                  placeholder="Pilih kategori"
+                  options={categoryOptions}
+                  placeholder={t('wf.common.selectCategory')}
                 />
                 {formErrors.category && (
                   <p className="text-xs text-destructive">{formErrors.category}</p>
@@ -412,13 +426,13 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
               {/* fileName */}
               <div className="space-y-1.5">
                 <Label htmlFor="attachment-filename">
-                  Nama File <span className="text-destructive">*</span>
+                  {t('wf.attachment.fields.fileName')} <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="attachment-filename"
                   value={form.fileName}
                   onChange={(e) => handleFormChange('fileName', e.target.value)}
-                  placeholder="contoh: KTP.pdf"
+                  placeholder={t('wf.attachment.fields.fileNamePlaceholder')}
                 />
                 {formErrors.fileName && (
                   <p className="text-xs text-destructive">{formErrors.fileName}</p>
@@ -428,7 +442,7 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
               {/* fileUrl */}
               <div className="space-y-1.5">
                 <Label htmlFor="attachment-fileurl">
-                  URL File <span className="text-destructive">*</span>
+                  {t('wf.attachment.fields.fileUrl')} <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="attachment-fileurl"
@@ -444,23 +458,23 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
 
               {/* originalName */}
               <div className="space-y-1.5">
-                <Label htmlFor="attachment-originalname">Nama Asli</Label>
+                <Label htmlFor="attachment-originalname">{t('wf.attachment.fields.originalName')}</Label>
                 <Input
                   id="attachment-originalname"
                   value={form.originalName}
                   onChange={(e) => handleFormChange('originalName', e.target.value)}
-                  placeholder="Nama file saat diunggah"
+                  placeholder={t('wf.attachment.fields.originalNamePlaceholder')}
                 />
               </div>
 
               {/* description */}
               <div className="space-y-1.5">
-                <Label htmlFor="attachment-description">Deskripsi</Label>
+                <Label htmlFor="attachment-description">{t('wf.common.description')}</Label>
                 <textarea
                   id="attachment-description"
                   value={form.description}
                   onChange={(e) => handleFormChange('description', e.target.value)}
-                  placeholder="Deskripsi lampiran (opsional)"
+                  placeholder={t('wf.attachment.fields.descriptionPlaceholder')}
                   rows={3}
                   className={cn(
                     'flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors',
@@ -474,11 +488,11 @@ export function AttachmentTab({ employeeId }: AttachmentTabProps) {
             {/* Modal footer */}
             <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
               <Button variant="outline" onClick={closeDialog} disabled={saving}>
-                Batal
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleSave} disabled={saving}>
                 {saving && <Loader2 size={16} className="mr-1.5 animate-spin" />}
-                {editingItem ? 'Simpan Perubahan' : 'Tambah'}
+                {editingItem ? t('wf.common.saveChanges') : t('wf.common.add')}
               </Button>
             </div>
           </div>

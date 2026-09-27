@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import {
   Users,
   Plus,
@@ -26,29 +28,29 @@ import {
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 
-const RELATIONSHIP_OPTIONS = [
-  { value: 'SPOUSE', label: 'Suami/Istri' },
-  { value: 'CHILD', label: 'Anak' },
-  { value: 'PARENT', label: 'Orang Tua' },
-  { value: 'SIBLING', label: 'Saudara Kandung' },
-  { value: 'OTHER', label: 'Lainnya' },
+const RELATIONSHIP_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'SPOUSE', labelKey: 'wf.family.relationship.spouse' },
+  { value: 'CHILD', labelKey: 'wf.family.relationship.child' },
+  { value: 'PARENT', labelKey: 'wf.family.relationship.parent' },
+  { value: 'SIBLING', labelKey: 'wf.family.relationship.sibling' },
+  { value: 'OTHER', labelKey: 'wf.family.relationship.other' },
 ];
 
-const GENDER_OPTIONS = [
-  { value: 'MALE', label: 'Laki-laki' },
-  { value: 'FEMALE', label: 'Perempuan' },
+const GENDER_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'MALE', labelKey: 'wf.common.gender.male' },
+  { value: 'FEMALE', labelKey: 'wf.common.gender.female' },
 ];
 
-const YES_NO_OPTIONS = [
-  { value: 'yes', label: 'Ya' },
-  { value: 'no', label: 'Tidak' },
+const YES_NO_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'yes', labelKey: 'wf.common.yes' },
+  { value: 'no', labelKey: 'wf.common.no' },
 ];
 
-const MARITAL_STATUS_OPTIONS = [
-  { value: 'MARRIED', label: 'Kawin' },
-  { value: 'SINGLE', label: 'Belum Kawin' },
-  { value: 'DIVORCED', label: 'Cerai' },
-  { value: 'WIDOWED', label: 'Duda/Janda' },
+const MARITAL_STATUS_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'MARRIED', labelKey: 'wf.common.marital.married' },
+  { value: 'SINGLE', labelKey: 'wf.common.marital.single' },
+  { value: 'DIVORCED', labelKey: 'wf.common.marital.divorced' },
+  { value: 'WIDOWED', labelKey: 'wf.common.marital.widowed' },
 ];
 
 const EDUCATION_LEVEL_OPTIONS = [
@@ -173,6 +175,7 @@ interface FamilyTabProps {
 }
 
 export function FamilyTab({ employeeId }: FamilyTabProps) {
+  const { t } = useI18n();
   const [data, setData] = useState<EmployeeFamily[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -188,11 +191,11 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
       setData(result);
     } catch (error) {
       console.error('Failed to fetch families:', error);
-      toast.error('Gagal memuat data keluarga');
+      toast.error(t('wf.family.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [employeeId]);
+  }, [employeeId, t]);
 
   useEffect(() => {
     fetchData();
@@ -221,11 +224,11 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
     if (!employeeId) return;
 
     if (!form.fullName.trim()) {
-      toast.error('Nama lengkap harus diisi');
+      toast.error(t('wf.family.validation.nameRequired'));
       return;
     }
     if (!form.relationship) {
-      toast.error('Hubungan keluarga harus dipilih');
+      toast.error(t('wf.family.validation.relationshipRequired'));
       return;
     }
 
@@ -234,16 +237,16 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
       const payload = formToPayload(form);
       if (editingItem) {
         await employeeService.updateFamily(employeeId, editingItem.id, payload);
-        toast.success('Data keluarga berhasil diperbarui');
+        toast.success(t('wf.family.toast.updateSuccess'));
       } else {
         await employeeService.createFamily(employeeId, payload);
-        toast.success('Data keluarga berhasil ditambahkan');
+        toast.success(t('wf.family.toast.createSuccess'));
       }
       closeDialog();
       await fetchData();
     } catch (error) {
       console.error('Failed to save family:', error);
-      toast.error('Gagal menyimpan data keluarga');
+      toast.error(t('wf.family.toast.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -252,21 +255,21 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
   async function handleDelete(item: EmployeeFamily) {
     if (!employeeId) return;
     const confirmed = await popup.confirm({
-      title: 'Hapus Data Keluarga',
-      description: `Data keluarga ${item.fullName} akan dihapus dari profil employee.`,
-      confirmText: 'Hapus',
-      cancelText: 'Batal',
+      title: t('wf.family.confirm.title'),
+      description: t('wf.family.confirm.description', { name: item.fullName }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       intent: 'destructive',
     });
     if (!confirmed) return;
 
     try {
       await employeeService.deleteFamily(employeeId, item.id);
-      toast.success('Data keluarga berhasil dihapus');
+      toast.success(t('wf.family.toast.deleteSuccess'));
       await fetchData();
     } catch (error) {
       console.error('Failed to delete family:', error);
-      toast.error('Gagal menghapus data keluarga');
+      toast.error(t('wf.family.toast.deleteFailed'));
     }
   }
 
@@ -278,14 +281,14 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
         <div>
-          <h3 className="text-sm font-medium">Data Keluarga</h3>
+          <h3 className="text-sm font-medium">{t('wf.family.title')}</h3>
           <p className="text-xs text-muted-foreground">
-            Kelola data keluarga, pasangan, dan tanggungan.
+            {t('wf.family.subtitle')}
           </p>
         </div>
         <Button size="sm" onClick={openAddDialog}>
           <Plus size={16} className="mr-2" />
-          Tambah
+          {t('wf.common.add')}
         </Button>
       </div>
 
@@ -299,13 +302,13 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <Users size={24} className="text-muted-foreground" />
             </div>
-            <p className="text-sm font-medium text-muted-foreground">Belum ada data keluarga</p>
+            <p className="text-sm font-medium text-muted-foreground">{t('wf.family.empty.title')}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Tambahkan data pasangan, anak, atau anggota keluarga lainnya.
+              {t('wf.family.empty.hint')}
             </p>
             <Button size="sm" variant="outline" className="mt-4" onClick={openAddDialog}>
               <Plus size={16} className="mr-2" />
-              Tambah Keluarga
+              {t('wf.family.empty.add')}
             </Button>
           </div>
         ) : (
@@ -325,7 +328,10 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
                     <div>
                       <p className="text-sm font-medium">{item.fullName}</p>
                       <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                        {RELATIONSHIP_OPTIONS.find((o) => o.value === item.relationship)?.label || item.relationship}
+                        {(() => {
+                          const relationshipOption = RELATIONSHIP_OPTIONS.find((o) => o.value === item.relationship);
+                          return relationshipOption ? t(relationshipOption.labelKey) : item.relationship;
+                        })()}
                       </span>
                     </div>
                   </div>
@@ -341,7 +347,10 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
                     {item.gender && (
                       <div className="flex items-center gap-1.5 text-muted-foreground">
                         <UserRound size={12} />
-                        <span>{GENDER_OPTIONS.find((o) => o.value === item.gender)?.label || item.gender}</span>
+                        <span>{(() => {
+                          const genderOption = GENDER_OPTIONS.find((o) => o.value === item.gender);
+                          return genderOption ? t(genderOption.labelKey) : item.gender;
+                        })()}</span>
                       </div>
                     )}
                     {item.placeOfBirth && (
@@ -377,7 +386,10 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
                     {item.maritalStatus && (
                       <div className="flex items-center gap-1.5 text-muted-foreground">
                         <Heart size={12} />
-                        <span>{MARITAL_STATUS_OPTIONS.find((o) => o.value === item.maritalStatus)?.label || item.maritalStatus}</span>
+                        <span>{(() => {
+                          const maritalOption = MARITAL_STATUS_OPTIONS.find((o) => o.value === item.maritalStatus);
+                          return maritalOption ? t(maritalOption.labelKey) : item.maritalStatus;
+                        })()}</span>
                       </div>
                     )}
                     {item.educationLevel && (
@@ -389,13 +401,13 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
                     {item.isEmergencyContact && (
                       <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
                         <ShieldCheck size={12} />
-                        <span>Kontak Darurat</span>
+                        <span>{t('employees.detail.tabs.emergency.label')}</span>
                       </div>
                     )}
                     {item.isDependent && (
                       <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                         <HeartHandshake size={12} />
-                        <span>Tanggungan</span>
+                        <span>{t('wf.family.dependent')}</span>
                       </div>
                     )}
                   </div>
@@ -447,17 +459,17 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {editingItem ? 'Edit' : 'Tambah'} Data Keluarga
+                  {editingItem ? t('wf.family.dialog.editBadge') : t('wf.family.dialog.addBadge')}
                 </p>
                 <h3 className="mt-1 text-lg font-semibold">
-                  {editingItem ? `Edit: ${editingItem.fullName}` : 'Keluarga Baru'}
+                  {editingItem ? t('wf.family.dialog.editTitle', { name: editingItem.fullName }) : t('wf.family.dialog.newTitle')}
                 </h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Isi informasi anggota keluarga dengan lengkap.
+                  {t('wf.family.dialog.subtitle')}
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={closeDialog}>
-                Tutup
+                {t('wf.common.close')}
               </Button>
             </div>
 
@@ -467,12 +479,12 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
                 {/* fullName */}
                 <div className="md:col-span-2">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Nama Lengkap <span className="text-destructive">*</span>
+                    {t('wf.common.fullName')} <span className="text-destructive">*</span>
                   </label>
                   <Input
                     value={form.fullName}
                     onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                    placeholder="Nama lengkap anggota keluarga"
+                    placeholder={t('wf.family.fields.fullNamePlaceholder')}
                     required
                     className="h-10"
                   />
@@ -481,41 +493,41 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
                 {/* relationship */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Hubungan <span className="text-destructive">*</span>
+                    {t('wf.common.relationship')} <span className="text-destructive">*</span>
                   </label>
                   <Select2
                     value={form.relationship}
                     onValueChange={(value) => setForm((prev) => ({ ...prev, relationship: value }))}
-                    options={RELATIONSHIP_OPTIONS}
-                    placeholder="Pilih hubungan"
+                    options={RELATIONSHIP_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                    placeholder={t('wf.family.fields.selectRelationship')}
                   />
                 </div>
 
                 {/* idNumber */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">NIK / No. Identitas</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.family.fields.idNumber')}</label>
                   <Input
                     value={form.idNumber}
                     onChange={(e) => setForm((prev) => ({ ...prev, idNumber: e.target.value }))}
-                    placeholder="16 digit NIK"
+                    placeholder={t('wf.family.fields.idNumberPlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* placeOfBirth */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Tempat Lahir</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.family.fields.placeOfBirth')}</label>
                   <Input
                     value={form.placeOfBirth}
                     onChange={(e) => setForm((prev) => ({ ...prev, placeOfBirth: e.target.value }))}
-                    placeholder="Kota kelahiran"
+                    placeholder={t('wf.family.fields.placeOfBirthPlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* dateOfBirth */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Tanggal Lahir</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.family.fields.dateOfBirth')}</label>
                   <Input
                     type="date"
                     value={form.dateOfBirth}
@@ -526,40 +538,40 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
 
                 {/* gender */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Jenis Kelamin</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.family.fields.gender')}</label>
                   <Select2
                     value={form.gender}
                     onValueChange={(value) => setForm((prev) => ({ ...prev, gender: value }))}
-                    options={GENDER_OPTIONS}
-                    placeholder="Pilih jenis kelamin"
+                    options={GENDER_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                    placeholder={t('wf.family.fields.selectGender')}
                   />
                 </div>
 
                 {/* religion */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Agama</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('employees.detail.fields.religion')}</label>
                   <Input
                     value={form.religion}
                     onChange={(e) => setForm((prev) => ({ ...prev, religion: e.target.value }))}
-                    placeholder="Agama"
+                    placeholder={t('wf.family.fields.religionPlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* occupation */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Pekerjaan</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.family.fields.occupation')}</label>
                   <Input
                     value={form.occupation}
                     onChange={(e) => setForm((prev) => ({ ...prev, occupation: e.target.value }))}
-                    placeholder="Pekerjaan"
+                    placeholder={t('wf.family.fields.occupationPlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* phone */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">No. Telepon</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.common.phoneNumber')}</label>
                   <Input
                     value={form.phone}
                     onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
@@ -570,56 +582,56 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
 
                 {/* maritalStatus */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Status Perkawinan</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.family.fields.maritalStatus')}</label>
                   <Select2
                     value={form.maritalStatus}
                     onValueChange={(value) => setForm((prev) => ({ ...prev, maritalStatus: value }))}
-                    options={MARITAL_STATUS_OPTIONS}
-                    placeholder="Pilih status perkawinan"
+                    options={MARITAL_STATUS_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                    placeholder={t('wf.family.fields.selectMarital')}
                   />
                 </div>
 
                 {/* educationLevel */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Pendidikan</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.family.fields.education')}</label>
                   <Select2
                     value={form.educationLevel}
                     onValueChange={(value) => setForm((prev) => ({ ...prev, educationLevel: value }))}
                     options={EDUCATION_LEVEL_OPTIONS}
-                    placeholder="Pilih tingkat pendidikan"
+                    placeholder={t('wf.family.fields.selectEducation')}
                   />
                 </div>
 
                 {/* address */}
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Alamat</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('employees.detail.cards.address.title')}</label>
                   <textarea
                     value={form.address}
                     onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
                     className="h-20 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                    placeholder="Alamat lengkap"
+                    placeholder={t('wf.family.fields.addressPlaceholder')}
                   />
                 </div>
 
                 {/* isEmergencyContact */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Kontak Darurat</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('employees.detail.tabs.emergency.label')}</label>
                   <Select2
                     value={form.isEmergencyContact}
                     onValueChange={(value) => setForm((prev) => ({ ...prev, isEmergencyContact: value }))}
-                    options={YES_NO_OPTIONS}
-                    placeholder="Pilih"
+                    options={YES_NO_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                    placeholder={t('wf.common.select')}
                   />
                 </div>
 
                 {/* isDependent */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Tanggungan</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.family.dependent')}</label>
                   <Select2
                     value={form.isDependent}
                     onValueChange={(value) => setForm((prev) => ({ ...prev, isDependent: value }))}
-                    options={YES_NO_OPTIONS}
-                    placeholder="Pilih"
+                    options={YES_NO_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                    placeholder={t('wf.common.select')}
                   />
                 </div>
               </div>
@@ -627,7 +639,7 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
               {/* Footer */}
               <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-4">
                 <Button type="button" variant="outline" onClick={closeDialog}>
-                  Batal
+                  {t('common.cancel')}
                 </Button>
                 <Button type="submit" disabled={saving}>
                   {saving ? (
@@ -637,7 +649,7 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
                   ) : (
                     <Plus size={16} className="mr-2" />
                   )}
-                  {saving ? 'Menyimpan...' : editingItem ? 'Perbarui' : 'Simpan'}
+                  {saving ? t('wf.common.saving') : editingItem ? t('wf.common.update') : t('common.save')}
                 </Button>
               </div>
             </form>

@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import { LogIn, LogOut, Timer } from 'lucide-react';
 import type { DashboardSummary } from '@/services/reports.service';
 import type { MyAttendanceToday } from '@/services/attendance.service';
+import { useI18n } from '@/i18n/provider';
 import { DashCard, StatusChip, type ChipTone } from './shared';
 import { formatDuration } from './format';
 
@@ -18,6 +19,7 @@ interface StatStripProps {
 
 /** Strip 4 statistik perusahaan (baris paling atas dashboard). */
 export function StatStrip({ summary, companyName, labels }: StatStripProps) {
+  const { t } = useI18n();
   const items: Array<{
     label: string;
     value: number;
@@ -28,30 +30,30 @@ export function StatStrip({ summary, companyName, labels }: StatStripProps) {
     {
       label: labels.totalEmployees,
       value: summary.stats.totalEmployees,
-      tag: 'Aktif',
+      tag: t('common.active'),
       tone: 'primary',
-      sub: companyName || 'Semua unit',
+      sub: companyName || t('ops.dashboard.statStrip.allUnits'),
     },
     {
       label: labels.departments,
       value: summary.stats.totalDepartments,
-      tag: 'Struktur',
+      tag: t('ops.dashboard.statStrip.structure'),
       tone: 'neutral',
-      sub: 'Departemen aktif',
+      sub: t('ops.dashboard.statStrip.activeDepartments'),
     },
     {
       label: labels.presentToday,
       value: summary.stats.presentToday,
-      tag: 'Hari ini',
+      tag: t('ops.dashboard.statStrip.today'),
       tone: 'success',
-      sub: dayjs().locale('id').format('D MMM YYYY'),
+      sub: dayjs().format('D MMM YYYY'),
     },
     {
       label: labels.onLeave,
       value: summary.stats.onLeaveToday,
-      tag: 'Cuti',
+      tag: t('ops.dashboard.statStrip.leave'),
       tone: 'warning',
-      sub: 'Disetujui, sedang berjalan',
+      sub: t('ops.dashboard.statStrip.approvedOngoing'),
     },
   ];
 
@@ -75,6 +77,7 @@ export function StatStrip({ summary, companyName, labels }: StatStripProps) {
 
 /** Fallback untuk karyawan biasa: ringkasan absensi pribadi hari ini (Masuk / Pulang / Jam Kerja). */
 export function PersonalTodayCard({ today }: { today: MyAttendanceToday }) {
+  const { t } = useI18n();
   const record = today.record;
   const schedule = today.context?.schedule;
 
@@ -88,27 +91,27 @@ export function PersonalTodayCard({ today }: { today: MyAttendanceToday }) {
         : '—';
 
   const status: { label: string; tone: 'success' | 'warning' | 'neutral' } = record?.checkOut
-    ? { label: 'Selesai', tone: 'success' }
+    ? { label: t('ops.dashboard.statStrip.done'), tone: 'success' }
     : record?.checkIn
       ? record.lateMinutes
-        ? { label: `Telat ${record.lateMinutes}m`, tone: 'warning' }
-        : { label: 'Sedang bekerja', tone: 'success' }
-      : { label: 'Belum absen', tone: 'neutral' };
+        ? { label: t('ops.dashboard.statStrip.lateBy', { minutes: record.lateMinutes }), tone: 'warning' }
+        : { label: t('ops.dashboard.statStrip.working'), tone: 'success' }
+      : { label: t('ops.dashboard.statStrip.notCheckedIn'), tone: 'neutral' };
 
   const cells = [
-    { icon: LogIn, label: 'Masuk', value: checkIn },
-    { icon: LogOut, label: 'Pulang', value: checkOut },
-    { icon: Timer, label: 'Jam Kerja', value: duration },
+    { icon: LogIn, label: t('ops.dashboard.statStrip.checkIn'), value: checkIn },
+    { icon: LogOut, label: t('ops.dashboard.statStrip.checkOut'), value: checkOut },
+    { icon: Timer, label: t('ops.dashboard.statStrip.workHours'), value: duration },
   ];
 
   return (
     <DashCard className="rounded-[22px] p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <span className="text-[11.5px] text-muted-foreground">Absensi saya hari ini</span>
+          <span className="text-[11.5px] text-muted-foreground">{t('ops.dashboard.statStrip.myAttendanceToday')}</span>
           {schedule?.workStart && schedule.workEnd && (
             <p className="mt-0.5 text-[10.5px] text-muted-foreground">
-              Jadwal {schedule.workStart}–{schedule.workEnd}
+              {t('ops.dashboard.statStrip.schedule', { start: schedule.workStart, end: schedule.workEnd })}
             </p>
           )}
         </div>

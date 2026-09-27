@@ -12,6 +12,8 @@ import {
   CalendarDays, Plus, RefreshCw, Copy, Pencil, Trash2,
   Search, ChevronRight,
 } from 'lucide-react';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 // ─── Default work days: Mon–Fri ─────────────────────────
 const DEFAULT_WORK_DAYS: WorkDaysConfig = {
@@ -24,9 +26,9 @@ const DEFAULT_WORK_DAYS: WorkDaysConfig = {
   sun: { enabled: false, workStart: null, workEnd: null },
 };
 
-const DAY_LABELS: Record<WorkDayKey, string> = {
-  mon: 'Senin', tue: 'Selasa', wed: 'Rabu', thu: 'Kamis', fri: 'Jumat',
-  sat: 'Sabtu', sun: 'Minggu',
+const DAY_LABEL_KEYS: Record<WorkDayKey, TranslationKey> = {
+  mon: 'adm.day.mon', tue: 'adm.day.tue', wed: 'adm.day.wed', thu: 'adm.day.thu', fri: 'adm.day.fri',
+  sat: 'adm.day.sat', sun: 'adm.day.sun',
 };
 
 // ─── Modal Wrapper ──────────────────────────────────────
@@ -52,6 +54,8 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
   open: boolean; onClose: () => void; onConfirm: () => void;
   title: string; message: string;
 }) {
+  const { t } = useI18n();
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -61,8 +65,8 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">Delete</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">{t('common.delete')}</Button>
         </div>
       </div>
     </div>
@@ -75,6 +79,7 @@ function CalendarForm({ initial, onSave, onClose }: {
   onSave: (data: Partial<WorkCalendar>) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(initial?.name || '');
   const [year, setYear] = useState(initial?.year || dayjs().year());
   const [description, setDescription] = useState(initial?.description || '');
@@ -85,7 +90,7 @@ function CalendarForm({ initial, onSave, onClose }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return toast.error('Calendar name is required');
+    if (!name.trim()) return toast.error(t('adm.calendar.form.nameRequired'));
     setSaving(true);
     try {
       await onSave({ name: name.trim(), year, description: description.trim() || undefined, workDays });
@@ -120,19 +125,19 @@ function CalendarForm({ initial, onSave, onClose }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Calendar Name *</label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Standard Calendar" required />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.calendar.form.name')}</label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('adm.calendar.form.namePlaceholder')} required />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Year *</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.calendar.form.year')}</label>
         <Input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} min={2000} max={2100} required />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Work Days</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.calendar.form.workDays')}</label>
         <div className="space-y-2">
-          {(Object.keys(DAY_LABELS) as WorkDayKey[]).map((day) => (
+          {(Object.keys(DAY_LABEL_KEYS) as WorkDayKey[]).map((day) => (
             <div key={day} className="grid grid-cols-[110px,1fr,1fr] gap-2 items-center rounded-lg border border-border p-2.5">
               <button
                 type="button"
@@ -143,7 +148,7 @@ function CalendarForm({ initial, onSave, onClose }: {
                     : 'bg-background text-muted-foreground border-border hover:border-primary/50'
                 }`}
               >
-                {DAY_LABELS[day]}
+                {t(DAY_LABEL_KEYS[day])}
               </button>
               <Input
                 type="time"
@@ -161,24 +166,24 @@ function CalendarForm({ initial, onSave, onClose }: {
           ))}
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Cocok untuk HO, cabang, dan jadwal normal. Untuk shift bergilir, atur default di sini lalu override per tanggal di detail kalender.
+          {t('adm.calendar.form.workDaysHint')}
         </p>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Description (optional)</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.calendar.form.description')}</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. Standard company-wide work calendar"
+          placeholder={t('adm.calendar.form.descriptionPlaceholder')}
           rows={2}
           className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
         />
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('adm.common.saving') : t('common.save')}</Button>
       </div>
     </form>
   );
@@ -189,6 +194,7 @@ function CopyDialog({ open, onClose, onCopy, calendar }: {
   open: boolean; onClose: () => void; onCopy: (targetYear: number, name?: string) => Promise<void>;
   calendar: WorkCalendar | null;
 }) {
+  const { t } = useI18n();
   const [targetYear, setTargetYear] = useState(dayjs().year() + 1);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -214,23 +220,23 @@ function CopyDialog({ open, onClose, onCopy, calendar }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-border">
-          <h2 className="text-base font-semibold">Copy Calendar</h2>
+          <h2 className="text-base font-semibold">{t('adm.calendar.copy.title')}</h2>
         </div>
         <div className="p-5 space-y-4">
           <p className="text-sm text-muted-foreground">
-            Copy <strong>{calendar.name}</strong> ({calendar.year}) to:
+            {t('adm.calendar.copy.promptPrefix')} <strong>{calendar.name}</strong> ({calendar.year}) {t('adm.calendar.copy.promptSuffix')}
           </p>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Target Year *</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">{t('adm.calendar.copy.targetYear')}</label>
             <Input type="number" value={targetYear} onChange={(e) => setTargetYear(Number(e.target.value))} min={2000} max={2100} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">New Name (optional)</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={`Copy ${targetYear}`} />
+            <label className="block text-xs font-medium text-muted-foreground mb-1">{t('adm.calendar.copy.newName')}</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('adm.calendar.copy.namePlaceholder', { year: targetYear })} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-            <Button size="sm" onClick={handleCopy} disabled={saving}>{saving ? 'Copying...' : 'Copy'}</Button>
+            <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button size="sm" onClick={handleCopy} disabled={saving}>{saving ? t('adm.calendar.copy.copying') : t('adm.calendar.copy.copy')}</Button>
           </div>
         </div>
       </div>
@@ -240,6 +246,7 @@ function CopyDialog({ open, onClose, onCopy, calendar }: {
 
 // ─── Main Page ──────────────────────────────────────────
 export function WorkCalendarListPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [calendars, setCalendars] = useState<WorkCalendar[]>([]);
   const [loading, setLoading] = useState(true);
@@ -264,10 +271,11 @@ export function WorkCalendarListPage() {
       setCalendars(data);
     } catch (error) {
       console.error('Failed to fetch calendars:', error);
-      toast.error('Failed to load work calendars');
+      toast.error(t('adm.calendar.loadFailed'));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t hanya untuk pesan error; fetch mengikuti company aktif
   }, [companyId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -275,10 +283,10 @@ export function WorkCalendarListPage() {
   const handleCreate = async (data: Partial<WorkCalendar>) => {
     try {
       await workCalendarService.create({ ...data, companyId });
-      toast.success('Calendar created');
+      toast.success(t('adm.calendar.created'));
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to create calendar'));
+      toast.error(apiErrorMessage(err, t('adm.calendar.createFailed')));
       throw err;
     }
   };
@@ -287,10 +295,10 @@ export function WorkCalendarListPage() {
     if (!editingCalendar) return;
     try {
       await workCalendarService.update(editingCalendar.id, data);
-      toast.success('Calendar updated');
+      toast.success(t('adm.calendar.updated'));
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to update calendar'));
+      toast.error(apiErrorMessage(err, t('adm.calendar.updateFailed')));
       throw err;
     }
   };
@@ -299,11 +307,11 @@ export function WorkCalendarListPage() {
     if (!deletingCalendar) return;
     try {
       await workCalendarService.delete(deletingCalendar.id);
-      toast.success('Calendar deleted');
+      toast.success(t('adm.calendar.deleted'));
       setDeletingCalendar(null);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to delete calendar'));
+      toast.error(apiErrorMessage(err, t('adm.calendar.deleteFailed')));
     }
   };
 
@@ -311,11 +319,11 @@ export function WorkCalendarListPage() {
     if (!copyingCalendar) return;
     try {
       await workCalendarService.copyCalendar(copyingCalendar.id, targetYear, name);
-      toast.success(`Calendar copied to ${targetYear}`);
+      toast.success(t('adm.calendar.copiedTo', { year: targetYear }));
       setCopyingCalendar(null);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to copy calendar'));
+      toast.error(apiErrorMessage(err, t('adm.calendar.copyFailed')));
       throw err;
     }
   };
@@ -327,15 +335,15 @@ export function WorkCalendarListPage() {
   return (
     <div>
       <PageHeader
-        title="Work Calendar"
-        description="Manage company work calendars, working days, and holidays"
+        title={t('adm.calendar.title')}
+        description={t('adm.calendar.description')}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={fetchData}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+              <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={16} className="mr-2" /> New Calendar
+              <Plus size={16} className="mr-2" /> {t('adm.calendar.newCalendar')}
             </Button>
           </div>
         }
@@ -345,7 +353,7 @@ export function WorkCalendarListPage() {
       <div className="relative max-w-xs mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search calendars..."
+          placeholder={t('adm.calendar.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 h-9"
@@ -355,7 +363,7 @@ export function WorkCalendarListPage() {
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="text-sm text-muted-foreground">Loading calendars...</div>
+          <div className="text-sm text-muted-foreground">{t('adm.calendar.loading')}</div>
         </div>
       )}
 
@@ -364,11 +372,11 @@ export function WorkCalendarListPage() {
         <div className="flex flex-col items-center py-20 gap-3">
           <CalendarDays size={48} className="text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
-            {search ? 'No calendars match your search' : 'No work calendars yet'}
+            {search ? t('adm.calendar.emptySearch') : t('adm.calendar.emptyNone')}
           </p>
           {!search && (
             <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={16} className="mr-2" /> Create Calendar
+              <Plus size={16} className="mr-2" /> {t('adm.calendar.createCalendar')}
             </Button>
           )}
         </div>
@@ -390,7 +398,7 @@ export function WorkCalendarListPage() {
                     <h3 className="text-sm font-semibold flex items-center gap-2">
                       {cal.name}
                       {isCurrentYear && (
-                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">Current</span>
+                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{t('adm.calendar.currentBadge')}</span>
                       )}
                     </h3>
                     <p className="text-2xl font-bold text-muted-foreground mt-1">{cal.year}</p>
@@ -400,7 +408,7 @@ export function WorkCalendarListPage() {
 
                 {/* Work days summary */}
                 <div className="flex flex-wrap gap-1 mb-3">
-                  {(Object.keys(DAY_LABELS) as WorkDayKey[]).map((day) => {
+                  {(Object.keys(DAY_LABEL_KEYS) as WorkDayKey[]).map((day) => {
                     const wd = normalizeWorkDaysConfig(cal.workDays);
                     return (
                       <span
@@ -410,9 +418,9 @@ export function WorkCalendarListPage() {
                             ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                             : 'bg-gray-50 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
                         }`}
-                        title={wd[day].enabled ? `${wd[day].workStart || '--:--'} - ${wd[day].workEnd || '--:--'}` : 'Libur'}
+                        title={wd[day].enabled ? `${wd[day].workStart || '--:--'} - ${wd[day].workEnd || '--:--'}` : t('adm.calendar.offDay')}
                       >
-                        {DAY_LABELS[day].slice(0, 3)}
+                        {t(DAY_LABEL_KEYS[day]).slice(0, 3)}
                       </span>
                     );
                   })}
@@ -423,9 +431,9 @@ export function WorkCalendarListPage() {
                 )}
 
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{cal._count?.days ?? 0} days configured</span>
+                  <span>{t('adm.calendar.daysConfigured', { count: cal._count?.days ?? 0 })}</span>
                   <span className="flex items-center gap-1 text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                    Details <ChevronRight size={14} />
+                    {t('adm.calendar.details')} <ChevronRight size={14} />
                   </span>
                 </div>
 
@@ -434,21 +442,21 @@ export function WorkCalendarListPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingCalendar(cal); }}
                     className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title="Edit"
+                    title={t('common.edit')}
                   >
                     <Pencil size={15} />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setCopyingCalendar(cal); }}
                     className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title="Copy to year"
+                    title={t('adm.calendar.copyToYear')}
                   >
                     <Copy size={15} />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setDeletingCalendar(cal); }}
                     className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors ml-auto"
-                    title="Delete"
+                    title={t('common.delete')}
                   >
                     <Trash2 size={15} />
                   </button>
@@ -460,11 +468,11 @@ export function WorkCalendarListPage() {
       )}
 
       {/* Modals */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Work Calendar">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('adm.calendar.modal.createTitle')}>
         <CalendarForm onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
 
-      <Modal open={!!editingCalendar} onClose={() => setEditingCalendar(null)} title="Edit Calendar">
+      <Modal open={!!editingCalendar} onClose={() => setEditingCalendar(null)} title={t('adm.calendar.modal.editTitle')}>
         {editingCalendar && (
           <CalendarForm
             initial={editingCalendar}
@@ -478,8 +486,8 @@ export function WorkCalendarListPage() {
         open={!!deletingCalendar}
         onClose={() => setDeletingCalendar(null)}
         onConfirm={handleDelete}
-        title="Delete Calendar"
-        message={`Are you sure you want to delete "${deletingCalendar?.name}" (${deletingCalendar?.year})? This action cannot be undone.`}
+        title={t('adm.calendar.modal.deleteTitle')}
+        message={t('adm.calendar.modal.deleteMessage', { name: deletingCalendar?.name ?? '', year: deletingCalendar?.year ?? '' })}
       />
 
       <CopyDialog

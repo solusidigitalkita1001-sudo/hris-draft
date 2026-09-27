@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { formatCurrency, formatNumber } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 // ─── Types ──────────────────────────────────────────────
 type ReportTab = 'headcount' | 'attendance' | 'leave' | 'payroll' | 'turnover' | 'recruitment';
@@ -37,21 +39,21 @@ type ReportDataMap = {
   recruitment: RecruitmentReport;
 };
 
-interface TabConfig { key: ReportTab; label: string; icon: React.ReactNode }
+interface TabConfig { key: ReportTab; label: TranslationKey; icon: React.ReactNode }
 
 const TABS: TabConfig[] = [
-  { key: 'headcount', label: 'Headcount', icon: <Users size={16} /> },
-  { key: 'attendance', label: 'Attendance', icon: <Clock size={16} /> },
-  { key: 'leave', label: 'Leave', icon: <CalendarDays size={16} /> },
-  { key: 'payroll', label: 'Payroll', icon: <Banknote size={16} /> },
-  { key: 'turnover', label: 'Turnover', icon: <TrendingUp size={16} /> },
-  { key: 'recruitment', label: 'Recruitment', icon: <UserSquare2 size={16} /> },
+  { key: 'headcount', label: 'ops.reports.tabs.headcount', icon: <Users size={16} /> },
+  { key: 'attendance', label: 'ops.reports.tabs.attendance', icon: <Clock size={16} /> },
+  { key: 'leave', label: 'ops.reports.tabs.leave', icon: <CalendarDays size={16} /> },
+  { key: 'payroll', label: 'ops.reports.tabs.payroll', icon: <Banknote size={16} /> },
+  { key: 'turnover', label: 'ops.reports.tabs.turnover', icon: <TrendingUp size={16} /> },
+  { key: 'recruitment', label: 'ops.reports.tabs.recruitment', icon: <UserSquare2 size={16} /> },
 ];
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
-const STATUS_LABELS: Record<string, string> = {
-  PRESENT: 'Hadir', ABSENT: 'Absen', LATE: 'Terlambat', EXCUSED: 'Izin',
-  PENDING: 'Pending', APPROVED: 'Disetujui', REJECTED: 'Ditolak',
+const STATUS_LABELS: Record<string, TranslationKey> = {
+  PRESENT: 'ops.reports.status.present', ABSENT: 'ops.reports.status.absent', LATE: 'ops.reports.status.late', EXCUSED: 'ops.reports.status.excused',
+  PENDING: 'ops.reports.status.pending', APPROVED: 'ops.reports.status.approved', REJECTED: 'ops.reports.status.rejected',
 };
 
 // ─── CSV Export Helper ──────────────────────────────────
@@ -86,6 +88,7 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
 
 // ─── Main Component ─────────────────────────────────────
 export function ReportsPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const [activeTab, setActiveTab] = useState<ReportTab>('headcount');
   const [loading, setLoading] = useState(true);
@@ -135,13 +138,13 @@ export function ReportsPage() {
   // ─── Fetch Data ──────────────────────────────────────
   const fetchReport = useCallback(async (tab: ReportTab, force = false) => {
     if (!companyId) {
-      setError('companyId tidak tersedia');
+      setError(t('ops.reports.errors.noCompany'));
       setLoading(false);
       return;
     }
 
     if (dayjs(endDate).isBefore(dayjs(startDate), 'day')) {
-      setError('Tanggal tidak valid: endDate lebih kecil dari startDate');
+      setError(t('ops.reports.errors.invalidDateRange'));
       setLoading(false);
       return;
     }
@@ -182,11 +185,11 @@ export function ReportsPage() {
       setReportData((prev) => ({ ...prev, [tab]: data }));
       setLastFetchKeyByTab((prev) => ({ ...prev, [tab]: fetchKey }));
     } catch (e) {
-      setError(apiErrorMessage(e, 'Failed to load reports'));
+      setError(apiErrorMessage(e, t('ops.reports.errors.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [companyId, endDate, getFetchKey, lastFetchKeyByTab, periodId, reportData, startDate]);
+  }, [companyId, endDate, getFetchKey, lastFetchKeyByTab, periodId, reportData, startDate, t]);
 
   useEffect(() => {
     void fetchReport(activeTab);
@@ -206,29 +209,29 @@ export function ReportsPage() {
     switch (activeTab) {
       case 'headcount': {
         if (!headcountData) return;
-        const rows = [['Department', 'Count']];
+        const rows = [[t('ops.reports.columns.department'), t('ops.reports.columns.count')]];
         headcountData.byDepartment.forEach((d) => rows.push([d.departmentName, String(d.count)]));
         downloadCSV(rows, `headcount-${now.format('YYYY-MM')}.csv`);
         break;
       }
       case 'attendance': {
         if (!attendanceData) return;
-        const rows = [['Status', 'Count']];
-        attendanceData.byStatus.forEach((s) => rows.push([STATUS_LABELS[s.status] || s.status, String(s.count)]));
-        rows.push(['Terlambat', String(attendanceData.lateCount)]);
+        const rows = [[t('ops.reports.columns.status'), t('ops.reports.columns.count')]];
+        attendanceData.byStatus.forEach((s) => rows.push([STATUS_LABELS[s.status] ? t(STATUS_LABELS[s.status]) : s.status, String(s.count)]));
+        rows.push([t('ops.reports.status.late'), String(attendanceData.lateCount)]);
         downloadCSV(rows, `attendance-${now.format('YYYY-MM')}.csv`);
         break;
       }
       case 'leave': {
         if (!leaveData) return;
-        const rows = [['Leave Type', 'Requests', 'Total Days']];
+        const rows = [[t('ops.reports.columns.leaveType'), t('ops.reports.columns.requests'), t('ops.reports.columns.totalDays')]];
         leaveData.byType.forEach((t) => rows.push([t.leaveTypeName, String(t.count), String(t.totalDays)]));
         downloadCSV(rows, `leave-${now.format('YYYY-MM')}.csv`);
         break;
       }
       case 'payroll': {
         if (!payrollData) return;
-        const rows = [['Period', 'Employees', 'Earnings', 'Deductions', 'Net Pay']];
+        const rows = [[t('ops.reports.columns.period'), t('ops.reports.columns.employees'), t('ops.reports.columns.earnings'), t('ops.reports.columns.deductions'), t('ops.reports.columns.netPay')]];
         payrollData.runs.forEach((r) =>
           rows.push([r.name, String(r.totalEmployees), String(r.totalEarnings), String(r.totalDeductions), String(r.totalNetPay)])
         );
@@ -237,7 +240,7 @@ export function ReportsPage() {
       }
       case 'turnover': {
         if (!turnoverData) return;
-        const rows = [['Month', 'Hires', 'Resignations']];
+        const rows = [[t('ops.reports.columns.month'), t('ops.reports.columns.hires'), t('ops.reports.columns.resignations')]];
         turnoverData.monthly.forEach((m) =>
           rows.push([`${m.year}-${String(m.month).padStart(2, '0')}`, String(m.hires), String(m.resigns)])
         );
@@ -246,20 +249,20 @@ export function ReportsPage() {
       }
       case 'recruitment': {
         if (!recruitmentData) return;
-        const rows = [['Stage', 'Count']];
+        const rows = [[t('ops.reports.columns.stage'), t('ops.reports.columns.count')]];
         recruitmentData.byStage.forEach((s) => rows.push([s.stage, String(s.count)]));
         downloadCSV(rows, `recruitment-${now.format('YYYY-MM')}.csv`);
         break;
       }
     }
-  }, [activeTab, headcountData, attendanceData, leaveData, payrollData, turnoverData, recruitmentData, now]);
+  }, [activeTab, headcountData, attendanceData, leaveData, payrollData, turnoverData, recruitmentData, now, t]);
 
   // ─── Render ───────────────────────────────────────────
   return (
     <div>
       <PageHeader
-        title="Reports"
-        description="Custom reports and analytics"
+        title={t('ops.reports.title')}
+        description={t('ops.reports.description')}
         actions={
           <div className="flex items-center gap-2">
             <Input
@@ -280,19 +283,19 @@ export function ReportsPage() {
                   value={periodId}
                   onValueChange={setPeriodId}
                   options={[
-                    { value: '', label: 'All Periods' },
+                    { value: '', label: t('ops.reports.filters.allPeriods') },
                     ...payrollPeriods.map((p) => ({ value: p.id, label: `${p.name} • ${p.status}` })),
                   ]}
-                  placeholder="Filter period"
+                  placeholder={t('ops.reports.filters.periodPlaceholder')}
                   className="h-9 text-xs"
                 />
               </div>
             )}
             <Button variant="outline" size="sm" onClick={() => void fetchReport(activeTab, true)}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+              <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={exportCSV} disabled={loading || !activeTabData}>
-              <Download size={16} className="mr-2" /> Export CSV
+              <Download size={16} className="mr-2" /> {t('ops.reports.actions.exportCsv')}
             </Button>
           </div>
         }
@@ -310,7 +313,7 @@ export function ReportsPage() {
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {tab.icon} {tab.label}
+            {tab.icon} {t(tab.label)}
           </button>
         ))}
       </div>
@@ -323,13 +326,13 @@ export function ReportsPage() {
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="text-sm text-muted-foreground">Loading reports...</div>
+          <div className="text-sm text-muted-foreground">{t('ops.reports.loading')}</div>
         </div>
       )}
 
       {/* ─── Content ─────────────────────────────────── */}
       {!loading && !error && !activeTabData && (
-        <EmptyState icon={<BarChart3 size={40} />} message="Belum ada data untuk tab ini" />
+        <EmptyState icon={<BarChart3 size={40} />} message={t('ops.reports.empty.noTabData')} />
       )}
 
       {!loading && !error && activeTabData && (
@@ -338,17 +341,17 @@ export function ReportsPage() {
           {activeTab === 'headcount' && headcountData && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Total Employees" value={formatNumber(headcountData.total)} />
-                <StatCard label="Departments" value={formatNumber(headcountData.byDepartment.length)} />
+                <StatCard label={t('ops.reports.stats.totalEmployees')} value={formatNumber(headcountData.total)} />
+                <StatCard label={t('ops.reports.stats.departments')} value={formatNumber(headcountData.byDepartment.length)} />
                 {headcountData.byStatus.map((s) => (
-                  <StatCard key={s.status} label={`Status: ${s.status}`} value={formatNumber(s.count)} />
+                  <StatCard key={s.status} label={t('ops.reports.stats.statusLabel', { status: s.status })} value={formatNumber(s.count)} />
                 ))}
               </div>
               {headcountData.byDepartment.length === 0 ? (
-                <EmptyState icon={<BarChart3 size={40} />} message="No employee data available" />
+                <EmptyState icon={<BarChart3 size={40} />} message={t('ops.reports.empty.headcount')} />
               ) : (
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                  <h3 className="text-sm font-medium mb-4">Employees by Department</h3>
+                  <h3 className="text-sm font-medium mb-4">{t('ops.reports.charts.employeesByDepartment')}</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={headcountData.byDepartment}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -367,15 +370,15 @@ export function ReportsPage() {
           {activeTab === 'attendance' && attendanceData && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Total Records" value={formatNumber(attendanceData.total)} />
-                <StatCard label="Late Count" value={formatNumber(attendanceData.lateCount)} sub={`${attendanceData.lateRate}% late rate`} />
+                <StatCard label={t('ops.reports.stats.totalRecords')} value={formatNumber(attendanceData.total)} />
+                <StatCard label={t('ops.reports.stats.lateCount')} value={formatNumber(attendanceData.lateCount)} sub={t('ops.reports.stats.lateRate', { rate: attendanceData.lateRate })} />
               </div>
               {attendanceData.byStatus.length === 0 ? (
-                <EmptyState icon={<PieChartIcon size={40} />} message="No attendance data for this period" />
+                <EmptyState icon={<PieChartIcon size={40} />} message={t('ops.reports.empty.attendance')} />
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                    <h3 className="text-sm font-medium mb-4">Attendance Distribution</h3>
+                    <h3 className="text-sm font-medium mb-4">{t('ops.reports.charts.attendanceDistribution')}</h3>
                     <ResponsiveContainer width="100%" height={300}>
                       <PieChart>
                         <Pie
@@ -384,7 +387,7 @@ export function ReportsPage() {
                           nameKey="status"
                           cx="50%" cy="50%"
                           outerRadius={100}
-                          label={({ status, count }) => `${STATUS_LABELS[status] || status}: ${count}`}
+                          label={({ status, count }) => `${STATUS_LABELS[status] ? t(STATUS_LABELS[status]) : status}: ${count}`}
                         >
                           {attendanceData.byStatus.map((_, i: number) => (
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -395,13 +398,13 @@ export function ReportsPage() {
                     </ResponsiveContainer>
                   </div>
                   <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                    <h3 className="text-sm font-medium mb-4">Status Breakdown</h3>
+                    <h3 className="text-sm font-medium mb-4">{t('ops.reports.charts.statusBreakdown')}</h3>
                     <div className="space-y-3">
                       {attendanceData.byStatus.map((s, i: number) => (
                         <div key={s.status} className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                            <span className="text-sm">{STATUS_LABELS[s.status] || s.status}</span>
+                            <span className="text-sm">{STATUS_LABELS[s.status] ? t(STATUS_LABELS[s.status]) : s.status}</span>
                           </div>
                           <span className="text-sm font-medium">{formatNumber(s.count)}</span>
                         </div>
@@ -417,23 +420,23 @@ export function ReportsPage() {
           {activeTab === 'leave' && leaveData && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Total Requests" value={formatNumber(leaveData.totalRequests)} />
-                <StatCard label="Total Days" value={formatNumber(leaveData.totalDays)} />
-                <StatCard label="Departments" value={formatNumber(leaveData.byDepartmentCount)} />
+                <StatCard label={t('ops.reports.stats.totalRequests')} value={formatNumber(leaveData.totalRequests)} />
+                <StatCard label={t('ops.reports.stats.totalDays')} value={formatNumber(leaveData.totalDays)} />
+                <StatCard label={t('ops.reports.stats.departments')} value={formatNumber(leaveData.byDepartmentCount)} />
               </div>
               {leaveData.byType.length === 0 ? (
-                <EmptyState icon={<CalendarDays size={40} />} message="No leave data for this period" />
+                <EmptyState icon={<CalendarDays size={40} />} message={t('ops.reports.empty.leave')} />
               ) : (
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                  <h3 className="text-sm font-medium mb-4">Leave Usage by Type</h3>
+                  <h3 className="text-sm font-medium mb-4">{t('ops.reports.charts.leaveUsageByType')}</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={leaveData.byType}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="leaveTypeName" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip />
-                      <Bar dataKey="totalDays" fill="#10b981" radius={[4, 4, 0, 0]} name="Total Days" />
-                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Requests" />
+                      <Bar dataKey="totalDays" fill="#10b981" radius={[4, 4, 0, 0]} name={t('ops.reports.columns.totalDays')} />
+                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name={t('ops.reports.columns.requests')} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -445,26 +448,26 @@ export function ReportsPage() {
           {activeTab === 'payroll' && payrollData && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Total Earnings" value={formatCurrency(payrollData.summary.totalEarnings)} />
-                <StatCard label="Total Deductions" value={formatCurrency(payrollData.summary.totalDeductions)} />
-                <StatCard label="Total Net Pay" value={formatCurrency(payrollData.summary.totalNetPay)} />
-                <StatCard label="Total Employees" value={formatNumber(payrollData.summary.totalEmployees)} />
+                <StatCard label={t('ops.reports.stats.totalEarnings')} value={formatCurrency(payrollData.summary.totalEarnings)} />
+                <StatCard label={t('ops.reports.stats.totalDeductions')} value={formatCurrency(payrollData.summary.totalDeductions)} />
+                <StatCard label={t('ops.reports.stats.totalNetPay')} value={formatCurrency(payrollData.summary.totalNetPay)} />
+                <StatCard label={t('ops.reports.stats.totalEmployees')} value={formatNumber(payrollData.summary.totalEmployees)} />
               </div>
               {payrollData.runs.length === 0 ? (
-                <EmptyState icon={<Banknote size={40} />} message="No payroll data available" />
+                <EmptyState icon={<Banknote size={40} />} message={t('ops.reports.empty.payroll')} />
               ) : (
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                  <h3 className="text-sm font-medium mb-4">Payroll Runs</h3>
+                  <h3 className="text-sm font-medium mb-4">{t('ops.reports.charts.payrollRuns')}</h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border">
-                          <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground">Period</th>
-                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Employees</th>
-                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Earnings</th>
-                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Deductions</th>
-                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Net Pay</th>
-                          <th className="text-center py-2 px-3 text-xs font-medium text-muted-foreground">Status</th>
+                          <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground">{t('ops.reports.columns.period')}</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">{t('ops.reports.columns.employees')}</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">{t('ops.reports.columns.earnings')}</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">{t('ops.reports.columns.deductions')}</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">{t('ops.reports.columns.netPay')}</th>
+                          <th className="text-center py-2 px-3 text-xs font-medium text-muted-foreground">{t('ops.reports.columns.status')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -492,16 +495,16 @@ export function ReportsPage() {
           {activeTab === 'turnover' && turnoverData && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Total Active" value={formatNumber(turnoverData.totalActive)} />
-                <StatCard label="New Hires" value={formatNumber(turnoverData.newHires)} />
-                <StatCard label="Resignations" value={formatNumber(turnoverData.resignations)} />
-                <StatCard label="Turnover Rate" value={`${turnoverData.turnoverRate}%`} />
+                <StatCard label={t('ops.reports.stats.totalActive')} value={formatNumber(turnoverData.totalActive)} />
+                <StatCard label={t('ops.reports.stats.newHires')} value={formatNumber(turnoverData.newHires)} />
+                <StatCard label={t('ops.reports.stats.resignations')} value={formatNumber(turnoverData.resignations)} />
+                <StatCard label={t('ops.reports.stats.turnoverRate')} value={`${turnoverData.turnoverRate}%`} />
               </div>
               {turnoverData.monthly.length === 0 ? (
-                <EmptyState icon={<TrendingUp size={40} />} message="No turnover data for this period" />
+                <EmptyState icon={<TrendingUp size={40} />} message={t('ops.reports.empty.turnover')} />
               ) : (
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                  <h3 className="text-sm font-medium mb-4">Monthly Hires vs Resignations</h3>
+                  <h3 className="text-sm font-medium mb-4">{t('ops.reports.charts.monthlyHiresVsResignations')}</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart
                       data={turnoverData.monthly.map((m) => ({
@@ -515,8 +518,8 @@ export function ReportsPage() {
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="hires" stroke="#10b981" strokeWidth={2} name="New Hires" />
-                      <Line type="monotone" dataKey="resigns" stroke="#ef4444" strokeWidth={2} name="Resignations" />
+                      <Line type="monotone" dataKey="hires" stroke="#10b981" strokeWidth={2} name={t('ops.reports.stats.newHires')} />
+                      <Line type="monotone" dataKey="resigns" stroke="#ef4444" strokeWidth={2} name={t('ops.reports.stats.resignations')} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -528,15 +531,15 @@ export function ReportsPage() {
           {activeTab === 'recruitment' && recruitmentData && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Total Applications" value={formatNumber(recruitmentData.totalApplications)} />
-                <StatCard label="Active Postings" value={formatNumber(recruitmentData.totalPostings)} />
-                <StatCard label="Available Candidates" value={formatNumber(recruitmentData.totalCandidates)} />
+                <StatCard label={t('ops.reports.stats.totalApplications')} value={formatNumber(recruitmentData.totalApplications)} />
+                <StatCard label={t('ops.reports.stats.activePostings')} value={formatNumber(recruitmentData.totalPostings)} />
+                <StatCard label={t('ops.reports.stats.availableCandidates')} value={formatNumber(recruitmentData.totalCandidates)} />
               </div>
               {recruitmentData.byStage.length === 0 ? (
-                <EmptyState icon={<UserSquare2 size={40} />} message="No recruitment data for this period" />
+                <EmptyState icon={<UserSquare2 size={40} />} message={t('ops.reports.empty.recruitment')} />
               ) : (
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                  <h3 className="text-sm font-medium mb-4">Applications by Stage</h3>
+                  <h3 className="text-sm font-medium mb-4">{t('ops.reports.charts.applicationsByStage')}</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={recruitmentData.byStage}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />

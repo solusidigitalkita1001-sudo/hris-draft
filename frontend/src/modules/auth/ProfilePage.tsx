@@ -20,37 +20,48 @@ import { Input } from '@/components/ui/input';
 import { StatusChip, statusTone } from '@/components/shared/StatusChip';
 import { apiErrorMessage } from '@/lib/errors';
 import { formatDate, getInitials } from '@/utils/format';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 import {
   RefreshCw, Lock, CreditCard, KeyRound, ShieldCheck, FileText,
   Check, Download, ExternalLink, AlertTriangle,
 } from 'lucide-react';
 
+type Translate = (key: TranslationKey, params?: TranslationParams) => string;
+
 // ─── Label maps ─────────────────────────────────────────
-const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
-  PERMANENT: 'Karyawan tetap',
-  CONTRACT: 'Karyawan kontrak',
-  PROBATION: 'Masa percobaan',
-  INTERNSHIP: 'Magang',
-  FREELANCE: 'Freelance',
-  PART_TIME: 'Paruh waktu',
+const EMPLOYMENT_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  PERMANENT: 'ops.profile.employmentType.permanent',
+  CONTRACT: 'ops.profile.employmentType.contract',
+  PROBATION: 'ops.profile.employmentType.probation',
+  INTERNSHIP: 'ops.profile.employmentType.internship',
+  FREELANCE: 'ops.profile.employmentType.freelance',
+  PART_TIME: 'ops.profile.employmentType.partTime',
 };
 
-const EMPLOYEE_CATEGORY_LABELS: Record<string, string> = {
-  OFFICE: 'Kantor',
-  FACTORY: 'Pabrik',
-  FIELD: 'Lapangan',
-  REMOTE: 'Remote',
+const EMPLOYEE_CATEGORY_LABEL_KEYS: Record<string, TranslationKey> = {
+  OFFICE: 'ops.profile.category.office',
+  FACTORY: 'ops.profile.category.factory',
+  FIELD: 'ops.profile.category.field',
+  REMOTE: 'ops.profile.category.remote',
 };
 
-const CAREER_TYPE_LABELS: Record<string, string> = {
-  PROMOTION: 'Promosi',
-  DEMOTION: 'Demosi',
-  MUTATION: 'Mutasi',
-  TRANSFER: 'Transfer',
-  ROTATION: 'Rotasi',
-  ACTING_ASSIGNMENT: 'Penugasan Sementara',
-  STATUS_CHANGE: 'Perubahan Status',
+const CAREER_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  PROMOTION: 'ops.profile.careerType.promotion',
+  DEMOTION: 'ops.profile.careerType.demotion',
+  MUTATION: 'ops.profile.careerType.mutation',
+  TRANSFER: 'ops.profile.careerType.transfer',
+  ROTATION: 'ops.profile.careerType.rotation',
+  ACTING_ASSIGNMENT: 'ops.profile.careerType.actingAssignment',
+  STATUS_CHANGE: 'ops.profile.careerType.statusChange',
 };
+
+/** Melabeli kode enum lewat kamus, dengan fallback ke kode mentah dari server. */
+function labelFor(map: Record<string, TranslationKey>, code: string | null | undefined, t: Translate): string | null {
+  if (!code) return null;
+  const key = map[code];
+  return key ? t(key) : code;
+}
 
 type ProfileTab = 'overview' | 'payslip' | 'employment' | 'documents' | 'settings';
 
@@ -58,12 +69,12 @@ function payslipDate(p: MyPayslipSummary): string {
   return p.payrollRun?.period?.payDate || p.createdAt;
 }
 
-const TABS: { key: ProfileTab; label: string }[] = [
-  { key: 'overview', label: 'Ringkasan' },
-  { key: 'payslip', label: 'Slip Gaji' },
-  { key: 'employment', label: 'Kepegawaian' },
-  { key: 'documents', label: 'Dokumen' },
-  { key: 'settings', label: 'Pengaturan' },
+const TABS: { key: ProfileTab; labelKey: TranslationKey }[] = [
+  { key: 'overview', labelKey: 'ops.profile.tabs.overview' },
+  { key: 'payslip', labelKey: 'ops.profile.tabs.payslip' },
+  { key: 'employment', labelKey: 'ops.profile.tabs.employment' },
+  { key: 'documents', labelKey: 'ops.profile.tabs.documents' },
+  { key: 'settings', labelKey: 'ops.profile.tabs.settings' },
 ];
 
 // ─── Small presentational pieces ────────────────────────
@@ -295,6 +306,7 @@ function ChangePasswordCard({ mustChange }: { mustChange: boolean }) {
 // ─── Halaman utama ──────────────────────────────────────
 export function ProfilePage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { setUser } = useAuthStore();
   const [profile, setProfile] = useState<AuthUser | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -380,9 +392,7 @@ export function ProfilePage() {
   const employeeNumber = employee?.employeeNumber || reportingLine?.employee.employeeNumber || '';
   const positionName = employee?.position?.name || reportingLine?.employee.position?.name || '';
   const joinDate = employee?.joinDate || null;
-  const employmentTypeLabel = employee?.employmentType
-    ? (EMPLOYMENT_TYPE_LABELS[employee.employmentType] || employee.employmentType)
-    : null;
+  const employmentTypeLabel = labelFor(EMPLOYMENT_TYPE_LABEL_KEYS, employee?.employmentType, t);
 
   const tenure = useMemo(() => {
     if (!joinDate) return null;
@@ -516,20 +526,20 @@ export function ProfilePage() {
 
       {/* ── Tab ── */}
       <div className="mt-[18px] flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Bagian profil">
-        {TABS.map((t) => (
+        {TABS.map((item) => (
           <button
-            key={t.key}
+            key={item.key}
             type="button"
             role="tab"
-            aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
+            aria-selected={tab === item.key}
+            onClick={() => setTab(item.key)}
             className={`whitespace-nowrap border-b-2 px-[18px] py-3 text-[12.5px] transition-colors ${
-              tab === t.key
+              tab === item.key
                 ? 'border-primary font-medium text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {t.label}
+            {t(item.labelKey)}
           </button>
         ))}
       </div>
@@ -789,8 +799,8 @@ export function ProfilePage() {
                   {[
                     ['No. karyawan', employee.employeeNumber],
                     ['Status karyawan', employee.employmentStatus || '-'],
-                    ['Tipe kepegawaian', EMPLOYMENT_TYPE_LABELS[employee.employmentType] || employee.employmentType || '-'],
-                    ['Kategori', EMPLOYEE_CATEGORY_LABELS[employee.employeeCategory] || employee.employeeCategory || '-'],
+                    ['Tipe kepegawaian', labelFor(EMPLOYMENT_TYPE_LABEL_KEYS, employee.employmentType, t) || '-'],
+                    ['Kategori', labelFor(EMPLOYEE_CATEGORY_LABEL_KEYS, employee.employeeCategory, t) || '-'],
                     ['Tanggal bergabung', employee.joinDate ? formatDate(employee.joinDate) : '-'],
                     ['Departemen', employee.department?.name || '-'],
                     ['Posisi', employee.position?.name || '-'],
@@ -819,7 +829,7 @@ export function ProfilePage() {
                         </div>
                         <div className="min-w-0 flex-1 pb-5">
                           <p className="text-[12.5px] font-semibold text-foreground">
-                            {CAREER_TYPE_LABELS[c.transactionType] || c.transactionType}
+                            {labelFor(CAREER_TYPE_LABEL_KEYS, c.transactionType, t)}
                             {c.toPosition?.name ? ` — ${c.toPosition.name}` : ''}
                           </p>
                           <p className="mt-1 text-[11px] text-muted-foreground">

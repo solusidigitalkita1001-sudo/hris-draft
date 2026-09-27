@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Wallet, Percent, Pencil, Trash2 } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null;
@@ -43,6 +44,7 @@ function ConfirmDialog({
   title: string;
   message: string;
 }) {
+  const { t } = useI18n();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -55,8 +57,8 @@ function ConfirmDialog({
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">Delete</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">{t('common.delete')}</Button>
         </div>
       </div>
     </div>
@@ -72,6 +74,7 @@ function SalaryComponentForm({
   onSave: (data: Partial<SalaryComponent>) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(initial?.name || '');
   const [type, setType] = useState<SalaryComponent['type']>(initial?.type || 'ALLOWANCE');
   const [calculationMethod, setCalculationMethod] = useState<string>(initial?.calculationMethod || 'FIXED');
@@ -89,7 +92,7 @@ function SalaryComponentForm({
 
     const trimmedName = name.trim();
     if (!trimmedName) {
-      toast.error('Name wajib diisi');
+      toast.error(t('fin.salary.errNameRequired'));
       return;
     }
 
@@ -98,14 +101,14 @@ function SalaryComponentForm({
 
     if (calculationMethod === 'FIXED') {
       if (parsedAmount === undefined || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-        toast.error('Amount harus > 0 untuk FIXED');
+        toast.error(t('fin.salary.errAmountFixed'));
         return;
       }
     }
 
     if (calculationMethod === 'PERCENTAGE') {
       if (parsedRate === undefined || Number.isNaN(parsedRate) || parsedRate < 0 || parsedRate > 100) {
-        toast.error('Rate percent harus 0 - 100 untuk PERCENTAGE');
+        toast.error(t('fin.salary.errRatePercent'));
         return;
       }
     }
@@ -136,23 +139,23 @@ function SalaryComponentForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Name *</label>
+          <label className="text-sm font-medium">{t('fin.common.name')} *</label>
           <Input value={name} onChange={(event) => setName(event.target.value)} required />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Code</label>
+          <label className="text-sm font-medium">{t('fin.common.code')}</label>
           <Input
             value={initial?.code || ''}
             disabled
-            placeholder="Akan dibuat otomatis oleh sistem"
+            placeholder={t('fin.common.codeAutoPlaceholder')}
           />
-          <p className="text-xs text-muted-foreground">Code salary component digenerate sistem dan tidak bisa diedit manual.</p>
+          <p className="text-xs text-muted-foreground">{t('fin.salary.codeHint')}</p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Type *</label>
+          <label className="text-sm font-medium">{t('fin.common.type')} *</label>
           <Select2
             value={type}
             onValueChange={(value) => setType(value as SalaryComponent['type'])}
@@ -164,7 +167,7 @@ function SalaryComponentForm({
           />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Calculation Method *</label>
+          <label className="text-sm font-medium">{t('fin.salary.calcMethod')} *</label>
           <Select2
             value={calculationMethod}
             onValueChange={setCalculationMethod}
@@ -175,21 +178,21 @@ function SalaryComponentForm({
             className="h-9"
           />
           <p className="text-xs text-muted-foreground">
-            Metode dasar berlaku sebelum formula terjadwal. Setelah komponen disimpan, gunakan tombol Formula untuk membuat, menyimulasikan, dan memublikasikan versi.
+            {t('fin.salary.methodHint')}
           </p>
         </div>
       </div>
 
       {calculationMethod === 'FIXED' && (
         <div className="space-y-2">
-          <label className="text-sm font-medium">Amount *</label>
+          <label className="text-sm font-medium">{t('fin.common.amount')} *</label>
           <Input type="number" min={0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required />
         </div>
       )}
 
       {calculationMethod === 'PERCENTAGE' && (
         <div className="space-y-2">
-          <label className="text-sm font-medium">Rate Percent *</label>
+          <label className="text-sm font-medium">{t('fin.salary.ratePercent')} *</label>
           <Input type="number" min={0} max={100} step="0.01" value={ratePercent} onChange={(event) => setRatePercent(event.target.value)} required />
         </div>
       )}
@@ -197,32 +200,32 @@ function SalaryComponentForm({
       <div className="grid gap-4 md:grid-cols-3">
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isTaxable} onChange={(event) => setIsTaxable(event.target.checked)} />
-          Taxable
+          {t('fin.common.taxable')}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isProrated} onChange={(event) => setIsProrated(event.target.checked)} />
-          Prorated
+          {t('fin.salary.prorated')}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
-          Active
+          {t('common.active')}
         </label>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Sort Order</label>
+          <label className="text-sm font-medium">{t('fin.salary.sortOrder')}</label>
           <Input type="number" value={String(sortOrder)} onChange={(event) => setSortOrder(Number(event.target.value))} />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Description</label>
+          <label className="text-sm font-medium">{t('fin.common.description')}</label>
           <Input value={description} onChange={(event) => setDescription(event.target.value)} />
         </div>
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('fin.common.saving') : t('common.save')}</Button>
       </div>
     </form>
   );
@@ -236,6 +239,7 @@ export function SalaryComponentList() {
 }
 
 function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
+  const { t } = useI18n();
   const [components, setComponents] = useState<SalaryComponent[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -251,11 +255,11 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
       setComponents(data);
     } catch (error) {
       console.error('Failed to fetch salary components:', error);
-      toast.error('Gagal memuat salary components');
+      toast.error(t('fin.salary.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     fetchData();
@@ -269,17 +273,17 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
 
   const handleCreate = async (data: Partial<SalaryComponent>) => {
     if (!companyId) {
-      toast.error('companyId tidak tersedia. Silakan login ulang.');
+      toast.error(t('fin.common.companyMissing'));
       throw new Error('companyId missing');
     }
 
     try {
       await payrollService.createSalaryComponent({ ...data, companyId });
-      toast.success('Salary component created');
+      toast.success(t('fin.salary.created'));
       setShowCreate(false);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal membuat salary component'));
+      toast.error(apiErrorMessage(err, t('fin.salary.createFailed')));
       throw err;
     }
   };
@@ -288,11 +292,11 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
     if (!editing) return;
     try {
       await payrollService.updateSalaryComponent(editing.id, data);
-      toast.success('Salary component updated');
+      toast.success(t('fin.salary.updated'));
       setEditing(null);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal update salary component'));
+      toast.error(apiErrorMessage(err, t('fin.salary.updateFailed')));
       throw err;
     }
   };
@@ -301,28 +305,28 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
     if (!deleting) return;
     try {
       await payrollService.deleteSalaryComponent(deleting.id);
-      toast.success('Salary component deleted');
+      toast.success(t('fin.salary.deleted'));
       setDeleting(null);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal delete salary component'));
+      toast.error(apiErrorMessage(err, t('fin.salary.deleteFailed')));
     }
   };
 
   return (
     <div>
       <PageHeader
-        title="Salary Components"
-        description="Manage salary components such as allowances, deductions, and benefits"
+        title={t('fin.salary.title')}
+        description={t('fin.salary.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus size={16} className="mr-2" />
-              Add Component
+              {t('fin.salary.add')}
             </Button>
           </>
         }
@@ -333,7 +337,7 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
       <div className="relative mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search components..."
+          placeholder={t('fin.salary.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 h-9 max-w-xs"
@@ -344,27 +348,27 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
         <table className="w-full">
           <thead className="table-header">
             <tr>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Component</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Code</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Type</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Method</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Amount/Rate</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Taxable</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Active</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Actions</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.salary.colComponent')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.code')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.type')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.salary.colMethod')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.salary.colAmountRate')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.taxable')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('common.active')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-sm text-muted-foreground">Loading...</td>
+                <td colSpan={8} className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Wallet size={32} className="text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">No salary components found</p>
+                    <p className="text-sm text-muted-foreground">{t('fin.salary.empty')}</p>
                   </div>
                 </td>
               </tr>
@@ -399,7 +403,7 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center text-sm text-muted-foreground">{comp.calculationMethod}
-                    {comp.formulaVersions?.some(version => version.status === 'PUBLISHED') && <span className="block">Formula terjadwal</span>}
+                    {comp.formulaVersions?.some(version => version.status === 'PUBLISHED') && <span className="block">{t('fin.salary.formulaScheduled')}</span>}
                   </td>
                   <td className="px-4 py-3 text-right text-sm">
                     {comp.calculationMethod === 'PERCENTAGE'
@@ -414,7 +418,7 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
                         ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
                         : 'bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400'
                     }`}>
-                      {comp.isTaxable ? 'Yes' : 'No'}
+                      {comp.isTaxable ? t('fin.common.yes') : t('fin.common.no')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -423,17 +427,17 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
                         ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                         : 'bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400'
                     }`}>
-                      {comp.isActive ? 'Active' : 'Inactive'}
+                      {comp.isActive ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {!['BPJS-TK', 'BPJS-KES', 'PPH21', 'LOAN_DEDUCTION_AUTO', 'OVERTIME_EARNING_AUTO', 'LATE_DEDUCTION_AUTO', 'ABSENCE_DEDUCTION_AUTO', 'EWA-DEDUCT'].includes(comp.code) && <Button variant="outline" size="sm" onClick={() => setFormulaComponent(comp)} aria-label={`Kelola formula ${comp.name}`}>Formula</Button>}
+                      {!['BPJS-TK', 'BPJS-KES', 'PPH21', 'LOAN_DEDUCTION_AUTO', 'OVERTIME_EARNING_AUTO', 'LATE_DEDUCTION_AUTO', 'ABSENCE_DEDUCTION_AUTO', 'EWA-DEDUCT'].includes(comp.code) && <Button variant="outline" size="sm" onClick={() => setFormulaComponent(comp)} aria-label={t('fin.salary.manageFormulaAria', { name: comp.name })}>{t('fin.salary.formula')}</Button>}
                       <button
                         type="button"
                         onClick={() => setEditing(comp)}
                         className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
-                        title="Edit"
+                        title={t('common.edit')}
                       >
                         <Pencil size={15} />
                       </button>
@@ -441,7 +445,7 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
                         type="button"
                         onClick={() => setDeleting(comp)}
                         className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600"
-                        title="Delete"
+                        title={t('common.delete')}
                       >
                         <Trash2 size={15} />
                       </button>
@@ -454,11 +458,11 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
         </table>
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add Salary Component">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('fin.salary.addTitle')}>
         <SalaryComponentForm onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
 
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Salary Component">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={t('fin.salary.editTitle')}>
         {editing && <SalaryComponentForm initial={editing} onSave={handleUpdate} onClose={() => setEditing(null)} />}
       </Modal>
 
@@ -466,8 +470,8 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
         open={!!deleting}
         onClose={() => setDeleting(null)}
         onConfirm={handleDelete}
-        title="Delete Salary Component"
-        message={`Delete "${deleting?.name}"? This action cannot be undone.`}
+        title={t('fin.salary.deleteTitle')}
+        message={t('fin.salary.deleteConfirm', { name: deleting?.name ?? '' })}
       />
     </div>
   );

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
 import {
   documentManagementService,
   type DocumentCategory,
@@ -57,6 +58,7 @@ function UploadDialog({
   onClose: () => void;
   onUploaded: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [categoryId, setCategoryId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -84,28 +86,28 @@ function UploadDialog({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!companyId) {
-      toast.error('companyId tidak tersedia');
+      toast.error(t('ops.docs.upload.noCompany'));
       return;
     }
     if (!categoryId) {
-      toast.error('Pilih kategori dokumen');
+      toast.error(t('ops.docs.upload.categoryRequired'));
       return;
     }
     if (!title.trim()) {
-      toast.error('Judul dokumen wajib diisi');
+      toast.error(t('ops.docs.upload.titleRequired'));
       return;
     }
     if (!file) {
-      toast.error('File dokumen wajib dipilih');
+      toast.error(t('ops.docs.upload.fileRequired'));
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('Ukuran file maksimal 10MB');
+      toast.error(t('ops.docs.upload.fileTooLarge'));
       return;
     }
     if (ownerType === 'EMPLOYEE' && !employeeId.trim()) {
-      toast.error('employeeId wajib diisi untuk dokumen employee');
+      toast.error(t('ops.docs.upload.employeeIdRequired'));
       return;
     }
 
@@ -119,12 +121,12 @@ function UploadDialog({
       : undefined;
 
     if (expiresAt && expiresAtIso === null) {
-      toast.error('Format expiresAt tidak valid');
+      toast.error(t('ops.docs.upload.expiryInvalid'));
       return;
     }
 
     if (expiresAtIso === 'PAST') {
-      toast.error('expiresAt tidak boleh tanggal masa lalu');
+      toast.error(t('ops.docs.upload.expiryPast'));
       return;
     }
 
@@ -141,12 +143,12 @@ function UploadDialog({
         expiresAt: expiresAtIso || undefined,
         file,
       });
-      toast.success('Dokumen berhasil diupload');
+      toast.success(t('ops.docs.toast.uploaded'));
       await onUploaded();
       onClose();
     } catch (error) {
       console.error(error);
-      toast.error('Gagal upload dokumen');
+      toast.error(t('ops.docs.toast.uploadFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -159,95 +161,95 @@ function UploadDialog({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="border-b border-border px-5 py-4">
-          <h2 className="text-base font-semibold">Upload Dokumen</h2>
+          <h2 className="text-base font-semibold">{t('ops.docs.upload.title')}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Upload dokumen company atau employee untuk modul DMS dasar.
+            {t('ops.docs.upload.subtitle')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Kategori</label>
+              <label className="text-sm font-medium">{t('ops.docs.upload.category')}</label>
               <Select2
                 value={categoryId}
                 onValueChange={setCategoryId}
                 options={[
-                  { value: '', label: 'Pilih kategori' },
+                  { value: '', label: t('ops.docs.upload.categoryPlaceholder') },
                   ...categories.map((category) => ({
                     value: category.id,
                     label: category.name,
                   })),
                 ]}
-                placeholder="Pilih kategori"
+                placeholder={t('ops.docs.upload.categoryPlaceholder')}
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Owner Type</label>
+              <label className="text-sm font-medium">{t('ops.docs.upload.ownerType')}</label>
               <Select2
                 value={ownerType}
                 onValueChange={(value) => setOwnerType(value as 'EMPLOYEE' | 'COMPANY' | 'GROUP')}
                 options={[
-                  { value: 'COMPANY', label: 'Company' },
-                  { value: 'EMPLOYEE', label: 'Employee' },
-                  { value: 'GROUP', label: 'Group' },
+                  { value: 'COMPANY', label: t('ops.docs.upload.ownerCompany') },
+                  { value: 'EMPLOYEE', label: t('ops.docs.upload.ownerEmployee') },
+                  { value: 'GROUP', label: t('ops.docs.upload.ownerGroup') },
                 ]}
-                placeholder="Pilih owner type"
+                placeholder={t('ops.docs.upload.ownerTypePlaceholder')}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Judul Dokumen</label>
-            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Contoh: Kontrak Kerja Bambang" />
+            <label className="text-sm font-medium">{t('ops.docs.upload.docTitle')}</label>
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('ops.docs.upload.docTitlePlaceholder')} />
           </div>
 
           {ownerType === 'EMPLOYEE' && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Employee ID</label>
+              <label className="text-sm font-medium">{t('ops.docs.upload.employeeId')}</label>
               <Input
                 value={employeeId}
                 onChange={(event) => setEmployeeId(event.target.value)}
-                placeholder="Masukkan employeeId"
+                placeholder={t('ops.docs.upload.employeeIdPlaceholder')}
               />
             </div>
           )}
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Deskripsi</label>
+            <label className="text-sm font-medium">{t('ops.docs.upload.description')}</label>
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={3}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Catatan tambahan dokumen"
+              placeholder={t('ops.docs.upload.descriptionPlaceholder')}
             />
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Visibility</label>
+              <label className="text-sm font-medium">{t('ops.docs.upload.visibility')}</label>
               <Select2
                 value={visibility}
                 onValueChange={(value) => setVisibility(value as 'INTERNAL' | 'RESTRICTED' | 'PUBLIC')}
                 options={[
-                  { value: 'INTERNAL', label: 'Internal' },
-                  { value: 'RESTRICTED', label: 'Restricted' },
-                  { value: 'PUBLIC', label: 'Public' },
+                  { value: 'INTERNAL', label: t('ops.docs.upload.visibilityInternal') },
+                  { value: 'RESTRICTED', label: t('ops.docs.upload.visibilityRestricted') },
+                  { value: 'PUBLIC', label: t('ops.docs.upload.visibilityPublic') },
                 ]}
-                placeholder="Pilih visibility"
+                placeholder={t('ops.docs.upload.visibilityPlaceholder')}
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Expiry Date</label>
+              <label className="text-sm font-medium">{t('ops.docs.upload.expiryDate')}</label>
               <Input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">File</label>
+            <label className="text-sm font-medium">{t('ops.docs.upload.file')}</label>
             <Input
               type="file"
               onChange={(event) => setFile(event.target.files?.[0] || null)}
@@ -257,10 +259,10 @@ function UploadDialog({
 
           <div className="flex justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
-              Batal
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? 'Uploading...' : 'Upload'}
+              {submitting ? t('ops.docs.upload.uploading') : t('ops.docs.upload.submit')}
             </Button>
           </div>
         </form>

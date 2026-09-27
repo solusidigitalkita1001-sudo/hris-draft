@@ -4,21 +4,27 @@ import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/lib/errors';
 import { payrollPaymentService as service, paymentRequestKey, type PaymentBatch, type PaymentBatchStatus,
   type PaymentExport, type PaymentTransaction, type RecordPayment } from '@/services/payroll-payment.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 
-const labels: Record<PaymentBatchStatus | 'PENDING', string> = {
-  DRAFT: 'Belum diekspor', EXPORTED: 'File diekspor', PROCESSING: 'Sedang dicatat', PAID: 'Tercatat dibayar',
-  PARTIALLY_FAILED: 'Sebagian gagal', FAILED: 'Gagal', RECONCILED: 'Sudah direkonsiliasi', CANCELLED: 'Dibatalkan', PENDING: 'Belum dicatat',
+type Translate = (key: TranslationKey, params?: TranslationParams) => string;
+
+const labelKeys: Record<PaymentBatchStatus | 'PENDING', TranslationKey> = {
+  DRAFT: 'fin.pay.statusDraft', EXPORTED: 'fin.pay.statusExported', PROCESSING: 'fin.pay.statusProcessing', PAID: 'fin.pay.statusPaid',
+  PARTIALLY_FAILED: 'fin.pay.statusPartiallyFailed', FAILED: 'fin.pay.statusFailed', RECONCILED: 'fin.pay.statusReconciled',
+  CANCELLED: 'fin.pay.statusCancelled', PENDING: 'fin.pay.statusPending',
 };
 const money = (value: string) => new Intl.NumberFormat('id-ID', {
   style: 'currency', currency: 'IDR', minimumFractionDigits: 2,
 }).format(Number(value));
-function errorMessage(error: unknown) {
-  return apiErrorMessage(error, 'Data pembayaran belum berhasil diperbarui. Periksa koneksi lalu coba lagi.');
+function errorMessage(error: unknown, t: Translate) {
+  return apiErrorMessage(error, t('fin.pay.genericError'));
 }
 
 export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
   runId: string; runStatus: string; onReconciled: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const user = useAuthStore(state => state.user);
   const permitted = useAuthStore(state => state.hasPermission('payroll', 'process'));
   const canDisburse = useAuthStore(state => state.hasPermission('payroll', 'disburse'));
@@ -45,10 +51,10 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
     void service.forRun(runId, controller.signal).then(data => {
       if (!controller.signal.aborted) setBatch(data);
     }).catch(cause => {
-      if (!controller.signal.aborted) setError(errorMessage(cause));
+      if (!controller.signal.aborted) setError(errorMessage(cause, t));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { active.current = false; controller.abort(); };
-  }, [runId, reload, permitted]);
+  }, [runId, reload, permitted, t]);
 
   async function perform(action: string, payload: unknown, work: (key: string) => Promise<PaymentBatch>): Promise<boolean> {
     if (pending.current) return false;
@@ -61,10 +67,10 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
       if (!active.current) return false;
       setBatch(updated); setFiles([]); setConfirmation(null); setConfirmed(false);
       keys.current.delete(action);
-      setNotice('Data pembayaran tersimpan.');
+      setNotice(t('fin.pay.saved'));
       if (updated.status === 'RECONCILED') await onReconciled();
       return true;
-    } catch (cause) { if (active.current) setError(errorMessage(cause)); return false; }
+    } catch (cause) { if (active.current) setError(errorMessage(cause, t)); return false; }
     finally { pending.current = false; if (active.current) setBusy(false); }
   }
 
@@ -73,8 +79,8 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
     pending.current = true; setBusy(true); setError(null);
     try {
       const exported = await service.export(batch.id);
-      if (active.current) { setBatch(exported.batch); setFiles(exported.groups); setNotice('File siap diunduh. Belum ada pembayaran yang dikirim ke bank.'); }
-    } catch (cause) { if (active.current) setError(errorMessage(cause)); }
+      if (active.current) { setBatch(exported.batch); setFiles(exported.groups); setNotice(t('fin.pay.filesReady')); }
+    } catch (cause) { if (active.current) setError(errorMessage(cause, t)); }
     finally { pending.current = false; if (active.current) setBusy(false); }
   }
   function download(file: PaymentExport['groups'][number]) {
@@ -93,39 +99,39 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
 
   return <section aria-labelledby="payment-heading" className="mb-6 rounded-xl border border-border bg-background p-4 sm:p-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 id="payment-heading" className="text-lg font-semibold">Pembayaran payroll</h2>
-      {batch && <span className="text-sm font-medium">{labels[batch.status]}</span>}
+      <h2 id="payment-heading" className="text-lg font-semibold">{t('fin.pay.heading')}</h2>
+      {batch && <span className="text-sm font-medium">{t(labelKeys[batch.status])}</span>}
     </div>
-    <p className="mt-2 max-w-prose text-sm text-muted-foreground">Ekspor file untuk diproses melalui bank, lalu catat hasil setiap pembayaran. Payroll selesai setelah semua nominal cocok dan direkonsiliasi.</p>
-    {!permitted ? <p className="mt-4 text-sm">Akses proses payroll diperlukan untuk mengelola pembayaran.</p> : <>
+    <p className="mt-2 max-w-prose text-sm text-muted-foreground">{t('fin.pay.description')}</p>
+    {!permitted ? <p className="mt-4 text-sm">{t('fin.pay.needProcessPerm')}</p> : <>
       {error && <div role="alert" className="mt-4 text-sm text-destructive"><p>{error}</p>
-        <Button variant="outline" className="mt-2" disabled={busy} onClick={() => { setSelected(null); setFiles([]); setReload(value => value + 1); }}>Muat ulang pembayaran</Button>
+        <Button variant="outline" className="mt-2" disabled={busy} onClick={() => { setSelected(null); setFiles([]); setReload(value => value + 1); }}>{t('fin.pay.reload')}</Button>
       </div>}
-      <p role="status" className="mt-3 text-sm">{loading ? 'Memuat pembayaran…' : notice}</p>
+      <p role="status" className="mt-3 text-sm">{loading ? t('fin.pay.loading') : notice}</p>
       {!loading && !batch && !error && (runStatus === 'DISBURSED'
-        ? <p className="mt-3 text-sm">Payroll lama ini belum memiliki riwayat rekonsiliasi per transaksi.</p>
-        : <div className="mt-3 space-y-3"><p className="text-sm">Daftar pembayaran belum dibuat. Nominal dan rekening akan disimpan dari slip yang disetujui.</p>
-          <Button disabled={busy} onClick={() => void perform('create', { runId }, key => service.create(runId, key))}>{busy ? 'Menyimpan…' : 'Buat daftar pembayaran'}</Button></div>)}
+        ? <p className="mt-3 text-sm">{t('fin.pay.legacyNoHistory')}</p>
+        : <div className="mt-3 space-y-3"><p className="text-sm">{t('fin.pay.notCreated')}</p>
+          <Button disabled={busy} onClick={() => void perform('create', { runId }, key => service.create(runId, key))}>{busy ? t('fin.common.savingEllipsis') : t('fin.pay.createList')}</Button></div>)}
       {!loading && batch && <>
-        <p className="mt-3 text-sm font-medium tabular-nums">{batch.transactionCount} pegawai · {money(batch.totalAmount)}</p>
-        {checker && <p className="mt-3 text-sm text-muted-foreground">Pencatatan dan rekonsiliasi harus dilakukan pengguna selain pemberi persetujuan payroll.</p>}
-        {!canDisburse && <p className="mt-3 text-sm text-muted-foreground">Hak akses pencairan payroll diperlukan untuk mencatat hasil dan merekonsiliasi pembayaran.</p>}
+        <p className="mt-3 text-sm font-medium tabular-nums">{t('fin.pay.batchSummary', { count: batch.transactionCount, amount: money(batch.totalAmount) })}</p>
+        {checker && <p className="mt-3 text-sm text-muted-foreground">{t('fin.pay.checkerBlocked')}</p>}
+        {!canDisburse && <p className="mt-3 text-sm text-muted-foreground">{t('fin.pay.needDisbursePerm')}</p>}
         {!closed && !allPaid && <div className="mt-4 space-y-2">
-          <Button variant="outline" disabled={busy} onClick={() => void prepareFiles()}>{busy ? 'Memproses…' : 'Siapkan file bank'}</Button>
-          <p className="max-w-prose text-sm text-muted-foreground">Hanya transaksi yang belum tercatat dibayar masuk file. Cocokkan format dengan ketentuan bank dan periksa transaksi di bank sebelum mengirim ulang. File berisi rekening lengkap; simpan dengan akses terbatas.</p>
+          <Button variant="outline" disabled={busy} onClick={() => void prepareFiles()}>{busy ? t('fin.common.processingEllipsis') : t('fin.pay.prepareFiles')}</Button>
+          <p className="max-w-prose text-sm text-muted-foreground">{t('fin.pay.prepareHint')}</p>
         </div>}
         {files.length > 0 && <ul className="mt-3 space-y-2">{files.map(file => <li key={file.bankCode}>
-          <Button variant="link" className="h-auto whitespace-normal px-0 text-left" onClick={() => download(file)}>Unduh {file.bankName} · {file.employeeCount} pegawai · {money(file.totalAmount)}</Button>
+          <Button variant="link" className="h-auto whitespace-normal px-0 text-left" onClick={() => download(file)}>{t('fin.pay.downloadFile', { bank: file.bankName, count: file.employeeCount, amount: money(file.totalAmount) })}</Button>
         </li>)}</ul>}
-        <div className="mt-5 overflow-x-auto" tabIndex={0} role="region" aria-label="Daftar hasil pembayaran">
-          <table className="w-full min-w-[44rem] text-sm"><caption className="sr-only">Pembayaran per pegawai; rekening disamarkan</caption>
+        <div className="mt-5 overflow-x-auto" tabIndex={0} role="region" aria-label={t('fin.pay.tableAria')}>
+          <table className="w-full min-w-[44rem] text-sm"><caption className="sr-only">{t('fin.pay.tableCaption')}</caption>
             <thead><tr className="border-b border-border text-left">
-              <th scope="col" className="py-3 pr-4">Pegawai / rekening</th><th scope="col" className="p-3 text-right">Nominal</th><th scope="col" className="p-3">Hasil</th><th scope="col" className="py-3 pl-3">Tindakan</th>
+              <th scope="col" className="py-3 pr-4">{t('fin.pay.colEmployee')}</th><th scope="col" className="p-3 text-right">{t('fin.pay.colAmount')}</th><th scope="col" className="p-3">{t('fin.pay.colResult')}</th><th scope="col" className="py-3 pl-3">{t('fin.pay.colAction')}</th>
             </tr></thead><tbody>{batch.transactions.map(transaction => <tr key={transaction.id} className="border-b border-border last:border-0">
               <th scope="row" className="max-w-xs py-3 pr-4 text-left font-normal"><span className="block break-words font-medium">{transaction.employeeName}</span><span className="text-muted-foreground">{transaction.bankName} · {transaction.accountNumberMasked}<br />{transaction.accountHolderMasked}</span></th>
               <td className="whitespace-nowrap p-3 text-right tabular-nums">{money(transaction.expectedAmount)}</td>
-              <td className="max-w-xs break-words p-3">{labels[transaction.status]}{transaction.bankReferenceMasked && <span className="block text-muted-foreground">Ref. {transaction.bankReferenceMasked}</span>}{transaction.failureReason && <span className="block text-muted-foreground">{transaction.failureReason}</span>}</td>
-              <td className="py-3 pl-3">{canRecord && transaction.status !== 'PAID' ? <Button variant="outline" size="sm" disabled={busy} aria-label={`Catat hasil ${transaction.employeeName}`} onClick={() => setSelected(transaction.id)}>Catat hasil</Button> : <span className="text-muted-foreground">{transaction.status === 'PAID' ? 'Tersimpan' : '—'}</span>}</td>
+              <td className="max-w-xs break-words p-3">{t(labelKeys[transaction.status])}{transaction.bankReferenceMasked && <span className="block text-muted-foreground">{t('fin.pay.ref', { ref: transaction.bankReferenceMasked })}</span>}{transaction.failureReason && <span className="block text-muted-foreground">{transaction.failureReason}</span>}</td>
+              <td className="py-3 pl-3">{canRecord && transaction.status !== 'PAID' ? <Button variant="outline" size="sm" disabled={busy} aria-label={t('fin.pay.recordAria', { name: transaction.employeeName })} onClick={() => setSelected(transaction.id)}>{t('fin.pay.record')}</Button> : <span className="text-muted-foreground">{transaction.status === 'PAID' ? t('fin.pay.recorded') : '—'}</span>}</td>
             </tr>)}</tbody></table>
         </div>
         {current && canRecord && <PaymentForm key={current.id} transaction={current} busy={busy} onCancel={() => setSelected(null)} onSave={async data => {
@@ -133,13 +139,13 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
           if (saved) setSelected(null);
         }} />}
         {!closed && <div className="mt-5 flex flex-wrap gap-3">
-          {allPaid && canDisburse && !checker && <Button disabled={busy} onClick={() => { setConfirmation('reconcile'); setConfirmed(false); }}>Tinjau rekonsiliasi</Button>}
-          {!batch.transactions.some(transaction => transaction.status === 'PAID') && <Button variant="outline" disabled={busy} onClick={() => { setConfirmation('cancel'); setConfirmed(false); }}>Batalkan daftar</Button>}
+          {allPaid && canDisburse && !checker && <Button disabled={busy} onClick={() => { setConfirmation('reconcile'); setConfirmed(false); }}>{t('fin.pay.reviewReconcile')}</Button>}
+          {!batch.transactions.some(transaction => transaction.status === 'PAID') && <Button variant="outline" disabled={busy} onClick={() => { setConfirmation('cancel'); setConfirmed(false); }}>{t('fin.pay.cancelList')}</Button>}
         </div>}
         {confirmation && <div className="mt-4 space-y-3 border-t border-border pt-4">
-          <p className="max-w-prose text-sm">{confirmation === 'reconcile' ? 'Rekonsiliasi menyelesaikan payroll dan melunasi cicilan yang dipotong pada slip. Pastikan bukti bank sesuai seluruh catatan pembayaran.' : 'Pembatalan menutup daftar ini secara permanen. Pembayaran di bank harus dibatalkan melalui bank; aplikasi tidak mengirim perintah pembatalan.'}</p>
-          <label className="flex items-start gap-3 text-sm"><input className="mt-1 h-4 w-4" type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />{confirmation === 'reconcile' ? 'Saya sudah mencocokkan seluruh pembayaran dengan bukti bank.' : 'Saya memastikan belum ada pembayaran berhasil atau tertunda di bank.'}</label>
-          <div className="flex flex-wrap gap-3"><Button disabled={busy || !confirmed} variant={confirmation === 'cancel' ? 'destructive' : 'default'} onClick={() => void perform(confirmation, { id: batch.id }, key => confirmation === 'reconcile' ? service.reconcile(batch.id, key) : service.cancel(batch.id, key))}>{confirmation === 'reconcile' ? 'Rekonsiliasi pembayaran' : 'Konfirmasi pembatalan'}</Button><Button variant="ghost" disabled={busy} onClick={() => setConfirmation(null)}>Kembali</Button></div>
+          <p className="max-w-prose text-sm">{confirmation === 'reconcile' ? t('fin.pay.reconcileWarn') : t('fin.pay.cancelWarn')}</p>
+          <label className="flex items-start gap-3 text-sm"><input className="mt-1 h-4 w-4" type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />{confirmation === 'reconcile' ? t('fin.pay.reconcileConfirmLabel') : t('fin.pay.cancelConfirmLabel')}</label>
+          <div className="flex flex-wrap gap-3"><Button disabled={busy || !confirmed} variant={confirmation === 'cancel' ? 'destructive' : 'default'} onClick={() => void perform(confirmation, { id: batch.id }, key => confirmation === 'reconcile' ? service.reconcile(batch.id, key) : service.cancel(batch.id, key))}>{confirmation === 'reconcile' ? t('fin.pay.reconcileAction') : t('fin.pay.cancelAction')}</Button><Button variant="ghost" disabled={busy} onClick={() => setConfirmation(null)}>{t('fin.common.back')}</Button></div>
         </div>}
       </>}
     </>}
@@ -149,6 +155,7 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
 function PaymentForm({ transaction, busy, onCancel, onSave }: {
   transaction: PaymentTransaction; busy: boolean; onCancel: () => void; onSave: (data: RecordPayment) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<'PAID' | 'FAILED'>('PAID');
   const [amount, setAmount] = useState(transaction.expectedAmount);
   const [reference, setReference] = useState('');
@@ -161,12 +168,12 @@ function PaymentForm({ transaction, busy, onCancel, onSave }: {
   }
   const inputClass = 'mt-1 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
   return <form onSubmit={submit} className="mt-4 space-y-4 border-t border-border pt-4">
-    <h3 ref={heading} tabIndex={-1} className="break-words font-medium">Catat hasil: {transaction.employeeName}</h3>
-    <label className="block max-w-lg text-sm">Hasil pembayaran<select className={inputClass} disabled={busy} value={status} onChange={event => setStatus(event.target.value === 'PAID' ? 'PAID' : 'FAILED')}><option value="PAID">Sudah dibayar</option><option value="FAILED">Gagal dibayar</option></select></label>
+    <h3 ref={heading} tabIndex={-1} className="break-words font-medium">{t('fin.pay.recordHeading', { name: transaction.employeeName })}</h3>
+    <label className="block max-w-lg text-sm">{t('fin.pay.resultLabel')}<select className={inputClass} disabled={busy} value={status} onChange={event => setStatus(event.target.value === 'PAID' ? 'PAID' : 'FAILED')}><option value="PAID">{t('fin.pay.optPaid')}</option><option value="FAILED">{t('fin.pay.optFailed')}</option></select></label>
     {status === 'PAID' ? <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
-      <label className="block text-sm">Nominal pada bukti bank (IDR)<input className={inputClass} disabled={busy} inputMode="decimal" required pattern="(?:0|[1-9][0-9]{0,12})(?:\.[0-9]{1,2})?" value={amount} onChange={event => setAmount(event.target.value)} aria-describedby="payment-amount-hint" /><span id="payment-amount-hint" className="mt-1 block text-muted-foreground">Gunakan titik untuk desimal, tanpa pemisah ribuan.</span></label>
-      <label className="block text-sm">Referensi transaksi bank<input className={inputClass} disabled={busy} required maxLength={100} value={reference} onChange={event => setReference(event.target.value)} autoComplete="off" /></label>
-    </div> : <label className="block max-w-3xl text-sm">Alasan kegagalan<textarea className={inputClass} disabled={busy} required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></label>}
-    <div className="flex flex-wrap gap-3"><Button type="submit" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan hasil pembayaran'}</Button><Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>Tutup pencatatan</Button></div>
+      <label className="block text-sm">{t('fin.pay.amountLabel')}<input className={inputClass} disabled={busy} inputMode="decimal" required pattern="(?:0|[1-9][0-9]{0,12})(?:\.[0-9]{1,2})?" value={amount} onChange={event => setAmount(event.target.value)} aria-describedby="payment-amount-hint" /><span id="payment-amount-hint" className="mt-1 block text-muted-foreground">{t('fin.pay.amountHint')}</span></label>
+      <label className="block text-sm">{t('fin.pay.referenceLabel')}<input className={inputClass} disabled={busy} required maxLength={100} value={reference} onChange={event => setReference(event.target.value)} autoComplete="off" /></label>
+    </div> : <label className="block max-w-3xl text-sm">{t('fin.pay.failureReasonLabel')}<textarea className={inputClass} disabled={busy} required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></label>}
+    <div className="flex flex-wrap gap-3"><Button type="submit" disabled={busy}>{busy ? t('fin.common.savingEllipsis') : t('fin.pay.saveResult')}</Button><Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>{t('fin.pay.closeForm')}</Button></div>
   </form>;
 }

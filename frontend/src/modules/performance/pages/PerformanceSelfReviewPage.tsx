@@ -8,6 +8,21 @@ import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { CheckCircle2, RefreshCw, Save, Send } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.status.draft',
+  PUBLISHED: 'perf.status.published',
+  IN_PROGRESS: 'perf.status.inProgress',
+  SUBMITTED: 'perf.status.submitted',
+  APPROVED: 'perf.status.approved',
+  REJECTED: 'perf.status.rejected',
+  REVISION_REQUIRED: 'perf.status.revisionRequired',
+  COMPLETED: 'perf.status.completed',
+  REASSIGNED: 'perf.status.reassigned',
+  ARCHIVED: 'perf.status.archived',
+};
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -34,6 +49,7 @@ function formatDateTime(value?: string | null) {
 }
 
 export function PerformanceSelfReviewPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
 
@@ -90,11 +106,11 @@ export function PerformanceSelfReviewPage() {
       setFilterPeriodId((prev) => (prev && data.some((item) => item.periodId === prev) ? prev : nextPeriod));
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal memuat assignment self review'));
+      toast.error(apiErrorMessage(error, t('perf.selfReview.loadAssignmentsFailed')));
     } finally {
       setLoading(false);
     }
-  }, [companyId, selectedAssignmentId]);
+  }, [companyId, selectedAssignmentId, t]);
 
   const loadDetail = useCallback(async () => {
     if (!selectedAssignmentId) {
@@ -115,11 +131,11 @@ export function PerformanceSelfReviewPage() {
     } catch (error) {
       console.error(error);
       setDetail(null);
-      toast.error(apiErrorMessage(error, 'Gagal memuat detail assignment'));
+      toast.error(apiErrorMessage(error, t('perf.common.loadDetailFailed')));
     } finally {
       setDetailLoading(false);
     }
-  }, [selectedAssignmentId]);
+  }, [selectedAssignmentId, t]);
 
   useEffect(() => {
     void loadAssignments();
@@ -134,49 +150,49 @@ export function PerformanceSelfReviewPage() {
     setActing(true);
     try {
       await performanceService.updateExecutionTargetComment(targetId, comment || null);
-      toast.success('Self comment tersimpan');
+      toast.success(t('perf.selfReview.commentSaved'));
       await loadDetail();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menyimpan comment'));
+      toast.error(apiErrorMessage(error, t('perf.common.commentSaveFailed')));
     } finally {
       setActing(false);
     }
-  }, [draftComments, loadDetail]);
+  }, [draftComments, loadDetail, t]);
 
   const handleSubmit = useCallback(async () => {
     if (!detail) {
-      toast.error('Pilih assignment terlebih dahulu');
+      toast.error(t('perf.common.selectAssignmentFirst'));
       return;
     }
     setActing(true);
     try {
       await performanceService.submitPlanningAssignment(detail.id, { notes: submitNotes.trim() || undefined });
-      toast.success('Self review berhasil disubmit');
+      toast.success(t('perf.selfReview.submitSuccess'));
       setSubmitNotes('');
       await loadAssignments();
       await loadDetail();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal submit self review'));
+      toast.error(apiErrorMessage(error, t('perf.selfReview.submitFailed')));
     } finally {
       setActing(false);
     }
-  }, [detail, loadAssignments, loadDetail, submitNotes]);
+  }, [detail, loadAssignments, loadDetail, submitNotes, t]);
 
   if (loading) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>;
+    return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title="Performance Self Review"
-        description="Phase 4 (MVP): isi self comment per target dan submit ke reviewer."
+        title={t('perf.selfReview.title')}
+        description={t('perf.selfReview.description')}
         actions={(
           <Button variant="outline" size="sm" onClick={() => void loadAssignments()}>
             <RefreshCw size={16} className="mr-2" />
-            Refresh
+            {t('common.refresh')}
           </Button>
         )}
       />
@@ -184,26 +200,30 @@ export function PerformanceSelfReviewPage() {
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Filter Period</label>
+            <label className="text-sm font-medium">{t('perf.common.filterPeriod')}</label>
             <Select2
               value={filterPeriodId}
               onValueChange={setFilterPeriodId}
               options={periodOptions}
-              placeholder="Semua period"
+              placeholder={t('perf.common.allPeriods')}
             />
           </div>
           <div className="rounded-xl border border-border bg-background px-4 py-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">Assignments</p>
+              <p className="text-xs text-muted-foreground">{t('perf.selfReview.assignments')}</p>
               <CheckCircle2 size={16} className="text-muted-foreground" />
             </div>
             <p className="mt-2 text-sm font-semibold">{filteredAssignments.length}</p>
           </div>
           <div className="rounded-xl border border-border bg-background px-4 py-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">Selected Status</p>
+              <p className="text-xs text-muted-foreground">{t('perf.selfReview.selectedStatus')}</p>
               <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[selectedSummary?.status || 'DRAFT'] || STATUS_STYLES.DRAFT}`}>
-                {selectedSummary?.status || '-'}
+                {selectedSummary?.status
+                  ? STATUS_LABEL_KEYS[selectedSummary.status]
+                    ? t(STATUS_LABEL_KEYS[selectedSummary.status])
+                    : selectedSummary.status
+                  : '-'}
               </span>
             </div>
             <p className="mt-2 text-sm font-semibold">{selectedSummary?.period?.name || '-'}</p>
@@ -215,15 +235,15 @@ export function PerformanceSelfReviewPage() {
         <div className="rounded-xl border border-border bg-card p-5">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">My Assignments</h3>
-              <p className="text-xs text-muted-foreground">Pilih assignment untuk isi self review.</p>
+              <h3 className="text-sm font-semibold">{t('perf.selfReview.myAssignments')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.selfReview.myAssignmentsHint')}</p>
             </div>
-            <span className="text-xs text-muted-foreground">{filteredAssignments.length} item</span>
+            <span className="text-xs text-muted-foreground">{t('perf.common.itemCount', { count: filteredAssignments.length })}</span>
           </div>
           <div className="space-y-3">
             {filteredAssignments.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                Belum ada assignment execution untuk self review.
+                {t('perf.selfReview.emptyAssignments')}
               </div>
             ) : (
               filteredAssignments.map((item) => (
@@ -239,16 +259,16 @@ export function PerformanceSelfReviewPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold">{item.period?.name || 'Tanpa period'}</p>
+                      <p className="text-sm font-semibold">{item.period?.name || t('perf.selfReview.noPeriod')}</p>
                       <p className="text-xs text-muted-foreground">{item.period?.code || ''}</p>
                     </div>
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[item.status] || STATUS_STYLES.DRAFT}`}>
-                      {item.status}
+                      {STATUS_LABEL_KEYS[item.status] ? t(STATUS_LABEL_KEYS[item.status]) : item.status}
                     </span>
                   </div>
                   <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-                    <p>Reviewer: {item.reviewer?.fullName || '-'}</p>
-                    <p>Submitted: {formatDateTime(item.submittedAt)}</p>
+                    <p>{t('perf.common.reviewerLabel', { value: item.reviewer?.fullName || '-' })}</p>
+                    <p>{t('perf.common.submittedLabel', { value: formatDateTime(item.submittedAt) })}</p>
                   </div>
                 </button>
               ))
@@ -260,40 +280,40 @@ export function PerformanceSelfReviewPage() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Self Review Form</h3>
-                <p className="text-xs text-muted-foreground">Isi comment per target lalu submit.</p>
+                <h3 className="text-sm font-semibold">{t('perf.selfReview.formTitle')}</h3>
+                <p className="text-xs text-muted-foreground">{t('perf.selfReview.formHint')}</p>
               </div>
               {detail && (
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[detail.status] || STATUS_STYLES.DRAFT}`}>
-                  {detail.status}
+                  {STATUS_LABEL_KEYS[detail.status] ? t(STATUS_LABEL_KEYS[detail.status]) : detail.status}
                 </span>
               )}
             </div>
 
             {detailLoading ? (
               <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                Loading detail...
+                {t('perf.common.loadingDetail')}
               </div>
             ) : !detail ? (
               <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                Pilih assignment untuk mulai self review.
+                {t('perf.selfReview.selectAssignment')}
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="rounded-xl border border-border bg-background px-4 py-3">
                   <p className="text-sm font-semibold">{detail.employee.fullName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {detail.period?.name || '-'} • Reviewer {detail.reviewer?.fullName || '-'}
+                    {detail.period?.name || '-'} • {t('perf.selfReview.reviewerInline', { value: detail.reviewer?.fullName || '-' })}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Submitted {formatDateTime(detail.submittedAt)} • Reviewed {formatDateTime(detail.reviewedAt)}
+                    {t('perf.selfReview.submittedInline', { value: formatDateTime(detail.submittedAt) })} • {t('perf.selfReview.reviewedInline', { value: formatDateTime(detail.reviewedAt) })}
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   {detail.targets.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                      Belum ada target.
+                      {t('perf.selfReview.noTargets')}
                     </div>
                   ) : (
                     detail.targets.map((target) => (
@@ -302,22 +322,22 @@ export function PerformanceSelfReviewPage() {
                           <div>
                             <p className="text-sm font-semibold">{target.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {target.component?.name || 'Tanpa component'} • {target.indicator?.name || 'Tanpa indicator'}
+                              {target.component?.name || t('perf.common.noComponent')} • {target.indicator?.name || t('perf.common.noIndicator')}
                             </p>
                           </div>
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[target.status] || STATUS_STYLES.DRAFT}`}>
-                            {target.status}
+                            {STATUS_LABEL_KEYS[target.status] ? t(STATUS_LABEL_KEYS[target.status]) : target.status}
                           </span>
                         </div>
                         <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-                          <p>Target: {target.targetValue ?? target.targetText ?? '-'}</p>
-                          <p>Current: {target.currentValue ?? target.currentText ?? '-'}</p>
-                          <p>Progress: {target.progressPercent || 0}%</p>
+                          <p>{t('perf.common.targetLabel', { value: target.targetValue ?? target.targetText ?? '-' })}</p>
+                          <p>{t('perf.common.currentLabel', { value: target.currentValue ?? target.currentText ?? '-' })}</p>
+                          <p>{t('perf.selfReview.progressLabel', { value: target.progressPercent || 0 })}</p>
                         </div>
                         <textarea
                           value={draftComments[target.id] ?? ''}
                           onChange={(event) => setDraftComments((prev) => ({ ...prev, [target.id]: event.target.value }))}
-                          placeholder="Self comment"
+                          placeholder={t('perf.selfReview.selfCommentPlaceholder')}
                           className="mt-3 min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         />
                         <Button
@@ -328,7 +348,7 @@ export function PerformanceSelfReviewPage() {
                           disabled={acting}
                         >
                           <Save size={16} className="mr-2" />
-                          Simpan Comment
+                          {t('perf.common.saveComment')}
                         </Button>
                       </div>
                     ))
@@ -336,17 +356,17 @@ export function PerformanceSelfReviewPage() {
                 </div>
 
                 <div className="rounded-xl border border-border bg-background p-4">
-                  <p className="text-sm font-semibold">Submission Notes</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Optional catatan saat submit ke reviewer.</p>
+                  <p className="text-sm font-semibold">{t('perf.selfReview.submissionNotes')}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t('perf.selfReview.submissionNotesHint')}</p>
                   <Input
                     value={submitNotes}
                     onChange={(event) => setSubmitNotes(event.target.value)}
-                    placeholder="Catatan submit"
+                    placeholder={t('perf.selfReview.submitNotesPlaceholder')}
                     className="mt-3"
                   />
                   <Button size="sm" className="mt-3 w-full" onClick={() => void handleSubmit()} disabled={acting}>
                     <Send size={16} className="mr-2" />
-                    Submit Self Review
+                    {t('perf.selfReview.submitButton')}
                   </Button>
                 </div>
               </div>
