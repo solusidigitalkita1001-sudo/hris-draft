@@ -219,6 +219,51 @@ export class LeaveService {
     throw new BadRequestError(`Pengajuan cuti berstatus ${request.status} tidak dapat dibatalkan`);
   }
 
+  /**
+   * Memastikan saldo cuti mencukupi tanpa mengubah apa pun. Dipakai sebagai
+   * pra-syarat approve agar kegagalan saldo tidak menyisakan workflow yang
+   * sudah disetujui di atas dokumen yang masih menunggu.
+   */
+  async assertLeaveBalanceSufficient(leaveRequestId: string) {
+    const request = await prisma.leaveRequest.findFirst({
+      where: { id: leaveRequestId, deletedAt: null },
+      select: {
+        companyId: true,
+        employeeId: true,
+        leaveTypeId: true,
+        totalDays: true,
+        startDate: true,
+        status: true,
+        leaveType: { select: { name: true } },
+      },
+    });
+    if (!request) throw new NotFoundError('Leave request not found');
+    if (request.status === 'APPROVED') return;
+
+    const year = new Date(request.startDate).getFullYear();
+    const balance = await prisma.leaveBalance.findFirst({
+      where: {
+        companyId: request.companyId,
+        employeeId: request.employeeId,
+        leaveTypeId: request.leaveTypeId,
+        year,
+      },
+      select: { remainingDays: true },
+    });
+
+    const typeName = request.leaveType?.name ?? 'cuti';
+    if (!balance) {
+      throw new BadRequestError(
+        `Karyawan belum punya saldo ${typeName} untuk tahun ${year}. Minta HR menetapkan saldo sebelum menyetujui.`
+      );
+    }
+    if (Number(balance.remainingDays) < Number(request.totalDays)) {
+      throw new BadRequestError(
+        `Saldo ${typeName} tidak cukup: sisa ${balance.remainingDays} hari, diajukan ${request.totalDays} hari.`
+      );
+    }
+  }
+
   async finalizeApprovalEffects(leaveRequestId: string) {
     // Payroll lock: approving leave inside a reviewed/closed period would
     // change LEAVE_DAYS after the run consumed them.
@@ -322,6 +367,14 @@ export class LeaveService {
           `Self approval not allowed: you cannot ${action.action.toLowerCase()} your own leave request`
         );
       }
+    }
+
+    // Saldo divalidasi SEBELUM transisi engine. Bila dicek hanya saat
+    // finalisasi, transisi sudah ter-commit lebih dulu sehingga instance
+    // berakhir APPROVED sementara dokumennya tetap PENDING — dan langkah
+    // approval tidak bisa diulang, jadi pengajuan macet selamanya.
+    if (action.action === 'APPROVE') {
+      await this.assertLeaveBalanceSufficient(leaveRequestId);
     }
 
     const updatedInstance = await workflowEngineRepository.applyAction(
