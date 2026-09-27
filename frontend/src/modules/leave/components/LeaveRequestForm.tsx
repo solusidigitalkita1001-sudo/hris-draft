@@ -98,8 +98,11 @@ export function LeaveRequestForm({ companyId, employeeId, onSuccess, onClose }: 
         employeeId,
         companyId,
         leaveTypeId,
-        startDate: new Date(`${startDate}T00:00:00`).toISOString(),
-        endDate: new Date(`${endDate}T00:00:00`).toISOString(),
+        // Tanggal kalender dipatok ke UTC: `T00:00:00` tanpa zona diparse
+        // sebagai waktu lokal, sehingga di zona timur UTC tanggalnya mundur
+        // satu hari saat dikirim ke server.
+        startDate: new Date(`${startDate}T00:00:00Z`).toISOString(),
+        endDate: new Date(`${endDate}T00:00:00Z`).toISOString(),
         reason: reason.trim(),
         attachment: attachmentUrl,
       });

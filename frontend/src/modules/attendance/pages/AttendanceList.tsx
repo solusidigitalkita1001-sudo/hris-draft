@@ -54,8 +54,12 @@ function toIsoDateTime(date: string, time: string) {
   return new Date(`${date}T${time}:00`).toISOString();
 }
 
+/**
+ * Tanggal kalender (bukan momen): dipatok UTC supaya tidak mundur sehari di
+ * zona timur UTC. Jam check-in/out tetap lewat toIsoDateTime (waktu lokal).
+ */
 function toIsoDate(date: string) {
-  return new Date(`${date}T00:00:00`).toISOString();
+  return new Date(`${date}T00:00:00Z`).toISOString();
 }
 
 async function getCurrentLocation(messages: { unsupported: string; failed: string }) {
