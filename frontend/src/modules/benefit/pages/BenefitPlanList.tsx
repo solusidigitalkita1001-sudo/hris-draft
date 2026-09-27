@@ -246,7 +246,7 @@ export function BenefitPlanList() {
           <div className="col-span-full text-center py-12">
             <div className="flex flex-col items-center gap-2">
               <Heart size={32} className="text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No benefit plans found</p>
+              <p className="text-sm text-muted-foreground">{t('fin.benefit.empty')}</p>
             </div>
           </div>
         ) : (
@@ -259,7 +259,7 @@ export function BenefitPlanList() {
               <button
                 onClick={(e) => { e.stopPropagation(); setEditing(plan); }}
                 className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted text-muted-foreground hover:text-foreground"
-                title="Edit plan"
+                title={t('fin.benefit.editTooltip')}
               >
                 <Pencil size={14} />
               </button>
@@ -276,21 +276,21 @@ export function BenefitPlanList() {
 
               <div className="flex items-center gap-2 mb-3">
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400">
-                  {plan.type}
+                  {PLAN_TYPE_LABEL_KEYS[plan.type] ? t(PLAN_TYPE_LABEL_KEYS[plan.type]) : plan.type}
                 </span>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                   plan.isActive
                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                     : 'bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400'
                 }`}>
-                  {plan.isActive ? 'Active' : 'Inactive'}
+                  {plan.isActive ? t('common.active') : t('common.inactive')}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Users size={14} />
-                  <span>{plan._count?.enrollments || 0} enrolled</span>
+                  <span>{t('fin.benefit.enrolledCount', { count: plan._count?.enrollments || 0 })}</span>
                 </div>
                 <span>
                   {plan.employeeContribution}% / {plan.employerContribution}%
@@ -299,7 +299,7 @@ export function BenefitPlanList() {
 
               {plan.provider && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  Provider: {plan.provider}
+                  {t('fin.benefit.providerLine', { provider: plan.provider })}
                 </p>
               )}
             </div>
@@ -307,11 +307,11 @@ export function BenefitPlanList() {
         )}
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Benefit Plan">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('fin.benefit.createTitle')}>
         <BenefitPlanForm onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
 
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Benefit Plan">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={t('fin.benefit.editTitle')}>
         {editing && <BenefitPlanForm initial={editing} onSave={handleUpdate} onClose={() => setEditing(null)} />}
       </Modal>
     </div>

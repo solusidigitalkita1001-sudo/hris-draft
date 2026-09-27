@@ -780,7 +780,7 @@ export function PerformancePlanningPage() {
                       checked={targetForm.evidenceRequired}
                       onChange={(event) => setTargetForm((prev) => ({ ...prev, evidenceRequired: event.target.checked }))}
                     />
-                    {t('perf.planning.evidenceRequired')}
+                    {t('perf.common.evidenceRequired')}
                   </label>
                 </div>
                 <Input value={targetForm.description} onChange={(event) => setTargetForm((prev) => ({ ...prev, description: event.target.value }))} placeholder={t('perf.planning.descriptionPlaceholder')} />
