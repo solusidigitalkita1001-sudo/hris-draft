@@ -13,6 +13,21 @@ import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { CheckCircle2, Clock3, RefreshCw, Send, Target, Upload, Users, XCircle } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.status.draft',
+  PUBLISHED: 'perf.status.published',
+  IN_PROGRESS: 'perf.status.inProgress',
+  SUBMITTED: 'perf.status.submitted',
+  APPROVED: 'perf.status.approved',
+  REJECTED: 'perf.status.rejected',
+  REVISION_REQUIRED: 'perf.status.revisionRequired',
+  COMPLETED: 'perf.status.completed',
+  REASSIGNED: 'perf.status.reassigned',
+  ARCHIVED: 'perf.status.archived',
+};
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -53,6 +68,7 @@ function formatFileSize(size: number) {
 }
 
 export function PerformanceExecutionPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
 
@@ -110,11 +126,11 @@ export function PerformanceExecutionPage() {
       setApprovalQueue(data);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal memuat approval queue'));
+      toast.error(apiErrorMessage(error, t('perf.common.loadQueueFailed')));
     } finally {
       setQueueLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   const loadWorkspace = useCallback(async (periodId: string) => {
     if (!periodId) {
@@ -142,11 +158,11 @@ export function PerformanceExecutionPage() {
     } catch (error) {
       console.error(error);
       setWorkspace(null);
-      toast.error(apiErrorMessage(error, 'Gagal memuat execution workspace'));
+      toast.error(apiErrorMessage(error, t('perf.execution.loadWorkspaceFailed')));
     } finally {
       setWorkspaceLoading(false);
     }
-  }, [selectedAssignmentId, selectedTargetId]);
+  }, [selectedAssignmentId, selectedTargetId, t]);
 
   const loadBootstrap = useCallback(async () => {
     if (!companyId) {
@@ -180,11 +196,11 @@ export function PerformanceExecutionPage() {
       setSelectedPeriodId(nextPeriodId);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal memuat data execution performance'));
+      toast.error(apiErrorMessage(error, t('perf.execution.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [companyId, loadQueue, selectedPeriodId]);
+  }, [companyId, loadQueue, selectedPeriodId, t]);
 
   useEffect(() => {
     void loadBootstrap();
@@ -238,7 +254,7 @@ export function PerformanceExecutionPage() {
 
   const handleSaveProgress = useCallback(async () => {
     if (!selectedTarget || !selectedAssignment) {
-      toast.error('Pilih target terlebih dahulu');
+      toast.error(t('perf.execution.selectTargetFirst'));
       return;
     }
 
@@ -250,48 +266,48 @@ export function PerformanceExecutionPage() {
         currentText: progressForm.currentText.trim() || undefined,
         note: progressForm.note.trim() || undefined,
       });
-      toast.success('Progress execution berhasil disimpan');
+      toast.success(t('perf.execution.progressSaved'));
       await refreshAll();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menyimpan progress'));
+      toast.error(apiErrorMessage(error, t('perf.execution.progressSaveFailed')));
     } finally {
       setSavingProgress(false);
     }
-  }, [progressForm, refreshAll, selectedAssignment, selectedTarget]);
+  }, [progressForm, refreshAll, selectedAssignment, selectedTarget, t]);
 
   const handleUploadEvidence = useCallback(async () => {
     if (!selectedTarget) {
-      toast.error('Pilih target terlebih dahulu');
+      toast.error(t('perf.execution.selectTargetFirst'));
       return;
     }
 
     if (!evidenceFile) {
-      toast.error('Pilih file evidence');
+      toast.error(t('perf.execution.selectEvidenceFile'));
       return;
     }
 
     setUploadingEvidence(true);
     try {
       await performanceService.uploadPlanningEvidence(selectedTarget.id, evidenceFile, evidenceNotes.trim() || undefined);
-      toast.success('Evidence berhasil diupload');
+      toast.success(t('perf.execution.evidenceUploaded'));
       setEvidenceFile(null);
       setEvidenceNotes('');
       await refreshAll();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal upload evidence'));
+      toast.error(apiErrorMessage(error, t('perf.execution.evidenceUploadFailed')));
     } finally {
       setUploadingEvidence(false);
     }
-  }, [evidenceFile, evidenceNotes, refreshAll, selectedTarget]);
+  }, [evidenceFile, evidenceNotes, refreshAll, selectedTarget, t]);
 
   const runAssignmentAction = useCallback(async (
     action: 'submit' | 'approve' | 'reject' | 'revision' | 'complete',
     successMessage: string
   ) => {
     if (!selectedAssignment) {
-      toast.error('Pilih assignment terlebih dahulu');
+      toast.error(t('perf.common.selectAssignmentFirst'));
       return;
     }
 
@@ -308,26 +324,26 @@ export function PerformanceExecutionPage() {
       await refreshAll();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Aksi execution gagal diproses'));
+      toast.error(apiErrorMessage(error, t('perf.execution.actionFailed')));
     } finally {
       setActing(false);
     }
-  }, [actionNotes, refreshAll, selectedAssignment]);
+  }, [actionNotes, refreshAll, selectedAssignment, t]);
 
   if (loading) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>;
+    return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title="Performance Execution"
-        description="Workspace Phase 3 untuk progress update, evidence upload, submit lifecycle, dan approver queue."
+        title={t('perf.execution.title')}
+        description={t('perf.execution.description')}
         actions={(
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => void loadBootstrap()}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
           </div>
         )}
@@ -336,17 +352,17 @@ export function PerformanceExecutionPage() {
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="grid gap-4 lg:grid-cols-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Execution Period</label>
+            <label className="text-sm font-medium">{t('perf.execution.periodLabel')}</label>
             <Select2
               value={selectedPeriodId}
               onValueChange={setSelectedPeriodId}
               options={periodOptions}
-              placeholder="Pilih period execution"
+              placeholder={t('perf.execution.periodPlaceholder')}
             />
           </div>
-          <StatCard label="Planning Published" value={formatDateTime(workspace?.planningPublishedAt)} icon={<Clock3 size={16} />} />
-          <StatCard label="Assignments" value={workspace?.planningAssignments.length || 0} icon={<Users size={16} />} />
-          <StatCard label="Approval Queue" value={filteredQueue.length} icon={<CheckCircle2 size={16} />} />
+          <StatCard label={t('perf.execution.stats.planningPublished')} value={formatDateTime(workspace?.planningPublishedAt)} icon={<Clock3 size={16} />} />
+          <StatCard label={t('perf.execution.stats.assignments')} value={workspace?.planningAssignments.length || 0} icon={<Users size={16} />} />
+          <StatCard label={t('perf.common.approvalQueue')} value={filteredQueue.length} icon={<CheckCircle2 size={16} />} />
         </div>
       </div>
 
@@ -355,19 +371,19 @@ export function PerformanceExecutionPage() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Assignment Execution</h3>
-                <p className="text-xs text-muted-foreground">Pilih employee assignment yang sedang berjalan.</p>
+                <h3 className="text-sm font-semibold">{t('perf.execution.assignmentListTitle')}</h3>
+                <p className="text-xs text-muted-foreground">{t('perf.execution.assignmentListHint')}</p>
               </div>
-              <span className="text-xs text-muted-foreground">{workspace?.planningAssignments.length || 0} item</span>
+              <span className="text-xs text-muted-foreground">{t('perf.common.itemCount', { count: workspace?.planningAssignments.length || 0 })}</span>
             </div>
             <div className="space-y-3">
               {workspaceLoading ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  Loading workspace...
+                  {t('perf.execution.loadingWorkspace')}
                 </div>
               ) : !workspace?.planningAssignments.length ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  Belum ada assignment execution untuk period ini.
+                  {t('perf.execution.emptyAssignments')}
                 </div>
               ) : (
                 workspace.planningAssignments.map((assignment) => (
@@ -387,13 +403,13 @@ export function PerformanceExecutionPage() {
                         <p className="text-xs text-muted-foreground">{assignment.employee.employeeNumber}</p>
                       </div>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[assignment.status] || STATUS_STYLES.DRAFT}`}>
-                        {assignment.status}
+                        {STATUS_LABEL_KEYS[assignment.status] ? t(STATUS_LABEL_KEYS[assignment.status]) : assignment.status}
                       </span>
                     </div>
                     <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-                      <p>Reviewer: {assignment.reviewer?.fullName || '-'}</p>
-                      <p>Approver: {assignment.approver?.fullName || '-'}</p>
-                      <p>Submitted: {formatDateTime(assignment.submittedAt)}</p>
+                      <p>{t('perf.common.reviewerLabel', { value: assignment.reviewer?.fullName || '-' })}</p>
+                      <p>{t('perf.common.approverLabel', { value: assignment.approver?.fullName || '-' })}</p>
+                      <p>{t('perf.common.submittedLabel', { value: formatDateTime(assignment.submittedAt) })}</p>
                     </div>
                   </button>
                 ))
@@ -403,17 +419,17 @@ export function PerformanceExecutionPage() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Approver Queue</h3>
-              <p className="text-xs text-muted-foreground">List assignment submitted yang menunggu keputusan approver.</p>
+              <h3 className="text-sm font-semibold">{t('perf.execution.approverQueueTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.execution.approverQueueHint')}</p>
             </div>
             <div className="space-y-3">
               {queueLoading ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  Loading queue...
+                  {t('perf.execution.loadingQueue')}
                 </div>
               ) : !filteredQueue.length ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  Tidak ada approval queue pada period ini.
+                  {t('perf.execution.emptyQueue')}
                 </div>
               ) : (
                 filteredQueue.map((assignment) => (
@@ -429,11 +445,11 @@ export function PerformanceExecutionPage() {
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold">{assignment.employee.fullName}</p>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[assignment.status] || STATUS_STYLES.SUBMITTED}`}>
-                        {assignment.status}
+                        {STATUS_LABEL_KEYS[assignment.status] ? t(STATUS_LABEL_KEYS[assignment.status]) : assignment.status}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {assignment.period?.name || 'Tanpa period'} • Submitted {formatDateTime(assignment.submittedAt)}
+                      {assignment.period?.name || t('perf.common.noPeriod')} • {t('perf.common.submittedInline', { value: formatDateTime(assignment.submittedAt) })}
                     </p>
                   </button>
                 ))
@@ -446,34 +462,34 @@ export function PerformanceExecutionPage() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Target Runtime</h3>
-                <p className="text-xs text-muted-foreground">Update progress, nilai aktual, dan evidence per target.</p>
+                <h3 className="text-sm font-semibold">{t('perf.execution.targetRuntimeTitle')}</h3>
+                <p className="text-xs text-muted-foreground">{t('perf.execution.targetRuntimeHint')}</p>
               </div>
               {selectedAssignment && (
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[selectedAssignment.status] || STATUS_STYLES.DRAFT}`}>
-                  {selectedAssignment.status}
+                  {STATUS_LABEL_KEYS[selectedAssignment.status] ? t(STATUS_LABEL_KEYS[selectedAssignment.status]) : selectedAssignment.status}
                 </span>
               )}
             </div>
 
             {!selectedAssignment ? (
-              <p className="text-sm text-muted-foreground">Pilih assignment dari panel kiri.</p>
+              <p className="text-sm text-muted-foreground">{t('perf.execution.selectAssignmentLeft')}</p>
             ) : (
               <div className="space-y-4">
                 <div className="rounded-xl border border-border bg-background px-4 py-3">
                   <p className="text-sm font-semibold">{selectedAssignment.employee.fullName}</p>
                   <p className="text-xs text-muted-foreground">
-                    Reviewer {selectedAssignment.reviewer?.fullName || '-'} • Approver {selectedAssignment.approver?.fullName || '-'}
+                    {t('perf.execution.reviewerApproverInline', { reviewer: selectedAssignment.reviewer?.fullName || '-', approver: selectedAssignment.approver?.fullName || '-' })}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Published {formatDateTime(selectedAssignment.publishedAt)} • Submitted {formatDateTime(selectedAssignment.submittedAt)}
+                    {t('perf.execution.publishedSubmittedInline', { published: formatDateTime(selectedAssignment.publishedAt), submitted: formatDateTime(selectedAssignment.submittedAt) })}
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   {selectedAssignment.targets.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                      Belum ada target pada assignment ini.
+                      {t('perf.execution.emptyTargets')}
                     </div>
                   ) : (
                     selectedAssignment.targets.map((target) => (
@@ -491,16 +507,16 @@ export function PerformanceExecutionPage() {
                           <div>
                             <p className="text-sm font-semibold">{target.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {target.component?.name || 'Tanpa component'} • {target.indicator?.name || 'Tanpa indicator'}
+                              {target.component?.name || t('perf.common.noComponent')} • {target.indicator?.name || t('perf.common.noIndicator')}
                             </p>
                           </div>
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[target.status] || STATUS_STYLES.DRAFT}`}>
-                            {target.status}
+                            {STATUS_LABEL_KEYS[target.status] ? t(STATUS_LABEL_KEYS[target.status]) : target.status}
                           </span>
                         </div>
                         <div className="mt-3">
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Progress</span>
+                            <span>{t('perf.common.progress')}</span>
                             <span>{target.progressPercent || 0}%</span>
                           </div>
                           <div className="mt-2 h-2 rounded-full bg-muted">
@@ -511,9 +527,9 @@ export function PerformanceExecutionPage() {
                           </div>
                         </div>
                         <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-                          <p>Target: {target.targetValue ?? target.targetText ?? '-'}</p>
-                          <p>Current: {target.currentValue ?? target.currentText ?? '-'}</p>
-                          <p>Evidence: {target.evidences.length} file</p>
+                          <p>{t('perf.common.targetLabel', { value: target.targetValue ?? target.targetText ?? '-' })}</p>
+                          <p>{t('perf.common.currentLabel', { value: target.currentValue ?? target.currentText ?? '-' })}</p>
+                          <p>{t('perf.execution.evidenceCount', { count: target.evidences.length })}</p>
                         </div>
                       </button>
                     ))
@@ -527,17 +543,17 @@ export function PerformanceExecutionPage() {
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Progress Update</h3>
-              <p className="text-xs text-muted-foreground">Catat progress execution untuk target terpilih.</p>
+              <h3 className="text-sm font-semibold">{t('perf.execution.progressTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.execution.progressHint')}</p>
             </div>
             {!selectedTarget ? (
-              <p className="text-sm text-muted-foreground">Pilih target untuk mengisi progress.</p>
+              <p className="text-sm text-muted-foreground">{t('perf.execution.selectTargetForProgress')}</p>
             ) : (
               <div className="space-y-3">
                 <div className="rounded-xl border border-border bg-background px-4 py-3">
                   <p className="text-sm font-semibold">{selectedTarget.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {selectedTarget.progressPercent}% progress • Evidence {selectedTarget.evidences.length} file
+                    {t('perf.execution.progressSummary', { percent: selectedTarget.progressPercent, count: selectedTarget.evidences.length })}
                   </p>
                 </div>
                 <Input
@@ -546,28 +562,28 @@ export function PerformanceExecutionPage() {
                   max={100}
                   value={progressForm.progressPercent}
                   onChange={(event) => setProgressForm((prev) => ({ ...prev, progressPercent: event.target.value }))}
-                  placeholder="Progress percent"
+                  placeholder={t('perf.execution.progressPercentPlaceholder')}
                 />
                 <Input
                   type="number"
                   value={progressForm.currentValue}
                   onChange={(event) => setProgressForm((prev) => ({ ...prev, currentValue: event.target.value }))}
-                  placeholder="Current numeric value"
+                  placeholder={t('perf.execution.currentValuePlaceholder')}
                 />
                 <Input
                   value={progressForm.currentText}
                   onChange={(event) => setProgressForm((prev) => ({ ...prev, currentText: event.target.value }))}
-                  placeholder="Current text update"
+                  placeholder={t('perf.execution.currentTextPlaceholder')}
                 />
                 <textarea
                   value={progressForm.note}
                   onChange={(event) => setProgressForm((prev) => ({ ...prev, note: event.target.value }))}
-                  placeholder="Catatan progress"
+                  placeholder={t('perf.execution.progressNotePlaceholder')}
                   className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 <Button size="sm" className="w-full" onClick={() => void handleSaveProgress()} disabled={savingProgress}>
                   <Target size={16} className="mr-2" />
-                  {savingProgress ? 'Menyimpan...' : 'Simpan Progress'}
+                  {savingProgress ? t('perf.common.saving') : t('perf.execution.saveProgress')}
                 </Button>
               </div>
             )}
@@ -575,26 +591,26 @@ export function PerformanceExecutionPage() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Evidence Upload</h3>
-              <p className="text-xs text-muted-foreground">Upload bukti pencapaian untuk target terpilih.</p>
+              <h3 className="text-sm font-semibold">{t('perf.execution.evidenceTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.execution.evidenceHint')}</p>
             </div>
             {!selectedTarget ? (
-              <p className="text-sm text-muted-foreground">Pilih target untuk upload evidence.</p>
+              <p className="text-sm text-muted-foreground">{t('perf.execution.selectTargetForEvidence')}</p>
             ) : (
               <div className="space-y-3">
                 <Input type="file" onChange={(event) => setEvidenceFile(event.target.files?.[0] || null)} />
                 <Input
                   value={evidenceNotes}
                   onChange={(event) => setEvidenceNotes(event.target.value)}
-                  placeholder="Catatan evidence"
+                  placeholder={t('perf.execution.evidenceNotePlaceholder')}
                 />
                 <Button size="sm" className="w-full" variant="outline" onClick={() => void handleUploadEvidence()} disabled={uploadingEvidence}>
                   <Upload size={16} className="mr-2" />
-                  {uploadingEvidence ? 'Uploading...' : 'Upload Evidence'}
+                  {uploadingEvidence ? t('perf.common.uploading') : t('perf.execution.uploadEvidence')}
                 </Button>
                 <div className="space-y-2">
                   {selectedTarget.evidences.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Belum ada evidence untuk target ini.</p>
+                    <p className="text-xs text-muted-foreground">{t('perf.execution.emptyEvidence')}</p>
                   ) : (
                     selectedTarget.evidences.map((evidence) => (
                       <div key={evidence.id} className="rounded-lg border border-border bg-background px-3 py-2">
@@ -617,39 +633,39 @@ export function PerformanceExecutionPage() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Execution Actions</h3>
-              <p className="text-xs text-muted-foreground">Submit, approve, reject, request revision, atau complete assignment.</p>
+              <h3 className="text-sm font-semibold">{t('perf.execution.actionsTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.execution.actionsHint')}</p>
             </div>
             {!selectedAssignment ? (
-              <p className="text-sm text-muted-foreground">Pilih assignment untuk menjalankan action.</p>
+              <p className="text-sm text-muted-foreground">{t('perf.execution.selectAssignmentForAction')}</p>
             ) : (
               <div className="space-y-3">
                 <textarea
                   value={actionNotes}
                   onChange={(event) => setActionNotes(event.target.value)}
-                  placeholder="Catatan action"
+                  placeholder={t('perf.execution.actionNotePlaceholder')}
                   className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 <div className="grid gap-2">
-                  <Button size="sm" onClick={() => void runAssignmentAction('submit', 'Assignment berhasil disubmit')} disabled={acting}>
+                  <Button size="sm" onClick={() => void runAssignmentAction('submit', t('perf.execution.submitSuccess'))} disabled={acting}>
                     <Send size={16} className="mr-2" />
-                    Submit Assignment
+                    {t('perf.execution.submitAssignment')}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => void runAssignmentAction('approve', 'Assignment berhasil diapprove')} disabled={acting}>
+                  <Button size="sm" variant="outline" onClick={() => void runAssignmentAction('approve', t('perf.execution.approveSuccess'))} disabled={acting}>
                     <CheckCircle2 size={16} className="mr-2" />
-                    Approve Assignment
+                    {t('perf.execution.approveAssignment')}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => void runAssignmentAction('revision', 'Assignment berhasil dikirim balik untuk revisi')} disabled={acting}>
+                  <Button size="sm" variant="outline" onClick={() => void runAssignmentAction('revision', t('perf.execution.revisionSuccess'))} disabled={acting}>
                     <Clock3 size={16} className="mr-2" />
-                    Request Revision
+                    {t('perf.common.requestRevision')}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => void runAssignmentAction('reject', 'Assignment berhasil direject')} disabled={acting}>
+                  <Button size="sm" variant="outline" onClick={() => void runAssignmentAction('reject', t('perf.execution.rejectSuccess'))} disabled={acting}>
                     <XCircle size={16} className="mr-2" />
-                    Reject Assignment
+                    {t('perf.execution.rejectAssignment')}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => void runAssignmentAction('complete', 'Assignment berhasil diselesaikan')} disabled={acting}>
+                  <Button size="sm" variant="outline" onClick={() => void runAssignmentAction('complete', t('perf.execution.completeSuccess'))} disabled={acting}>
                     <CheckCircle2 size={16} className="mr-2" />
-                    Complete Assignment
+                    {t('perf.execution.completeAssignment')}
                   </Button>
                 </div>
               </div>
