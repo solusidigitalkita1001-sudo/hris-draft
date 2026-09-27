@@ -16,6 +16,36 @@ import { formatDate } from '@/utils/format';
 import { AlertCircle, CalendarRange, RefreshCw, Rocket } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.status.draft',
+  READY: 'perf.status.ready',
+  PUBLISHED: 'perf.status.published',
+  CLOSED: 'perf.status.closed',
+  ARCHIVED: 'perf.status.archived',
+};
+
+const APPROVER_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  ROLE: 'perf.approverType.role',
+  USER: 'perf.approverType.user',
+  AUTO: 'perf.approverType.auto',
+};
+
+const COMPONENT_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  KPI: 'perf.componentType.kpi',
+  GOAL: 'perf.componentType.goal',
+  COMPETENCY: 'perf.componentType.competency',
+  BEHAVIOR: 'perf.componentType.behavior',
+  CUSTOM: 'perf.componentType.custom',
+};
+
+const AGGREGATION_LABEL_KEYS: Record<string, TranslationKey> = {
+  WEIGHTED_AVERAGE: 'perf.aggregation.weightedAverage',
+  SUM: 'perf.aggregation.sum',
+  AVERAGE: 'perf.aggregation.average',
+};
 
 const PERIOD_STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -61,6 +91,8 @@ function SnapshotDetailModal({
   periodName: string;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
+
   if (!open || !snapshot) return null;
 
   const snapshotJson = JSON.stringify(snapshot, null, 2);
@@ -69,10 +101,10 @@ function SnapshotDetailModal({
   const handleCopyJson = async () => {
     try {
       await navigator.clipboard.writeText(snapshotJson);
-      toast.success('Snapshot JSON berhasil dicopy');
+      toast.success(t('perf.snapshot.copySuccess'));
     } catch (error) {
       console.error(error);
-      toast.error('Gagal copy snapshot JSON');
+      toast.error(t('perf.snapshot.copyFailed'));
     }
   };
 
@@ -87,10 +119,10 @@ function SnapshotDetailModal({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success('Snapshot JSON berhasil diunduh');
+      toast.success(t('perf.snapshot.exportSuccess'));
     } catch (error) {
       console.error(error);
-      toast.error('Gagal export snapshot JSON');
+      toast.error(t('perf.snapshot.exportFailed'));
     }
   };
 
@@ -102,20 +134,20 @@ function SnapshotDetailModal({
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
           <div>
-            <p className="text-lg font-semibold">Snapshot Period</p>
+            <p className="text-lg font-semibold">{t('perf.snapshot.title')}</p>
             <p className="text-sm text-muted-foreground">
-              {periodName} • frozen at {formatDateTime(snapshot.frozenAt)}
+              {t('perf.snapshot.frozenAtInline', { name: periodName, value: formatDateTime(snapshot.frozenAt) })}
             </p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <Button size="sm" variant="outline" onClick={() => void handleCopyJson()}>
-              Copy JSON
+              {t('perf.snapshot.copyJson')}
             </Button>
             <Button size="sm" variant="outline" onClick={handleExportJson}>
-              Export JSON
+              {t('perf.snapshot.exportJson')}
             </Button>
             <Button size="sm" variant="outline" onClick={onClose}>
-              Tutup
+              {t('perf.snapshot.close')}
             </Button>
           </div>
         </div>
@@ -123,69 +155,78 @@ function SnapshotDetailModal({
         <div className="max-h-[calc(90vh-80px)] overflow-y-auto p-6">
           <div className="grid gap-4 md:grid-cols-4">
             <div className="rounded-xl border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Method</p>
+              <p className="text-xs text-muted-foreground">{t('perf.snapshot.method')}</p>
               <p className="mt-2 text-sm font-semibold">{snapshot.method.name}</p>
               <p className="text-xs text-muted-foreground">{snapshot.method.code}</p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Version</p>
+              <p className="text-xs text-muted-foreground">{t('perf.snapshot.version')}</p>
               <p className="mt-2 text-sm font-semibold">v{snapshot.methodVersion.versionNumber}</p>
-              <p className="text-xs text-muted-foreground">{snapshot.methodVersion.status}</p>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Components</p>
-              <p className="mt-2 text-sm font-semibold">{snapshot.components.length}</p>
-              <p className="text-xs text-muted-foreground">Item dibekukan</p>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Governance</p>
-              <p className="mt-2 text-sm font-semibold">{snapshot.gradeRule?.code || 'NO_GRADE'}</p>
               <p className="text-xs text-muted-foreground">
-                {snapshot.reviewWorkflowTemplate?.stages.length || 0} review • {snapshot.approvalWorkflowTemplate?.stages.length || 0} approval
+                {STATUS_LABEL_KEYS[snapshot.methodVersion.status] ? t(STATUS_LABEL_KEYS[snapshot.methodVersion.status]) : snapshot.methodVersion.status}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground">{t('perf.snapshot.components')}</p>
+              <p className="mt-2 text-sm font-semibold">{snapshot.components.length}</p>
+              <p className="text-xs text-muted-foreground">{t('perf.snapshot.frozenItems')}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground">{t('perf.snapshot.governance')}</p>
+              <p className="mt-2 text-sm font-semibold">{snapshot.gradeRule?.code || t('perf.snapshot.noGradeCode')}</p>
+              <p className="text-xs text-muted-foreground">
+                {t('perf.snapshot.workflowCounts', {
+                  review: snapshot.reviewWorkflowTemplate?.stages.length || 0,
+                  approval: snapshot.approvalWorkflowTemplate?.stages.length || 0,
+                })}
               </p>
             </div>
           </div>
 
           <div className="mt-6 grid gap-6 xl:grid-cols-2">
             <div className="rounded-xl border border-border bg-card p-5">
-              <h3 className="text-sm font-semibold">Period Scope</h3>
+              <h3 className="text-sm font-semibold">{t('perf.snapshot.periodScope')}</h3>
               <div className="mt-4 space-y-2 text-sm">
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Period</span>
+                  <span className="text-muted-foreground">{t('perf.snapshot.period')}</span>
                   <span className="font-medium">{snapshot.period.name}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Code</span>
+                  <span className="text-muted-foreground">{t('perf.snapshot.code')}</span>
                   <span className="font-medium">{snapshot.period.code}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Start</span>
+                  <span className="text-muted-foreground">{t('perf.snapshot.start')}</span>
                   <span className="font-medium">{formatDateTime(snapshot.period.startDate)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">End</span>
+                  <span className="text-muted-foreground">{t('perf.snapshot.end')}</span>
                   <span className="font-medium">{formatDateTime(snapshot.period.endDate)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Review Deadline</span>
+                  <span className="text-muted-foreground">{t('perf.snapshot.reviewDeadline')}</span>
                   <span className="font-medium">{formatDateTime(snapshot.period.reviewDeadline)}</span>
                 </div>
               </div>
             </div>
 
             <div className="rounded-xl border border-border bg-card p-5">
-              <h3 className="text-sm font-semibold">Method Version Rule</h3>
+              <h3 className="text-sm font-semibold">{t('perf.snapshot.versionRule')}</h3>
               <div className="mt-4 space-y-2 text-sm">
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Aggregation</span>
-                  <span className="font-medium">{snapshot.methodVersion.scoreAggregation}</span>
+                  <span className="text-muted-foreground">{t('perf.snapshot.aggregation')}</span>
+                  <span className="font-medium">
+                    {AGGREGATION_LABEL_KEYS[snapshot.methodVersion.scoreAggregation]
+                      ? t(AGGREGATION_LABEL_KEYS[snapshot.methodVersion.scoreAggregation])
+                      : snapshot.methodVersion.scoreAggregation}
+                  </span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Minimum Score</span>
+                  <span className="text-muted-foreground">{t('perf.snapshot.minimumScore')}</span>
                   <span className="font-medium">{snapshot.methodVersion.minimumScore ?? '-'}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Maximum Score</span>
+                  <span className="text-muted-foreground">{t('perf.snapshot.maximumScore')}</span>
                   <span className="font-medium">{snapshot.methodVersion.maximumScore ?? '-'}</span>
                 </div>
               </div>
@@ -201,7 +242,7 @@ function SnapshotDetailModal({
           </div>
 
           <div className="mt-6 rounded-xl border border-border bg-card p-5">
-            <h3 className="text-sm font-semibold">Frozen Components</h3>
+            <h3 className="text-sm font-semibold">{t('perf.snapshot.frozenComponents')}</h3>
             <div className="mt-4 space-y-3">
               {snapshot.components.map((component) => (
                 <div key={component.id} className="rounded-xl border border-border bg-background p-4">
@@ -209,19 +250,19 @@ function SnapshotDetailModal({
                     <div>
                       <p className="text-sm font-semibold">{component.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {component.code} • {component.type}
+                        {component.code} • {COMPONENT_TYPE_LABEL_KEYS[component.type] ? t(COMPONENT_TYPE_LABEL_KEYS[component.type]) : component.type}
                       </p>
                     </div>
                     <div className="text-right text-xs text-muted-foreground">
                       <p>{component.weight}%</p>
-                      <p>Sort {component.sortOrder}</p>
+                      <p>{t('perf.snapshot.sortValue', { value: component.sortOrder })}</p>
                     </div>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {component.description || 'Tanpa deskripsi component.'}
+                    {component.description || t('perf.snapshot.noComponentDescription')}
                   </p>
                   <div className="mt-2 text-xs text-muted-foreground">
-                    {component.isRequired ? 'Required component' : 'Optional component'}
+                    {component.isRequired ? t('perf.snapshot.requiredComponent') : t('perf.snapshot.optionalComponent')}
                   </div>
                   {component.config && (
                     <pre className="mt-3 overflow-x-auto rounded-xl bg-muted p-3 text-xs text-muted-foreground">
@@ -235,7 +276,7 @@ function SnapshotDetailModal({
 
           <div className="mt-6 grid gap-6 xl:grid-cols-3">
             <div className="rounded-xl border border-border bg-card p-5 xl:col-span-1">
-              <h3 className="text-sm font-semibold">Grade Rule</h3>
+              <h3 className="text-sm font-semibold">{t('perf.snapshot.gradeRule')}</h3>
               {snapshot.gradeRule ? (
                 <>
                   <p className="mt-3 text-sm font-medium">{snapshot.gradeRule.name}</p>
@@ -255,12 +296,12 @@ function SnapshotDetailModal({
                   </div>
                 </>
               ) : (
-                <p className="mt-3 text-sm text-muted-foreground">Snapshot ini tidak punya grade rule.</p>
+                <p className="mt-3 text-sm text-muted-foreground">{t('perf.snapshot.noGradeRule')}</p>
               )}
             </div>
 
             <div className="rounded-xl border border-border bg-card p-5 xl:col-span-1">
-              <h3 className="text-sm font-semibold">Review Workflow</h3>
+              <h3 className="text-sm font-semibold">{t('perf.snapshot.reviewWorkflow')}</h3>
               {snapshot.reviewWorkflowTemplate ? (
                 <>
                   <p className="mt-3 text-sm font-medium">{snapshot.reviewWorkflowTemplate.name}</p>
@@ -269,10 +310,12 @@ function SnapshotDetailModal({
                       <div key={stage.id} className="rounded-lg bg-muted/60 px-3 py-2 text-sm">
                         <div className="flex items-center justify-between gap-3">
                           <span className="font-medium">{stage.level}. {stage.name}</span>
-                          <span className="text-xs text-muted-foreground">{stage.approverType}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {APPROVER_TYPE_LABEL_KEYS[stage.approverType] ? t(APPROVER_TYPE_LABEL_KEYS[stage.approverType]) : stage.approverType}
+                          </span>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {stage.approverRoleCode || stage.approverId || 'Auto step'} • SLA {stage.slaHours} jam
+                          {stage.approverRoleCode || stage.approverId || t('perf.workflows.autoStep')} • {t('perf.workflows.slaHours', { hours: stage.slaHours })}
                         </p>
                         {stage.conditionRules.length > 0 && (
                           <pre className="mt-2 overflow-x-auto rounded-lg bg-background p-2 text-[11px] text-muted-foreground">
@@ -284,12 +327,12 @@ function SnapshotDetailModal({
                   </div>
                 </>
               ) : (
-                <p className="mt-3 text-sm text-muted-foreground">Snapshot ini tidak punya review workflow.</p>
+                <p className="mt-3 text-sm text-muted-foreground">{t('perf.snapshot.noReviewWorkflow')}</p>
               )}
             </div>
 
             <div className="rounded-xl border border-border bg-card p-5 xl:col-span-1">
-              <h3 className="text-sm font-semibold">Approval Workflow</h3>
+              <h3 className="text-sm font-semibold">{t('perf.snapshot.approvalWorkflow')}</h3>
               {snapshot.approvalWorkflowTemplate ? (
                 <>
                   <p className="mt-3 text-sm font-medium">{snapshot.approvalWorkflowTemplate.name}</p>
@@ -298,10 +341,12 @@ function SnapshotDetailModal({
                       <div key={stage.id} className="rounded-lg bg-muted/60 px-3 py-2 text-sm">
                         <div className="flex items-center justify-between gap-3">
                           <span className="font-medium">{stage.level}. {stage.name}</span>
-                          <span className="text-xs text-muted-foreground">{stage.approverType}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {APPROVER_TYPE_LABEL_KEYS[stage.approverType] ? t(APPROVER_TYPE_LABEL_KEYS[stage.approverType]) : stage.approverType}
+                          </span>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {stage.approverRoleCode || stage.approverId || 'Auto step'} • SLA {stage.slaHours} jam
+                          {stage.approverRoleCode || stage.approverId || t('perf.workflows.autoStep')} • {t('perf.workflows.slaHours', { hours: stage.slaHours })}
                         </p>
                         {stage.conditionRules.length > 0 && (
                           <pre className="mt-2 overflow-x-auto rounded-lg bg-background p-2 text-[11px] text-muted-foreground">
@@ -313,7 +358,7 @@ function SnapshotDetailModal({
                   </div>
                 </>
               ) : (
-                <p className="mt-3 text-sm text-muted-foreground">Snapshot ini tidak punya approval workflow.</p>
+                <p className="mt-3 text-sm text-muted-foreground">{t('perf.snapshot.noApprovalWorkflow')}</p>
               )}
             </div>
           </div>
@@ -324,6 +369,7 @@ function SnapshotDetailModal({
 }
 
 export function PerformancePeriodsPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
 
@@ -355,9 +401,9 @@ export function PerformancePeriodsPage() {
     () =>
       (selectedMethod?.versions ?? []).map((version) => ({
         value: version.id,
-        label: `v${version.versionNumber} • ${version.status}`,
+        label: `v${version.versionNumber} • ${STATUS_LABEL_KEYS[version.status] ? t(STATUS_LABEL_KEYS[version.status]) : version.status}`,
       })),
-    [selectedMethod?.versions]
+    [selectedMethod?.versions, t]
   );
 
   const loadData = useCallback(async () => {
@@ -393,11 +439,11 @@ export function PerformancePeriodsPage() {
       });
     } catch (error) {
       console.error(error);
-      toast.error('Gagal memuat performance periods');
+      toast.error(t('perf.periods.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     void loadData();
@@ -417,17 +463,17 @@ export function PerformancePeriodsPage() {
 
   const handleCreatePeriod = useCallback(async () => {
     if (!companyId) {
-      toast.error('Company belum aktif');
+      toast.error(t('perf.cycles.noCompany'));
       return;
     }
 
     if (!form.methodId || !form.methodVersionId || !form.name.trim() || !form.startDate || !form.endDate) {
-      toast.error('Method, version, nama, start date, dan end date wajib diisi');
+      toast.error(t('perf.periods.validation'));
       return;
     }
 
     if (form.endDate < form.startDate) {
-      toast.error('End date tidak boleh lebih kecil dari start date');
+      toast.error(t('perf.periods.endBeforeStart'));
       return;
     }
 
@@ -444,7 +490,7 @@ export function PerformancePeriodsPage() {
         description: form.description.trim() || undefined,
       };
       await performanceService.createPeriod(payload);
-      toast.success('Performance period berhasil dibuat');
+      toast.success(t('perf.periods.createSuccess'));
       setForm((prev) => ({
         ...prev,
         name: '',
@@ -457,68 +503,68 @@ export function PerformancePeriodsPage() {
       await loadData();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal membuat performance period'));
+      toast.error(apiErrorMessage(error, t('perf.periods.createFailed')));
     } finally {
       setSaving(false);
     }
-  }, [companyId, form, loadData]);
+  }, [companyId, form, loadData, t]);
 
   const handleLoadReadiness = useCallback(async (periodId: string) => {
     setReadinessLoadingId(periodId);
     try {
       const summary = await performanceService.getPeriodReadiness(periodId);
       setReadinessMap((prev) => ({ ...prev, [periodId]: summary }));
-      toast.success(summary.isReady ? 'Period ready untuk publish' : 'Readiness summary berhasil dimuat');
+      toast.success(summary.isReady ? t('perf.periods.readyToast') : t('perf.periods.readinessLoaded'));
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal mengecek readiness period'));
+      toast.error(apiErrorMessage(error, t('perf.periods.readinessFailed')));
     } finally {
       setReadinessLoadingId('');
     }
-  }, []);
+  }, [t]);
 
   const handlePublishPeriod = useCallback(async (periodId: string) => {
     setPublishingId(periodId);
     try {
       const published = await performanceService.publishPeriod(periodId);
-      toast.success(`Period ${published.name} berhasil dipublish`);
+      toast.success(t('perf.periods.publishSuccess', { name: published.name }));
       const readiness = await performanceService.getPeriodReadiness(periodId);
       setReadinessMap((prev) => ({ ...prev, [periodId]: readiness }));
       await loadData();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal publish period'));
+      toast.error(apiErrorMessage(error, t('perf.periods.publishFailed')));
     } finally {
       setPublishingId('');
     }
-  }, [loadData]);
+  }, [loadData, t]);
 
   const publishedCount = periods.filter((period) => period.status === 'PUBLISHED').length;
 
   return (
     <div>
       <PageHeader
-        title="Performance Config Periods"
-        description="Kelola period, cek readiness, dan publish period yang sudah siap."
+        title={t('perf.periods.title')}
+        description={t('perf.periods.description')}
         actions={(
           <Button size="sm" variant="outline" onClick={loadData}>
             <RefreshCw size={16} className="mr-2" />
-            Refresh
+            {t('common.refresh')}
           </Button>
         )}
       />
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Total Periods</p>
+          <p className="text-xs text-muted-foreground">{t('perf.periods.stats.totalPeriods')}</p>
           <p className="mt-2 text-2xl font-semibold">{periods.length}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Published Periods</p>
+          <p className="text-xs text-muted-foreground">{t('perf.periods.stats.publishedPeriods')}</p>
           <p className="mt-2 text-2xl font-semibold">{publishedCount}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Methods Available</p>
+          <p className="text-xs text-muted-foreground">{t('perf.periods.stats.methodsAvailable')}</p>
           <p className="mt-2 text-2xl font-semibold">{methods.length}</p>
         </div>
       </div>
@@ -526,47 +572,47 @@ export function PerformancePeriodsPage() {
       <div className="mb-6 rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">
           <CalendarRange size={16} />
-          <h2 className="text-sm font-semibold">New Period</h2>
+          <h2 className="text-sm font-semibold">{t('perf.periods.newPeriod')}</h2>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Method</label>
+            <label className="text-sm font-medium">{t('perf.periods.methodLabel')}</label>
             <Select2
               value={form.methodId}
               onValueChange={(value) => setForm((prev) => ({ ...prev, methodId: value }))}
               options={methods.map((method) => ({ value: method.id, label: `${method.name} • ${method.code}` }))}
-              placeholder="Pilih method"
+              placeholder={t('perf.periods.selectMethod')}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Version</label>
+            <label className="text-sm font-medium">{t('perf.periods.versionLabel')}</label>
             <Select2
               value={form.methodVersionId}
               onValueChange={(value) => setForm((prev) => ({ ...prev, methodVersionId: value }))}
               options={selectedVersionOptions}
-              placeholder="Pilih version"
+              placeholder={t('perf.periods.selectVersion')}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Period Name</label>
+            <label className="text-sm font-medium">{t('perf.periods.periodName')}</label>
             <Input
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="2026 Annual Appraisal"
+              placeholder={t('perf.periods.periodNamePlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Code</label>
+            <label className="text-sm font-medium">{t('perf.periods.code')}</label>
             <Input
               value=""
-              placeholder="Akan dibuat otomatis oleh sistem"
+              placeholder={t('perf.periods.autoCodePlaceholder')}
               disabled
             />
-            <p className="text-xs text-muted-foreground">Code period digenerate otomatis saat create.</p>
+            <p className="text-xs text-muted-foreground">{t('perf.periods.codeHint')}</p>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Start Date</label>
+            <label className="text-sm font-medium">{t('perf.periods.startDate')}</label>
             <Input
               type="date"
               value={form.startDate}
@@ -574,7 +620,7 @@ export function PerformancePeriodsPage() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">End Date</label>
+            <label className="text-sm font-medium">{t('perf.periods.endDate')}</label>
             <Input
               type="date"
               value={form.endDate}
@@ -582,7 +628,7 @@ export function PerformancePeriodsPage() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Review Deadline</label>
+            <label className="text-sm font-medium">{t('perf.periods.reviewDeadline')}</label>
             <Input
               type="date"
               value={form.reviewDeadline}
@@ -590,37 +636,41 @@ export function PerformancePeriodsPage() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Selected Version Status</label>
+            <label className="text-sm font-medium">{t('perf.periods.selectedVersionStatus')}</label>
             <div className="flex h-10 items-center rounded-lg border border-input bg-background px-3 text-sm text-muted-foreground">
-              {selectedMethod?.versions?.find((version) => version.id === form.methodVersionId)?.status || '-'}
+              {(() => {
+                const status = selectedMethod?.versions?.find((version) => version.id === form.methodVersionId)?.status;
+                if (!status) return '-';
+                return STATUS_LABEL_KEYS[status] ? t(STATUS_LABEL_KEYS[status]) : status;
+              })()}
             </div>
           </div>
         </div>
 
         <div className="mt-4 space-y-2">
-          <label className="text-sm font-medium">Description</label>
+          <label className="text-sm font-medium">{t('perf.periods.descriptionLabel')}</label>
           <textarea
             value={form.description}
             onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
             className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-            placeholder="Tujuan period, timeline, dan catatan publish."
+            placeholder={t('perf.periods.descriptionPlaceholder')}
           />
         </div>
 
         <div className="mt-5 flex justify-end">
           <Button size="sm" onClick={handleCreatePeriod} disabled={saving}>
-            {saving ? 'Menyimpan...' : 'Buat Period'}
+            {saving ? t('perf.common.saving') : t('perf.periods.createPeriod')}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {loading ? (
-          <div className="col-span-full py-12 text-center text-sm text-muted-foreground">Loading...</div>
+          <div className="col-span-full py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>
         ) : periods.length === 0 ? (
           <div className="col-span-full rounded-xl border border-dashed border-border bg-card py-12 text-center">
             <CalendarRange size={32} className="mx-auto text-muted-foreground/40" />
-            <p className="mt-3 text-sm text-muted-foreground">Belum ada performance period.</p>
+            <p className="mt-3 text-sm text-muted-foreground">{t('perf.periods.emptyPeriods')}</p>
           </div>
         ) : (
           periods.map((period) => {
@@ -634,7 +684,7 @@ export function PerformancePeriodsPage() {
                     <p className="text-xs text-muted-foreground">{period.code}</p>
                   </div>
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${PERIOD_STATUS_STYLES[period.status] || PERIOD_STATUS_STYLES.DRAFT}`}>
-                    {period.status}
+                    {STATUS_LABEL_KEYS[period.status] ? t(STATUS_LABEL_KEYS[period.status]) : period.status}
                   </span>
                 </div>
 
@@ -645,7 +695,7 @@ export function PerformancePeriodsPage() {
                 </div>
 
                 <p className="mt-3 text-sm text-muted-foreground">
-                  {period.description || 'Belum ada deskripsi period.'}
+                  {period.description || t('perf.periods.noDescription')}
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -655,7 +705,7 @@ export function PerformancePeriodsPage() {
                     onClick={() => handleLoadReadiness(period.id)}
                     disabled={readinessLoadingId === period.id}
                   >
-                    {readinessLoadingId === period.id ? 'Checking...' : 'Check Readiness'}
+                    {readinessLoadingId === period.id ? t('perf.periods.checking') : t('perf.periods.checkReadiness')}
                   </Button>
                   {period.status !== 'PUBLISHED' && (
                     <Button
@@ -664,7 +714,7 @@ export function PerformancePeriodsPage() {
                       disabled={publishingId === period.id}
                     >
                       <Rocket size={14} className="mr-2" />
-                      {publishingId === period.id ? 'Publishing...' : 'Publish Period'}
+                      {publishingId === period.id ? t('perf.periods.publishing') : t('perf.periods.publishPeriod')}
                     </Button>
                   )}
                   {snapshot && (
@@ -673,7 +723,7 @@ export function PerformancePeriodsPage() {
                       variant="outline"
                       onClick={() => setSnapshotPeriod(period)}
                     >
-                      Lihat Snapshot
+                      {t('perf.periods.viewSnapshot')}
                     </Button>
                   )}
                 </div>
@@ -682,12 +732,16 @@ export function PerformancePeriodsPage() {
                   <div className={`mt-4 rounded-xl border p-4 ${readiness.isReady ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20' : 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20'}`}>
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <AlertCircle size={16} />
-                      {readiness.isReady ? 'Ready to Publish' : 'Belum Ready'}
+                      {readiness.isReady ? t('perf.periods.readyToPublish') : t('perf.periods.notReady')}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <span>{readiness.metrics.componentCount} components</span>
-                      <span>{readiness.metrics.totalWeight.toFixed(2)}% weight</span>
-                      <span>{readiness.metrics.methodVersionStatus}</span>
+                      <span>{t('perf.periods.componentCount', { count: readiness.metrics.componentCount })}</span>
+                      <span>{t('perf.periods.weightValue', { value: readiness.metrics.totalWeight.toFixed(2) })}</span>
+                      <span>
+                        {STATUS_LABEL_KEYS[readiness.metrics.methodVersionStatus]
+                          ? t(STATUS_LABEL_KEYS[readiness.metrics.methodVersionStatus])
+                          : readiness.metrics.methodVersionStatus}
+                      </span>
                     </div>
                     {readiness.issues.length > 0 ? (
                       <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
@@ -697,7 +751,7 @@ export function PerformancePeriodsPage() {
                       </ul>
                     ) : (
                       <p className="mt-3 text-sm text-muted-foreground">
-                        Semua rule readiness lulus. Period aman untuk dipublish.
+                        {t('perf.periods.readinessPassed')}
                       </p>
                     )}
                   </div>
@@ -707,9 +761,9 @@ export function PerformancePeriodsPage() {
                   <div className="mt-4 rounded-xl border border-border bg-background p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold">Frozen Config Snapshot</p>
+                        <p className="text-sm font-semibold">{t('perf.periods.snapshotTitle')}</p>
                         <p className="text-xs text-muted-foreground">
-                          Dibekukan pada {formatDate(snapshot.frozenAt)}
+                          {t('perf.periods.frozenAt', { value: formatDate(snapshot.frozenAt) })}
                         </p>
                       </div>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -717,13 +771,13 @@ export function PerformancePeriodsPage() {
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <span>{snapshot.components.length} components</span>
-                      <span>{snapshot.gradeRule?.code || 'NO_GRADE_RULE'}</span>
-                      <span>{snapshot.reviewWorkflowTemplate?.stages.length || 0} review stages</span>
-                      <span>{snapshot.approvalWorkflowTemplate?.stages.length || 0} approval stages</span>
+                      <span>{t('perf.periods.componentCount', { count: snapshot.components.length })}</span>
+                      <span>{snapshot.gradeRule?.code || t('perf.periods.noGradeRuleCode')}</span>
+                      <span>{t('perf.periods.reviewStageCount', { count: snapshot.reviewWorkflowTemplate?.stages.length || 0 })}</span>
+                      <span>{t('perf.periods.approvalStageCount', { count: snapshot.approvalWorkflowTemplate?.stages.length || 0 })}</span>
                     </div>
                     <p className="mt-3 text-sm text-muted-foreground">
-                      Snapshot ini mengunci config method, component, grade rule, dan workflow yang dipakai saat period dipublish.
+                      {t('perf.periods.snapshotHint')}
                     </p>
                   </div>
                 )}
