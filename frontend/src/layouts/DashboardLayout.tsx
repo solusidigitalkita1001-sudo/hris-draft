@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopNavigation } from './TopNavigation';
+import { IdleLogoutGuard } from '@/components/shared/IdleLogoutGuard';
 import { useUIStore } from '@/stores/ui.store';
 import { useCompanyStore } from '@/stores/company.store';
 import { cn } from '@/utils/cn';
@@ -27,6 +28,7 @@ export function DashboardLayout() {
         if (e.animationName === 'shell-enter') setEntering(false);
       }}
     >
+      <IdleLogoutGuard />
       <Sidebar />
       <div
         className={cn(

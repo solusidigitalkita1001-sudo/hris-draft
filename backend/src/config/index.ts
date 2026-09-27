@@ -54,6 +54,16 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   JWT_ISSUER: z.string().default('hrms-enterprise'),
+  // Sliding idle window sesi (menit). Refresh ditolak bila token menganggur
+  // melewati batas ini. Harus > umur access token (15m) agar pengguna aktif
+  // tidak ikut terlogout; 0 menonaktifkan pemeriksaan.
+  SESSION_IDLE_TIMEOUT_MINUTES: z.coerce
+    .number()
+    .int()
+    .refine((value) => value === 0 || (value >= 16 && value <= 1440), {
+      message: 'SESSION_IDLE_TIMEOUT_MINUTES must be 0 (disabled) or between 16 and 1440',
+    })
+    .default(30),
 
   // Password
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().default(12),
@@ -189,6 +199,7 @@ export function buildConfig(env: Env) {
       accessExpiresIn: env.JWT_ACCESS_EXPIRES_IN,
       refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
       issuer: env.JWT_ISSUER,
+      sessionIdleTimeoutMinutes: env.SESSION_IDLE_TIMEOUT_MINUTES,
     },
     password: {
       saltRounds: env.BCRYPT_SALT_ROUNDS,

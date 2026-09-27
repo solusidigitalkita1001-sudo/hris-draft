@@ -18,6 +18,7 @@ import {
   ConflictError,
 } from '@/shared/exceptions/AppError';
 import config from '@/config';
+import { isRefreshTokenIdleExpired } from '@/shared/security/session-idle';
 import { AuthResponse, LoginDTO, ChangePasswordDTO } from './auth.dto';
 import {
   generateTotpSecret,
@@ -371,6 +372,20 @@ export class AuthService {
     if (storedToken.expiresAt < new Date()) {
       await authRepository.revokeRefreshToken(storedToken.id);
       throw new AuthError('Refresh token has expired');
+    }
+
+    // Sliding idle window: token dirotasi tiap refresh, jadi createdAt ==
+    // aktivitas terautentikasi terakhir. Sesi yang ditinggalkan (laptop
+    // terbuka, cookie dicuri) tidak bisa diperpanjang tanpa batas.
+    if (
+      isRefreshTokenIdleExpired(storedToken.createdAt, new Date(), config.jwt.sessionIdleTimeoutMinutes)
+    ) {
+      if (storedToken.family) {
+        await authRepository.revokeRefreshTokenFamily(storedToken.family);
+      } else {
+        await authRepository.revokeRefreshToken(storedToken.id);
+      }
+      throw new AuthError('Sesi berakhir karena tidak ada aktivitas. Silakan masuk kembali.');
     }
 
     // Revoke old token (rotation)

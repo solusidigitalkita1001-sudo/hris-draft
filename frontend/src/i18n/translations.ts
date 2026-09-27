@@ -128,6 +128,12 @@ export const translations = {
     'auth.reset.failed': 'Gagal mengubah kata sandi. Link mungkin kedaluwarsa.',
     'auth.reset.invalidToken': 'Link reset tidak valid. Minta link baru dari halaman lupa kata sandi.',
 
+    'idle.title': 'Masih di sana?',
+    'idle.body': 'Demi keamanan, sesi Anda akan berakhir dalam {{seconds}} detik karena tidak ada aktivitas.',
+    'idle.stay': 'Tetap Masuk',
+    'idle.logout': 'Keluar Sekarang',
+    'idle.expired': 'Sesi berakhir karena tidak ada aktivitas. Silakan masuk kembali.',
+
     'dashboard.welcome': 'Selamat datang kembali, {{name}}',
     'dashboard.description': 'Berikut ringkasan aktivitas organisasi Anda hari ini.',
     'dashboard.stats.totalEmployees': 'Total Karyawan',
@@ -463,6 +469,12 @@ export const translations = {
     'auth.reset.success': 'Password changed successfully. Please sign in again.',
     'auth.reset.failed': 'Failed to change the password. The link may have expired.',
     'auth.reset.invalidToken': 'Invalid reset link. Request a new one from the forgot-password page.',
+
+    'idle.title': 'Still there?',
+    'idle.body': 'For security, your session will end in {{seconds}} seconds due to inactivity.',
+    'idle.stay': 'Stay Signed In',
+    'idle.logout': 'Sign Out Now',
+    'idle.expired': 'Your session ended due to inactivity. Please sign in again.',
 
     'dashboard.welcome': 'Welcome back, {{name}}',
     'dashboard.description': "Here's what's happening across your organization today.",
