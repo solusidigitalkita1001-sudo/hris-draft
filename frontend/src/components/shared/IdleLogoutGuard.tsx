@@ -63,7 +63,7 @@ export function IdleLogoutGuard() {
     loggingOutRef.current = true;
     toast.error(t('idle.expired'), { id: 'idle-logout', duration: 6000 });
     await logout();
-    window.location.href = '/login';
+    window.location.href = '/login?reason=idle';
   }, [logout, t]);
 
   // Pantau aktivitas pengguna di tab ini + tab lain.

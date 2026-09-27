@@ -133,6 +133,7 @@ export const translations = {
     'idle.stay': 'Tetap Masuk',
     'idle.logout': 'Keluar Sekarang',
     'idle.expired': 'Sesi berakhir karena tidak ada aktivitas. Silakan masuk kembali.',
+    'login.notice.expired': 'Sesi Anda telah berakhir. Silakan masuk kembali.',
 
     'dashboard.welcome': 'Selamat datang kembali, {{name}}',
     'dashboard.description': 'Berikut ringkasan aktivitas organisasi Anda hari ini.',
@@ -475,6 +476,7 @@ export const translations = {
     'idle.stay': 'Stay Signed In',
     'idle.logout': 'Sign Out Now',
     'idle.expired': 'Your session ended due to inactivity. Please sign in again.',
+    'login.notice.expired': 'Your session has expired. Please sign in again.',
 
     'dashboard.welcome': 'Welcome back, {{name}}',
     'dashboard.description': "Here's what's happening across your organization today.",

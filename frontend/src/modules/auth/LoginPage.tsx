@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useI18n } from '@/i18n/provider';
-import { Loader2, Eye, EyeOff, AlertCircle, Check } from 'lucide-react';
+import { Loader2, Eye, EyeOff, AlertCircle, Check, TimerReset } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
 import { cn } from '@/utils/cn';
 
@@ -13,8 +13,14 @@ const REMEMBER_KEY = 'hris-login-email';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, isLoading } = useAuthStore();
   const { t } = useI18n();
+
+  // Alasan terlempar ke login (dari IdleLogoutGuard / kegagalan refresh sesi).
+  const reason = searchParams.get('reason');
+  const sessionNotice =
+    reason === 'idle' ? t('idle.expired') : reason === 'expired' ? t('login.notice.expired') : null;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -107,6 +113,15 @@ export function LoginPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t('auth.login.description')}</p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate>
+          {sessionNotice && !error && (
+            <div
+              className="flex items-start gap-2.5 rounded-field border border-warning/25 bg-warning-bg p-3 text-sm text-warning"
+              role="status"
+            >
+              <TimerReset size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>{sessionNotice}</span>
+            </div>
+          )}
           {error && (
             <div className="flex items-center gap-2 rounded-field border border-danger/20 bg-danger-bg p-3 text-sm text-danger" role="alert">
               <AlertCircle size={16} className="shrink-0" aria-hidden="true" />
