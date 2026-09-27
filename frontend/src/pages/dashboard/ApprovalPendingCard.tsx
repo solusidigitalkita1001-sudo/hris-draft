@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { Link } from 'react-router-dom';
 import { CalendarDays, CheckCircle2, FileText } from 'lucide-react';
-import type { WorkflowInstanceStep } from '@/services/workflow-engine.service';
+import type { ApprovalSummary, ApprovalSummaryLine, WorkflowInstanceStep } from '@/services/workflow-engine.service';
 import { useI18n } from '@/i18n/provider';
 import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 import { CardTitle, DashCard, StatusChip } from './shared';
@@ -20,6 +20,17 @@ function waitingChip(
   if (days <= 0) return { label: t('ops.dashboard.approvals.new'), tone: 'success' };
   if (days <= 2) return { label: t('ops.dashboard.approvals.daysWaiting', { days }), tone: 'warning' };
   return { label: t('ops.dashboard.approvals.daysWaiting', { days }), tone: 'danger' };
+}
+
+/**
+ * Baris ringkasan paling menentukan untuk kartu sempit: baris pertama yang
+ * memuat angka (periode, nominal, durasi, tanggal) — bukan label tertentu —
+ * sehingga tidak ada kopling ke teks label yang dibentuk server.
+ */
+function headlineLine(summary?: ApprovalSummary): ApprovalSummaryLine | null {
+  const lines = summary?.lines;
+  if (!lines?.length) return null;
+  return lines.find((line) => /\d/.test(line.value)) ?? lines[0] ?? null;
 }
 
 /** Kartu "Approval Menunggu" — 2 pengajuan teratas yang menunggu aksi user. */
@@ -65,6 +76,14 @@ export function ApprovalPendingCard({
             {top.map((step) => {
               const Icon = approvalIcon(step.instance?.approvalType);
               const chip = waitingChip(step.createdAt, t);
+              // Judul dokumen + pengaju + satu baris ringkas: cukup untuk tahu
+              // apa yang menunggu tanpa membuka modul lain.
+              const summary = step.summary;
+              const headline = headlineLine(summary);
+              const subtitle = [
+                summary?.requesterName || t('ops.dashboard.approvals.unknownRequester'),
+                headline?.value || dayjs(step.createdAt).format('D MMM YYYY'),
+              ].join(' · ');
               return (
                 <div key={step.id} className="flex items-center gap-3 rounded-2xl bg-secondary px-3.5 py-3">
                   <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-xl bg-card text-primary">
@@ -72,12 +91,10 @@ export function ApprovalPendingCard({
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-medium text-foreground">
-                      {step.instance?.template?.name || step.instance?.approvalType || step.name}
+                      {summary?.title || step.instance?.template?.name || step.instance?.approvalType || step.name}
                     </p>
-                    <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
-                      {step.instance?.referenceType || t('ops.dashboard.approvals.request')}
-                      {' · '}
-                      {dayjs(step.createdAt).format('D MMM YYYY')}
+                    <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground" title={subtitle}>
+                      {subtitle}
                     </p>
                   </div>
                   <StatusChip tone={chip.tone}>{chip.label}</StatusChip>

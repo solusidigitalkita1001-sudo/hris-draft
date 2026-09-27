@@ -41,6 +41,24 @@ export interface WorkflowTemplate {
   _count?: { instances: number };
 }
 
+/** Satu pasangan label/nilai ringkasan dokumen. Label sudah berbahasa Indonesia dari server. */
+export interface ApprovalSummaryLine {
+  label: string;
+  value: string;
+}
+
+/**
+ * Ringkasan dokumen yang dirujuk sebuah approval — dibentuk server agar approver
+ * bisa memutuskan dari kartu inbox tanpa membuka modul lain. Bentuknya seragam
+ * lintas referenceType; `lines` kosong berarti dokumen tidak dikenal/terhapus.
+ */
+export interface ApprovalSummary {
+  title: string;
+  requesterName: string | null;
+  requesterNumber: string | null;
+  lines: ApprovalSummaryLine[];
+}
+
 export interface WorkflowInstanceStep {
   id: string;
   instanceId: string;
@@ -60,6 +78,8 @@ export interface WorkflowInstanceStep {
   createdAt: string;
   updatedAt: string;
   instance?: WorkflowInstance;
+  /** Hanya diisi endpoint my-approvals. */
+  summary?: ApprovalSummary;
 }
 
 export interface WorkflowInstanceLog {

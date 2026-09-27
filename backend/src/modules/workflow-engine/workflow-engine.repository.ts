@@ -2,6 +2,12 @@ import { prisma } from '@/shared/database/prisma';
 import type { Prisma } from '@prisma/client';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
+import {
+  buildApprovalSummary,
+  isSummarizableReferenceType,
+  normalizeReferenceType,
+  type ApprovalSummary,
+} from '@/shared/workflow/approval-summary';
 import type {
   CreateWorkflowTemplateDTO,
   StartWorkflowInstanceDTO,
@@ -68,6 +74,148 @@ function mapStageCreate(stage: WorkflowStageInput) {
       })),
     },
   };
+}
+
+// ==================== Ringkasan dokumen untuk inbox approval ====================
+
+/** Identitas pengaju yang cukup untuk kartu approval — tidak lebih. */
+const SUMMARY_EMPLOYEE_SELECT = { select: { fullName: true, employeeNumber: true } } as const;
+
+/**
+ * Pengambil dokumen massal per referenceType. SEMUA loader terikat `companyId`
+ * instance (tenant safety: approver hanya boleh melihat isi dokumen company-nya
+ * sendiri) dan memakai satu `findMany` per tipe — bukan query per kartu — agar
+ * inbox approval tidak pernah N+1.
+ */
+type SummaryDocLoader = (companyId: string, ids: string[]) => Promise<Array<{ id: string }>>;
+
+const SUMMARY_DOC_LOADERS: Record<string, SummaryDocLoader> = {
+  LEAVE_REQUEST: (companyId, ids) =>
+    prisma.leaveRequest.findMany({
+      where: { companyId, id: { in: ids } },
+      include: { employee: SUMMARY_EMPLOYEE_SELECT, leaveType: { select: { name: true } } },
+    }),
+  LOAN_REQUEST: (companyId, ids) =>
+    prisma.loan.findMany({
+      where: { companyId, id: { in: ids } },
+      include: { employee: SUMMARY_EMPLOYEE_SELECT, loanType: { select: { name: true } } },
+    }),
+  BUSINESS_TRIP: (companyId, ids) =>
+    prisma.businessTrip.findMany({
+      where: { companyId, id: { in: ids } },
+      include: { employee: SUMMARY_EMPLOYEE_SELECT },
+    }),
+  EXPENSE_CLAIM: (companyId, ids) =>
+    prisma.expenseClaim.findMany({
+      where: { companyId, id: { in: ids } },
+      include: { employee: SUMMARY_EMPLOYEE_SELECT, trip: { select: { destination: true } } },
+    }),
+  SHIFT_SWAP_REQUEST: (companyId, ids) =>
+    prisma.shiftSwapRequest.findMany({
+      where: { companyId, id: { in: ids } },
+      include: { requesterEmployee: SUMMARY_EMPLOYEE_SELECT, targetEmployee: SUMMARY_EMPLOYEE_SELECT },
+    }),
+  OVERTIME_REQUEST: (companyId, ids) =>
+    prisma.overtimeRequest.findMany({
+      where: { companyId, id: { in: ids } },
+      include: { employee: SUMMARY_EMPLOYEE_SELECT },
+    }),
+  CAREER_MOVEMENT: (companyId, ids) =>
+    prisma.employeeCareerTransaction.findMany({
+      where: { companyId, id: { in: ids } },
+      include: {
+        employee: SUMMARY_EMPLOYEE_SELECT,
+        fromPosition: { select: { name: true } },
+        toPosition: { select: { name: true } },
+        toDepartment: { select: { name: true } },
+      },
+    }),
+  PERMISSION_REQUEST: (companyId, ids) =>
+    prisma.permissionRequest.findMany({
+      where: { companyId, id: { in: ids } },
+      include: { employee: SUMMARY_EMPLOYEE_SELECT },
+    }),
+  ATTENDANCE_CORRECTION: (companyId, ids) =>
+    prisma.attendanceCorrection.findMany({
+      where: { companyId, id: { in: ids } },
+      include: { employee: SUMMARY_EMPLOYEE_SELECT },
+    }),
+};
+
+/**
+ * Ringkasan dokumen untuk sekumpulan referensi workflow, dikunci per
+ * `referenceType:referenceId`. Tipe tak dikenal (mis. instance lama
+ * `LEAVE_APPROVAL`) dan dokumen yang sudah terhapus tetap mendapat ringkasan
+ * dengan judul generik + `lines` kosong, bukan error.
+ */
+async function loadApprovalSummaries(
+  companyId: string,
+  references: Array<{ referenceType: string; referenceId: string; requesterId: string }>,
+): Promise<Map<string, ApprovalSummary>> {
+  const summaryKey = (referenceType: string, referenceId: string) => `${referenceType}:${referenceId}`;
+
+  // Dikelompokkan per tipe yang SUDAH dinormalisasi agar data lama bertipe
+  // `leave_request` ikut terambil dan tetap satu query per tipe dokumen.
+  const idsByType = new Map<string, Set<string>>();
+  for (const reference of references) {
+    // Dua penjaga: `isSummarizableReferenceType` adalah kontrak domain (tipe ini
+    // punya pemetaan ringkasan) dan `SUMMARY_DOC_LOADERS` kontrak datanya.
+    if (!isSummarizableReferenceType(reference.referenceType)) continue;
+    const normalized = normalizeReferenceType(reference.referenceType);
+    if (!SUMMARY_DOC_LOADERS[normalized]) continue;
+    const bucket = idsByType.get(normalized) ?? new Set<string>();
+    bucket.add(reference.referenceId);
+    idsByType.set(normalized, bucket);
+  }
+
+  const docsByKey = new Map<string, { id: string }>();
+  await Promise.all(
+    [...idsByType.entries()].map(async ([referenceType, ids]) => {
+      const docs = await (SUMMARY_DOC_LOADERS[referenceType] as SummaryDocLoader)(companyId, [...ids]);
+      for (const doc of docs) docsByKey.set(summaryKey(referenceType, doc.id), doc);
+    }),
+  );
+
+  const summaries = new Map<string, ApprovalSummary>();
+  for (const reference of references) {
+    const key = summaryKey(reference.referenceType, reference.referenceId);
+    if (summaries.has(key)) continue;
+    const doc = docsByKey.get(summaryKey(normalizeReferenceType(reference.referenceType), reference.referenceId)) ?? null;
+    summaries.set(key, buildApprovalSummary(reference.referenceType, doc));
+  }
+
+  // Dokumen hilang/tipe tak dikenal masih menyisakan satu fakta penting: SIAPA
+  // yang mengajukan. Diambil dari requester instance (satu query untuk semua
+  // kartu yang belum punya nama pengaju), bukan dibiarkan kosong.
+  const unresolvedRequesterIds = [
+    ...new Set(
+      references
+        .filter((reference) => reference.requesterId && !summaries.get(summaryKey(reference.referenceType, reference.referenceId))?.requesterName)
+        .map((reference) => reference.requesterId),
+    ),
+  ];
+  if (unresolvedRequesterIds.length > 0) {
+    const requesterEmployees = await prisma.employee.findMany({
+      where: { companyId, user: { id: { in: unresolvedRequesterIds } } },
+      select: { fullName: true, employeeNumber: true, user: { select: { id: true } } },
+    });
+    const byUserId = new Map(
+      requesterEmployees.flatMap((employee) => (employee.user ? [[employee.user.id, employee] as const] : [])),
+    );
+    for (const reference of references) {
+      const key = summaryKey(reference.referenceType, reference.referenceId);
+      const summary = summaries.get(key);
+      const employee = byUserId.get(reference.requesterId);
+      if (!summary || summary.requesterName || !employee) continue;
+      summaries.set(key, {
+        ...summary,
+        requesterName: employee.fullName,
+        requesterNumber: employee.employeeNumber,
+      });
+    }
+  }
+
+  return summaries;
 }
 
 export class WorkflowEngineRepository {
@@ -289,7 +437,27 @@ export class WorkflowEngineRepository {
       }),
       prisma.workflowInstanceStep.count({ where }),
     ]);
-    return { items, total };
+
+    // Approver harus bisa memutuskan dari kartu inbox saja: tiap langkah dibekali
+    // ringkasan dokumen yang dirujuk (pengaju, periode, nominal, …). Dokumen
+    // diambil massal per referenceType sehingga jumlah query tetap konstan
+    // terhadap ukuran halaman.
+    const summaries = await loadApprovalSummaries(
+      companyId,
+      items.map((item) => ({
+        referenceType: item.instance.referenceType,
+        referenceId: item.instance.referenceId,
+        requesterId: item.instance.requesterId,
+      })),
+    );
+    const itemsWithSummary = items.map((item) => ({
+      ...item,
+      summary:
+        summaries.get(`${item.instance.referenceType}:${item.instance.referenceId}`) ??
+        buildApprovalSummary(item.instance.referenceType, null),
+    }));
+
+    return { items: itemsWithSummary, total };
   }
 
   async findInstanceById(id: string) {

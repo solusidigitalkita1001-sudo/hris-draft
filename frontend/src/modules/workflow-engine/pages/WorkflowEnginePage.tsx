@@ -771,36 +771,80 @@ export function WorkflowEnginePage() {
                   {t('ops.workflow.engine.approvals.empty')}
                 </div>
               )}
-              {approvals.map((approval) => (
-                <div key={approval.id} className="rounded-xl border border-border bg-card p-5">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold">{approval.name}</h3>
-                        <StatusBadge label={approval.status} tone="warning" />
-                        <StatusBadge label={approval.instance?.template?.approvalType || t('ops.workflow.engine.approvals.workflowBadge')} tone="neutral" />
+              {approvals.map((approval) => {
+                // Ringkasan dokumen dari server: approver harus bisa memutuskan dari
+                // kartu ini saja, jadi identitas pengaju + isi dokumen yang jadi
+                // informasi utama — id referensi hanya detail kecil.
+                const summary = approval.summary;
+                const referenceType = approval.instance?.referenceType ?? '';
+                const referenceId = approval.instance?.referenceId ?? '';
+                return (
+                  <div key={approval.id} className="rounded-xl border border-border bg-card p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold">
+                            {summary?.title || approval.instance?.template?.name || approval.name}
+                          </h3>
+                          <StatusBadge label={approval.status} tone="warning" />
+                          <StatusBadge
+                            label={referenceType || approval.instance?.template?.approvalType || t('ops.workflow.engine.approvals.workflowBadge')}
+                            tone="neutral"
+                          />
+                        </div>
+                        <p className="mb-3 text-sm">
+                          <span className="text-muted-foreground">{t('ops.workflow.engine.approvals.requesterLabel')}</span>{' '}
+                          <span className="font-medium text-foreground">
+                            {summary?.requesterName || t('ops.workflow.engine.approvals.requesterUnknown')}
+                          </span>
+                          {summary?.requesterNumber && (
+                            <span className="text-muted-foreground">
+                              {' · '}
+                              {t('ops.workflow.engine.approvals.employeeNumber', { number: summary.requesterNumber })}
+                            </span>
+                          )}
+                        </p>
+                        {summary?.lines?.length ? (
+                          <dl className="grid gap-x-8 gap-y-1.5 text-sm md:grid-cols-2">
+                            {summary.lines.map((line) => (
+                              <div key={`${approval.id}-${line.label}`} className="flex gap-2">
+                                <dt className="w-32 shrink-0 text-muted-foreground">{line.label}</dt>
+                                <dd className="min-w-0 break-words font-medium text-foreground">{line.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">{t('ops.workflow.engine.approvals.detailUnavailable')}</p>
+                        )}
+                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span>{t('ops.workflow.engine.approvals.stage', { name: approval.name, level: approval.level })}</span>
+                          <span>{t('ops.workflow.engine.approvals.submittedAt', { date: dayjs(approval.createdAt).format('DD MMM YYYY HH:mm') })}</span>
+                          <span>{t('ops.workflow.engine.approvals.template', { name: approval.instance?.template?.name || '-' })}</span>
+                          {referenceId && (
+                            <span
+                              className="font-mono"
+                              title={t('ops.workflow.engine.reference', { type: referenceType, id: referenceId })}
+                            >
+                              #{referenceId.slice(0, 8)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                        <span>{t('ops.workflow.engine.approvals.template', { name: approval.instance?.template?.name || '-' })}</span>
-                        <span>{t('ops.workflow.engine.reference', { type: approval.instance?.referenceType ?? '', id: approval.instance?.referenceId ?? '' })}</span>
-                        <span>{t('ops.workflow.engine.currentLevel', { level: approval.level })}</span>
-                        <span>{t('ops.workflow.engine.createdAt', { date: dayjs(approval.createdAt).format('DD MMM YYYY HH:mm') })}</span>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" onClick={() => handleAction(approval.instanceId, 'APPROVE')}>
+                          <CheckCircle2 size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.approve')}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleAction(approval.instanceId, 'REJECT')}>
+                          <XCircle size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.reject')}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleAction(approval.instanceId, 'ESCALATE')}>
+                          <ArrowUpCircle size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.escalate')}
+                        </Button>
                       </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" onClick={() => handleAction(approval.instanceId, 'APPROVE')}>
-                        <CheckCircle2 size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.approve')}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleAction(approval.instanceId, 'REJECT')}>
-                        <XCircle size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.reject')}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleAction(approval.instanceId, 'ESCALATE')}>
-                        <ArrowUpCircle size={15} className="mr-1.5" /> {t('ops.workflow.engine.approvals.escalate')}
-                      </Button>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
