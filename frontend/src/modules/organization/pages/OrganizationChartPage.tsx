@@ -11,7 +11,9 @@ import {
   Search,
   UserRound,
   Users,
+  X,
 } from 'lucide-react';
+import { StatusChip, statusTone } from '@/components/shared/StatusChip';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -521,8 +523,13 @@ export function OrganizationChartPage() {
     setCollapsedIds(ids);
   };
 
-  const handleSelectNode = useCallback(async (node: OrgChartNode) => {
+  // Klik node hanya memilih (panel detail); daftar karyawan dibuka eksplisit
+  // lewat tombol di panel supaya modal tidak menyergap setiap klik.
+  const handleSelectNode = useCallback((node: OrgChartNode) => {
     setSelectedNode(node);
+  }, []);
+
+  const handleShowPeople = useCallback(async (node: OrgChartNode) => {
     setPeopleNode(node);
     setPeopleDialogOpen(true);
     setPeopleLoading(true);
@@ -681,61 +688,96 @@ export function OrganizationChartPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-5">
+          <aside className="self-start rounded-card border border-border bg-card p-5 shadow-card xl:sticky xl:top-24">
             {selectedNode ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                    {selectedNode.type === 'company' ? <Building2 size={18} /> :
-                     selectedNode.type === 'division' ? <GitBranch size={18} /> :
-                     selectedNode.type === 'department' ? <Network size={18} /> :
-                     <Briefcase size={18} />}
+              <div key={selectedNode.id} className="animate-in fade-in slide-in-from-right-2 duration-200">
+                {/* Header: ikon tipe + label + nama + tutup */}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 flex-none items-center justify-center rounded-[14px] bg-accent text-primary">
+                    {selectedNode.type === 'company' ? <Building2 size={19} /> :
+                     selectedNode.type === 'division' ? <GitBranch size={19} /> :
+                     selectedNode.type === 'department' ? <Network size={19} /> :
+                     <Briefcase size={19} />}
                   </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">
                       {DETAIL_LABELS[selectedNode.type]}
                     </p>
-                    <h3 className="text-base font-semibold">{selectedNode.label}</h3>
+                    <h3 className="text-balance text-base font-semibold leading-snug tracking-[-0.3px]">
+                      {selectedNode.label}
+                    </h3>
+                    {selectedNode.subtitle && (
+                      <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{selectedNode.subtitle}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNode(null)}
+                    aria-label="Tutup detail"
+                    className="flex h-7 w-7 flex-none items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {selectedNode.status && (
+                  <StatusChip tone={statusTone(selectedNode.status)} className="mt-3">
+                    {selectedNode.status === 'ACTIVE' ? 'Aktif' : selectedNode.status}
+                  </StatusChip>
+                )}
+
+                {/* Statistik ringkas */}
+                <div className="mt-4 grid grid-cols-2 gap-2.5">
+                  <div className="rounded-2xl bg-secondary px-3.5 py-3">
+                    <p className="text-[10.5px] text-muted-foreground">Sub-unit</p>
+                    <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.8px] tabular-nums">
+                      {selectedNode.children.length}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-secondary px-3.5 py-3">
+                    <p className="text-[10.5px] text-muted-foreground">Karyawan</p>
+                    <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.8px] tabular-nums">
+                      {typeof selectedNode.employeeCount === 'number' ? selectedNode.employeeCount : '—'}
+                    </p>
                   </div>
                 </div>
 
-                <div className="mt-5 space-y-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Identifier</p>
-                    <p className="mt-1 text-sm font-medium">{selectedNode.subtitle || '-'}</p>
+                {/* Pimpinan */}
+                <div className="mt-4 flex items-center gap-3 rounded-2xl bg-accent/60 px-3.5 py-3">
+                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                    {selectedNode.headName
+                      ? selectedNode.headName.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase()
+                      : <UserRound size={15} />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10.5px] text-muted-foreground">Pimpinan</p>
+                    <p className="truncate text-sm font-medium">
+                      {selectedNode.headName || 'Belum ditetapkan'}
+                    </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Status</p>
-                    <p className="mt-1 text-sm font-medium">{selectedNode.status || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Lead / Head</p>
-                    <div className="mt-1 flex items-center gap-2 text-sm font-medium">
-                      <UserRound size={14} className="text-muted-foreground" />
-                      <span>{selectedNode.headName || '-'}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Direct Children</p>
-                    <div className="mt-1 flex items-center gap-2 text-sm font-medium">
-                      <Users size={14} className="text-muted-foreground" />
-                      <span>{selectedNode.children.length}</span>
-                    </div>
-                  </div>
-                  {typeof selectedNode.employeeCount === 'number' && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">People / Assigned</p>
-                      <p className="mt-1 text-sm font-medium">{selectedNode.employeeCount}</p>
-                    </div>
-                  )}
                 </div>
-              </>
+
+                <Button
+                  variant="outline"
+                  className="mt-4 w-full"
+                  onClick={() => void handleShowPeople(selectedNode)}
+                >
+                  <Users size={15} className="mr-2" />
+                  Lihat Karyawan
+                </Button>
+              </div>
             ) : (
-              <div className="flex h-full min-h-[240px] items-center justify-center text-center text-sm text-muted-foreground">
-                Klik node mana pun di chart untuk melihat detailnya.
+              <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2.5 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-secondary text-muted-foreground">
+                  <Network size={19} />
+                </span>
+                <p className="text-sm font-medium">Belum ada yang dipilih</p>
+                <p className="max-w-[220px] text-xs text-muted-foreground">
+                  Klik node mana pun di chart untuk melihat detail unitnya di sini.
+                </p>
               </div>
             )}
-          </div>
+          </aside>
         </div>
       )}
 
