@@ -30,6 +30,17 @@ export const payrollUnlockSchema = z.object({
   totp: z.string().trim().min(6).max(20).optional(),
 });
 
+const payslipPinSchema = z.string().regex(/^\d{6}$/, 'PIN harus terdiri dari 6 digit angka');
+
+export const setPayslipPinSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  pin: payslipPinSchema,
+});
+
+export const payslipPinUnlockSchema = z.object({
+  pin: payslipPinSchema,
+});
+
 export const periodIdParamSchema = z.object({
   periodId: z.string().uuid(),
 });

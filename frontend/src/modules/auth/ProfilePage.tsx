@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
 import { authService, type AuthUser, type UserSession } from '@/services/auth.service';
@@ -11,7 +12,8 @@ import {
   type EmployeeAttachment,
 } from '@/services/employee.service';
 import { leaveService, type LeaveBalance } from '@/services/leave.service';
-import { payrollService, type MyPayslipSummary } from '@/services/payroll.service';
+import { payrollService, type MyPayslipSummary, type PayslipPinStatus } from '@/services/payroll.service';
+import { PayslipPinDialog } from '@/modules/payroll/components/PayslipPinDialog';
 import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -169,6 +171,68 @@ function ChartStatCard({
   );
 }
 
+// ─── PIN slip gaji ──────────────────────────────────────
+function PayslipPinCard() {
+  const [status, setStatus] = useState<PayslipPinStatus | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setStatus(await payrollService.getPayslipPinStatus());
+    } catch {
+      // Akun tanpa tautan karyawan (mis. admin murni) tidak punya PIN slip gaji.
+      setStatus(null);
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const pinSet = status?.pinSet === true;
+
+  return (
+    <SectionCard
+      title="PIN Slip Gaji"
+      action={
+        loaded && status !== null ? (
+          <StatusChip tone={pinSet ? 'success' : 'warning'}>
+            {pinSet ? 'PIN sudah diset' : 'Belum diset'}
+          </StatusChip>
+        ) : undefined
+      }
+    >
+      <p className="text-xs text-muted-foreground">
+        PIN 6 digit melindungi nominal slip gaji Anda: server hanya mengirim angka setelah PIN
+        terverifikasi di halaman Slip Gaji Saya.
+      </p>
+      {!loaded ? (
+        <p className="mt-4 text-xs text-muted-foreground">Memuat status PIN...</p>
+      ) : status === null ? (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Akun ini tidak tertaut ke data karyawan, jadi tidak memiliki slip gaji untuk dilindungi PIN.
+        </p>
+      ) : (
+        <div className="mt-4 flex justify-end">
+          <Button size="sm" variant={pinSet ? 'outline' : 'default'} onClick={() => setDialogOpen(true)}>
+            <KeyRound size={14} className="mr-1.5" /> {pinSet ? 'Ubah PIN' : 'Atur PIN'}
+          </Button>
+        </div>
+      )}
+      <PayslipPinDialog
+        open={dialogOpen}
+        mode="set"
+        pinAlreadySet={pinSet}
+        onClose={() => setDialogOpen(false)}
+        onPinSaved={load}
+      />
+    </SectionCard>
+  );
+}
+
 // ─── Ganti kata sandi ───────────────────────────────────
 function ChangePasswordCard({ mustChange }: { mustChange: boolean }) {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -230,6 +294,7 @@ function ChangePasswordCard({ mustChange }: { mustChange: boolean }) {
 
 // ─── Halaman utama ──────────────────────────────────────
 export function ProfilePage() {
+  const navigate = useNavigate();
   const { setUser } = useAuthStore();
   const [profile, setProfile] = useState<AuthUser | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -647,11 +712,14 @@ export function ProfilePage() {
                       <p className="text-[13px] font-semibold tracking-[1px] text-muted-foreground">Rp ••••••••</p>
                       <p className="mt-0.5 text-[10px] text-muted-foreground">take home pay</p>
                     </div>
-                    <span title="Buka dari halaman Slip Gaji Saya">
-                      <Button size="sm" className="rounded-[13px]" disabled>
-                        <Lock size={12} className="mr-1.5" /> Buka
-                      </Button>
-                    </span>
+                    <Button
+                      size="sm"
+                      className="rounded-[13px]"
+                      title="Buka dengan PIN di halaman Slip Gaji Saya"
+                      onClick={() => navigate('/my-payslips')}
+                    >
+                      <Lock size={12} className="mr-1.5" /> Buka
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -839,7 +907,10 @@ export function ProfilePage() {
       {/* ── Tab: Pengaturan ── */}
       {tab === 'settings' && (
         <div className="mt-[18px] grid grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
-          <ChangePasswordCard mustChange={Boolean(profile?.mustChangePassword)} />
+          <div className="min-w-0 space-y-3.5">
+            <ChangePasswordCard mustChange={Boolean(profile?.mustChangePassword)} />
+            <PayslipPinCard />
+          </div>
 
           <SectionCard
             title="Keamanan & akses"
