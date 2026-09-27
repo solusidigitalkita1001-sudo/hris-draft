@@ -74,7 +74,7 @@ export class PayslipPinService {
     }
     const passwordValid = await passwordHandler.compare(input.currentPassword, user.passwordHash);
     if (!passwordValid) {
-      throw new AppError('Kata sandi salah', 401, 'PAYSLIP_PIN_REAUTH_FAILED', true);
+      throw new AppError('Kata sandi salah', 403, 'PAYSLIP_PIN_REAUTH_FAILED', true);
     }
     const pinHash = await passwordHandler.hash(input.pin);
     const reset = resetPinLockState();
@@ -125,7 +125,7 @@ export class PayslipPinService {
       if (next.lockedUntil && pinLockRemainingSeconds(next.lockedUntil, now) > 0) {
         throw pinLockedError(next.lockedUntil, now);
       }
-      throw new AppError('PIN salah', 401, 'PAYSLIP_PIN_INVALID', true);
+      throw new AppError('PIN salah', 403, 'PAYSLIP_PIN_INVALID', true);
     }
 
     const reset = resetPinLockState();

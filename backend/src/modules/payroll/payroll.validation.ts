@@ -21,8 +21,11 @@ export const payrollRunIdParamSchema = z.object({
   id: z.string().uuid(),
 });
 
+// Id payslip tidak selalu UUID: data seed/impor memakai kode seperti
+// "ps-EMP001-2606" (kolomnya VarChar(36)). Validasi ketat-UUID menolak data
+// sah dengan 422, jadi pakai charset aman + batas panjang kolom.
 export const payslipIdParamSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1).max(36).regex(/^[A-Za-z0-9_-]+$/, 'Format id slip gaji tidak valid'),
 });
 
 export const payrollUnlockSchema = z.object({
