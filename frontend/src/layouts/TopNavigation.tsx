@@ -118,7 +118,10 @@ export function TopNavigation() {
     [setActiveCompany]
   );
 
-  const roleLabel = user?.roles?.[0]?.replace(/_/g, ' ').toLowerCase();
+  // Tampilkan role dengan wewenang tertinggi, bukan urutan array dari server.
+  const ROLE_PRECEDENCE = ['SUPER_ADMIN', 'GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER', 'EMPLOYEE'];
+  const topRole = ROLE_PRECEDENCE.find((role) => user?.roles?.includes(role)) ?? user?.roles?.[0];
+  const roleLabel = topRole?.replace(/_/g, ' ').toLowerCase();
 
   return (
     <header className="topbar-blur sticky top-0 z-30">
