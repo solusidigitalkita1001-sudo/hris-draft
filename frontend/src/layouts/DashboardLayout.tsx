@@ -4,11 +4,15 @@ import { TopNavigation } from './TopNavigation';
 import { useUIStore } from '@/stores/ui.store';
 import { useCompanyStore } from '@/stores/company.store';
 import { cn } from '@/utils/cn';
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 export function DashboardLayout() {
   const { sidebarCollapsed } = useUIStore();
+  // Class animasi DILEPAS setelah selesai: nilai transform yang tertahan
+  // (walau identity) menjadikan elemen containing block dan mematahkan
+  // position:fixed pada sidebar/bottom-nav/modal di dalamnya.
+  const [entering, setEntering] = useState(true);
   // Remount all routed content when the active company changes. This discards
   // every page's component state (lists, detail/modal ids, forms) and re-runs
   // its data fetches under the new tenant, so no company-A state — nor a slow
@@ -17,7 +21,12 @@ export function DashboardLayout() {
   const activeCompanyId = useCompanyStore((s) => s.activeCompanyId);
 
   return (
-    <div className="anim-shell-enter min-h-screen bg-background">
+    <div
+      className={cn('min-h-screen bg-background', entering && 'anim-shell-enter')}
+      onAnimationEnd={(e) => {
+        if (e.animationName === 'shell-enter') setEntering(false);
+      }}
+    >
       <Sidebar />
       <div
         className={cn(
