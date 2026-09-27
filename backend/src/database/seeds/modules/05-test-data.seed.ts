@@ -1234,12 +1234,19 @@ export async function seedTestData(): Promise<void> {
   // 8. LEAVE BALANCES & REQUESTS
   // ===================================================
   console.log('  Creating leave balances...');
+  // Alokasi dibuat untuk SEMUA jenis cuti aktif, bukan hanya yang tahunan:
+  // approval mewajibkan baris saldo ada untuk jenis apa pun, jadi jenis tanpa
+  // alokasi tidak akan pernah bisa diajukan siapa pun. Kuota memakai maxDays
+  // tiap jenis (mengikuti UU Ketenagakerjaan: melahirkan 90, menikah 3, dst).
+  const balanceYears = Array.from(new Set([new Date().getFullYear(), 2026]));
   for (const emp of createdEmployees) {
-    for (const lt of createdLeaveTypes.filter((l) => l.isAnnual)) {
-      await prisma.leaveBalance.upsert({
-        where: { employeeId_leaveTypeId_year: { employeeId: emp.id, leaveTypeId: lt.id, year: 2026 } },
-        update: {}, create: { employeeId: emp.id, companyId: company.id, leaveTypeId: lt.id, year: 2026, totalDays: lt.maxDays, usedDays: 0, remainingDays: lt.maxDays },
-      });
+    for (const lt of createdLeaveTypes) {
+      for (const year of balanceYears) {
+        await prisma.leaveBalance.upsert({
+          where: { employeeId_leaveTypeId_year: { employeeId: emp.id, leaveTypeId: lt.id, year } },
+          update: {}, create: { employeeId: emp.id, companyId: company.id, leaveTypeId: lt.id, year, totalDays: lt.maxDays, usedDays: 0, remainingDays: lt.maxDays },
+        });
+      }
     }
   }
   console.log(`  ✓ Leave balances created`);
@@ -1643,9 +1650,9 @@ export async function seedTestData(): Promise<void> {
   // ===================================================
   console.log('  Creating attendance records...');
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
   const attendanceStartDate = new Date(today);
-  attendanceStartDate.setDate(attendanceStartDate.getDate() - 7);
+  attendanceStartDate.setUTCDate(attendanceStartDate.getUTCDate() - 7);
   await prisma.attendance.deleteMany({
     where: {
       employeeId: { in: createdEmployees.map((employee) => employee.id) },
@@ -1666,14 +1673,14 @@ export async function seedTestData(): Promise<void> {
   for (const emp of createdEmployees) {
     for (let i = 1; i <= 7; i++) {
       const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      if (d.getDay() === 0 || d.getDay() === 6) continue; // Skip weekends
+      d.setUTCDate(d.getUTCDate() - i);
+      d.setUTCHours(0, 0, 0, 0);
+      if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue; // Skip weekends
 
-      const nineAM = new Date(d); nineAM.setHours(9, 0, 0, 0);
+      const nineAM = new Date(d); nineAM.setUTCHours(9, 0, 0, 0);
       const checkIn = new Date(nineAM);
       checkIn.setMinutes(checkIn.getMinutes() + (emp.employeeNumber === 'EMP002' ? 15 : 0)); // EMP002 always late
-      const checkOut = new Date(d); checkOut.setHours(17, 0, 0, 0);
+      const checkOut = new Date(d); checkOut.setUTCHours(17, 0, 0, 0);
       const status = emp.employeeNumber === 'EMP002' ? 'LATE' : 'PRESENT';
       const branchPolicy = branchPolicies.get(emp.branchId || branch.id) || branchPolicies.get(branch.id)!;
       const usesMobileGps = branchPolicy.method === 'MOBILE_GPS' || (branchPolicy.method === 'BOTH' && i % 2 === 0);
