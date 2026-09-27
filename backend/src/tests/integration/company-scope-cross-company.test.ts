@@ -640,9 +640,9 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
     });
 
     it('createLeaveRequest EMPLOYEE dengan employeeId emp-A (diri) → bukan IDOR Forbidden', async () => {
-      jest.spyOn(prisma.leaveBalance, 'findMany').mockResolvedValue([
-        { leaveTypeId: 'lt-1', remainingDays: 10 } as any,
-      ]);
+      // Saldo cuti dibaca per (jenis, tahun) lewat findFirst sejak validasi saldo
+      // ditegakkan di jalur create (lihat shared/leave/balance-policy).
+      jest.spyOn(prisma.leaveBalance, 'findFirst').mockResolvedValue({ remainingDays: 10 } as any);
       // Complete the create path so it reaches (and passes) the IDOR guard.
       jest.spyOn(prisma.leaveType, 'findFirst').mockResolvedValue({
         id: 'lt-1', companyId: COMPANY_A_ID, name: 'Annual', requiresAttachment: false, maxDays: 12, deletedAt: null,
@@ -653,13 +653,18 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
       jest.spyOn(workflowEngineRepository, 'findDefaultTemplate').mockResolvedValue({ id: 'wf-tpl-1' } as any);
       jest.spyOn(workflowEngineRepository, 'startInstance').mockResolvedValue({} as any);
 
+      // Tanggal relatif: fixture bertanggal tetap membuat test ini basi begitu
+      // tanggal tsb lewat, karena aturan H-7 mewajibkan lampiran.
+      const startDate = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+      const endDate = new Date(Date.now() + 32 * 86_400_000).toISOString().slice(0, 10);
+
       const result = await runAs(userEmployeeA(), () =>
         leaveService.createLeaveRequest({
           companyId: COMPANY_A_ID,
           employeeId: EMPLOYEE_A_ID,
           leaveTypeId: 'lt-1',
-          startDate: '2026-01-10',
-          endDate: '2026-01-12',
+          startDate,
+          endDate,
           reason: 'test',
         })
       );

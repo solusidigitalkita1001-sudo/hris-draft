@@ -43,7 +43,13 @@ export function LeaveRequestForm({ companyId, employeeId, onSuccess, onClose }: 
         const activeTypes = typeList.filter((t) => t.isActive !== false);
         setTypes(activeTypes);
         setBalances(balanceList);
-        setLeaveTypeId((current) => current || activeTypes[0]?.id || '');
+        // Default ke jenis cuti yang benar-benar punya saldo; memilih jenis
+        // tanpa alokasi sebagai default hanya memancing pengajuan yang pasti
+        // ditolak server.
+        const firstWithBalance = activeTypes.find((type) =>
+          balanceList.some((b) => b.leaveTypeId === type.id && b.remainingDays > 0)
+        );
+        setLeaveTypeId((current) => current || firstWithBalance?.id || activeTypes[0]?.id || '');
       } catch (err) {
         if (!cancelled) toast.error(apiErrorMessage(err, t('ess.leave.form.toast.loadTypesFailed')));
       } finally {
@@ -53,8 +59,55 @@ export function LeaveRequestForm({ companyId, employeeId, onSuccess, onClose }: 
     return () => { cancelled = true; };
   }, [companyId, employeeId, t]);
 
-  const selectedBalance = balances.find((b) => b.leaveTypeId === leaveTypeId);
+  // Saldo dibebankan ke tahun tanggal MULAI cuti — sama dengan server
+  // (shared/leave/balance-policy.leaveBalanceYear), yang juga memakai tahun
+  // startDate saat memotong maupun mengembalikan saldo.
+  const balanceYear = Number(startDate.slice(0, 4)) || new Date().getFullYear();
+  const balanceForType = (typeId: string) =>
+    balances.find((b) => b.leaveTypeId === typeId && b.year === balanceYear);
+
+  const selectedBalance = balanceForType(leaveTypeId);
   const selectedType = types.find((t) => t.id === leaveTypeId);
+
+  // Perkiraan hari kerja Sen–Jum. Server menghitung ulang lewat kalender kerja
+  // karyawan/perusahaan dan hari libur nasional (leave.repository.countLeaveDays),
+  // jadi angka ini hanya indikasi — server tetap sumber kebenaran.
+  const estimatedWorkingDays = (() => {
+    const from = Date.parse(`${startDate}T00:00:00Z`);
+    const to = Date.parse(`${endDate}T00:00:00Z`);
+    if (Number.isNaN(from) || Number.isNaN(to) || to < from) return null;
+    let workdays = 0;
+    for (let cursor = from; cursor <= to; cursor += 86_400_000) {
+      const weekday = new Date(cursor).getUTCDay();
+      if (weekday !== 0 && weekday !== 6) workdays += 1;
+    }
+    return Math.max(1, workdays);
+  })();
+
+  // Gerbang saldo versi klien, mencerminkan aturan server: baris saldo untuk
+  // (jenis, tahun) wajib ada dan sisanya harus >= hari kerja yang diajukan.
+  const balanceIssue: 'NO_ALLOCATION' | 'INSUFFICIENT' | null = (() => {
+    if (loading || !leaveTypeId) return null;
+    if (!selectedBalance) return 'NO_ALLOCATION';
+    if (estimatedWorkingDays !== null && selectedBalance.remainingDays < estimatedWorkingDays) {
+      return 'INSUFFICIENT';
+    }
+    return null;
+  })();
+
+  const typeOptions = types.map((type) => {
+    const balance = balanceForType(type.id);
+    return {
+      value: type.id,
+      label: balance
+        ? t('ess.leave.form.option.withBalance', { type: type.name, days: balance.remainingDays })
+        : t('ess.leave.form.option.noBalance', { type: type.name }),
+      // Server mewajibkan alokasi saldo untuk SEMUA jenis cuti — termasuk yang
+      // isPaid=false — karena pemotongan saldo saat approval juga mewajibkannya.
+      // Jadi jenis tanpa alokasi dinonaktifkan, bukan sekadar ditandai.
+      disabled: !balance,
+    };
+  });
 
   // Aturan H-7 (kalender harian, date-only): pengajuan pada H-7 atau lebih awal
   // boleh tanpa lampiran; kurang dari H-7 wajib lampiran. Backend tetap
@@ -76,6 +129,16 @@ export function LeaveRequestForm({ companyId, employeeId, onSuccess, onClose }: 
     if (!leaveTypeId) return toast.error(t('ess.leave.form.toast.selectTypeFirst'));
     if (!startDate || !endDate) return toast.error(t('ess.leave.form.toast.datesRequired'));
     if (new Date(endDate) < new Date(startDate)) return toast.error(t('ess.leave.form.toast.endBeforeStart'));
+    // Cegah pengajuan yang pasti ditolak server karena saldo (leave.service
+    // createLeaveRequest). Perkiraan hari kerja klien bisa lebih besar dari
+    // hitungan server bila ada hari libur, jadi ini hanya menahan kasus jelas.
+    if (balanceIssue === 'NO_ALLOCATION') return toast.error(t('ess.leave.form.toast.noBalanceForType'));
+    if (balanceIssue === 'INSUFFICIENT' && selectedBalance) {
+      return toast.error(t('ess.leave.form.toast.insufficientBalance', {
+        remaining: selectedBalance.remainingDays,
+        days: estimatedWorkingDays ?? 0,
+      }));
+    }
     if (!reason.trim()) return toast.error(t('ess.common.reasonRequired'));
     if (attachmentRequired && !attachmentFile) {
       return toast.error(
@@ -123,7 +186,7 @@ export function LeaveRequestForm({ companyId, employeeId, onSuccess, onClose }: 
         <Select2
           value={leaveTypeId}
           onValueChange={setLeaveTypeId}
-          options={types.map((t) => ({ value: t.id, label: t.name }))}
+          options={typeOptions}
           placeholder={loading ? t('ess.leave.form.loadingTypes') : t('ess.leave.form.selectType')}
           disabled={loading}
           className="h-9"
@@ -138,17 +201,44 @@ export function LeaveRequestForm({ companyId, employeeId, onSuccess, onClose }: 
             {' '}{t('ess.leave.form.balanceUsed', { used: selectedBalance.usedDays, total: selectedBalance.totalDays })}
           </p>
         )}
+        {!loading && balances.length === 0 && (
+          <p className="mt-1.5 text-[11px] text-danger">{t('ess.leave.form.balanceWarn.noBalanceAtAll')}</p>
+        )}
+        {balanceIssue === 'NO_ALLOCATION' && balances.length > 0 && (
+          <p className="mt-1.5 text-[11px] text-danger">
+            {t('ess.leave.form.balanceWarn.noAllocation', {
+              type: selectedType?.name || t('ess.leave.form.balanceFallbackType'),
+              year: balanceYear,
+            })}
+          </p>
+        )}
+        {balanceIssue === 'INSUFFICIENT' && selectedBalance && (
+          <p className="mt-1.5 text-[11px] text-danger">
+            {t('ess.leave.form.balanceWarn.insufficient', {
+              type: selectedBalance.leaveType?.name || selectedType?.name || t('ess.leave.form.balanceFallbackType'),
+              remaining: selectedBalance.remainingDays,
+              days: estimatedWorkingDays ?? 0,
+            })}
+          </p>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.leave.detail.startDate')} *</label>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+      <div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.leave.detail.startDate')} *</label>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.leave.detail.endDate')} *</label>
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.leave.detail.endDate')} *</label>
-          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
-        </div>
+        {estimatedWorkingDays !== null && (
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            {t('ess.leave.form.estimatedDuration', { days: estimatedWorkingDays })}
+          </p>
+        )}
       </div>
 
       <div>

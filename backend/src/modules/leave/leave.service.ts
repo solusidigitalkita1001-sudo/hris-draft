@@ -6,6 +6,11 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import prisma from '@/shared/database/prisma';
 import { calculateOpeningBalance } from '@/shared/leave/accrual';
 import { leaveNeedsAttachment } from '@/shared/leave/attachment-policy';
+import {
+  evaluateLeaveBalance,
+  leaveBalanceViolationMessage,
+  leaveBalanceYear,
+} from '@/shared/leave/balance-policy';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
@@ -112,10 +117,33 @@ export class LeaveService {
       throw new ConflictError(`Sudah ada pengajuan cuti ${overlap.status} yang tumpang tindih pada rentang tanggal tersebut`);
     }
 
-    const balances = await leaveRepository.findLeaveBalances(data.employeeId);
-    const balance = balances.find((b) => b.leaveTypeId === data.leaveTypeId);
-    if (balance && balance.remainingDays <= 0) {
-      throw new BadRequestError('Insufficient leave balance');
+    // Saldo divalidasi SEBELUM request dibuat. Sebelumnya cek ini hanya menolak
+    // saat baris saldo ADA dan sudah 0, sehingga jenis cuti tanpa alokasi sama
+    // sekali (mis. Sick Leave yang tidak diseed) lolos masuk lalu baru ditolak
+    // di meja approver oleh finalizeApprovalEffects.
+    //
+    // Berlaku untuk SEMUA jenis cuti — termasuk yang isPaid=false — karena
+    // finalizeApprovalEffects juga mewajibkan baris saldo ada dan mencukupi
+    // untuk semua jenis. Melonggarkan aturan di sini hanya akan mengembalikan
+    // bug yang sama pada jenis yang dilonggarkan.
+    const balanceYear = leaveBalanceYear(start);
+    const balance = await prisma.leaveBalance.findFirst({
+      where: {
+        companyId: data.companyId,
+        employeeId: data.employeeId,
+        leaveTypeId: data.leaveTypeId,
+        year: balanceYear,
+      },
+      select: { remainingDays: true },
+    });
+    const balanceViolation = evaluateLeaveBalance({
+      leaveTypeName: leaveType.name,
+      year: balanceYear,
+      requestedDays: computedTotalDays,
+      remainingDays: balance ? Number(balance.remainingDays) : null,
+    });
+    if (balanceViolation) {
+      throw new BadRequestError(leaveBalanceViolationMessage(balanceViolation, 'REQUESTER'));
     }
 
     const requesterId = currentUser?.id ?? undefined;
@@ -124,7 +152,9 @@ export class LeaveService {
     // atomicity is achieved by compensating (deleting the fresh request) when
     // the workflow cannot start — an approval-less request is unapprovable.
     {
-      const request = await leaveRepository.createLeaveRequest(data);
+      // totalDays yang sudah divalidasi (cap per jenis + saldo) diteruskan agar
+      // angka yang tersimpan persis angka yang diuji, bukan hasil hitung ulang.
+      const request = await leaveRepository.createLeaveRequest(data, computedTotalDays);
 
       try {
         const templateId = await this.resolveDefaultWorkflowTemplateId(data.companyId);
@@ -240,7 +270,7 @@ export class LeaveService {
     if (!request) throw new NotFoundError('Leave request not found');
     if (request.status === 'APPROVED') return;
 
-    const year = new Date(request.startDate).getFullYear();
+    const year = leaveBalanceYear(new Date(request.startDate));
     const balance = await prisma.leaveBalance.findFirst({
       where: {
         companyId: request.companyId,
@@ -251,16 +281,16 @@ export class LeaveService {
       select: { remainingDays: true },
     });
 
-    const typeName = request.leaveType?.name ?? 'cuti';
-    if (!balance) {
-      throw new BadRequestError(
-        `Karyawan belum punya saldo ${typeName} untuk tahun ${year}. Minta HR menetapkan saldo sebelum menyetujui.`
-      );
-    }
-    if (Number(balance.remainingDays) < Number(request.totalDays)) {
-      throw new BadRequestError(
-        `Saldo ${typeName} tidak cukup: sisa ${balance.remainingDays} hari, diajukan ${request.totalDays} hari.`
-      );
+    // Aturan yang sama dipakai saat pengajuan dibuat (createLeaveRequest),
+    // hanya beda audiens pesan — supaya kedua gerbang tidak bisa berbeda.
+    const violation = evaluateLeaveBalance({
+      leaveTypeName: request.leaveType?.name ?? 'cuti',
+      year,
+      requestedDays: Number(request.totalDays),
+      remainingDays: balance ? Number(balance.remainingDays) : null,
+    });
+    if (violation) {
+      throw new BadRequestError(leaveBalanceViolationMessage(violation, 'APPROVER'));
     }
   }
 

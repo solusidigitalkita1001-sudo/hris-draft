@@ -202,6 +202,14 @@ export const essDictionary = defineDictionary({
     'ess.leave.form.toast.typeAttachmentRequiredNoName': 'Jenis cuti ini wajib menyertakan lampiran dokumen',
     'ess.leave.form.toast.submitSuccess': 'Pengajuan cuti berhasil dikirim',
     'ess.leave.form.toast.submitFailed': 'Gagal mengajukan cuti',
+    'ess.leave.form.option.withBalance': '{{type}} — sisa {{days}} hari',
+    'ess.leave.form.option.noBalance': '{{type}} — belum ada saldo',
+    'ess.leave.form.estimatedDuration': 'Perkiraan {{days}} hari kerja (Sen–Jum, belum memperhitungkan hari libur). Jumlah final dihitung server.',
+    'ess.leave.form.balanceWarn.noAllocation': 'Anda belum punya alokasi saldo {{type}} untuk tahun {{year}}, jadi jenis cuti ini belum bisa diajukan. Hubungi HR atau pilih jenis cuti lain.',
+    'ess.leave.form.balanceWarn.insufficient': 'Sisa saldo {{type}} tinggal {{remaining}} hari, sedangkan rentang ini diperkirakan {{days}} hari kerja. Perpendek rentang tanggal atau pilih jenis cuti lain.',
+    'ess.leave.form.balanceWarn.noBalanceAtAll': 'Anda belum punya alokasi saldo cuti apa pun. Hubungi HR untuk penetapan saldo sebelum mengajukan.',
+    'ess.leave.form.toast.noBalanceForType': 'Jenis cuti ini belum punya alokasi saldo. Hubungi HR atau pilih jenis cuti lain.',
+    'ess.leave.form.toast.insufficientBalance': 'Sisa saldo {{remaining}} hari tidak cukup untuk perkiraan {{days}} hari kerja. Perpendek rentang tanggal atau pilih jenis cuti lain.',
 
     // ── Self Service ────────────────────────────────────
     'ess.selfService.title': 'Self Service',
@@ -658,6 +666,14 @@ export const essDictionary = defineDictionary({
     'ess.leave.form.toast.typeAttachmentRequiredNoName': 'This leave type requires a document attachment',
     'ess.leave.form.toast.submitSuccess': 'Leave request submitted successfully',
     'ess.leave.form.toast.submitFailed': 'Failed to submit leave request',
+    'ess.leave.form.option.withBalance': '{{type}} — {{days}} days left',
+    'ess.leave.form.option.noBalance': '{{type}} — no balance allocated',
+    'ess.leave.form.estimatedDuration': 'Estimated {{days}} working days (Mon–Fri, holidays not yet accounted for). The server computes the final total.',
+    'ess.leave.form.balanceWarn.noAllocation': 'You have no {{type}} balance allocated for {{year}}, so this leave type cannot be requested yet. Contact HR or pick another leave type.',
+    'ess.leave.form.balanceWarn.insufficient': 'Only {{remaining}} days of {{type}} left, but this range is estimated at {{days}} working days. Shorten the date range or pick another leave type.',
+    'ess.leave.form.balanceWarn.noBalanceAtAll': 'You have no leave balance allocated at all. Ask HR to set your balance before submitting.',
+    'ess.leave.form.toast.noBalanceForType': 'This leave type has no balance allocated. Contact HR or pick another leave type.',
+    'ess.leave.form.toast.insufficientBalance': 'Only {{remaining}} days left, which is not enough for the estimated {{days}} working days. Shorten the date range or pick another leave type.',
 
     // ── Self Service ────────────────────────────────────
     'ess.selfService.title': 'Self Service',
