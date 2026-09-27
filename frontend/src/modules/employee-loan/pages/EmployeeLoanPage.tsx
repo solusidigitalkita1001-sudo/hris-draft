@@ -2,34 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { formatCurrency, formatDate } from '@/utils/format';
-import { employeeLoanService, type Loan, type LoanType, LOAN_STATUS_LABELS } from '@/services/employee-loan.service';
-import { PageHeader } from '@/components/shared/PageHeader';
+import { employeeLoanService, type Loan, type LoanType, type LoanStatus, LOAN_STATUS_LABELS } from '@/services/employee-loan.service';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { AppModal } from '@/components/shared/AppModal';
+import { StatTile } from '@/components/shared/StatTile';
+import { StatusChip, FilterChip, statusTone } from '@/components/shared/StatusChip';
+import { TableShell, useTableControls } from '@/components/shared/TableShell';
 import { apiErrorMessage } from '@/lib/errors';
 import { useCompanyStore } from '@/stores/company.store';
-import {
-  Plus, RefreshCw, Banknote, Eye,
-} from 'lucide-react';
-
-// ─── Modal ──────────────────────────────────────────────
-function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
-  );
-}
+import { Plus, RefreshCw, Banknote, ChevronRight } from 'lucide-react';
 
 // ─── Loan Form ──────────────────────────────────────────
 function LoanForm({ onClose }: { onClose: () => void }) {
@@ -91,7 +74,7 @@ function LoanForm({ onClose }: { onClose: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Jenis Pinjaman *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Jenis Pinjaman *</label>
         <Select2
           value={selectedType}
           onValueChange={setSelectedType}
@@ -109,27 +92,28 @@ function LoanForm({ onClose }: { onClose: () => void }) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Jumlah Pinjaman *</label>
+          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Jumlah Pinjaman *</label>
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min={1} required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Cicilan (bulan) *</label>
+          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Cicilan (bulan) *</label>
           <Input type="number" value={installments} onChange={(e) => setInstallments(Number(e.target.value))} min={1}
             max={selectedLoanType?.maxInstallments || 60} required />
         </div>
       </div>
 
       {installmentAmount > 0 && (
-        <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-sm">
-          <span className="text-muted-foreground">Estimasi cicilan per bulan: </span>
-          <span className="font-semibold">{formatCurrency(Math.round(installmentAmount * 100) / 100)}</span>
+        <div className="flex items-center gap-2.5 rounded-field bg-accent px-4 py-3 text-sm">
+          <span className="h-2 w-2 flex-none rounded-full bg-primary" />
+          <span className="text-muted-foreground">Estimasi cicilan per bulan:</span>
+          <span className="font-semibold text-foreground">{formatCurrency(Math.round(installmentAmount * 100) / 100)}</span>
         </div>
       )}
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Alasan Pinjaman *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Alasan Pinjaman *</label>
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none" required />
+          className="w-full resize-none rounded-field border border-border bg-background px-3.5 py-2.5 text-sm text-foreground" required />
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
@@ -140,14 +124,21 @@ function LoanForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  PENDING: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  APPROVED: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-  ACTIVE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
-  REJECTED: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
-  PAID: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
-  CANCELLED: 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-};
+function LoanStatusChip({ status }: { status: string }) {
+  return (
+    <StatusChip tone={statusTone(status)}>
+      {LOAN_STATUS_LABELS[status as LoanStatus] || status}
+    </StatusChip>
+  );
+}
+
+const STATUS_FILTERS: { value: string; label: string }[] = [
+  { value: '', label: 'Semua' },
+  { value: 'PENDING', label: 'Menunggu' },
+  { value: 'ACTIVE', label: 'Aktif' },
+  { value: 'PAID', label: 'Lunas' },
+  { value: 'REJECTED', label: 'Ditolak' },
+];
 
 export function EmployeeLoanPage() {
   const navigate = useNavigate();
@@ -166,91 +157,169 @@ export function EmployeeLoanPage() {
         ? await employeeLoanService.findMyLoans(statusFilter || undefined)
         : await employeeLoanService.findAll(companyId, statusFilter || undefined);
       setLoans(data);
-    } catch { toast.error('Gagal memuat data pinjaman'); }
+    } catch (err) { toast.error(apiErrorMessage(err, 'Gagal memuat data pinjaman')); }
     finally { setLoading(false); }
   }, [companyId, employeeId, isEmployee, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const activeLoans = loans.filter((l) => l.status === 'ACTIVE');
+  const outstanding = activeLoans.reduce((sum, l) => sum + Number(l.remainingBalance || 0), 0);
+  const pendingCount = loans.filter((l) => l.status === 'PENDING').length;
+  const paidCount = loans.filter((l) => l.status === 'PAID').length;
+
+  const table = useTableControls(loans, (loan, q) =>
+    [loan.loanType?.name, LOAN_STATUS_LABELS[loan.status] || loan.status, loan.reason, loan.employee?.fullName]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(q));
+
   return (
     <div>
-      <PageHeader
-        title="Employee Loan"
-        description="Pinjaman karyawan — pengajuan, cicilan, dan status"
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={fetchData}><RefreshCw size={16} className="mr-2" />Refresh</Button>
-            {isEmployee && <Button size="sm" onClick={() => setShowForm(true)}><Plus size={16} className="mr-2" />Ajukan Pinjaman</Button>}
-          </div>
-        }
-      />
+      {/* Header halaman ala handoff */}
+      <div className="flex flex-wrap items-start justify-between gap-5">
+        <div>
+          <h1 className="text-xl font-semibold tracking-[-0.9px] text-foreground">Employee Loan</h1>
+          <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+            Pinjaman karyawan — pengajuan, cicilan, dan status pembayaran
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button variant="outline" size="sm" onClick={fetchData}>
+            <RefreshCw size={15} className="mr-2" /> Refresh
+          </Button>
+          {isEmployee && (
+            <Button size="sm" className="rounded-[14px]" onClick={() => setShowForm(true)}>
+              <Plus size={15} className="mr-2" /> Ajukan Pinjaman
+            </Button>
+          )}
+        </div>
+      </div>
 
-      <div className="flex gap-1 mb-4 flex-wrap">
-        {['', 'PENDING', 'ACTIVE', 'PAID', 'REJECTED'].map((s) => (
-          <button key={s} onClick={() => setStatusFilter(s)}
-            className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-              statusFilter === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-            }`}>
-            {s || 'Semua'}
-          </button>
+      {/* Kartu ringkasan */}
+      <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-3.5">
+        <StatTile
+          label="Sisa Pinjaman Berjalan"
+          value={<span className="text-[22px] tracking-[-0.8px]">{formatCurrency(outstanding)}</span>}
+          note={activeLoans.length > 0 ? `${activeLoans.length} pinjaman aktif` : 'Tidak ada pinjaman aktif'}
+        />
+        <StatTile label="Pinjaman Aktif" value={activeLoans.length} valueClassName="text-success" />
+        <StatTile label="Menunggu Persetujuan" value={pendingCount} valueClassName="text-warning" />
+        <StatTile label="Lunas" value={paidCount} valueClassName="text-primary" />
+      </div>
+
+      {/* Chip filter status */}
+      <div className="mt-3.5 flex flex-wrap gap-2">
+        {STATUS_FILTERS.map((s) => (
+          <FilterChip key={s.value} active={statusFilter === s.value} onClick={() => setStatusFilter(s.value)}>
+            {s.label}
+          </FilterChip>
         ))}
       </div>
 
-      {loading && <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data...</div></div>}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-sm text-muted-foreground">Memuat data...</div>
+        </div>
+      )}
 
       {!loading && loans.length === 0 && (
-        <div className="flex flex-col items-center py-20 gap-3">
-          <Banknote size={48} className="text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">{statusFilter ? 'Tidak ada pinjaman dengan status ini' : 'Belum ada pinjaman'}</p>
-          {isEmployee && !statusFilter && <Button size="sm" onClick={() => setShowForm(true)}><Plus size={16} className="mr-2" />Ajukan Pinjaman</Button>}
+        <div className="mt-3.5 flex flex-col items-center gap-3.5 rounded-card border border-border bg-card px-6 py-16">
+          <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
+            <Banknote size={24} className="text-primary" />
+          </div>
+          <p className="text-sm font-medium text-foreground">
+            {statusFilter ? 'Tidak ada pinjaman dengan status ini' : 'Belum ada pinjaman'}
+          </p>
+          <p className="max-w-[340px] text-center text-[11.5px] leading-relaxed text-muted-foreground">
+            Pengajuan pinjaman Anda akan tampil di sini beserta jadwal cicilannya.
+          </p>
+          {isEmployee && !statusFilter && (
+            <Button size="sm" className="rounded-[14px]" onClick={() => setShowForm(true)}>
+              <Plus size={15} className="mr-2" /> Ajukan Pinjaman
+            </Button>
+          )}
         </div>
       )}
 
       {!loading && loans.length > 0 && (
-        <div className="space-y-3">
-          {loans.map((loan) => {
-            const progress = loan.totalInstallments > 0
-              ? Math.round(((loan.amount - loan.remainingBalance) / loan.amount) * 100)
-              : 0;
-            return (
-              <div key={loan.id} className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4 hover:shadow-sm transition-shadow cursor-pointer"
-                onClick={() => navigate(`/employee-loans/${loan.id}`)}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[loan.status] || ''}`}>
-                        {LOAN_STATUS_LABELS[loan.status as keyof typeof LOAN_STATUS_LABELS] || loan.status}
-                      </span>
-                      <span className="text-xs font-medium text-muted-foreground">{loan.loanType?.name || '-'}</span>
-                    </div>
-                    <div className="flex items-baseline gap-2 mt-2">
-                      <span className="text-lg font-bold">{formatCurrency(loan.amount)}</span>
-                      <span className="text-xs text-muted-foreground">{loan.totalInstallments}x cicilan @ {formatCurrency(loan.installmentAmount)}</span>
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>Sisa: {formatCurrency(loan.remainingBalance)}</span>
-                      <span>Diajukan: {formatDate(loan.createdAt)}</span>
-                      {loan._count && <span>{loan._count.installments} cicilan</span>}
-                    </div>
-                    {loan.status === 'ACTIVE' && (
-                      <div className="mt-2 w-full max-w-xs bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                        <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${progress}%` }} />
-                      </div>
-                    )}
-                  </div>
-                  <button className="shrink-0 p-1.5 rounded-lg hover:bg-muted text-muted-foreground" title="Detail">
-                    <Eye size={16} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+        <div className="mt-3.5">
+          <TableShell
+            search={table.search}
+            setSearch={table.setSearch}
+            pageSize={table.pageSize}
+            setPageSize={table.setPageSize}
+            page={table.page}
+            setPage={table.setPage}
+            totalPages={table.totalPages}
+            totalItems={table.filtered.length}
+            searchPlaceholder="Cari pinjaman…"
+          >
+            <table className="w-full min-w-[820px] text-left">
+              <thead>
+                <tr className="bg-secondary/70">
+                  {['Jenis', 'Jumlah', 'Cicilan', 'Sisa', 'Progres', 'Diajukan', 'Status', ''].map((h, i) => (
+                    <th key={i} className="px-5 py-3.5 text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {table.paged.map((loan) => {
+                  const progress = loan.amount > 0
+                    ? Math.round(((loan.amount - loan.remainingBalance) / loan.amount) * 100)
+                    : 0;
+                  return (
+                    <tr
+                      key={loan.id}
+                      onClick={() => navigate(`/employee-loans/${loan.id}`)}
+                      className="cursor-pointer border-t border-border transition-colors hover:bg-muted/30"
+                    >
+                      <td className="px-5 py-3.5">
+                        <p className="text-xs font-medium text-foreground">{loan.loanType?.name || '-'}</p>
+                        {loan.employee && (
+                          <p className="mt-0.5 text-[10.5px] text-muted-foreground">{loan.employee.fullName}</p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-xs font-semibold tracking-[-0.2px] text-foreground">{formatCurrency(loan.amount)}</td>
+                      <td className="px-5 py-3.5 text-xs text-muted-foreground">{loan.totalInstallments}x @ {formatCurrency(loan.installmentAmount)}</td>
+                      <td className="px-5 py-3.5 text-xs text-muted-foreground">{formatCurrency(loan.remainingBalance)}</td>
+                      <td className="px-5 py-3.5">
+                        {loan.status === 'ACTIVE' || loan.status === 'PAID' ? (
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+                              <div className="h-full rounded-full bg-success" style={{ width: `${loan.status === 'PAID' ? 100 : progress}%` }} />
+                            </div>
+                            <span className="text-[10.5px] font-medium text-muted-foreground">{loan.status === 'PAID' ? 100 : progress}%</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10.5px] text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-muted-foreground">{formatDate(loan.createdAt)}</td>
+                      <td className="px-5 py-3.5"><LoanStatusChip status={loan.status} /></td>
+                      <td className="px-5 py-3.5 text-right">
+                        <ChevronRight size={14} className="ml-auto text-muted-foreground" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableShell>
         </div>
       )}
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Ajukan Pinjaman">
+      <AppModal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title="Ajukan Pinjaman"
+        description="Pengajuan diproses melalui workflow persetujuan pinjaman"
+      >
         <LoanForm onClose={() => { setShowForm(false); fetchData(); }} />
-      </Modal>
+      </AppModal>
     </div>
   );
 }

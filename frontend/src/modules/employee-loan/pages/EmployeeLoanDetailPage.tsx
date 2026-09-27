@@ -7,11 +7,13 @@ import {
   employeeLoanService,
   type Loan,
   type WorkflowInstance,
+  type LoanStatus,
   LOAN_STATUS_LABELS,
   INSTALLMENT_STATUS_LABELS,
 } from '@/services/employee-loan.service';
-import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
+import { AppModal } from '@/components/shared/AppModal';
+import { StatusChip, statusTone } from '@/components/shared/StatusChip';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/lib/errors';
 import {
@@ -26,44 +28,28 @@ import {
   UserRound,
 } from 'lucide-react';
 
-const STATUS_STYLES: Record<string, string> = {
-  PENDING: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  APPROVED: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-  ACTIVE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
-  REJECTED: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
-  PAID: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
-  CANCELLED: 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-};
-
-const INSTALLMENT_COLORS: Record<string, string> = {
-  PENDING: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30',
-  PAID: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30',
-  OVERDUE: 'text-red-600 bg-red-50 dark:bg-red-950/30',
-  SKIPPED: 'text-gray-400 bg-gray-50 dark:bg-gray-800',
-};
+function LoanStatusChip({ status }: { status: string }) {
+  return (
+    <StatusChip tone={statusTone(status)}>
+      {LOAN_STATUS_LABELS[status as LoanStatus] || status}
+    </StatusChip>
+  );
+}
 
 function getStepIcon(status: string, isCurrent: boolean) {
-  if (status === 'APPROVED') {
-    return <CheckCircle2 size={16} className="text-white" />;
-  }
-  if (status === 'REJECTED') {
-    return <XCircle size={16} className="text-white" />;
-  }
-  if (status === 'ESCALATED') {
-    return <AlertTriangle size={16} className="text-white" />;
-  }
-  if (isCurrent) {
-    return <Gauge size={16} className="text-white animate-pulse" />;
-  }
-  return <Clock size={16} className="text-white" />;
+  if (status === 'APPROVED') return <CheckCircle2 size={15} />;
+  if (status === 'REJECTED') return <XCircle size={15} />;
+  if (status === 'ESCALATED') return <AlertTriangle size={15} />;
+  if (isCurrent) return <Gauge size={15} className="animate-pulse" />;
+  return <Clock size={15} />;
 }
 
 function getStepColor(status: string, isCurrent: boolean) {
-  if (status === 'APPROVED') return 'bg-emerald-500 ring-2 ring-emerald-200 dark:ring-emerald-900';
-  if (status === 'REJECTED') return 'bg-red-500 ring-2 ring-red-200 dark:ring-red-900';
-  if (status === 'ESCALATED') return 'bg-amber-500 ring-2 ring-amber-200 dark:ring-amber-900';
-  if (isCurrent) return 'bg-blue-500 ring-2 ring-blue-200 dark:ring-blue-900';
-  return 'bg-gray-400 dark:bg-gray-600 ring-2 ring-gray-200 dark:ring-gray-700';
+  if (status === 'APPROVED') return 'bg-success-bg text-success';
+  if (status === 'REJECTED') return 'bg-danger-bg text-danger';
+  if (status === 'ESCALATED') return 'bg-warning-bg text-warning';
+  if (isCurrent) return 'bg-accent text-primary';
+  return 'bg-secondary text-muted-foreground';
 }
 
 function WorkflowTimelineCard({
@@ -79,30 +65,35 @@ function WorkflowTimelineCard({
 }) {
   const currentStep = workflow.steps.find((s) => s.isCurrent);
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-border shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+    <div className="overflow-hidden rounded-card border border-border bg-card shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
         <div>
-          <h3 className="text-sm font-semibold">Approval Workflow Timeline</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <h3 className="text-[15px] font-semibold tracking-[-0.3px]">Alur Persetujuan</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Status: <span className="font-medium text-foreground">{workflow.status}</span>
           </p>
         </div>
         {canAct && workflow.status === 'PENDING' && currentStep && (
           <div className="flex gap-2">
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onApprove}>
-              <CheckCircle2 size={14} className="mr-1.5" /> Approve
+            <Button size="sm" onClick={onApprove}>
+              <CheckCircle2 size={14} className="mr-1.5" /> Setujui
             </Button>
-            <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950" onClick={onReject}>
-              <XCircle size={14} className="mr-1.5" /> Reject
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-danger/25 text-danger hover:bg-danger-bg"
+              onClick={onReject}
+            >
+              <XCircle size={14} className="mr-1.5" /> Tolak
             </Button>
           </div>
         )}
       </div>
-      <div className="p-4 pl-6">
-        <ol className="relative border-l border-border ml-2">
+      <div className="p-5 pl-7">
+        <ol className="relative ml-2 border-l border-border">
           {workflow.steps.map((step, idx) => (
             <li key={step.id} className="mb-5 ml-6 last:mb-0">
-              <span className={`absolute -left-3.5 flex items-center justify-center w-7 h-7 rounded-full ${getStepColor(step.status, !!step.isCurrent)}`}>
+              <span className={`absolute -left-3.5 flex h-7 w-7 items-center justify-center rounded-full ${getStepColor(step.status, !!step.isCurrent)}`}>
                 {getStepIcon(step.status, !!step.isCurrent)}
               </span>
               <div className="pt-0.5">
@@ -111,9 +102,7 @@ function WorkflowTimelineCard({
                     Level {step.level} &middot; {step.name}
                   </h4>
                   {step.isCurrent && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      CURRENT
-                    </span>
+                    <StatusChip tone="accent" className="uppercase tracking-[0.4px]">Saat ini</StatusChip>
                   )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -121,15 +110,15 @@ function WorkflowTimelineCard({
                     Approver: <span className="font-medium text-foreground">{step.approverRoleCode || (step.approverId ? 'User' : '-')}</span>
                   </span>
                   {step.actedAt && (
-                    <span>Acted: {formatDateTime(step.actedAt)}</span>
+                    <span>Diproses: {formatDateTime(step.actedAt)}</span>
                   )}
                   {step.actedBy && (
-                    <span>By: <span className="font-mono">{step.actedBy.slice(0, 8)}...</span></span>
+                    <span>Oleh: <span className="font-mono">{step.actedBy.slice(0, 8)}...</span></span>
                   )}
                 </div>
                 {step.comment && (
-                  <div className="mt-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-900/60 border border-border text-xs text-muted-foreground whitespace-pre-wrap">
-                    <span className="font-medium text-foreground">Comment:</span> {step.comment}
+                  <div className="mt-2 whitespace-pre-wrap rounded-field border border-border bg-muted/20 p-2.5 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Catatan:</span> {step.comment}
                   </div>
                 )}
               </div>
@@ -165,7 +154,7 @@ export function EmployeeLoanDetailPage() {
       ]);
       setLoan(loanData);
       setWorkflow(wfData);
-    } catch { toast.error('Gagal memuat detail pinjaman'); }
+    } catch (err) { toast.error(apiErrorMessage(err, 'Gagal memuat detail pinjaman')); }
     finally { setLoading(false); }
   }, [id]);
 
@@ -215,22 +204,29 @@ export function EmployeeLoanDetailPage() {
     }
   };
 
+  const paidInstallments = loan?.installments?.filter((i) => i.status === 'PAID').length || 0;
+
   return (
     <div>
-      <PageHeader
-        title={loading ? 'Loading...' : 'Detail Pinjaman'}
-        description={loan?.loanType?.name || ''}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate('/employee-loans')}>
-              <ArrowLeft size={16} className="mr-2" /> Kembali
-            </Button>
-            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
-            </Button>
-          </div>
-        }
-      />
+      {/* Header halaman */}
+      <div className="flex flex-wrap items-start justify-between gap-5">
+        <div>
+          <h1 className="text-xl font-semibold tracking-[-0.9px] text-foreground">
+            {loading ? 'Memuat…' : 'Detail Pinjaman'}
+          </h1>
+          <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+            {loan?.loanType?.name || 'Rincian pengajuan, alur persetujuan, dan jadwal cicilan'}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button variant="outline" size="sm" onClick={() => navigate('/employee-loans')}>
+            <ArrowLeft size={15} className="mr-2" /> Kembali
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+            <RefreshCw size={15} className="mr-2" /> Refresh
+          </Button>
+        </div>
+      </div>
 
       {loading && (
         <div className="flex items-center justify-center py-20">
@@ -239,69 +235,69 @@ export function EmployeeLoanDetailPage() {
       )}
 
       {!loading && !loan && (
-        <div className="flex flex-col items-center py-20 gap-3">
-          <Banknote size={48} className="text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Pinjaman tidak ditemukan</p>
-          <Button size="sm" onClick={() => navigate('/employee-loans')}>Kembali</Button>
+        <div className="mt-5 flex flex-col items-center gap-3.5 rounded-card border border-border bg-card px-6 py-16">
+          <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
+            <Banknote size={24} className="text-primary" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Pinjaman tidak ditemukan</p>
+          <Button size="sm" className="rounded-[14px]" onClick={() => navigate('/employee-loans')}>Kembali</Button>
         </div>
       )}
 
       {!loading && loan && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-                <p className="text-xs text-muted-foreground mb-1">Jumlah Pinjaman</p>
-                <p className="text-xl font-bold">{formatCurrency(loan.amount)}</p>
+        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="space-y-5 lg:col-span-2">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,170px),1fr))] gap-3.5">
+              <div className="rounded-card-sm border border-border bg-card px-[18px] py-4 shadow-card">
+                <p className="text-[11.5px] text-muted-foreground">Jumlah Pinjaman</p>
+                <p className="mt-2.5 text-[22px] font-semibold leading-none tracking-[-0.8px] text-foreground">{formatCurrency(loan.amount)}</p>
               </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-                <p className="text-xs text-muted-foreground mb-1">Sisa Pinjaman</p>
-                <p className="text-xl font-bold text-amber-600">{formatCurrency(loan.remainingBalance)}</p>
+              <div className="rounded-card-sm border border-border bg-card px-[18px] py-4 shadow-card">
+                <p className="text-[11.5px] text-muted-foreground">Sisa Pinjaman</p>
+                <p className="mt-2.5 text-[22px] font-semibold leading-none tracking-[-0.8px] text-warning">{formatCurrency(loan.remainingBalance)}</p>
               </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-                <p className="text-xs text-muted-foreground mb-1">Cicilan per Bulan</p>
-                <p className="text-xl font-bold">{formatCurrency(loan.installmentAmount)}</p>
+              <div className="rounded-card-sm border border-border bg-card px-[18px] py-4 shadow-card">
+                <p className="text-[11.5px] text-muted-foreground">Cicilan per Bulan</p>
+                <p className="mt-2.5 text-[22px] font-semibold leading-none tracking-[-0.8px] text-foreground">{formatCurrency(loan.installmentAmount)}</p>
               </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-                <p className="text-xs text-muted-foreground mb-1">Status</p>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[loan.status] || ''}`}>
-                  {LOAN_STATUS_LABELS[loan.status as keyof typeof LOAN_STATUS_LABELS] || loan.status}
-                </span>
+              <div className="rounded-card-sm border border-border bg-card px-[18px] py-4 shadow-card">
+                <p className="text-[11.5px] text-muted-foreground">Status</p>
+                <div className="mt-2.5"><LoanStatusChip status={loan.status} /></div>
               </div>
             </div>
 
             {loan.status === 'ACTIVE' && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">Progress Pembayaran</span>
-                  <span className="text-xs font-medium">{progress}%</span>
+              <div className="rounded-card-sm border border-border bg-card px-[18px] py-4 shadow-card">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11.5px] text-muted-foreground">Progress Pembayaran</span>
+                  <span className="text-xs font-semibold">{progress}%</span>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                  <div className="bg-emerald-500 h-2.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-success transition-all" style={{ width: `${progress}%` }} />
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {loan.installments?.filter((i) => i.status === 'PAID').length || 0} dari {loan.totalInstallments} cicilan dibayar
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {paidInstallments} dari {loan.totalInstallments} cicilan dibayar
                 </p>
               </div>
             )}
 
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Informasi Pinjaman</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Jenis:</span> <span className="font-medium ml-1">{loan.loanType?.name || '-'}</span></div>
-                <div><span className="text-muted-foreground">Total Cicilan:</span> <span className="font-medium ml-1">{loan.totalInstallments} bulan</span></div>
-                <div className="col-span-2"><span className="text-muted-foreground">Alasan:</span> <span className="ml-1">{loan.reason}</span></div>
-                <div><span className="text-muted-foreground">Diajukan:</span> <span className="font-medium ml-1">{formatDate(loan.createdAt)}</span></div>
-                <div><span className="text-muted-foreground">Disetujui:</span> <span className="font-medium ml-1">{loan.approvedAt ? formatDate(loan.approvedAt) : '-'}</span></div>
+            <div className="rounded-card border border-border bg-card p-5 shadow-card">
+              <h3 className="mb-4 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Informasi Pinjaman</h3>
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                <div><span className="text-muted-foreground">Jenis:</span> <span className="ml-1 font-medium">{loan.loanType?.name || '-'}</span></div>
+                <div><span className="text-muted-foreground">Total Cicilan:</span> <span className="ml-1 font-medium">{loan.totalInstallments} bulan</span></div>
+                <div className="sm:col-span-2"><span className="text-muted-foreground">Alasan:</span> <span className="ml-1">{loan.reason}</span></div>
+                <div><span className="text-muted-foreground">Diajukan:</span> <span className="ml-1 font-medium">{formatDate(loan.createdAt)}</span></div>
+                <div><span className="text-muted-foreground">Disetujui:</span> <span className="ml-1 font-medium">{loan.approvedAt ? formatDate(loan.approvedAt) : '-'}</span></div>
                 {loan.employee && (
                   <>
                     <div>
                       <span className="text-muted-foreground">Karyawan:</span>{' '}
-                      <span className="font-medium ml-1 flex items-center gap-1.5 inline-flex">
+                      <span className="ml-1 inline-flex items-center gap-1.5 font-medium">
                         <UserRound size={14} className="text-muted-foreground" /> {loan.employee.fullName}
                       </span>
                     </div>
-                    <div><span className="text-muted-foreground">NIK:</span> <span className="font-medium ml-1">{loan.employee.employeeNumber}</span></div>
+                    <div><span className="text-muted-foreground">NIK:</span> <span className="ml-1 font-medium">{loan.employee.employeeNumber}</span></div>
                   </>
                 )}
               </div>
@@ -317,35 +313,37 @@ export function EmployeeLoanDetailPage() {
             )}
 
             {loan.installments && loan.installments.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Jadwal Cicilan</h3>
-                <div className="table-container">
-                  <table className="w-full text-sm">
-                    <thead className="table-header">
-                      <tr>
-                        <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase">#</th>
-                        <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Jatuh Tempo</th>
-                        <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Jumlah</th>
-                        <th className="text-center px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Status</th>
-                        <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Dibayar</th>
-                        <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase">Catatan</th>
+              <div className="overflow-hidden rounded-card border border-border bg-card shadow-card">
+                <div className="border-b border-border px-5 py-4">
+                  <h3 className="text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Jadwal Cicilan (Amortisasi)</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead>
+                      <tr className="bg-secondary/70">
+                        <th className="px-5 py-3 text-left text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">#</th>
+                        <th className="px-5 py-3 text-left text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">Jatuh Tempo</th>
+                        <th className="px-5 py-3 text-right text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">Jumlah</th>
+                        <th className="px-5 py-3 text-center text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">Status</th>
+                        <th className="px-5 py-3 text-left text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">Dibayar</th>
+                        <th className="px-5 py-3 text-left text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">Catatan</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody>
                       {loan.installments.map((inst, i) => (
-                        <tr key={inst.id} className="table-row-hover">
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground">{i + 1}</td>
-                          <td className="px-3 py-2.5">{dayjs(inst.dueDate).format('DD MMM YYYY')}</td>
-                          <td className="px-3 py-2.5 text-right font-medium">{formatCurrency(inst.amount)}</td>
-                          <td className="px-3 py-2.5 text-center">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${INSTALLMENT_COLORS[inst.status] || ''}`}>
-                              {INSTALLMENT_STATUS_LABELS[inst.status as keyof typeof INSTALLMENT_STATUS_LABELS] || inst.status}
-                            </span>
+                        <tr key={inst.id} className="border-t border-border transition-colors hover:bg-muted/30">
+                          <td className="px-5 py-3 text-xs text-muted-foreground">{i + 1}</td>
+                          <td className="px-5 py-3 text-xs">{dayjs(inst.dueDate).format('DD MMM YYYY')}</td>
+                          <td className="px-5 py-3 text-right text-xs font-semibold tracking-[-0.2px]">{formatCurrency(inst.amount)}</td>
+                          <td className="px-5 py-3 text-center">
+                            <StatusChip tone={statusTone(inst.status)}>
+                              {INSTALLMENT_STATUS_LABELS[inst.status] || inst.status}
+                            </StatusChip>
                           </td>
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                          <td className="px-5 py-3 text-xs text-muted-foreground">
                             {inst.paidDate ? dayjs(inst.paidDate).format('DD MMM YYYY') : '-'}
                           </td>
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                          <td className="px-5 py-3 text-xs text-muted-foreground">
                             {inst.notes || '-'}
                           </td>
                         </tr>
@@ -357,8 +355,8 @@ export function EmployeeLoanDetailPage() {
             )}
 
             {(!loan.installments || loan.installments.length === 0) && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-5">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Jadwal Cicilan</h3>
+              <div className="rounded-card border border-border bg-card p-5 shadow-card">
+                <h3 className="mb-3 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Jadwal Cicilan</h3>
                 <p className="text-sm text-muted-foreground">
                   {loan.status === 'PENDING'
                     ? 'Jadwal cicilan akan dibuat setelah pengajuan pinjaman disetujui.'
@@ -372,20 +370,20 @@ export function EmployeeLoanDetailPage() {
 
           <div className="space-y-4">
             {loan.status === 'PENDING' && !workflow && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900 p-4">
-                <h3 className="text-sm font-medium text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1.5">
-                  <AlertTriangle size={14} /> Workflow not available
+              <div className="rounded-card-sm border border-warning/30 bg-warning-bg p-4">
+                <h3 className="mb-1 flex items-center gap-1.5 text-sm font-medium text-warning">
+                  <AlertTriangle size={14} /> Workflow tidak tersedia
                 </h3>
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  No workflow instance attached. Legacy actions still available below.
+                <p className="text-xs text-warning/90">
+                  Belum ada workflow instance untuk pengajuan ini. Aksi legacy masih tersedia di bawah.
                 </p>
               </div>
             )}
 
             {loan.status === 'PENDING' && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-                <h3 className="text-sm font-medium mb-3">
-                  {workflow ? 'Legacy Actions (deprecated)' : 'Actions'}
+              <div className="rounded-card-sm border border-border bg-card p-4 shadow-card">
+                <h3 className="mb-3 text-sm font-semibold">
+                  {workflow ? 'Aksi Legacy (deprecated)' : 'Aksi'}
                 </h3>
                 <div className="space-y-3">
                   <Button
@@ -396,7 +394,7 @@ export function EmployeeLoanDetailPage() {
                     disabled={actionLoading === 'APPROVE' || !!workflow}
                   >
                     <CheckCircle2 size={16} className="mr-2" />
-                    {actionLoading === 'APPROVE' ? 'Approving...' : 'Approve'}
+                    {actionLoading === 'APPROVE' ? 'Menyetujui...' : 'Setujui'}
                   </Button>
 
                   {!showRejectModal ? (
@@ -408,23 +406,23 @@ export function EmployeeLoanDetailPage() {
                       disabled={actionLoading === 'REJECT' || !!workflow}
                     >
                       <XCircle size={16} className="mr-2" />
-                      Reject
+                      Tolak
                     </Button>
                   ) : (
-                    <div className="space-y-2 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
-                      <p className="text-xs font-medium text-red-700 dark:text-red-400">Reason for rejection:</p>
+                    <div className="space-y-2 rounded-field bg-danger-bg p-3">
+                      <p className="text-xs font-medium text-danger">Alasan penolakan:</p>
                       <textarea
                         value={rejectReason}
                         onChange={(e) => setRejectReason(e.target.value)}
-                        className="w-full h-20 text-xs p-2 rounded border border-border bg-background resize-none"
-                        placeholder="Enter rejection reason..."
+                        className="h-20 w-full resize-none rounded-field border border-border bg-background p-2.5 text-xs"
+                        placeholder="Tulis alasan penolakan..."
                       />
                       <div className="flex gap-2">
                         <Button size="sm" variant="destructive" onClick={handleReject} disabled={actionLoading === 'REJECT' || (!workflow && !rejectReason)}>
-                          {actionLoading === 'REJECT' ? 'Rejecting...' : 'Confirm Reject'}
+                          {actionLoading === 'REJECT' ? 'Menolak...' : 'Konfirmasi Tolak'}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => { setShowRejectModal(false); setRejectReason(''); }}>
-                          Cancel
+                          Batal
                         </Button>
                       </div>
                     </div>
@@ -434,25 +432,25 @@ export function EmployeeLoanDetailPage() {
             )}
 
             {!workflow && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-                <h3 className="text-sm font-medium mb-3">Timeline</h3>
+              <div className="rounded-card-sm border border-border bg-card p-4 shadow-card">
+                <h3 className="mb-3 text-sm font-semibold">Linimasa</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-0.5">
-                      <Banknote size={12} className="text-blue-600 dark:text-blue-400" />
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent">
+                      <Banknote size={13} className="text-primary" />
                     </div>
                     <div>
-                      <p className="text-xs font-medium">Submitted</p>
+                      <p className="text-xs font-medium">Diajukan</p>
                       <p className="text-xs text-muted-foreground">{formatDateTime(loan.createdAt)}</p>
                     </div>
                   </div>
                   {loan.approvedAt && (
                     <div className="flex items-start gap-3">
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center shrink-0 mt-0.5">
-                        <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-400" />
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-success-bg">
+                        <CheckCircle2 size={13} className="text-success" />
                       </div>
                       <div>
-                        <p className="text-xs font-medium">Approved</p>
+                        <p className="text-xs font-medium">Disetujui</p>
                         <p className="text-xs text-muted-foreground">{formatDateTime(loan.approvedAt)}</p>
                       </div>
                     </div>
@@ -464,71 +462,60 @@ export function EmployeeLoanDetailPage() {
         </div>
       )}
 
-      {showApproveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowApproveModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5">
-              <h3 className="text-base font-semibold mb-2 flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-emerald-600" /> Approve Loan Request
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Are you sure you want to approve this loan request? You can add an optional comment below.
-              </p>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Comment (optional)</label>
-                <textarea
-                  value={approveComment}
-                  onChange={(e) => setApproveComment(e.target.value)}
-                  placeholder="Enter approval comment..."
-                  rows={3}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-              <Button variant="outline" size="sm" onClick={() => setShowApproveModal(false)} disabled={actionLoading === 'APPROVE'}>
-                Cancel
-              </Button>
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleApprove} disabled={actionLoading === 'APPROVE'}>
-                {actionLoading === 'APPROVE' ? 'Approving...' : 'Confirm Approve'}
-              </Button>
-            </div>
-          </div>
+      <AppModal
+        open={showApproveModal}
+        onClose={() => setShowApproveModal(false)}
+        title="Setujui Pengajuan Pinjaman"
+        description="Pengajuan akan diteruskan ke tahap berikutnya setelah disetujui"
+        maxWidth="max-w-sm"
+      >
+        <div>
+          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Catatan (opsional)</label>
+          <textarea
+            value={approveComment}
+            onChange={(e) => setApproveComment(e.target.value)}
+            placeholder="Tulis catatan persetujuan..."
+            rows={3}
+            className="w-full resize-none rounded-field border border-border bg-background px-3.5 py-2.5 text-sm text-foreground"
+          />
         </div>
-      )}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowApproveModal(false)} disabled={actionLoading === 'APPROVE'}>
+            Batal
+          </Button>
+          <Button size="sm" onClick={handleApprove} disabled={actionLoading === 'APPROVE'}>
+            <CheckCircle2 size={14} className="mr-1.5" />
+            {actionLoading === 'APPROVE' ? 'Menyetujui...' : 'Konfirmasi Setujui'}
+          </Button>
+        </div>
+      </AppModal>
 
-      {showRejectModal && workflow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowRejectModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5">
-              <h3 className="text-base font-semibold mb-2 flex items-center gap-2">
-                <XCircle size={18} className="text-red-600" /> Reject Loan Request
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Provide a reason for rejecting this loan request.
-              </p>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Rejection Reason</label>
-                <textarea
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Enter rejection reason..."
-                  rows={3}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-              <Button variant="outline" size="sm" onClick={() => setShowRejectModal(false)} disabled={actionLoading === 'REJECT'}>
-                Cancel
-              </Button>
-              <Button size="sm" variant="destructive" onClick={handleReject} disabled={actionLoading === 'REJECT' || !rejectReason}>
-                {actionLoading === 'REJECT' ? 'Rejecting...' : 'Confirm Reject'}
-              </Button>
-            </div>
-          </div>
+      <AppModal
+        open={showRejectModal && !!workflow}
+        onClose={() => setShowRejectModal(false)}
+        title="Tolak Pengajuan Pinjaman"
+        description="Berikan alasan penolakan pengajuan pinjaman ini"
+        maxWidth="max-w-sm"
+      >
+        <div>
+          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Alasan Penolakan</label>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Tulis alasan penolakan..."
+            rows={3}
+            className="w-full resize-none rounded-field border border-border bg-background px-3.5 py-2.5 text-sm text-foreground"
+          />
         </div>
-      )}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowRejectModal(false)} disabled={actionLoading === 'REJECT'}>
+            Batal
+          </Button>
+          <Button size="sm" variant="destructive" onClick={handleReject} disabled={actionLoading === 'REJECT' || !rejectReason}>
+            {actionLoading === 'REJECT' ? 'Menolak...' : 'Konfirmasi Tolak'}
+          </Button>
+        </div>
+      </AppModal>
     </div>
   );
 }

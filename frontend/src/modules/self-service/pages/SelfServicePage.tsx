@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { permissionRequestService, type PermissionRequest, type PermissionType, type RequestStatus, PERMISSION_TYPE_LABELS, REQUEST_STATUS_LABELS } from '@/services/permission-request.service';
@@ -6,17 +6,20 @@ import { leaveService } from '@/services/leave.service';
 import { LeaveRequestForm } from '@/modules/leave/components/LeaveRequestForm';
 import { attendanceService } from '@/services/attendance.service';
 import { workCalendarService, type MyWorkCalendarDay, type MyWorkCalendarMonth, type ShiftSwapCandidateResponse, type ShiftSwapRequest, type ShiftSwapSchedulePreview } from '@/services/work-calendar.service';
-import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { AppModal } from '@/components/shared/AppModal';
+import { StatTile } from '@/components/shared/StatTile';
+import { StatusChip, FilterChip, statusTone } from '@/components/shared/StatusChip';
+import { TableShell, useTableControls } from '@/components/shared/TableShell';
 import { popup } from '@/stores/popup.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useCompanyStore } from '@/stores/company.store';
 import {
   Plus, RefreshCw, FileText, CalendarDays, Clock,
   CheckCircle, XCircle, AlertCircle, Ban,
-  Send, Repeat, Users,
+  Send, Repeat, Users, Table2, List,
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
@@ -82,31 +85,55 @@ function formatShiftSchedule(schedule?: ShiftSwapSchedulePreview | null) {
   return schedule.label ? `${schedule.label} • ${timeText}` : timeText;
 }
 
-// ─── Stat Card ──────────────────────────────────────────
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+// ─── Segmented control (pill) ala handoff ───────────────
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  options: { key: T; label: string; icon?: ReactNode }[];
+  value: T;
+  onChange: (key: T) => void;
+  ariaLabel: string;
+}) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      className="flex max-w-full gap-0.5 overflow-x-auto rounded-[14px] bg-secondary p-[3px]"
+    >
+      {options.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          role="tab"
+          aria-selected={value === option.key}
+          onClick={() => onChange(option.key)}
+          className={`flex items-center gap-1.5 whitespace-nowrap rounded-[11px] px-3.5 py-2 text-[11.5px] font-medium transition-colors ${
+            value === option.key
+              ? 'bg-card text-foreground shadow-card'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {option.icon}
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
 
-// ─── Modal ──────────────────────────────────────────────
-function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!open) return null;
+// ─── Tombol batalkan (danger, token semantik) ───────────
+function CancelButton({ onClick, children = 'Batalkan' }: { onClick: () => void; children?: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0 rounded-[12px] border border-danger/25 px-3 py-1.5 text-[11px] font-medium text-danger transition-colors hover:bg-danger-bg"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -151,7 +178,7 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tipe Izin *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Tipe Izin *</label>
         <Select2
           value={type}
           onValueChange={(value) => setType(value as PermissionType)}
@@ -166,28 +193,28 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tanggal Mulai *</label>
+          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Tanggal Mulai *</label>
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tanggal Selesai *</label>
+          <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Tanggal Selesai *</label>
           <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
         </div>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Durasi (hari) *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Durasi (hari) *</label>
         <Input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} min={0.5} step={0.5} required />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Alasan *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Alasan *</label>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Jelaskan alasan pengajuan..."
           rows={3}
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
+          className="w-full resize-none rounded-field border border-border bg-background px-3.5 py-2.5 text-sm text-foreground"
           required
         />
       </div>
@@ -263,12 +290,12 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tanggal Shift *</label>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Tanggal Shift *</label>
         <Input type="date" value={shiftDate} onChange={(e) => setShiftDate(e.target.value)} required />
       </div>
 
-      <div className="rounded-xl border border-border bg-muted/20 p-4">
-        <p className="text-xs font-medium text-muted-foreground mb-1">Akan disetujui oleh</p>
+      <div className="rounded-field border border-border bg-accent/60 p-4">
+        <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Akan disetujui oleh</p>
         <p className="text-sm font-semibold">{candidateData?.approver.fullName || '-'}</p>
         <p className="text-xs text-muted-foreground">
           {candidateData?.approver.employeeNumber || '-'}
@@ -277,21 +304,21 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
       </div>
 
       {loadingCandidates ? (
-        <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+        <div className="rounded-field border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
           Memuat kandidat tukar shift...
         </div>
       ) : !candidateData ? (
-        <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+        <div className="rounded-field border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
           Data kandidat belum tersedia.
         </div>
       ) : !isFactoryRequester ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="rounded-field border border-warning/30 bg-warning-bg p-4 text-sm text-warning">
           Fitur tukar shift hanya tersedia untuk pegawai pabrik yang memakai formula shifting.
         </div>
       ) : (
         <>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Rekan Tukar Shift *</label>
+            <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Rekan Tukar Shift *</label>
             <Select2
               value={targetEmployeeId}
               onValueChange={setTargetEmployeeId}
@@ -308,13 +335,13 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-border bg-background p-4">
-              <p className="text-xs font-medium text-muted-foreground mb-1">Shift Saya</p>
+            <div className="rounded-field border border-border bg-background p-4">
+              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Shift Saya</p>
               <p className="text-sm font-semibold">{candidateData.requester.fullName}</p>
               <p className="text-xs text-muted-foreground">{formatShiftSchedule(candidateData.requester.schedule)}</p>
             </div>
-            <div className="rounded-xl border border-border bg-background p-4">
-              <p className="text-xs font-medium text-muted-foreground mb-1">Shift Rekan</p>
+            <div className="rounded-field border border-border bg-background p-4">
+              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Shift Rekan</p>
               {selectedCandidate ? (
                 <>
                   <p className="text-sm font-semibold">{selectedCandidate.fullName}</p>
@@ -327,13 +354,13 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Alasan Request *</label>
+            <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Alasan Request *</label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Contoh: ada kebutuhan keluarga dan sudah sepakat tukar dengan rekan satu regu."
               rows={3}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
+              className="w-full resize-none rounded-field border border-border bg-background px-3.5 py-2.5 text-sm text-foreground"
               required
             />
           </div>
@@ -350,20 +377,21 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Request Card ───────────────────────────────────────
-const STATUS_STYLES: Record<string, string> = {
-  PENDING: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400 border-amber-200',
-  APPROVED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 border-emerald-200',
-  REJECTED: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400 border-red-200',
-  CANCELLED: 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 border-gray-200',
+// ─── Status icon per chip ───────────────────────────────
+const STATUS_ICONS: Record<string, React.ReactNode> = {
+  PENDING: <AlertCircle size={12} />,
+  APPROVED: <CheckCircle size={12} />,
+  REJECTED: <XCircle size={12} />,
+  CANCELLED: <Ban size={12} />,
 };
 
-const STATUS_ICONS: Record<string, React.ReactNode> = {
-  PENDING: <AlertCircle size={14} />,
-  APPROVED: <CheckCircle size={14} />,
-  REJECTED: <XCircle size={14} />,
-  CANCELLED: <Ban size={14} />,
-};
+function RequestStatusChip({ status }: { status: string }) {
+  return (
+    <StatusChip tone={statusTone(status)}>
+      {STATUS_ICONS[status]} {REQUEST_STATUS_LABELS[status as RequestStatus] ?? status}
+    </StatusChip>
+  );
+}
 
 // ─── Main Component ─────────────────────────────────────
 export function SelfServicePage() {
@@ -373,6 +401,7 @@ export function SelfServicePage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'permissions' | 'leave' | 'overtime' | 'calendar' | 'shift-swap'>('permissions');
   const [statusFilter, setStatusFilter] = useState('');
+  const [viewMode, setViewMode] = useState<'table' | 'list'>('table');
   const [activeModal, setActiveModal] = useState<'permission' | 'shift-swap' | null>(null);
   const [shiftCalendarMeta, setShiftCalendarMeta] = useState<MyWorkCalendarMonth | null>(null);
   const [loadingShiftEligibility, setLoadingShiftEligibility] = useState(true);
@@ -384,8 +413,8 @@ export function SelfServicePage() {
     try {
       const data = await permissionRequestService.findMyRequests(employeeId, statusFilter || undefined);
       setPermissions(data);
-    } catch {
-      toast.error('Gagal memuat data');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal memuat data'));
     } finally {
       setLoading(false);
     }
@@ -443,88 +472,94 @@ export function SelfServicePage() {
       await permissionRequestService.cancel(id, employeeId);
       toast.success('Pengajuan dibatalkan');
       fetchPermissions();
-    } catch {
-      toast.error('Gagal membatalkan');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Gagal membatalkan'));
     }
   };
 
   const pendingCount = permissions.filter((p) => p.status === 'PENDING').length;
   const approvedCount = permissions.filter((p) => p.status === 'APPROVED').length;
+  const rejectedCount = permissions.filter((p) => p.status === 'REJECTED').length;
+
+  const table = useTableControls(permissions, (p, q) =>
+    [PERMISSION_TYPE_LABELS[p.type], p.reason, REQUEST_STATUS_LABELS[p.status]]
+      .join(' ')
+      .toLowerCase()
+      .includes(q));
 
   const tabs = [
-    { key: 'permissions' as const, label: 'Izin', icon: <FileText size={16} /> },
-    { key: 'leave' as const, label: 'Cuti', icon: <CalendarDays size={16} /> },
-    { key: 'overtime' as const, label: 'Lembur', icon: <Clock size={16} /> },
-    { key: 'shift-swap' as const, label: 'Tukar Shift', icon: <Repeat size={16} /> },
-    { key: 'calendar' as const, label: 'Kalender Kerja', icon: <CalendarDays size={16} /> },
+    { key: 'permissions' as const, label: 'Izin', icon: <FileText size={14} /> },
+    { key: 'leave' as const, label: 'Cuti', icon: <CalendarDays size={14} /> },
+    { key: 'overtime' as const, label: 'Lembur', icon: <Clock size={14} /> },
+    { key: 'shift-swap' as const, label: 'Tukar Shift', icon: <Repeat size={14} /> },
+    { key: 'calendar' as const, label: 'Kalender Kerja', icon: <CalendarDays size={14} /> },
   ].filter((tab) => hasShiftCalendar || tab.key !== 'shift-swap');
 
   return (
     <div>
-      <PageHeader
-        title="Self Service"
-        description="Ajukan dan pantau status pengajuan Anda"
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={fetchPermissions}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+      {/* Header halaman ala handoff */}
+      <div className="flex flex-wrap items-start justify-between gap-5">
+        <div>
+          <h1 className="text-xl font-semibold tracking-[-0.9px] text-foreground">Self Service</h1>
+          <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+            Ajukan dan pantau status pengajuan Anda · diurutkan terbaru
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {activeTab === 'permissions' && (
+            <Segmented
+              ariaLabel="Mode tampilan"
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                { key: 'table' as const, label: 'Tabel', icon: <Table2 size={13} /> },
+                { key: 'list' as const, label: 'List', icon: <List size={13} /> },
+              ]}
+            />
+          )}
+          <Button variant="outline" size="sm" onClick={fetchPermissions}>
+            <RefreshCw size={15} className="mr-2" /> Refresh
+          </Button>
+          {activeTab === 'permissions' && (
+            <Button size="sm" className="rounded-[14px]" onClick={() => setActiveModal('permission')}>
+              <Plus size={15} className="mr-2" /> Ajukan Izin
             </Button>
-            {activeTab === 'permissions' && (
-              <Button size="sm" onClick={() => setActiveModal('permission')}>
-                <Plus size={16} className="mr-2" /> Ajukan Izin
-              </Button>
-            )}
-            {activeTab === 'shift-swap' && hasShiftCalendar && (
-              <Button size="sm" onClick={() => setActiveModal('shift-swap')}>
-                <Plus size={16} className="mr-2" /> Request Tukar Shift
-              </Button>
-            )}
-          </div>
-        }
-      />
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-border">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
+          )}
+          {activeTab === 'shift-swap' && hasShiftCalendar && (
+            <Button size="sm" className="rounded-[14px]" onClick={() => setActiveModal('shift-swap')}>
+              <Plus size={15} className="mr-2" /> Request Tukar Shift
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Stats */}
+      {/* Tab utama */}
+      <div className="mt-5">
+        <Segmented
+          ariaLabel="Kategori pengajuan"
+          value={activeTab}
+          onChange={setActiveTab}
+          options={tabs}
+        />
+      </div>
+
+      {/* Strip stat kecil (radius 20) */}
       {activeTab === 'permissions' && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <StatCard label="Total Pengajuan" value={permissions.length} color="text-foreground" />
-          <StatCard label="Pending" value={pendingCount} color="text-amber-500" />
-          <StatCard label="Disetujui" value={approvedCount} color="text-emerald-500" />
-          <StatCard label="Ditolak" value={permissions.filter((p) => p.status === 'REJECTED').length} color="text-red-500" />
+        <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3.5">
+          <StatTile label="Total Pengajuan" value={permissions.length} />
+          <StatTile label="Menunggu" value={pendingCount} valueClassName="text-warning" />
+          <StatTile label="Disetujui" value={approvedCount} valueClassName="text-success" />
+          <StatTile label="Ditolak" value={rejectedCount} valueClassName="text-danger" />
         </div>
       )}
 
-      {/* Status filter */}
+      {/* Chip filter status */}
       {activeTab === 'permissions' && (
-        <div className="flex gap-1 mb-4">
+        <div className="mt-3.5 flex flex-wrap gap-2">
           {['', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                statusFilter === s
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-              }`}
-            >
+            <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(s)}>
               {s ? REQUEST_STATUS_LABELS[s as RequestStatus] : 'Semua'}
-            </button>
+            </FilterChip>
           ))}
         </div>
       )}
@@ -538,90 +573,132 @@ export function SelfServicePage() {
 
       {/* ─── PERMISSIONS TAB ──────────────────────────── */}
       {!loading && activeTab === 'permissions' && (
-        <>
+        <div className="mt-3.5">
           {permissions.length === 0 ? (
-            <div className="flex flex-col items-center py-20 gap-3">
-              <FileText size={48} className="text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
+            <div className="flex flex-col items-center gap-3.5 rounded-card border border-border bg-card px-6 py-16">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
+                <FileText size={24} className="text-primary" />
+              </div>
+              <p className="text-sm font-medium text-foreground">
                 {statusFilter ? 'Tidak ada pengajuan dengan status ini' : 'Belum ada pengajuan izin'}
               </p>
+              <p className="max-w-[340px] text-center text-[11.5px] leading-relaxed text-muted-foreground">
+                Pengajuan izin Anda akan tampil di sini beserta status persetujuannya.
+              </p>
               {!statusFilter && (
-                <Button size="sm" onClick={() => setActiveModal('permission')}>
-                  <Plus size={16} className="mr-2" /> Ajukan Izin
+                <Button size="sm" className="rounded-[14px]" onClick={() => setActiveModal('permission')}>
+                  <Plus size={15} className="mr-2" /> Ajukan Izin
                 </Button>
               )}
             </div>
+          ) : viewMode === 'table' ? (
+            <TableShell
+              search={table.search}
+              setSearch={table.setSearch}
+              pageSize={table.pageSize}
+              setPageSize={table.setPageSize}
+              page={table.page}
+              setPage={table.setPage}
+              totalPages={table.totalPages}
+              totalItems={table.filtered.length}
+              searchPlaceholder="Cari pengajuan…"
+            >
+              <table className="w-full min-w-[760px] text-left">
+                <thead>
+                  <tr className="bg-secondary/70">
+                    {['Jenis', 'Periode', 'Durasi', 'Diajukan', 'Alasan', 'Status', ''].map((h, i) => (
+                      <th key={i} className="px-5 py-3.5 text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {table.paged.map((p) => (
+                    <tr key={p.id} className="border-t border-border transition-colors hover:bg-muted/30">
+                      <td className="px-5 py-3.5 text-xs font-medium text-foreground">{PERMISSION_TYPE_LABELS[p.type]}</td>
+                      <td className="px-5 py-3.5 text-xs text-foreground">{formatDate(p.startDate)} — {formatDate(p.endDate)}</td>
+                      <td className="px-5 py-3.5 text-xs text-muted-foreground">{p.duration} hari</td>
+                      <td className="px-5 py-3.5 text-xs text-muted-foreground">{formatDate(p.createdAt)}</td>
+                      <td className="max-w-[220px] truncate px-5 py-3.5 text-xs text-muted-foreground" title={p.reason}>{p.reason}</td>
+                      <td className="px-5 py-3.5"><RequestStatusChip status={p.status} /></td>
+                      <td className="px-5 py-3.5 text-right">
+                        {p.status === 'PENDING' && <CancelButton onClick={() => handleCancel(p.id)} />}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableShell>
           ) : (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-2.5">
               {permissions.map((p) => (
-                <div
-                  key={p.id}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4 hover:shadow-sm transition-shadow"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[p.status]}`}>
-                          {STATUS_ICONS[p.status]} {REQUEST_STATUS_LABELS[p.status]}
-                        </span>
-                        <span className="text-xs font-medium text-muted-foreground">{PERMISSION_TYPE_LABELS[p.type]}</span>
-                      </div>
-                      <p className="text-sm mt-1">{p.reason}</p>
-                      <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                        <span>{formatDate(p.startDate)} — {formatDate(p.endDate)}</span>
-                        <span>{p.duration} hari</span>
-                        <span>Pengajuan: {formatDate(p.createdAt)}</span>
-                      </div>
-                    </div>
-                    {p.status === 'PENDING' && (
-                      <button
-                        onClick={() => handleCancel(p.id)}
-                        className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        Batalkan
-                      </button>
-                    )}
+                <div key={p.id} className="flex flex-wrap items-center gap-3.5 rounded-card-sm border border-border bg-card px-[18px] py-4 shadow-card">
+                  <span className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-full bg-accent text-primary">
+                    <FileText size={16} />
+                  </span>
+                  <div className="min-w-0 flex-[1_1_200px]">
+                    <p className="text-[12.5px] font-medium text-foreground">
+                      {PERMISSION_TYPE_LABELS[p.type]} · {p.duration} hari
+                    </p>
+                    <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                      {formatDate(p.startDate)} — {formatDate(p.endDate)} · diajukan {formatDate(p.createdAt)}
+                    </p>
+                    <p className="mt-1 truncate text-[11.5px] text-muted-foreground" title={p.reason}>{p.reason}</p>
                   </div>
+                  <RequestStatusChip status={p.status} />
+                  {p.status === 'PENDING' && <CancelButton onClick={() => handleCancel(p.id)} />}
                 </div>
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* ─── LEAVE TAB ────────────────────────────────── */}
       {!loading && activeTab === 'leave' && (
-        <LeaveTabView companyId={companyId} employeeId={employeeId} />
+        <div className="mt-5">
+          <LeaveTabView companyId={companyId} employeeId={employeeId} />
+        </div>
       )}
 
       {/* ─── OVERTIME TAB ─────────────────────────────── */}
       {!loading && activeTab === 'overtime' && (
-        <OvertimeTabView companyId={companyId} />
+        <div className="mt-5">
+          <OvertimeTabView companyId={companyId} />
+        </div>
       )}
 
       {!loading && activeTab === 'shift-swap' && (
-        <ShiftSwapTabView
-          canApprove={Boolean(user?.employeeId)}
-          onCreateRequest={() => setActiveModal('shift-swap')}
-        />
+        <div className="mt-5">
+          <ShiftSwapTabView
+            canApprove={Boolean(user?.employeeId)}
+            onCreateRequest={() => setActiveModal('shift-swap')}
+          />
+        </div>
       )}
 
       {!loading && activeTab === 'calendar' && (
-        <MyWorkCalendarTabView />
+        <div className="mt-5">
+          <MyWorkCalendarTabView />
+        </div>
       )}
 
       {/* Modal */}
-      <Modal
+      <AppModal
         open={activeModal !== null}
         onClose={() => setActiveModal(null)}
         title={activeModal === 'shift-swap' ? 'Request Tukar Shift' : 'Ajukan Izin'}
+        description={activeModal === 'shift-swap'
+          ? 'Request akan diteruskan ke kepala regu untuk disetujui'
+          : 'Pengajuan akan diteruskan ke atasan langsung Anda'}
       >
         {activeModal === 'shift-swap' ? (
           <ShiftSwapRequestForm onClose={() => setActiveModal(null)} />
         ) : (
           <PermissionForm onClose={() => { setActiveModal(null); fetchPermissions(); }} />
         )}
-      </Modal>
+      </AppModal>
     </div>
   );
 }
@@ -655,22 +732,20 @@ function MyWorkCalendarTabView() {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-border p-4 md:p-5">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="rounded-card border border-border bg-card p-4 shadow-card md:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg font-semibold">{cursor.format('MMMM YYYY')}</h3>
-                <span className="inline-flex items-center rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-semibold tracking-tight">{cursor.format('MMMM YYYY')}</h3>
+                <StatusChip tone="neutral">
                   {calendar?.employee.employeeCategory === 'FACTORY' ? 'Pegawai Pabrik' : 'Kalender Kerja Aktif'}
-                </span>
+                </StatusChip>
                 {calendar?.shiftFormula && (
-                  <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
-                    Formula Shift {calendar.shiftFormula.code}
-                  </span>
+                  <StatusChip tone="accent">Formula Shift {calendar.shiftFormula.code}</StatusChip>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Jadwal bulanan ini sudah resolve dari work calendar aktif dan otomatis memakai formula shift bila user termasuk pegawai pabrik.
               </p>
             </div>
@@ -687,15 +762,15 @@ function MyWorkCalendarTabView() {
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-2 mt-5">
+          <div className="mt-5 grid grid-cols-7 gap-2">
             {WEEKDAY_LABELS.map((label) => (
-              <div key={label} className="px-2 py-2 text-xs font-semibold text-muted-foreground">
+              <div key={label} className="px-2 py-2 text-[10.5px] font-semibold uppercase tracking-[0.8px] text-muted-foreground">
                 {label}
               </div>
             ))}
 
             {loading && Array.from({ length: 35 }).map((_, index) => (
-              <div key={index} className="min-h-[124px] rounded-2xl border border-border bg-muted/30 animate-pulse" />
+              <div key={index} className="min-h-[124px] animate-pulse rounded-2xl border border-border bg-muted/30" />
             ))}
 
             {!loading && gridDays.map((day, index) => (
@@ -737,7 +812,7 @@ function MyWorkCalendarTabView() {
                       {day.absence && (
                         <>
                           <div className="font-semibold">{day.absence.label}</div>
-                          <div className="opacity-80 line-clamp-2">{day.absence.reason}</div>
+                          <div className="line-clamp-2 opacity-80">{day.absence.reason}</div>
                           {day.absence.partialDay && <div className="opacity-80">Pengajuan parsial / setengah hari</div>}
                         </>
                       )}
@@ -748,7 +823,7 @@ function MyWorkCalendarTabView() {
                         </div>
                       )}
                       {day.crossesMidnight && <div className="opacity-80">Lintas tengah malam</div>}
-                      {day.notes && <div className="opacity-70 line-clamp-2">{day.notes}</div>}
+                      {day.notes && <div className="line-clamp-2 opacity-70">{day.notes}</div>}
                     </div>
                   </>
                 )}
@@ -758,33 +833,33 @@ function MyWorkCalendarTabView() {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-border p-4">
-            <h3 className="text-sm font-semibold mb-4">Profil Jadwal</h3>
+          <div className="rounded-card border border-border bg-card p-4 shadow-card">
+            <h3 className="mb-4 text-[15px] font-semibold tracking-[-0.3px]">Profil Jadwal</h3>
             {!calendar ? (
               <p className="text-sm text-muted-foreground">Belum ada data kalender kerja.</p>
             ) : (
               <div className="space-y-3 text-sm">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Pegawai</p>
+                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Pegawai</p>
                   <p className="font-medium">{calendar.employee.fullName}</p>
                   <p className="text-muted-foreground">{calendar.employee.employeeNumber}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Posisi Organisasi</p>
+                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Posisi Organisasi</p>
                   <p>{calendar.employee.position?.name || '-'}</p>
                   <p className="text-muted-foreground">
                     {[calendar.employee.department?.name, calendar.employee.branch?.name].filter(Boolean).join(' • ') || '-'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Kalender Kerja Terhubung</p>
+                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Kalender Kerja Terhubung</p>
                   <p>{calendar.linkedCalendar?.name || '-'}</p>
                   <p className="text-muted-foreground">
                     {calendar.linkedCalendar ? `${calendar.linkedCalendar.scope} • ${calendar.linkedCalendar.year}` : 'Belum ada calendar aktif'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Formula Shift</p>
+                  <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">Formula Shift</p>
                   <p>{calendar.shiftFormula ? `${calendar.shiftFormula.code} - ${calendar.shiftFormula.name}` : 'Tidak menggunakan formula shift'}</p>
                   <p className="text-muted-foreground">
                     {calendar.shiftFormula?.startDate ? `Mulai ${formatDate(calendar.shiftFormula.startDate)}` : 'Mengikuti work calendar biasa'}
@@ -794,19 +869,19 @@ function MyWorkCalendarTabView() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <StatCard label="Hari Kerja" value={calendar?.summary.workingDays || 0} color="text-emerald-500" />
-            <StatCard label="Hari Off" value={calendar?.summary.offDays || 0} color="text-slate-500" />
-            <StatCard label="Hari Calendar" value={calendar?.summary.calendarDays || 0} color="text-amber-500" />
-            <StatCard label="Hari Shift" value={calendar?.summary.shiftDays || 0} color="text-blue-500" />
-            <StatCard label="Hari Swap" value={calendar?.summary.shiftSwapDays || 0} color="text-violet-500" />
-            <StatCard label="Cuti Approved" value={calendar?.summary.approvedLeaveDays || 0} color="text-fuchsia-500" />
-            <StatCard label="Izin Approved" value={calendar?.summary.approvedPermissionDays || 0} color="text-orange-500" />
-            <StatCard label="Sakit Approved" value={calendar?.summary.approvedSickDays || 0} color="text-red-500" />
+          <div className="grid grid-cols-2 gap-3.5">
+            <StatTile label="Hari Kerja" value={calendar?.summary.workingDays || 0} valueClassName="text-success" />
+            <StatTile label="Hari Off" value={calendar?.summary.offDays || 0} valueClassName="text-muted-foreground" />
+            <StatTile label="Hari Calendar" value={calendar?.summary.calendarDays || 0} valueClassName="text-warning" />
+            <StatTile label="Hari Shift" value={calendar?.summary.shiftDays || 0} valueClassName="text-primary" />
+            <StatTile label="Hari Swap" value={calendar?.summary.shiftSwapDays || 0} valueClassName="text-violet-500 dark:text-violet-400" />
+            <StatTile label="Cuti Approved" value={calendar?.summary.approvedLeaveDays || 0} valueClassName="text-fuchsia-500 dark:text-fuchsia-400" />
+            <StatTile label="Izin Approved" value={calendar?.summary.approvedPermissionDays || 0} valueClassName="text-orange-500 dark:text-orange-400" />
+            <StatTile label="Sakit Approved" value={calendar?.summary.approvedSickDays || 0} valueClassName="text-danger" />
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-border p-4">
-            <h3 className="text-sm font-semibold mb-3">Legenda</h3>
+          <div className="rounded-card border border-border bg-card p-4 shadow-card">
+            <h3 className="mb-3 text-[15px] font-semibold tracking-[-0.3px]">Legenda</h3>
             <div className="space-y-2 text-xs text-muted-foreground">
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-emerald-400" />
@@ -923,11 +998,11 @@ function ShiftSwapTabView({
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Request" value={requests.length} color="text-foreground" />
-        <StatCard label="Pending Saya" value={requests.filter((item) => item.status === 'PENDING').length} color="text-amber-500" />
-        <StatCard label="Approved" value={requests.filter((item) => item.status === 'APPROVED').length} color="text-emerald-500" />
-        <StatCard label="Menunggu Approval" value={approvals.length} color="text-violet-500" />
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3.5">
+        <StatTile label="Total Request" value={requests.length} />
+        <StatTile label="Menunggu Saya" value={requests.filter((item) => item.status === 'PENDING').length} valueClassName="text-warning" />
+        <StatTile label="Disetujui" value={requests.filter((item) => item.status === 'APPROVED').length} valueClassName="text-success" />
+        <StatTile label="Menunggu Approval" value={approvals.length} valueClassName="text-primary" />
       </div>
 
       {loading ? (
@@ -936,32 +1011,32 @@ function ShiftSwapTabView({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.1fr)_420px]">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-border p-4">
-            <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="rounded-card border border-border bg-card p-5 shadow-card">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Request Saya</h3>
+                <h3 className="text-[15px] font-semibold tracking-[-0.3px]">Request Saya</h3>
                 <p className="text-xs text-muted-foreground">Ajukan tukar shift ke kepala regu dan pantau statusnya di sini.</p>
               </div>
-              <Button size="sm" onClick={onCreateRequest}>
-                <Plus size={16} className="mr-2" /> Request Baru
+              <Button size="sm" className="rounded-[14px]" onClick={onCreateRequest}>
+                <Plus size={15} className="mr-2" /> Request Baru
               </Button>
             </div>
 
             {requests.length === 0 ? (
-              <div className="flex flex-col items-center py-16 gap-3">
-                <Repeat size={40} className="text-muted-foreground/40" />
+              <div className="flex flex-col items-center gap-3 py-16">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
+                  <Repeat size={24} className="text-primary" />
+                </div>
                 <p className="text-sm text-muted-foreground">Belum ada request tukar shift.</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {requests.map((request) => (
-                  <div key={request.id} className="rounded-xl border border-border p-4 bg-background">
+                  <div key={request.id} className="rounded-card-sm border border-border bg-background p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[request.status]}`}>
-                            {STATUS_ICONS[request.status]} {REQUEST_STATUS_LABELS[request.status as RequestStatus]}
-                          </span>
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <RequestStatusChip status={request.status} />
                           <span className="text-xs font-medium text-muted-foreground">
                             {formatDate(request.shiftDate)}
                           </span>
@@ -969,23 +1044,18 @@ function ShiftSwapTabView({
                         <p className="text-sm font-semibold">
                           Tukar dengan {request.targetEmployee?.fullName || '-'}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {request.targetEmployee?.employeeNumber || '-'} • Approver: {request.approverEmployee?.fullName || '-'}
                         </p>
-                        <p className="text-sm mt-3">{request.reason}</p>
+                        <p className="mt-3 text-sm">{request.reason}</p>
                         {request.approvalNotes && (
-                          <div className="mt-3 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                          <div className="mt-3 rounded-field border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                             Catatan kepala regu: {request.approvalNotes}
                           </div>
                         )}
                       </div>
                       {request.status === 'PENDING' && (
-                        <button
-                          onClick={() => handleCancel(request.id)}
-                          className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-                        >
-                          Batalkan
-                        </button>
+                        <CancelButton onClick={() => handleCancel(request.id)} />
                       )}
                     </div>
                   </div>
@@ -995,12 +1065,12 @@ function ShiftSwapTabView({
           </div>
 
           <div className="space-y-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-border p-4">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="rounded-card border border-border bg-card p-5 shadow-card">
+              <div className="mb-3 flex items-center gap-2">
                 <Users size={16} className="text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Approval Kepala Regu</h3>
+                <h3 className="text-[15px] font-semibold tracking-[-0.3px]">Approval Kepala Regu</h3>
               </div>
-              <p className="text-xs text-muted-foreground mb-4">
+              <p className="mb-4 text-xs text-muted-foreground">
                 Panel ini muncul untuk kepala regu yang menjadi approver resmi request tukar shift.
               </p>
 
@@ -1011,21 +1081,19 @@ function ShiftSwapTabView({
               ) : (
                 <div className="space-y-3">
                   {approvals.map((request) => (
-                    <div key={request.id} className="rounded-xl border border-border p-4 bg-background">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[request.status]}`}>
-                          {STATUS_ICONS[request.status]} {REQUEST_STATUS_LABELS[request.status as RequestStatus]}
-                        </span>
+                    <div key={request.id} className="rounded-card-sm border border-border bg-background p-4">
+                      <div className="mb-2 flex items-center gap-2">
+                        <RequestStatusChip status={request.status} />
                         <span className="text-xs text-muted-foreground">{formatDate(request.shiftDate)}</span>
                       </div>
                       <p className="text-sm font-semibold">
                         {request.requesterEmployee?.fullName || '-'} ↔ {request.targetEmployee?.fullName || '-'}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {request.requesterEmployee?.employeeNumber || '-'} • {request.targetEmployee?.employeeNumber || '-'}
                       </p>
-                      <p className="text-sm mt-3">{request.reason}</p>
-                      <div className="flex gap-2 mt-4">
+                      <p className="mt-3 text-sm">{request.reason}</p>
+                      <div className="mt-4 flex gap-2">
                         <Button size="sm" onClick={() => handleReview(request.id, 'approve')}>
                           Setujui
                         </Button>
@@ -1098,62 +1166,63 @@ function LeaveTabView({ companyId, employeeId }: { companyId: string; employeeId
 
   return (
     <div>
-      <div className="flex justify-end mb-4">
-        <Button size="sm" onClick={openForm}>
-          <Plus size={16} className="mr-2" /> Ajukan Cuti
+      <div className="mb-4 flex justify-end">
+        <Button size="sm" className="rounded-[14px]" onClick={openForm}>
+          <Plus size={15} className="mr-2" /> Ajukan Cuti
         </Button>
       </div>
 
       {leaves.length === 0 ? (
-        <div className="flex flex-col items-center py-20 gap-3">
-          <CalendarDays size={48} className="text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Belum ada pengajuan cuti</p>
-          <Button size="sm" onClick={openForm}>
-            <Plus size={16} className="mr-2" /> Ajukan Cuti
+        <div className="flex flex-col items-center gap-3.5 rounded-card border border-border bg-card px-6 py-16">
+          <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
+            <CalendarDays size={24} className="text-primary" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Belum ada pengajuan cuti</p>
+          <p className="max-w-[340px] text-center text-[11.5px] leading-relaxed text-muted-foreground">
+            Pengajuan cuti Anda akan tampil di sini beserta status persetujuannya.
+          </p>
+          <Button size="sm" className="rounded-[14px]" onClick={openForm}>
+            <Plus size={15} className="mr-2" /> Ajukan Cuti
           </Button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {leaves.map((l) => (
-            <div key={l.id} className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      l.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' :
-                      l.status === 'REJECTED' ? 'bg-red-50 text-red-700' :
-                      l.status === 'CANCELLED' ? 'bg-gray-50 text-gray-500' :
-                      'bg-amber-50 text-amber-700'
-                    }`}>{l.status}</span>
-                    <span className="text-xs text-muted-foreground">{l.leaveType?.name || 'Cuti'}</span>
-                  </div>
-                  <p className="text-sm mt-1">{l.reason}</p>
-                  <div className="text-xs text-muted-foreground mt-2">
-                    {formatDate(l.startDate)} — {formatDate(l.endDate)} ({l.totalDays} hari)
-                  </div>
-                </div>
-                {l.status === 'PENDING' && l.employeeId === employeeId && (
-                  <button
-                    onClick={() => handleCancelLeave(l.id)}
-                    className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    Batalkan
-                  </button>
-                )}
+            <div key={l.id} className="flex flex-wrap items-center gap-3.5 rounded-card-sm border border-border bg-card px-[18px] py-4 shadow-card">
+              <span className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-full bg-accent text-primary">
+                <CalendarDays size={16} />
+              </span>
+              <div className="min-w-0 flex-[1_1_200px]">
+                <p className="text-[12.5px] font-medium text-foreground">
+                  {l.leaveType?.name || 'Cuti'} · {l.totalDays} hari
+                </p>
+                <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                  {formatDate(l.startDate)} — {formatDate(l.endDate)}
+                </p>
+                <p className="mt-1 truncate text-[11.5px] text-muted-foreground" title={l.reason}>{l.reason}</p>
               </div>
+              <RequestStatusChip status={l.status} />
+              {l.status === 'PENDING' && l.employeeId === employeeId && (
+                <CancelButton onClick={() => handleCancelLeave(l.id)} />
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Ajukan Cuti">
+      <AppModal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title="Ajukan Cuti"
+        description="Saldo cuti terpotong otomatis setelah pengajuan disetujui"
+      >
         <LeaveRequestForm
           companyId={companyId}
           employeeId={employeeId}
           onSuccess={fetchLeaves}
           onClose={() => setShowForm(false)}
         />
-      </Modal>
+      </AppModal>
     </div>
   );
 }
@@ -1170,34 +1239,37 @@ function OvertimeTabView({ companyId }: { companyId: string }) {
         setOvertimes(data);
       } catch { /* ignore */ }
       finally { setLoading(false); }
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
+  })(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional deps (mount-only load / stable helper / avoids setState loop)
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="text-sm text-muted-foreground">Memuat data lembur...</div></div>;
 
   if (overtimes.length === 0) return (
-    <div className="flex flex-col items-center py-20 gap-3">
-      <Clock size={48} className="text-muted-foreground/40" />
-      <p className="text-sm text-muted-foreground">Belum ada pengajuan lembur</p>
+    <div className="flex flex-col items-center gap-3.5 rounded-card border border-border bg-card px-6 py-16">
+      <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-accent">
+        <Clock size={24} className="text-primary" />
+      </div>
+      <p className="text-sm font-medium text-foreground">Belum ada pengajuan lembur</p>
+      <p className="max-w-[340px] text-center text-[11.5px] leading-relaxed text-muted-foreground">
+        Riwayat lembur Anda akan tampil di sini setelah tercatat oleh sistem.
+      </p>
     </div>
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {overtimes.map((o) => (
-        <div key={o.id} className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-              o.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' :
-              o.status === 'REJECTED' ? 'bg-red-50 text-red-700' :
-              'bg-amber-50 text-amber-700'
-            }`}>{o.status}</span>
-            <span className="text-xs text-muted-foreground">{o.date ? formatDate(o.date) : ''}</span>
+        <div key={o.id} className="flex flex-wrap items-center gap-3.5 rounded-card-sm border border-border bg-card px-[18px] py-4 shadow-card">
+          <span className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-full bg-accent text-primary">
+            <Clock size={16} />
+          </span>
+          <div className="min-w-0 flex-[1_1_200px]">
+            <p className="text-[12.5px] font-medium text-foreground">
+              Lembur {o.durationHours || 0} jam
+            </p>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">{o.date ? formatDate(o.date) : '-'}</p>
+            <p className="mt-1 truncate text-[11.5px] text-muted-foreground" title={o.reason}>{o.reason}</p>
           </div>
-          <p className="text-sm mt-1">{o.reason}</p>
-          <div className="text-xs text-muted-foreground mt-2">
-            {o.durationHours || 0} jam
-          </div>
+          <RequestStatusChip status={o.status} />
         </div>
       ))}
     </div>
