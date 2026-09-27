@@ -259,10 +259,8 @@ export function DashboardPage() {
           )}
           {!wantsCompanyStats && data.myToday && <PersonalTodayCard today={data.myToday} />}
 
-          {/* ── Aksi cepat sesuai role ── */}
-          {(persona === 'employee' || persona === 'manager') && (
-            <QuickActionsCard actions={quickActions} />
-          )}
+          {/* ── Aksi cepat (khusus manager; karyawan cukup lewat sidebar) ── */}
+          {persona === 'manager' && <QuickActionsCard actions={quickActions} />}
 
           {/* ── Baris kartu berpasangan (tinggi sejajar) ── */}
           <div className="flex flex-col gap-3.5 lg:flex-row lg:items-stretch">
