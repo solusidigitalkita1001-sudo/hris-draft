@@ -192,6 +192,36 @@ function policyRequiresFace(policyMethod: string): boolean {
   return policyMethod === 'FACE_RECOGNITION' || policyMethod === 'FACE_GPS';
 }
 
+interface EmployeeMethodFlags {
+  allowFingerprint: boolean;
+  allowFaceRecognition: boolean;
+  allowMobileGps: boolean;
+}
+
+/**
+ * Matriks metode per karyawan (diatur SUPER_ADMIN): metode efektif =
+ * kebijakan cabang ∩ izin karyawan. MANUAL tidak difilter (jalur admin/HR).
+ */
+export function filterMethodsByEmployeeFlags(
+  methods: AttendanceCaptureMethod[],
+  flags: EmployeeMethodFlags | null,
+): AttendanceCaptureMethod[] {
+  if (!flags) return methods;
+  return methods.filter((method) => {
+    if (method === AttendanceCaptureMethod.FINGERPRINT) return flags.allowFingerprint;
+    if (method === AttendanceCaptureMethod.MOBILE_GPS) return flags.allowMobileGps;
+    if (method === AttendanceCaptureMethod.FACE_RECOGNITION) return flags.allowFaceRecognition;
+    return true;
+  });
+}
+
+async function fetchEmployeeMethodFlags(employeeId: string): Promise<EmployeeMethodFlags | null> {
+  return prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { allowFingerprint: true, allowFaceRecognition: true, allowMobileGps: true },
+  });
+}
+
 function isHolidayLikeDayType(dayType: string) {
   return ['NH', 'JL', 'CH', 'RH'].includes(dayType);
 }
@@ -418,7 +448,10 @@ export class AttendanceService {
   async getResolvedContext(employeeId: string, attendanceDate: string, companyId?: string) {
     const resolvedDate = new Date(attendanceDate);
     const context = await attendanceContextService.resolve(employeeId, resolvedDate, companyId);
-    const allowedMethods = resolveAllowedMethods(context.policy.attendanceMethod);
+    const allowedMethods = filterMethodsByEmployeeFlags(
+      resolveAllowedMethods(context.policy.attendanceMethod),
+      await fetchEmployeeMethodFlags(employeeId),
+    );
 
     return {
       ...context,
@@ -436,10 +469,13 @@ export class AttendanceService {
 
     const context = await attendanceContextService.resolve(data.employeeId, attendanceDate, data.companyId);
     const method = data.method as AttendanceCaptureMethod;
-    const allowedMethods = resolveAllowedMethods(context.policy.attendanceMethod);
+    const allowedMethods = filterMethodsByEmployeeFlags(
+      resolveAllowedMethods(context.policy.attendanceMethod),
+      await fetchEmployeeMethodFlags(data.employeeId),
+    );
 
     if (!allowedMethods.includes(method)) {
-      throw new BadRequestError('Attendance method is not allowed for the resolved branch attendance policy');
+      throw new BadRequestError('Metode absensi ini tidak diizinkan untuk karyawan tersebut pada kebijakan cabang yang berlaku');
     }
 
     if (!context.schedule.isWorkingDay) {

@@ -2,8 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { permissionRequestRepository } from './permission-request.repository';
 import { Result } from '@/shared/core/Result';
-import { ForbiddenError } from '@/shared/exceptions/AppError';
+import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
+import { PERMISSION_ATTACHMENT_URL_PREFIX, permissionAttachmentOwnerDirectory } from '@/shared/storage/permission-attachment-reference';
+import config from '@/config';
 
 export class PermissionRequestController {
   private async getEmployeeId(req: AuthenticatedRequest) {
@@ -56,6 +58,28 @@ export class PermissionRequestController {
         employeeId,
       }, req.user!.id);
       res.status(201).json(Result.created(data));
+    } catch (error) { next(error); }
+  }
+
+  async uploadAttachment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.file) {
+        throw new BadRequestError('File lampiran wajib diunggah');
+      }
+      const ownerDirectory = permissionAttachmentOwnerDirectory(req.user?.companyId, req.user?.employeeId);
+      const attachmentUrl = `${config.app.url}${PERMISSION_ATTACHMENT_URL_PREFIX}${ownerDirectory}/${req.file.filename}`;
+      res.status(201).json(
+        Result.created(
+          {
+            fileName: req.file.filename,
+            originalName: req.file.originalname,
+            mimeType: req.file.mimetype,
+            size: req.file.size,
+            url: attachmentUrl,
+          },
+          'Lampiran izin berhasil diunggah'
+        )
+      );
     } catch (error) { next(error); }
   }
 

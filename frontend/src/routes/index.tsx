@@ -18,6 +18,7 @@ import { BranchListPage } from '@/modules/organization/pages/BranchListPage';
 import { DepartmentListPage } from '@/modules/organization/pages/DepartmentListPage';
 import { PositionListPage } from '@/modules/organization/pages/PositionListPage';
 import { OrganizationChartPage } from '@/modules/organization/pages/OrganizationChartPage';
+import { AttendanceMethodMatrixPage } from '@/modules/organization/pages/AttendanceMethodMatrixPage';
 
 // Employee Pages
 import { EmployeeListPage } from '@/modules/employee/pages/EmployeeListPage';
@@ -241,6 +242,15 @@ export const router = createBrowserRouter([
                 requiredRoles={OPERATIONAL_ROLES}
               >
                 <PositionListPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'attendance-methods',
+            element: (
+              // Khusus SUPER_ADMIN: matriks metode absensi per karyawan.
+              <ProtectedRoute requiredRoles={['SUPER_ADMIN']}>
+                <AttendanceMethodMatrixPage />
               </ProtectedRoute>
             ),
           },

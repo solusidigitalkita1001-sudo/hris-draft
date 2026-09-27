@@ -84,6 +84,12 @@ const navItems: NavItem[] = [
       { labelKey: 'sidebar.organization.branches', icon: <MapPin size={16} />, path: '/organization/branches' },
       { labelKey: 'sidebar.organization.departments', icon: <Building2 size={16} />, path: '/organization/departments' },
       { labelKey: 'sidebar.organization.positions', icon: <Briefcase size={16} />, path: '/organization/positions' },
+      {
+        labelKey: 'sidebar.organization.attendanceMethods',
+        icon: <ShieldCheck size={16} />,
+        path: '/organization/attendance-methods',
+        access: { requireAuth: true, requiredRoles: ['SUPER_ADMIN'] },
+      },
     ],
   },
   {

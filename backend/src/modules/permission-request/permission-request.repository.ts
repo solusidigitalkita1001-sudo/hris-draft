@@ -43,6 +43,10 @@ export class PermissionRequestRepository {
   }
 
   async create(data: CreatePermissionDTO & { companyId: string; employeeId: string }, requesterId?: string) {
+    // Kebijakan bisnis: setiap pengajuan izin WAJIB menyertakan lampiran.
+    if (!data.attachment?.trim()) {
+      throw new BadRequestError('Pengajuan izin wajib menyertakan lampiran');
+    }
     const request = await prisma.permissionRequest.create({
       data: {
         ...data,

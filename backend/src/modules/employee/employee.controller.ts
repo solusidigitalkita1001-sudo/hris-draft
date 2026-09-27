@@ -14,6 +14,35 @@ export class EmployeeController {
     }
   }
 
+  async getAttendanceMethodMatrix(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = (req.query.companyId as string) || req.user?.companyId;
+      const result = await employeeService.getAttendanceMethodMatrix({
+        companyId: companyId as string,
+        search: req.query.search as string | undefined,
+        page: parseInt(req.query.page as string) || 1,
+        limit: Math.min(parseInt(req.query.limit as string) || 20, 100),
+      });
+      res.json(Result.paginated(result.data, result.total, result.page, result.limit));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateAttendanceMethods(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = (req.query.companyId as string) || req.user?.companyId;
+      const data = await employeeService.updateAttendanceMethods(
+        req.params.id as string,
+        companyId as string,
+        req.body
+      );
+      res.json(Result.updated(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getFaceProfile(req: Request, res: Response, next: NextFunction) {
     try {
       const status = await employeeService.getFaceProfile(req.params.id as string);

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { appConfig } from '@/config/app';
 
 const DAY_TYPE_LABELS: Record<string, string> = {
   WD: 'Kerja',
@@ -144,6 +145,7 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
   const [endDate, setEndDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [duration, setDuration] = useState(1);
   const [reason, setReason] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const employeeId = localStorage.getItem('employeeId') || '';
 
@@ -156,14 +158,17 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
     const maxDuration = dayjs(endDate).startOf('day').diff(dayjs(startDate).startOf('day'), 'day') + 1;
     if (duration > maxDuration) return toast.error(`Durasi melebihi rentang tanggal (maks ${maxDuration} hari)`);
     if (!reason.trim()) return toast.error('Alasan harus diisi');
+    if (!attachmentFile) return toast.error('Pengajuan izin wajib menyertakan lampiran');
     setSaving(true);
     try {
+      const uploaded = await permissionRequestService.uploadAttachment(attachmentFile);
       await permissionRequestService.create({
         type,
         startDate: dayjs(startDate).toISOString(),
         endDate: dayjs(endDate).toISOString(),
         duration,
         reason: reason.trim(),
+        attachment: uploaded.url,
         employeeId,
       } as Partial<PermissionRequest>);
       toast.success('Pengajuan berhasil dikirim');
@@ -217,6 +222,32 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
           className="w-full resize-none rounded-field border border-border bg-background px-3.5 py-2.5 text-sm text-foreground"
           required
         />
+      </div>
+
+      <div>
+        <label className="mb-2 block text-[10.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">
+          Lampiran <span className="text-danger">*</span>
+        </label>
+        <Input
+          type="file"
+          accept=".jpg,.jpeg,.png,.gif,.pdf"
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            if (file && file.size > 5 * 1024 * 1024) {
+              toast.error('Ukuran file lampiran maksimal 5MB');
+              e.target.value = '';
+              setAttachmentFile(null);
+              return;
+            }
+            setAttachmentFile(file);
+          }}
+        />
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Setiap pengajuan izin wajib melampirkan dokumen pendukung. Format: JPG, PNG, GIF, atau PDF. Maks 5MB.
+        </p>
+        {attachmentFile && (
+          <p className="mt-1 text-[11px] text-muted-foreground">File terpilih: {attachmentFile.name}</p>
+        )}
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
@@ -606,7 +637,7 @@ export function SelfServicePage() {
               <table className="w-full min-w-[760px] text-left">
                 <thead>
                   <tr className="bg-secondary/70">
-                    {['Jenis', 'Periode', 'Durasi', 'Diajukan', 'Alasan', 'Status', ''].map((h, i) => (
+                    {['Jenis', 'Periode', 'Durasi', 'Diajukan', 'Alasan', 'Lampiran', 'Status', ''].map((h, i) => (
                       <th key={i} className="px-5 py-3.5 text-[10.5px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
                         {h}
                       </th>
@@ -621,6 +652,20 @@ export function SelfServicePage() {
                       <td className="px-5 py-3.5 text-xs text-muted-foreground">{p.duration} hari</td>
                       <td className="px-5 py-3.5 text-xs text-muted-foreground">{formatDate(p.createdAt)}</td>
                       <td className="max-w-[220px] truncate px-5 py-3.5 text-xs text-muted-foreground" title={p.reason}>{p.reason}</td>
+                      <td className="px-5 py-3.5 text-xs">
+                        {p.attachment ? (
+                          <a
+                            href={`${appConfig.apiUrl}/private-files/permission-attachments/${p.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            Lihat
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="px-5 py-3.5"><RequestStatusChip status={p.status} /></td>
                       <td className="px-5 py-3.5 text-right">
                         {p.status === 'PENDING' && <CancelButton onClick={() => handleCancel(p.id)} />}
@@ -645,6 +690,16 @@ export function SelfServicePage() {
                       {formatDate(p.startDate)} — {formatDate(p.endDate)} · diajukan {formatDate(p.createdAt)}
                     </p>
                     <p className="mt-1 truncate text-[11.5px] text-muted-foreground" title={p.reason}>{p.reason}</p>
+                    {p.attachment && (
+                      <a
+                        href={`${appConfig.apiUrl}/private-files/permission-attachments/${p.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[11.5px] text-primary hover:underline"
+                      >
+                        <FileText size={12} /> Lihat lampiran
+                      </a>
+                    )}
                   </div>
                   <RequestStatusChip status={p.status} />
                   {p.status === 'PENDING' && <CancelButton onClick={() => handleCancel(p.id)} />}
