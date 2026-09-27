@@ -312,53 +312,101 @@ export async function seedTestData(): Promise<void> {
     },
   });
 
+  const deptExec = await prisma.department.upsert({
+    where: { code: 'EXEC' },
+    update: {},
+    create: { companyId: company.id, name: 'Executive Office', code: 'EXEC', status: 'ACTIVE' },
+  });
+
+  // -----------------------------------------------------------------
+  // Struktur pelaporan posisi (reporting line):
+  //   Direktur Utama (puncak, tanpa reportsTo)
+  //     ├─ IT Manager        → Software Developer
+  //     ├─ HR Manager        → HR Specialist
+  //     ├─ Finance Manager   → Accountant
+  //     ├─ Marketing Manager → Marketing Staff
+  //     └─ Branch Operations Lead → Branch Operations Staff
+  // Setiap posisi non-puncak WAJIB punya reportsToId agar fitur
+  // "Tim Saya" / reporting-line / resolusi approver MANAGER berfungsi.
+  // -----------------------------------------------------------------
+  const posDirektur = await prisma.position.upsert({
+    where: { code: 'DIRUT' },
+    update: { departmentId: deptExec.id, name: 'Direktur Utama', gradeLevel: 7, reportsToId: null, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptExec.id, name: 'Direktur Utama', code: 'DIRUT', gradeLevel: 7, status: 'ACTIVE' },
+  });
+
   const posManager = await prisma.position.upsert({
     where: { code: 'MGR' },
-    update: {}, create: { companyId: company.id, departmentId: deptIT.id, name: 'Manager', code: 'MGR', gradeLevel: 5, status: 'ACTIVE' },
+    update: { departmentId: deptIT.id, name: 'IT Manager', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptIT.id, name: 'IT Manager', code: 'MGR', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE' },
   });
 
-  const posDev = await prisma.position.upsert({
-    where: { code: 'DEV' },
-    update: {}, create: { companyId: company.id, departmentId: deptIT.id, name: 'Software Developer', code: 'DEV', gradeLevel: 3, status: 'ACTIVE' },
+  const posHRMgr = await prisma.position.upsert({
+    where: { code: 'HR-MGR' },
+    update: { departmentId: deptHR.id, name: 'HR Manager', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptHR.id, name: 'HR Manager', code: 'HR-MGR', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE' },
   });
 
-  const posHR = await prisma.position.upsert({
-    where: { code: 'HRSP' },
-    update: {}, create: { companyId: company.id, departmentId: deptHR.id, name: 'HR Specialist', code: 'HRSP', gradeLevel: 3, status: 'ACTIVE' },
+  const posFinMgr = await prisma.position.upsert({
+    where: { code: 'FIN-MGR' },
+    update: { departmentId: deptFinance.id, name: 'Finance Manager', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptFinance.id, name: 'Finance Manager', code: 'FIN-MGR', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE' },
   });
 
-  const posAcc = await prisma.position.upsert({
-    where: { code: 'ACC' },
-    update: {}, create: { companyId: company.id, departmentId: deptFinance.id, name: 'Accountant', code: 'ACC', gradeLevel: 3, status: 'ACTIVE' },
-  });
-
-  const posMkt = await prisma.position.upsert({
-    where: { code: 'MKTS' },
-    update: {}, create: { companyId: company.id, departmentId: deptMarketing.id, name: 'Marketing Staff', code: 'MKTS', gradeLevel: 2, status: 'ACTIVE' },
-  });
-
-  const posOps = await prisma.position.upsert({
-    where: { code: 'OPSF' },
-    update: {},
-    create: {
-      companyId: company.id,
-      departmentId: deptOps.id,
-      name: 'Branch Operations Staff',
-      code: 'OPSF',
-      gradeLevel: 2,
-      status: 'ACTIVE',
-    },
+  const posMktMgr = await prisma.position.upsert({
+    where: { code: 'MKT-MGR' },
+    update: { departmentId: deptMarketing.id, name: 'Marketing Manager', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptMarketing.id, name: 'Marketing Manager', code: 'MKT-MGR', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE' },
   });
 
   const posOpsLead = await prisma.position.upsert({
     where: { code: 'OPSL' },
-    update: {},
+    update: { departmentId: deptOps.id, name: 'Branch Operations Lead', gradeLevel: 4, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
     create: {
       companyId: company.id,
       departmentId: deptOps.id,
       name: 'Branch Operations Lead',
       code: 'OPSL',
       gradeLevel: 4,
+      reportsToId: posDirektur.id,
+      status: 'ACTIVE',
+    },
+  });
+
+  const posDev = await prisma.position.upsert({
+    where: { code: 'DEV' },
+    update: { departmentId: deptIT.id, name: 'Software Developer', gradeLevel: 3, reportsToId: posManager.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptIT.id, name: 'Software Developer', code: 'DEV', gradeLevel: 3, reportsToId: posManager.id, status: 'ACTIVE' },
+  });
+
+  const posHR = await prisma.position.upsert({
+    where: { code: 'HRSP' },
+    update: { departmentId: deptHR.id, name: 'HR Specialist', gradeLevel: 3, reportsToId: posHRMgr.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptHR.id, name: 'HR Specialist', code: 'HRSP', gradeLevel: 3, reportsToId: posHRMgr.id, status: 'ACTIVE' },
+  });
+
+  const posAcc = await prisma.position.upsert({
+    where: { code: 'ACC' },
+    update: { departmentId: deptFinance.id, name: 'Accountant', gradeLevel: 3, reportsToId: posFinMgr.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptFinance.id, name: 'Accountant', code: 'ACC', gradeLevel: 3, reportsToId: posFinMgr.id, status: 'ACTIVE' },
+  });
+
+  const posMkt = await prisma.position.upsert({
+    where: { code: 'MKTS' },
+    update: { departmentId: deptMarketing.id, name: 'Marketing Staff', gradeLevel: 2, reportsToId: posMktMgr.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: company.id, departmentId: deptMarketing.id, name: 'Marketing Staff', code: 'MKTS', gradeLevel: 2, reportsToId: posMktMgr.id, status: 'ACTIVE' },
+  });
+
+  const posOps = await prisma.position.upsert({
+    where: { code: 'OPSF' },
+    update: { departmentId: deptOps.id, name: 'Branch Operations Staff', gradeLevel: 2, reportsToId: posOpsLead.id, status: 'ACTIVE', deletedAt: null },
+    create: {
+      companyId: company.id,
+      departmentId: deptOps.id,
+      name: 'Branch Operations Staff',
+      code: 'OPSF',
+      gradeLevel: 2,
+      reportsToId: posOpsLead.id,
       status: 'ACTIVE',
     },
   });
@@ -599,8 +647,10 @@ export async function seedTestData(): Promise<void> {
       email: 'bambang@tech.com',
       phone: '08123456789',
       gender: 'MALE',
-      position: posManager,
-      dept: deptIT,
+      // Bambang = Marketing Manager: atasan langsung Maya (Marketing Staff)
+      // untuk alur demo approval MANAGER.
+      position: posMktMgr,
+      dept: deptMarketing,
       branch,
       employmentType: 'PERMANENT',
       employmentStatus: 'ACTIVE',
@@ -650,7 +700,8 @@ export async function seedTestData(): Promise<void> {
       email: 'dewi@tech.com',
       phone: '08123456792',
       gender: 'FEMALE',
-      position: posHR,
+      // Dewi = HR Manager (role HR_MANAGER), kepala departemen HR.
+      position: posHRMgr,
       dept: deptHR,
       branch,
       employmentType: 'PERMANENT',
@@ -667,7 +718,8 @@ export async function seedTestData(): Promise<void> {
       email: 'rudi@tech.com',
       phone: '08123456793',
       gender: 'MALE',
-      position: posAcc,
+      // Rudi = Finance Manager (role COMPANY_ADMIN), kepala departemen Finance.
+      position: posFinMgr,
       dept: deptFinance,
       branch,
       employmentType: 'PERMANENT',
@@ -786,7 +838,37 @@ export async function seedTestData(): Promise<void> {
     };
   });
 
-  const employees = [...baseEmployees, ...generatedEmployees];
+  // Promosikan EMP009 (generated pertama di departemen IT) sebagai pejabat
+  // posisi IT Manager supaya posisi MGR punya pemegang aktif di org chart
+  // dan reporting line developer IT tidak kosong.
+  const itManagerCandidate = generatedEmployees.find((employee) => employee.employeeNumber === 'EMP009');
+  if (itManagerCandidate) {
+    itManagerCandidate.position = posManager;
+  }
+
+  // Karyawan khusus puncak hierarki: Direktur Utama (tanpa reportsTo).
+  const direkturEmployee = {
+    employeeNumber: 'EMP051',
+    firstName: 'Surya',
+    lastName: 'Wijaksana',
+    email: 'direktur@tech.com',
+    phone: '08123456700',
+    gender: 'MALE',
+    position: posDirektur,
+    dept: deptExec,
+    branch,
+    employmentType: 'PERMANENT',
+    employmentStatus: 'ACTIVE',
+    employeeCategory: 'OFFICE',
+    shiftFormulaId: null,
+    shiftStartDate: null,
+    joinDate: companyStartedAt,
+    religion: 'ISLAM',
+    maritalStatus: 'MARRIED',
+    placeOfBirth: 'Jakarta',
+  };
+
+  const employees = [...baseEmployees, ...generatedEmployees, direkturEmployee];
   const createdEmployees: any[] = [];
 
   for (const [employeeIndex, emp] of employees.entries()) {
@@ -900,6 +982,8 @@ export async function seedTestData(): Promise<void> {
   await ensureUserRole({ email: 'dewi@tech.com', roleCode: 'HR_MANAGER', companyId: company.id });
   await ensureUserRole({ email: 'rina@tech.com', roleCode: 'HR_STAFF', companyId: company.id });
   await ensureUserRole({ email: 'rudi@tech.com', roleCode: 'COMPANY_ADMIN', companyId: company.id });
+  // Direktur Utama bertindak sebagai approver puncak untuk request para manager.
+  await ensureUserRole({ email: 'direktur@tech.com', roleCode: 'MANAGER', companyId: company.id });
   console.log('  ✓ Role simulation assigned');
 
   const employeeMap = new Map(createdEmployees.map((employee) => [employee.employeeNumber, employee]));
@@ -911,6 +995,24 @@ export async function seedTestData(): Promise<void> {
   const maya = employeeMap.get('EMP006');
   const agus = employeeMap.get('EMP007');
   const rina = employeeMap.get('EMP008');
+  const direktur = employeeMap.get('EMP051');
+  const itManager = employeeMap.get('EMP009');
+  const opsLead = employeeMap.get('EMP014');
+
+  // ===================================================
+  // 4B-2. DEPARTMENT / DIVISION HEADS (org chart "Pimpinan")
+  // ===================================================
+  // Org chart membaca Department.headId / Division.headId (relasi head →
+  // Employee.fullName). Diisi dari pejabat manajerial masing-masing unit.
+  console.log('  Assigning department & division heads...');
+  await prisma.department.update({ where: { id: deptExec.id }, data: { headId: direktur?.id ?? null } });
+  await prisma.department.update({ where: { id: deptIT.id }, data: { headId: itManager?.id ?? null } });
+  await prisma.department.update({ where: { id: deptHR.id }, data: { headId: dewi?.id ?? null } });
+  await prisma.department.update({ where: { id: deptFinance.id }, data: { headId: rudi?.id ?? null } });
+  await prisma.department.update({ where: { id: deptMarketing.id }, data: { headId: bambang?.id ?? null } });
+  await prisma.department.update({ where: { id: deptOps.id }, data: { headId: opsLead?.id ?? null } });
+  await prisma.division.update({ where: { id: division.id }, data: { headId: direktur?.id ?? null } });
+  console.log('  ✓ Department & division heads assigned');
 
   const users = await prisma.user.findMany({
     where: { email: { in: employees.map((employee) => employee.email) } },
@@ -2437,6 +2539,186 @@ export async function seedTestData(): Promise<void> {
     });
   }
   console.log('  ✓ Audit logs created');
+
+  // ===================================================
+  // 15. COMPANY KEDUA: PT DIGITAL NUSANTARA (group HOLDING)
+  // ===================================================
+  // Untuk switcher "Ganti Perusahaan" superadmin: company kedua lengkap
+  // dengan branch, departemen, hierarki posisi (Direktur → Manager → Staff),
+  // dan karyawan aktif supaya reporting line berfungsi. Tanpa user login baru.
+  console.log('  Creating second company (PT Digital Nusantara)...');
+  const digiStartedAt = new Date('2025-01-06T09:00:00+07:00');
+
+  const companyDigi = await prisma.company.upsert({
+    where: { code: 'DIGI' },
+    update: {
+      groupId: group.id,
+      name: 'PT Digital Nusantara',
+      taxId: '03.456.789.0-123.000',
+      timezone: 'Asia/Jakarta',
+      currency: 'IDR',
+      status: 'ACTIVE',
+      address: 'Menara Digital, Jl. Gatot Subroto Kav. 18, Jakarta Selatan',
+      phone: '+62 21 5550 1300',
+      email: 'hello@digi.com',
+      website: 'https://digi.example.com',
+      createdAt: digiStartedAt,
+      deletedAt: null,
+    },
+    create: {
+      groupId: group.id,
+      name: 'PT Digital Nusantara',
+      code: 'DIGI',
+      taxId: '03.456.789.0-123.000',
+      timezone: 'Asia/Jakarta',
+      currency: 'IDR',
+      status: 'ACTIVE',
+      address: 'Menara Digital, Jl. Gatot Subroto Kav. 18, Jakarta Selatan',
+      phone: '+62 21 5550 1300',
+      email: 'hello@digi.com',
+      website: 'https://digi.example.com',
+      createdAt: digiStartedAt,
+    },
+  });
+
+  const digiBranch = await prisma.branch.upsert({
+    where: { code: 'DIGI-HQ' },
+    update: {
+      companyId: companyDigi.id,
+      name: 'HQ Digital Jakarta',
+      address: 'Menara Digital, Jl. Gatot Subroto Kav. 18, Jakarta Selatan',
+      phone: '+62 21 5550 1301',
+      email: 'hq@digi.com',
+      timezone: 'Asia/Jakarta',
+      latitude: -6.23012,
+      longitude: 106.81882,
+      status: 'ACTIVE',
+      createdAt: digiStartedAt,
+      deletedAt: null,
+    },
+    create: {
+      companyId: companyDigi.id,
+      name: 'HQ Digital Jakarta',
+      code: 'DIGI-HQ',
+      address: 'Menara Digital, Jl. Gatot Subroto Kav. 18, Jakarta Selatan',
+      phone: '+62 21 5550 1301',
+      email: 'hq@digi.com',
+      timezone: 'Asia/Jakarta',
+      latitude: -6.23012,
+      longitude: 106.81882,
+      status: 'ACTIVE',
+      createdAt: digiStartedAt,
+    },
+  });
+
+  const digiDeptProduct = await prisma.department.upsert({
+    where: { code: 'DIGI-PRD' },
+    update: { companyId: companyDigi.id, name: 'Product', status: 'ACTIVE', deletedAt: null },
+    create: { companyId: companyDigi.id, name: 'Product', code: 'DIGI-PRD', status: 'ACTIVE' },
+  });
+
+  const digiDeptSales = await prisma.department.upsert({
+    where: { code: 'DIGI-SLS' },
+    update: { companyId: companyDigi.id, name: 'Sales', status: 'ACTIVE', deletedAt: null },
+    create: { companyId: companyDigi.id, name: 'Sales', code: 'DIGI-SLS', status: 'ACTIVE' },
+  });
+
+  // Hierarki posisi DIGI: Direktur (puncak) → Manager departemen → Staff.
+  const digiPosDirektur = await prisma.position.upsert({
+    where: { code: 'DIGI-DIR' },
+    update: { companyId: companyDigi.id, departmentId: null, name: 'Direktur', gradeLevel: 7, reportsToId: null, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: companyDigi.id, name: 'Direktur', code: 'DIGI-DIR', gradeLevel: 7, status: 'ACTIVE' },
+  });
+
+  const digiPosPM = await prisma.position.upsert({
+    where: { code: 'DIGI-PM' },
+    update: { companyId: companyDigi.id, departmentId: digiDeptProduct.id, name: 'Product Manager', gradeLevel: 5, reportsToId: digiPosDirektur.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: companyDigi.id, departmentId: digiDeptProduct.id, name: 'Product Manager', code: 'DIGI-PM', gradeLevel: 5, reportsToId: digiPosDirektur.id, status: 'ACTIVE' },
+  });
+
+  const digiPosSM = await prisma.position.upsert({
+    where: { code: 'DIGI-SM' },
+    update: { companyId: companyDigi.id, departmentId: digiDeptSales.id, name: 'Sales Manager', gradeLevel: 5, reportsToId: digiPosDirektur.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: companyDigi.id, departmentId: digiDeptSales.id, name: 'Sales Manager', code: 'DIGI-SM', gradeLevel: 5, reportsToId: digiPosDirektur.id, status: 'ACTIVE' },
+  });
+
+  const digiPosProductSpecialist = await prisma.position.upsert({
+    where: { code: 'DIGI-PDS' },
+    update: { companyId: companyDigi.id, departmentId: digiDeptProduct.id, name: 'Product Specialist', gradeLevel: 3, reportsToId: digiPosPM.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: companyDigi.id, departmentId: digiDeptProduct.id, name: 'Product Specialist', code: 'DIGI-PDS', gradeLevel: 3, reportsToId: digiPosPM.id, status: 'ACTIVE' },
+  });
+
+  const digiPosSalesExecutive = await prisma.position.upsert({
+    where: { code: 'DIGI-SLE' },
+    update: { companyId: companyDigi.id, departmentId: digiDeptSales.id, name: 'Sales Executive', gradeLevel: 3, reportsToId: digiPosSM.id, status: 'ACTIVE', deletedAt: null },
+    create: { companyId: companyDigi.id, departmentId: digiDeptSales.id, name: 'Sales Executive', code: 'DIGI-SLE', gradeLevel: 3, reportsToId: digiPosSM.id, status: 'ACTIVE' },
+  });
+
+  const digiEmployees = [
+    { employeeNumber: 'DIGI-001', firstName: 'Andika', lastName: 'Mahesa', gender: 'MALE', position: digiPosDirektur, dept: null, joinOffset: 0 },
+    { employeeNumber: 'DIGI-002', firstName: 'Larasati', lastName: 'Puspita', gender: 'FEMALE', position: digiPosPM, dept: digiDeptProduct, joinOffset: 7 },
+    { employeeNumber: 'DIGI-003', firstName: 'Bimo', lastName: 'Santoso', gender: 'MALE', position: digiPosSM, dept: digiDeptSales, joinOffset: 7 },
+    { employeeNumber: 'DIGI-004', firstName: 'Kartika', lastName: 'Ayu', gender: 'FEMALE', position: digiPosProductSpecialist, dept: digiDeptProduct, joinOffset: 21 },
+    { employeeNumber: 'DIGI-005', firstName: 'Raka', lastName: 'Pratama', gender: 'MALE', position: digiPosProductSpecialist, dept: digiDeptProduct, joinOffset: 35 },
+    { employeeNumber: 'DIGI-006', firstName: 'Melati', lastName: 'Hapsari', gender: 'FEMALE', position: digiPosProductSpecialist, dept: digiDeptProduct, joinOffset: 49 },
+    { employeeNumber: 'DIGI-007', firstName: 'Damar', lastName: 'Kusnadi', gender: 'MALE', position: digiPosSalesExecutive, dept: digiDeptSales, joinOffset: 28 },
+    { employeeNumber: 'DIGI-008', firstName: 'Sekar', lastName: 'Anjani', gender: 'FEMALE', position: digiPosSalesExecutive, dept: digiDeptSales, joinOffset: 42 },
+  ];
+
+  const digiCreatedByNumber = new Map<string, any>();
+  for (const [digiIndex, emp] of digiEmployees.entries()) {
+    const fullName = `${emp.firstName} ${emp.lastName}`;
+    const joinDate = addDays(digiStartedAt, emp.joinOffset);
+    const created = await (prisma as any).employee.upsert({
+      where: { employeeNumber: emp.employeeNumber },
+      update: {
+        companyId: companyDigi.id,
+        branchId: digiBranch.id,
+        departmentId: emp.dept?.id ?? null,
+        positionId: emp.position.id,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        fullName,
+        gender: emp.gender,
+        joinDate,
+        employmentType: 'PERMANENT',
+        employmentStatus: 'ACTIVE',
+        employeeCategory: 'OFFICE',
+        status: 'ACTIVE',
+        deletedAt: null,
+      } as any,
+      create: {
+        companyId: companyDigi.id,
+        branchId: digiBranch.id,
+        departmentId: emp.dept?.id ?? null,
+        positionId: emp.position.id,
+        employeeNumber: emp.employeeNumber,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        fullName,
+        phone: `08155${padNumber(70000 + digiIndex + 1, 5)}`,
+        gender: emp.gender,
+        address: 'HQ Digital Jakarta',
+        joinDate,
+        employmentType: 'PERMANENT',
+        employmentStatus: 'ACTIVE',
+        employeeCategory: 'OFFICE',
+        createdAt: joinDate,
+      } as any,
+    });
+    digiCreatedByNumber.set(emp.employeeNumber, created);
+  }
+
+  // Head departemen DIGI untuk org chart "Pimpinan".
+  await prisma.department.update({
+    where: { id: digiDeptProduct.id },
+    data: { headId: digiCreatedByNumber.get('DIGI-002')?.id ?? null },
+  });
+  await prisma.department.update({
+    where: { id: digiDeptSales.id },
+    data: { headId: digiCreatedByNumber.get('DIGI-003')?.id ?? null },
+  });
+  console.log('  ✓ PT Digital Nusantara seeded (8 employees, reporting line ready)');
 
   console.log('\n  ✓ Test data seeding completed!');
   console.log('  ─────────────────────────────────────────');
