@@ -97,13 +97,32 @@ Running them surfaced two real defects and three stale fixtures.
 
 **Found by CI, not locally**
 
-The first CI run of the new job failed where four local runs had passed: under
-real contention the losing side of two concurrent salary allocations was
-rejected with the raw driver error instead of a conflict, so the HTTP boundary
-answered 500 where the suite expects 409. Serializable isolation and a company
-row lock do not remove the race — MySQL still reports a write conflict, a
-deadlock or a lock-wait timeout. Those three are now retried twice and then
-translated to a retryable 409; every other failure keeps its own meaning.
+The new job failed on its first run where four local runs had passed: with two
+concurrent salary allocations, the loser was rejected with the raw driver error,
+so the HTTP boundary answered 500 where a lost race should be a retryable 409.
+
+Identifying it took three attempts worth recording, because each wrong guess
+cost a CI round trip:
+
+1. Guessed the race surfaced as Prisma's `P2034`/`P2024`. It did not, and the
+   next CI run failed the same way.
+2. Added diagnostics with `toMatchObject`, which prints only the keys it
+   compares — so the failure still said nothing but `statusCode: undefined`.
+3. Threw the details instead, and reproduced it locally by raising contention
+   from two racers to eight. The error is **`P2010`** carrying
+   `Code: 1213 Deadlock found when trying to get lock`: the company row lock is
+   taken by a raw `SELECT … FOR UPDATE`, so a deadlock arrives as a raw-query
+   failure rather than Prisma's own conflict code.
+
+All four retry sites — salary allocation, payroll run creation, formula
+publication, payment batches — recognised only `P2034`, so each of them leaked
+a deadlock as a 500. They now share `isConcurrencyFailure` from
+`shared/database/concurrency.ts`, which covers `P2034`, `P2024`, and `P2010`
+carrying MySQL 1213/1205. A lost race is retried twice and then reported as a
+409; anything that is not a race keeps its own meaning and is never retried.
+
+The eight-racer burst is now a permanent test, because two racers deadlock only
+occasionally and that is what let this reach CI unnoticed.
 
 A separate flake is also fixed: the payment-routes HTTP test answered a 500
 while an unread request body was still in flight, which let Node reset the

@@ -16,6 +16,7 @@ import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 import { generateSystemCode } from '@/shared/utils/system-code';
@@ -314,7 +315,10 @@ export class PayrollService {
           return run;
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 60000 });
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 2) continue;
+        // Shared predicate: a lost race also arrives as P2010 carrying MySQL
+        // 1213/1205, which this site used to leak as a 500.
+        if (isConcurrencyFailure(error) && attempt < 2) continue;
+        if (isConcurrencyFailure(error)) throw new ConflictError('Payroll run is being created concurrently; retry the request');
         throw error;
       }
     }

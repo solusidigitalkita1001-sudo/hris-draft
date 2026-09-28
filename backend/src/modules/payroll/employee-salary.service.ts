@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/shared/database/prisma';
+import { withConcurrencyRetry } from '@/shared/database/concurrency';
 import { getCurrentCompanyId, getCurrentUser } from '@/shared/context/RequestContext';
 import { employeeAccessWhere } from '@/shared/security/employee-data-scope';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/shared/exceptions/AppError';
@@ -20,44 +21,18 @@ async function access() {
   return { companyId, employeeWhere: await employeeAccessWhere('payroll') };
 }
 
-/**
- * Serializable isolation plus a company row lock can still lose a race: MySQL
- * reports a write conflict, a deadlock or a lock-wait timeout. Retrying twice
- * covers the transient case; what is left is a genuine concurrent edit, and it
- * has to reach the client as a retryable 409 rather than the raw driver error,
- * which surfaced as a 500. Only these codes are translated — every other
- * failure keeps its own meaning.
- */
-function isConcurrencyFailure(error: unknown): boolean {
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    // P2034 write conflict/deadlock, P2024 pool timeout waiting for a lock.
-    return error.code === 'P2034' || error.code === 'P2024';
-  }
-  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
-    return /deadlock|lock wait timeout/i.test(error.message);
-  }
-  return false;
-}
-
 // Same company lock as payroll calculation and formula publication. Financial
 // edits and a payroll that consumes them cannot commit in the opposite order.
 async function transaction<T>(companyId: string, work: (database: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await prisma.$transaction(async database => {
-        const company = await database.company.findFirst({ where: { id: companyId, deletedAt: null }, select: { id: true } });
-        if (!company) throw new NotFoundError('Company not found');
-        await database.$queryRaw`SELECT id FROM companies WHERE id = ${companyId} FOR UPDATE`;
-        return work(database);
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 60000 });
-    } catch (error) {
-      if (isConcurrencyFailure(error)) {
-        if (attempt < 2) continue;
-        throw new ConflictError('Salary allocation is being changed concurrently; retry the request');
-      }
-      throw error;
-    }
-  }
+  return withConcurrencyRetry(
+    () => prisma.$transaction(async database => {
+      const company = await database.company.findFirst({ where: { id: companyId, deletedAt: null }, select: { id: true } });
+      if (!company) throw new NotFoundError('Company not found');
+      await database.$queryRaw`SELECT id FROM companies WHERE id = ${companyId} FOR UPDATE`;
+      return work(database);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 60000 }),
+    'Salary allocation is being changed concurrently; retry the request',
+  );
 }
 
 async function validateComponents(database: Prisma.TransactionClient, companyId: string, allocations: SalaryComponentAllocationDTO[] | undefined) {

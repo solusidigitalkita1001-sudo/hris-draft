@@ -135,6 +135,28 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
     expect((await stored(salary.id)).isActive).toBe(true);
   });
 
+  it('answers every loser of a high-contention burst with a conflict, not a driver error', async () => {
+    // Two racers only deadlock occasionally — this reproduced in CI but passed
+    // locally eight times. Eight racers make the same lost race reliable: the
+    // company row lock is taken by a raw statement, so MySQL reports the
+    // deadlock as P2010, which every retry site used to leak as a 500.
+    const f = await fixture();
+    const results = await Promise.allSettled(Array.from({ length: 8 }, (_, index) =>
+      create(f, { effectiveDate: `2026-09-01T${String(index).padStart(2, '0')}:00:00Z` })));
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    const losers = results.flatMap(result => result.status === 'rejected' ? [result.reason] : []);
+    expect(losers).toHaveLength(7);
+    for (const reason of losers) {
+      if (reason?.statusCode !== 409) {
+        throw new Error(`loser was not a conflict: constructor=${reason?.constructor?.name} `
+          + `code=${reason?.code} statusCode=${reason?.statusCode} message=${String(reason?.message ?? '').slice(0, 300)}`);
+      }
+    }
+    // One allocation committed, and it is the only active one.
+    expect(await mockDatabase.employeeSalary.count({ where: { companyId: f.companyId } })).toBe(1);
+    expect(await mockDatabase.employeeSalary.count({ where: { companyId: f.companyId, isActive: true } })).toBe(1);
+  });
+
   it('serializes concurrent duplicate creation and treats timestamps on the same UTC date as one effective date', async () => {
     const f = await fixture();
     const results = await Promise.allSettled([create(f), create(f, { effectiveDate: '2026-09-01T20:00:00Z' })]);
