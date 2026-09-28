@@ -33,7 +33,9 @@ function sampleRouter(): Router {
   );
 
   const api = express();
-  api.get('/health', noop);
+  // Registered as an array on purpose: the real app mounts its health probes
+  // this way, and a comma-joined path is not a path.
+  api.get(['/health', '/health/ready'], noop);
   api.use('/api/v1/leave', leave);
   return api as unknown as Router;
 }
@@ -42,6 +44,12 @@ describe('collectRoutes', () => {
   const routes = collectRoutes(sampleRouter());
   const find = (method: string, path: string) =>
     routes.find((route) => route.method === method && route.path === path);
+
+  it('splits a route registered with several paths', () => {
+    expect(find('GET', '/health')).toBeDefined();
+    expect(find('GET', '/health/ready')).toBeDefined();
+    expect(routes.some((route) => route.path.includes(','))).toBe(false);
+  });
 
   it('reconstructs the mounted path and rewrites params as templates', () => {
     expect(find('GET', '/api/v1/leave')).toBeDefined();

@@ -17,7 +17,9 @@ interface Layer {
   name: string;
   handle?: { stack?: Layer[] };
   regexp?: RegExp & { fast_slash?: boolean };
-  route?: { path: string; stack: Array<{ method?: string; handle: unknown; name: string }> };
+  // A route registered with several paths (`app.get(['/a', '/b'], ...)`)
+  // stores them as an array.
+  route?: { path: string | string[]; stack: Array<{ method?: string; handle: unknown; name: string }> };
 }
 
 export interface CollectedRoute {
@@ -88,17 +90,20 @@ export function collectRoutes(router: Router): CollectedRoute[] {
             if (requestSchemas.params) schemas.params = requestSchemas.params;
           }
         }
+        const declaredPaths = Array.isArray(layer.route.path) ? layer.route.path : [layer.route.path];
         for (const handler of layer.route.stack) {
           if (!handler.method) continue;
-          routes.push({
-            method: handler.method.toUpperCase(),
-            path: toTemplate(base + layer.route.path),
-            permissions: routePermissions,
-            requiresAuth: routeAuth || routePermissions.length > 0,
-            body: jsonSchema(schemas.body),
-            query: jsonSchema(schemas.query),
-            params: jsonSchema(schemas.params),
-          });
+          for (const declaredPath of declaredPaths) {
+            routes.push({
+              method: handler.method.toUpperCase(),
+              path: toTemplate(base + declaredPath),
+              permissions: routePermissions,
+              requiresAuth: routeAuth || routePermissions.length > 0,
+              body: jsonSchema(schemas.body),
+              query: jsonSchema(schemas.query),
+              params: jsonSchema(schemas.params),
+            });
+          }
         }
         continue;
       }
