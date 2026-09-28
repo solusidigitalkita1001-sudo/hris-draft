@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { formatCurrency, formatDate } from '@/utils/format';
 import {
@@ -77,7 +77,7 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
   } | null>(null);
   const [limitError, setLimitError] = useState<string | null>(null);
 
-  const computeLimit = async () => {
+  const computeLimit = useCallback(async () => {
     setFetchingLimit(true);
     setLimitError(null);
     try {
@@ -99,9 +99,9 @@ function RequestForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
     } finally {
       setFetchingLimit(false);
     }
-  };
+  }, [t]);
 
-  useEffect(() => { void computeLimit(); }, []);
+  useEffect(() => { void computeLimit(); }, [computeLimit]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
