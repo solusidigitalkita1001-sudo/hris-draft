@@ -22,9 +22,9 @@ export class AttendanceRepository {
     });
   }
 
-  async findById(id: string) {
+  async findById(id: string, employeeScope?: Prisma.EmployeeWhereInput) {
     return prisma.attendance.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, ...(employeeScope ? { employee: employeeScope } : {}) },
       include: {
         employee: {
           select: {
