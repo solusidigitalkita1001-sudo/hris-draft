@@ -171,13 +171,36 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     await mockDatabase.employeeSalaryComponent.updateMany({ where: { employeeSalaryId: person.salary.id }, data: { salaryComponentId: foreign.component.id } });
     await expect(run(f)).rejects.toThrow('outside the payroll company'); await expectNoPayroll(f);
   });
-  it('rejects ambiguous active salaries and unsupported currency before committing', async () => {
+  it('rejects unsupported currency and same-date duplicate salaries, but pays the as-of row when dates differ', async () => {
     const f = await fixture(), person = await employee(f);
     await mockDatabase.employeeSalary.update({ where: { id: person.salary.id }, data: { currency: 'USD' } });
     await expect(run(f)).rejects.toThrow('IDR'); await expectNoPayroll(f);
     await mockDatabase.employeeSalary.update({ where: { id: person.salary.id }, data: { currency: 'IDR' } });
-    await mockDatabase.employeeSalary.create({ data: { companyId: f.companyId, employeeId: person.person.id, baseSalary: '1000', effectiveDate: new Date('2026-09-02') } });
-    await expect(run(f)).rejects.toThrow('Multiple active salaries'); await expectNoPayroll(f);
+
+    // Two rows with DIFFERENT dates are not ambiguous: as-of selection pays the
+    // latest row effective on or before the period end.
+    const baseDate = new Date(person.salary.effectiveDate);
+    const later = new Date(baseDate.getTime() + 86_400_000);
+    const supersede = await mockDatabase.employeeSalary.create({ data: {
+      companyId: f.companyId, employeeId: person.person.id, baseSalary: '1234', effectiveDate: later,
+    } });
+    const committed = await run(f);
+    expect(committed.payslips[0].baseSalary.toString()).toBe('1234');
+    expect(committed.payslips[0].employeeSalaryId).toBe(supersede.id);
+
+    // expectNoPayroll also asserts nothing was published, and the committed run
+    // above published once.
+    jest.clearAllMocks();
+
+    // A second row sharing the selected effective date is a data error: the
+    // choice between them would come down to query order.
+    const ambiguous = await fixture(), other = await employee(ambiguous);
+    await mockDatabase.employeeSalary.create({ data: {
+      companyId: ambiguous.companyId, employeeId: other.person.id, baseSalary: '4321',
+      effectiveDate: new Date(other.salary.effectiveDate),
+    } });
+    await expect(run(ambiguous)).rejects.toThrow('Multiple active salaries');
+    await expectNoPayroll(ambiguous);
   });
   it('returns the committed payroll if event publication subsequently fails', async () => {
     const f = await fixture(); await employee(f); jest.mocked(eventBus.publish).mockRejectedValueOnce(new Error('Broker unavailable'));

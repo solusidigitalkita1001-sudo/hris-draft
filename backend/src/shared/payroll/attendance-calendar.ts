@@ -112,7 +112,13 @@ export function countPayrollAttendance(
       presentDays++;
       continue;
     }
-    const covering = ranges.find(range => date >= range.start && date <= range.end);
+    // A date can be covered by several approved requests, including one paid
+    // and one unpaid. `find` alone returned whichever the query happened to
+    // order first, so the unpaid-leave deduction — real money — differed
+    // between runs on the same data. Paid coverage wins: the day is already
+    // excused and paid for, and a deduction must never depend on row order.
+    const covers = (range: { start: string; end: string }) => date >= range.start && date <= range.end;
+    const covering = ranges.find(range => range.isPaid && covers(range)) ?? ranges.find(covers);
     if (covering) {
       leaveDays++;
       if (!covering.isPaid) unpaidLeaveDays++;

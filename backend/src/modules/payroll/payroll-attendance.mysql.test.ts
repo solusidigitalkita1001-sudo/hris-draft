@@ -117,7 +117,15 @@ withDatabase('payroll attendance inputs (isolated real MySQL)', () => {
       { ...leaveBase, startDate: new Date('2026-10-07'), endDate: new Date('2026-10-07'), status: 'PENDING' },
       { ...leaveBase, startDate: new Date('2026-10-07'), endDate: new Date('2026-10-07'), status: 'APPROVED', deletedAt: new Date() },
     ] });
-    expect((await review(f)).summary[person.id]).toEqual({ workDays: 4, present: 1, leave: 2, absent: 1, overtime: 0 });
+    // The summary also reports the workday/holiday overtime split and unpaid
+    // leave days (both added with the Phase 4 payroll work). The two approved
+    // ranges overlap on 2026-10-05 and one of them is unpaid, so this also
+    // pins the tie-break: paid coverage wins, leaving 10-06 as the only
+    // unpaid day.
+    expect((await review(f)).summary[person.id]).toEqual({
+      workDays: 4, present: 1, leave: 2, absent: 1,
+      overtime: 0, overtimeWorkday: 0, overtimeHoliday: 0, unpaidLeave: 1,
+    });
     const completed = await run(f);
     expect(completed.payslips[0]).toMatchObject({ workDays: 4, presentDays: 1, leaveDays: 2, absentDays: 1 });
     expect(completed.totalNetPay.toFixed(2)).toBe('750.00');
@@ -217,7 +225,10 @@ withDatabase('payroll attendance inputs (isolated real MySQL)', () => {
     const duplicate = await mockDatabase.workCalendar.create({ data: { companyId: f.companyId, createdBy: f.maker, year: 2026, name: 'Ambiguous calendar', workDays: { mon: true } } });
     await expect(run(f)).rejects.toThrow('Missing or ambiguous'); await expectNoPayroll(f);
     await mockDatabase.workCalendar.update({ where: { id: duplicate.id }, data: { deletedAt: new Date() } });
-    expect((await review(f)).summary[person.id]).toEqual({ workDays: 0, present: 0, leave: 0, absent: 0, overtime: 0 });
+    expect((await review(f)).summary[person.id]).toEqual({
+      workDays: 0, present: 0, leave: 0, absent: 0,
+      overtime: 0, overtimeWorkday: 0, overtimeHoliday: 0, unpaidLeave: 0,
+    });
     expect((await run(f)).payslips[0]).toMatchObject({ workDays: 0, absentDays: 0 });
   });
 });
