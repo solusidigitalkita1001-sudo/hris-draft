@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { authenticate, type AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
-import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
+import { discardUploadOnFailure, validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import { auditLog } from '@/shared/middleware/AuditLog';
 import { permissionRequestController } from './permission-request.controller';
 import { createPermissionSchema, approvePermissionSchema } from './permission-request.dto';
@@ -62,6 +62,7 @@ router.post('/', validate(createPermissionSchema), idempotency(), permissionRequ
 router.post(
   '/attachments',
   upload.single('attachment'),
+  discardUploadOnFailure(),
   validateFileMagicBytes(),
   permissionRequestController.uploadAttachment.bind(permissionRequestController)
 );

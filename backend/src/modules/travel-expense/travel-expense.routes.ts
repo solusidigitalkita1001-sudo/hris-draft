@@ -1,7 +1,7 @@
 import { receiptOwnerDirectory } from '@/shared/storage/receipt-reference';
 import type { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import crypto from 'crypto';
-import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
+import { discardUploadOnFailure, validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
@@ -117,6 +117,7 @@ router.post(
   '/claims/receipt-upload',
   authorizeRole(...employeeRoles),
   upload.single('receipt'),
+  discardUploadOnFailure(),
   validateFileMagicBytes(),
   travelExpenseController.uploadReceipt.bind(travelExpenseController)
 );

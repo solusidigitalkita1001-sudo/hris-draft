@@ -7,7 +7,7 @@ import { authenticate, type AuthenticatedRequest } from '@/shared/middleware/Aut
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
-import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
+import { discardUploadOnFailure, validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import { auditLog } from '@/shared/middleware/AuditLog';
 import { leaveController } from './leave.controller';
 import { createLeaveTypeSchema, createLeaveRequestSchema, createLeaveBalanceSchema } from './leave.dto';
@@ -70,6 +70,7 @@ router.post(
   '/attachments',
   authorize({ resource: 'leave', action: 'create' }),
   upload.single('attachment'),
+  discardUploadOnFailure(),
   validateFileMagicBytes(),
   leaveController.uploadAttachment.bind(leaveController)
 );
