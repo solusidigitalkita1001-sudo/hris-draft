@@ -3,6 +3,7 @@ import { Prisma, PrismaClient, PayrollPaymentBatchStatus } from '@prisma/client'
 import { z } from 'zod';
 import { prisma } from '@/shared/database/prisma';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
+import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { generateBankCsv, resolveEmployeeBankInfo } from '@/shared/payroll/disbursement';
 import { createPaymentBatchSchema, paymentIdempotencyKeySchema, recordPaymentTransactionSchema } from './payroll-payment.dto';
 import type { CreatePaymentBatchDTO, RecordPaymentTransactionDTO } from './payroll-payment.dto';
@@ -95,7 +96,8 @@ export class PayrollPaymentService {
           timeout: 15000,
         });
       } catch (error) {
-        if (errorCode(error) === 'P2034' && attempt < 2) continue;
+        if (isConcurrencyFailure(error) && attempt < 2) continue;
+        if (isConcurrencyFailure(error)) throw new ConflictError('Payment batch is being changed concurrently; retry the request');
         throw error;
       }
     }

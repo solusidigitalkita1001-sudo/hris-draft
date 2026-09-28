@@ -77,6 +77,18 @@ describe('payroll calendar and leave date arithmetic', () => {
 });
 
 describe('unpaid leave and trip/WFH presence (org policy decisions)', () => {
+
+  it('prefers paid coverage when paid and unpaid leave overlap the same date, whatever the row order', () => {
+    // The deduction must not depend on which request the query returned first.
+    const workingDates = new Set(['2026-10-05', '2026-10-06']);
+    const paid = { startDate: new Date('2026-10-01'), endDate: new Date('2026-10-05'), isPaid: true };
+    const unpaid = { startDate: new Date('2026-10-05'), endDate: new Date('2026-10-06'), isPaid: false };
+    for (const leaves of [[paid, unpaid], [unpaid, paid]]) {
+      expect(countPayrollAttendance(workingDates, [], leaves)).toMatchObject({
+        workDays: 2, leave: 2, unpaidLeave: 1, absent: 0,
+      });
+    }
+  });
   const work = new Set(['2026-10-01', '2026-10-02', '2026-10-05']);
   it('counts unpaid leave days separately while leave totals stay unchanged', () => {
     const result = countPayrollAttendance(work, [], [

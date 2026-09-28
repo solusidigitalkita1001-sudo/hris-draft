@@ -78,6 +78,14 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
   } });
   const detail = (f: Fixture, id = f.slip.id) => asActor(f, () => service.findPayslipById(id));
   const own = (f: Fixture) => asActor(f, () => service.findPayslipsByEmployee(f.person.id));
+  /**
+   * Self-service payslip history only exposes runs that reached APPROVED or
+   * DISBURSED, so an employee cannot read a slip from a run still being
+   * reviewed. The fixture run stays COMPLETED for the approval transition
+   * tests; the reads that assert a visible history publish it first.
+   */
+  const publishRun = (f: Fixture) =>
+    mockDatabase.payrollRun.update({ where: { id: f.run.id }, data: { status: 'APPROVED' } });
   const runDetail = (f: Fixture, id = f.run.id) => asActor(f, () => service.findPayrollRunById(id));
 
   it('keeps company totals on authorized runs while excluding them and bank data from payslip detail/history', async () => {
@@ -87,7 +95,9 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
     const run = await runDetail(f);
     expect(run.totalNetPay.toString()).toBe('3000.75'); expect(run.payslips).toHaveLength(2);
     expect(Object.keys(run.payslips[0].employee).sort()).toEqual(['employeeNumber', 'fullName', 'id']);
+    await publishRun(f);
     const slip = await detail(f), history = await own(f);
+    expect(history.map(row => row.id)).toEqual([f.slip.id]);
     expect(slip.netPay.toString()).toBe('1000.25'); expect(slip.breakdown.takeHomePay).toBe(1000.25);
     for (const summary of history) {
       expect(summary).not.toHaveProperty('baseSalary');
@@ -119,6 +129,7 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
   it.each(['BRANCH_ONLY', 'DEPARTMENT_ONLY', 'SUB_DEPARTMENT_ONLY', 'EMPLOYEE_SELF'] as const)('allows scoped payslips but denies company aggregates and mutations for %s', async scopeType => {
     const f = await fixture();
     await scope(f, scopeType, scopeType === 'BRANCH_ONLY' ? f.branch.id : scopeType === 'DEPARTMENT_ONLY' ? f.department.id : scopeType === 'SUB_DEPARTMENT_ONLY' ? f.subDepartment.id : undefined);
+    await publishRun(f);
     expect((await detail(f)).id).toBe(f.slip.id); expect((await own(f)).map(row => row.id)).toEqual([f.slip.id]);
     await expect(detail(f, f.outsideSlip.id)).rejects.toMatchObject({ statusCode: 404 });
     const readRuns = jest.spyOn(mockDatabase.payrollRun, 'findMany'), writeRuns = jest.spyOn(mockDatabase.payrollRun, 'create');
@@ -171,6 +182,7 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
       const invalid = await mockDatabase.payslip.create({ data: { ...data, ...overrides } });
       await expect(detail(f, invalid.id)).rejects.toMatchObject({ statusCode: 404 });
     }
+    await publishRun(f);
     expect((await own(f)).map(row => row.id)).toEqual([f.slip.id]);
     expect((await runDetail(f)).payslips.map(row => row.id).sort()).toEqual([f.slip.id, f.outsideSlip.id].sort());
     await expect(runDetail(f, invalidRun.id)).rejects.toMatchObject({ statusCode: 404 });
@@ -200,6 +212,7 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
     expect(slip.components.map(row => row.name)).toEqual(['Frozen salary']);
     expect(slip.formulaCalculations.map(row => row.id)).toEqual([evidence.id]);
     expect(slip.benefitDeductions.map(row => row.id)).toEqual([deductions[0]]);
+    await publishRun(f);
     expect((await own(f))[0]).not.toHaveProperty('components');
     expect((await runDetail(f)).payslips.find(row => row.id === f.slip.id)?.components.map(row => row.name)).toEqual(['Frozen salary']);
   });
@@ -240,6 +253,7 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
 
   it('keeps concurrent company contexts separate across asynchronous scope lookups', async () => {
     const f = await fixture(), other = await fixture(); await scope(f, 'EMPLOYEE_SELF'); await scope(other, 'EMPLOYEE_SELF');
+    await Promise.all([publishRun(f), publishRun(other)]);
     const results = await Promise.all([detail(f), detail(other), own(f), own(other)]);
     expect(results[0]).toMatchObject({ id: f.slip.id }); expect(results[1]).toMatchObject({ id: other.slip.id });
     expect(results[2]).toMatchObject([{ id: f.slip.id }]); expect(results[3]).toMatchObject([{ id: other.slip.id }]);

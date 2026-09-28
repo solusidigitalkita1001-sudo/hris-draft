@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Prisma, PrismaClient, PayrollFormulaVersion, SalaryComponent } from '@prisma/client';
 import { prisma } from '@/shared/database/prisma';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
+import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { compileFormula, FORMULA_ENGINE_VERSION, resolvePayrollComponents, selectFormulaVersions,
   SYSTEM_PAYROLL_CODES, validateFormulaGraph } from '@/shared/payroll/formula';
 import { formulaDraftSchema, formulaPreviewSchema, FormulaDraftDTO, FormulaPreviewDTO } from './payroll-formula.dto';
@@ -39,7 +40,8 @@ export class PayrollFormulaService {
           return work(tx);
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 15000 });
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 2) continue;
+        if (isConcurrencyFailure(error) && attempt < 2) continue;
+        if (isConcurrencyFailure(error)) throw new ConflictError('Formula revision is being published concurrently; retry the request');
         throw error;
       }
     }

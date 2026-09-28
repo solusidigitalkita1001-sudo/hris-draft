@@ -234,7 +234,8 @@ export function rollingAttritionRate90Days(
   rollingEndDate: string | Date = new Date(),
 ): RollingAttrition90Result {
   const end = endOfMonth(toDate(rollingEndDate) ?? new Date());
-  const start = addDays(startOfMonth(end), -89);
+  // Rolling 90 days counts back from the window end, not from the start of its
+  // month; the month-based variable this replaced was already unused.
   const startDay90 = addDays(end, -89);
   const hiresInWindow: HeadcountEmployee[] = [];
   const resignsInWindow: HeadcountEmployee[] = [];

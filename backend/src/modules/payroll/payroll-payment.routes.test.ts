@@ -79,7 +79,10 @@ describe('payroll payment HTTP boundary', () => {
 
   it('denies export if payroll scope lookup fails', async () => {
     jest.mocked(employeeAccessWhere).mockRejectedValueOnce(new Error('Scope unavailable'));
-    const response = await request(app()).post(`${BASE}/${BATCH}/export`).send({}).expect(500);
+    // No body on purpose: the route rejects before reading one, and answering
+    // while an unread request body is still in flight let Node reset the
+    // socket under load — the suite failed intermittently with ECONNRESET.
+    const response = await request(app()).post(`${BASE}/${BATCH}/export`).expect(500);
     expect(response.headers['cache-control']).toBe('no-store'); expect(service.exportBatch).not.toHaveBeenCalled();
   });
 

@@ -16,6 +16,7 @@ import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 import { generateSystemCode } from '@/shared/utils/system-code';
@@ -314,7 +315,10 @@ export class PayrollService {
           return run;
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 60000 });
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 2) continue;
+        // Shared predicate: a lost race also arrives as P2010 carrying MySQL
+        // 1213/1205, which this site used to leak as a 500.
+        if (isConcurrencyFailure(error) && attempt < 2) continue;
+        if (isConcurrencyFailure(error)) throw new ConflictError('Payroll run is being created concurrently; retry the request');
         throw error;
       }
     }
@@ -445,6 +449,19 @@ export class PayrollService {
       // rows already ordered effectiveDate desc by the repository
       const asOf = rows.find((row) => new Date(row.effectiveDate).getTime() <= periodEndTime);
       if (!asOf) continue; // only future-dated salaries exist — nothing payable this period
+      // As-of selection makes two rows with DIFFERENT dates unambiguous, but
+      // rows sharing the selected date are decided by query order alone: the
+      // run would silently pay one of two conflicting salaries, or skip an
+      // employee because the row it happened to pick was inactive. The
+      // duplicate is a data error, so surface it instead of coin-flipping.
+      const sameEffectiveDate = rows.filter(
+        (row) => new Date(row.effectiveDate).getTime() === new Date(asOf.effectiveDate).getTime(),
+      );
+      if (sameEffectiveDate.length > 1) {
+        throw new ConflictError(
+          `Multiple active salaries found for one employee on effective date ${new Date(asOf.effectiveDate).toISOString().slice(0, 10)}; review salary allocations`,
+        );
+      }
       const hasNewerRow = rows.some((row) => new Date(row.effectiveDate).getTime() > periodEndTime);
       if (!asOf.isActive && !hasNewerRow) continue; // deliberately deactivated
       employeeSalaries.push(asOf.isActive || hasNewerRow ? { ...asOf, isActive: true } : asOf);

@@ -5,8 +5,11 @@ let mockDatabase: PrismaClient;
 jest.mock('@/shared/database/prisma', () => ({ get prisma() { return mockDatabase; } }));
 jest.mock('@/shared/events/EventBus', () => ({ eventBus: { publish: jest.fn() } }));
 jest.mock('@/shared/logger/WinstonLogger', () => ({ logger: { info: jest.fn() } }));
+// The payroll calculation reads both settings; a partial mock made the run
+// fail with "getWorkweekDays is not a function" rather than testing anything.
 jest.mock('@/modules/company-settings/company-settings.service', () => ({ companySettingsService: {
   getLateDeductionConfig: jest.fn(async () => ({ enabled: false, absenceDailyPercentOfBasic: 0 })),
+  getWorkweekDays: jest.fn(async () => 5),
 } }));
 jest.mock('@/modules/ewa/ewa.repository', () => ({ ewaRepository: { findPAIDByEmployeeAndPeriod: jest.fn(async () => []), markPayrollDeductions: jest.fn() } }));
 import { PayrollFormulaService } from './payroll-formula.service';

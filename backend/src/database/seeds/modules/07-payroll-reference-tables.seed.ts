@@ -110,6 +110,5 @@ export async function seedPayrollReferences(prisma: PrismaClient) {
     }
   }
 
-  // eslint-disable-next-line no-console
   console.log(`[seed] Payroll reference tables OK (year=${TAX_YEAR}): 5 TaxBracket + 8 PtkpTable + 5 BpjsReference`);
 }

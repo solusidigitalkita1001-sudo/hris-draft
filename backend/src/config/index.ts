@@ -267,7 +267,6 @@ function initConfig(): Config {
     return buildConfig(loadEnv());
   } catch (err) {
     // Fail fast with a clear message and non-zero exit — do NOT run on defaults.
-    // eslint-disable-next-line no-console
     console.error(`\n[FATAL] ${(err as Error).message}\n`);
     process.exit(1);
   }

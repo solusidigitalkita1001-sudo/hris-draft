@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/shared/database/prisma';
+import { withConcurrencyRetry } from '@/shared/database/concurrency';
 import { getCurrentCompanyId, getCurrentUser } from '@/shared/context/RequestContext';
 import { employeeAccessWhere } from '@/shared/security/employee-data-scope';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/shared/exceptions/AppError';
@@ -23,19 +24,15 @@ async function access() {
 // Same company lock as payroll calculation and formula publication. Financial
 // edits and a payroll that consumes them cannot commit in the opposite order.
 async function transaction<T>(companyId: string, work: (database: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await prisma.$transaction(async database => {
-        const company = await database.company.findFirst({ where: { id: companyId, deletedAt: null }, select: { id: true } });
-        if (!company) throw new NotFoundError('Company not found');
-        await database.$queryRaw`SELECT id FROM companies WHERE id = ${companyId} FOR UPDATE`;
-        return work(database);
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 60000 });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 2) continue;
-      throw error;
-    }
-  }
+  return withConcurrencyRetry(
+    () => prisma.$transaction(async database => {
+      const company = await database.company.findFirst({ where: { id: companyId, deletedAt: null }, select: { id: true } });
+      if (!company) throw new NotFoundError('Company not found');
+      await database.$queryRaw`SELECT id FROM companies WHERE id = ${companyId} FOR UPDATE`;
+      return work(database);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 60000 }),
+    'Salary allocation is being changed concurrently; retry the request',
+  );
 }
 
 async function validateComponents(database: Prisma.TransactionClient, companyId: string, allocations: SalaryComponentAllocationDTO[] | undefined) {
