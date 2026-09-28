@@ -46,8 +46,11 @@ describe('employee export/import tenant boundary', () => {
 
     await controller.importCsv(req, res, next);
 
-    expect(res.status).toHaveBeenCalledWith(403);
+    // The rejection travels as a ForbiddenError so the global error handler
+    // emits the standard envelope with its FORBIDDEN code, instead of the
+    // controller hand-writing a code-less 403 body.
+    expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+    expect(res.status).not.toHaveBeenCalled();
     expect(importSpy).not.toHaveBeenCalled();
-    expect(next).not.toHaveBeenCalled();
   });
 });

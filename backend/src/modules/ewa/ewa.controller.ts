@@ -3,6 +3,7 @@ import { ewaService } from './ewa.service';
 import { getRequestContext, getCurrentCompanyId } from '@/shared/context/RequestContext';
 import type { ListEWARequestsDTO, CreateEWARequestDTO, ApproveEWARequestDTO, RejectEWARequestDTO, MarkPaidEWARequestDTO } from './ewa.dto';
 import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { Result } from '@/shared/core/Result';
 
 function actorId(): string {
   const id = getRequestContext()?.user?.id;
@@ -25,7 +26,7 @@ export class EWAController {
         status: req.query.status,
         employeeId: req.query.employeeId,
       });
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -36,9 +37,9 @@ export class EWAController {
       const ctx = getRequestContext()?.user as UserContextLite | undefined;
       // A platform account (e.g. SUPER_ADMIN) has no employee profile, so its
       // "my EWA requests" set is legitimately empty rather than a 400 error.
-      if (!ctx?.employeeId) return res.json({ success: true, data: [] });
+      if (!ctx?.employeeId) return res.json(Result.success([]));
       const result = await ewaService.findMyRequests(ctx.employeeId, req.query.status);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -48,7 +49,7 @@ export class EWAController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await ewaService.findById(id);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -72,7 +73,7 @@ export class EWAController {
         throw new BadRequestError('Field periodStart/periodEnd TIDAK BOLEH dikirim dari client. Gunakan payrollPeriodId yang terdaftar (atau kosongkan untuk auto-detect bulan ini). Hapus periodStart/periodEnd dari request body.');
       }
       const result = await ewaService.createRequest(req.body);
-      res.status(201).json({ success: true, data: result });
+      res.status(201).json(Result.created(result));
     } catch (e) {
       next(e);
     }
@@ -82,7 +83,7 @@ export class EWAController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await ewaService.approveRequest(id, actorId(), req.body);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -92,7 +93,7 @@ export class EWAController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await ewaService.rejectRequest(id, actorId(), req.body);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -102,7 +103,7 @@ export class EWAController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await ewaService.cancelRequest(id, actorId());
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -112,7 +113,7 @@ export class EWAController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await ewaService.markPaid(id, actorId(), req.body);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -129,9 +130,9 @@ export class EWAController {
         throw new BadRequestError('Query parameter earnedGross TIDAK BOLEH dikirim. Server menghitung sendiri limit dari salary + attendance + overtime aktual. Hapus query earnedGross.');
       }
       const ctx = getRequestContext()?.user as UserContextLite | undefined;
-      if (!ctx?.employeeId) return res.status(400).json({ success: false, message: 'employeeId context tidak ada' });
+      if (!ctx?.employeeId) throw new BadRequestError('employeeId context tidak ada');
       const companyId = getCurrentCompanyId() ?? ctx.companyId;
-      if (!companyId) return res.status(400).json({ success: false, message: 'companyId context tidak ada' });
+      if (!companyId) throw new BadRequestError('companyId context tidak ada');
 
       let percent: number | undefined;
       if (req.query.percent !== undefined) {
@@ -142,7 +143,7 @@ export class EWAController {
       }
 
       const result = await ewaService.getMyLimitServer(companyId, ctx.employeeId, percent);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }

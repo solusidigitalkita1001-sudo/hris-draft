@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { employeeService } from './employee.service';
 import { Result } from '@/shared/core/Result';
+import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { canReadSensitiveEmployeeData, serializeEmployee, serializeEmployees } from './employee-pii';
 
@@ -54,10 +55,7 @@ export class EmployeeController {
 
   async enrollFaceProfile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      if (!req.file?.buffer) {
-        res.status(400).json({ success: false, message: 'Foto wajah wajib diunggah pada field photo' });
-        return;
-      }
+      if (!req.file?.buffer) throw new BadRequestError('Foto wajah wajib diunggah pada field photo');
       const status = await employeeService.enrollFaceProfile(
         req.params.id as string,
         req.file.buffer,
@@ -90,11 +88,7 @@ export class EmployeeController {
         limit: parseInt(req.query.limit as string) || 20,
       };
       const result = await employeeService.findAll(query);
-      res.json({
-        success: true,
-        data: serializeEmployees(result.data),
-        meta: { page: result.page, limit: result.limit, total: result.total, totalPages: result.totalPages },
-      });
+      res.json(Result.paginated(serializeEmployees(result.data), result.total, result.page, result.limit));
     } catch (error) {
       next(error);
     }
@@ -233,20 +227,13 @@ export class EmployeeController {
       const scope = req.user?.companyScope || [];
       const requested = req.body.companyId as string | undefined;
       if (requested && !isSuperAdmin && !scope.includes(requested) && requested !== req.user?.companyId) {
-        res.status(403).json({ success: false, message: 'companyId is outside your company scope' });
-        return;
+        throw new ForbiddenError('companyId is outside your company scope');
       }
       const companyId = requested || req.user?.companyId;
-      if (!companyId) {
-        res.status(400).json({ success: false, message: 'companyId is required' });
-        return;
-      }
-      if (!req.file) {
-        res.status(400).json({ success: false, message: 'CSV file is required' });
-        return;
-      }
+      if (!companyId) throw new BadRequestError('companyId is required');
+      if (!req.file) throw new BadRequestError('CSV file is required');
       const result = await employeeService.importCsv(companyId, req.file);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (error) {
       next(error);
     }
@@ -255,10 +242,7 @@ export class EmployeeController {
   async exportCsv(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = (req.query.companyId as string) || req.user?.companyId;
-      if (!companyId) {
-        res.status(400).json({ success: false, message: 'companyId is required' });
-        return;
-      }
+      if (!companyId) throw new BadRequestError('companyId is required');
       const csv = await employeeService.exportCsv(companyId, { maskSensitive: !canReadSensitiveEmployeeData() });
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="employees.csv"');
