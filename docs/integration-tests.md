@@ -56,6 +56,15 @@ synthetic companies in `afterAll`.
 | `employee-salary-read.mysql` | `PAYROLL_SALARY_DB_URL` | salary read access per scope |
 | `payroll-run-access.mysql` | `PAYROLL_ACCESS_DB_URL` | run/payslip access per data scope, maker-checker, tenant intersection |
 
+## In CI
+
+The `Real-database integration suites (blocking)` job runs the nine suites on
+every push and pull request, against a MySQL service database named
+`hris_payment_integration` so the suites' own local-and-named guard is
+satisfied. It applies the migration chain first, then runs the same selector
+used above with `--runInBand`. A failure blocks the merge — these suites drifted
+precisely because nothing ran them.
+
 ## What this pass found
 
 Running them surfaced two real defects and three stale fixtures.

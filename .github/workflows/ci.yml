@@ -70,6 +70,57 @@ jobs:
           -v "/tmp/hris-ci-privkey.pem:/etc/nginx/tls/privkey.pem:ro"
           nginx:alpine nginx -t
 
+  integration:
+    name: Real-database integration suites (blocking)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          # The suites refuse to run unless the host is local and the database
+          # is named this, so a developer or deployment database cannot be hit
+          # by accident.
+          MYSQL_DATABASE: hris_payment_integration
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/hris_payment_integration
+      RUN_DB_INTEGRATION: "1"
+      EWA_ACCESS_DB_URL: mysql://root:root@127.0.0.1:3306/hris_payment_integration
+      PAYROLL_ATTENDANCE_DB_URL: mysql://root:root@127.0.0.1:3306/hris_payment_integration
+      PAYROLL_CALCULATION_DB_URL: mysql://root:root@127.0.0.1:3306/hris_payment_integration
+      PAYROLL_FORMULA_DB_URL: mysql://root:root@127.0.0.1:3306/hris_payment_integration
+      PAYROLL_PAYMENT_DB_URL: mysql://root:root@127.0.0.1:3306/hris_payment_integration
+      PAYROLL_SALARY_DB_URL: mysql://root:root@127.0.0.1:3306/hris_payment_integration
+      PAYROLL_ACCESS_DB_URL: mysql://root:root@127.0.0.1:3306/hris_payment_integration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Apply migrations to the integration database
+        run: npx prisma migrate deploy
+      # Advisory locks, rollback, concurrent runs and row locks are behaviour a
+      # mocked Prisma client cannot reproduce, so these nine suites need a real
+      # database. --runInBand because they share it and clean up after
+      # themselves in afterAll.
+      - name: Nine gated suites against real MySQL (blocking)
+        run: npx jest --runInBand "\\.mysql\\.test\\.ts$" "advisory-lock"
+
   backend:
     name: Backend (type-check + build [blocking], lint + test [soft])
     runs-on: ubuntu-latest
