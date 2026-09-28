@@ -90,6 +90,42 @@ tenant-neutral reference data.
   transaction; export calls the same scoped list path. Document/payslip/payment downloads resolve
   the scoped database record before returning storage or bank data.
 
+## Allowlist coverage is now verified against the schema
+
+The enforcement model's structural weakness was that `COMPANY_SCOPED_MODELS` is
+an allowlist: the middleware returns early for any model outside it, so a
+forgotten entry silently downgrades a tenant table to "safe only while every
+call site remembers to filter by hand". Three models had already drifted that
+way — `TaxBracket`, `PtkpTable`, and `BpjsReference`, the statutory payroll
+reference tables. Their loader does pass an explicit company predicate, so no
+leak was reachable, but nothing stopped a future call site from reading another
+company's tax overrides.
+
+Both halves are closed:
+
+- The three reference tables joined `COMPANY_SCOPED_MODELS`. Because their
+  platform-level rows (`companyId = null`) are the documented fallback when a
+  company has no override, the announcement-only platform exception was
+  generalised into `PLATFORM_FALLBACK_MODELS`: reads resolve to
+  `companyId IN (active, NULL)`, writes stay exact-company, and seeds keep
+  creating platform rows through system context.
+- `tenant-scope-coverage.test.ts` parses `schema.prisma` and both list sources
+  and fails when a model carrying `companyId` is neither scoped nor listed in a
+  reasoned exemption map, when a `PARENT_SCOPES` child is missing from the
+  allowlist (where it would enforce nothing), when either list names a model
+  that no longer exists, or when a platform-fallback model's company column is
+  not nullable. Each parse asserts a plausible size, so renaming a list cannot
+  turn the suite into a no-op.
+
+Two models stay deliberately unscoped with recorded reasons: `UserCompanyAccess`
+(must be readable before an active company exists, to resolve which companies a
+user may select) and `UserRole` (read during authentication). The test fails if
+either is later scoped or removed, so the exemption cannot go stale silently.
+
+This closes the middleware half of backlog item #2. Fine-grained within-company
+scope (the Tier 3 `OWN_*` findings) remains a separate product decision and is
+unchanged by this pass.
+
 ## `runInSystemContext` inventory
 
 System context is a privileged cross-tenant bypass. Every production call site is listed here;

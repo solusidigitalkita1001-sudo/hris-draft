@@ -35,6 +35,18 @@ const PARENT_SCOPES: Record<string, { relation: string; foreignKey: string }> = 
   AnnouncementRead: { relation: 'announcement', foreignKey: 'announcementId' },
 };
 
+/**
+ * Company-scoped models that additionally carry platform-level rows
+ * (`companyId = null`) which every tenant may read. `AnnouncementRead` inherits
+ * the same allowance through its announcement parent.
+ */
+const PLATFORM_FALLBACK_MODELS = new Set([
+  'Announcement',
+  'TaxBracket',
+  'PtkpTable',
+  'BpjsReference',
+]);
+
 export const TENANT_WRITE_ACTIONS = new Set([
   'create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert',
 ]);
@@ -76,13 +88,17 @@ export async function enforceTenantScope(params: Prisma.MiddlewareParams, compan
   const parent = params.model ? PARENT_SCOPES[params.model] : undefined;
   const args: Data = params.args ?? {};
   params.args = args;
-  // Published platform announcements intentionally use companyId=null and are
-  // visible to every authenticated tenant. All other company-scoped models
-  // remain exact-company only. AnnouncementRead follows the same parent rule.
+  // Models whose rows may also live at platform level (companyId = null) and
+  // are then readable by every tenant: published platform announcements, and
+  // the statutory payroll reference tables whose global rows are the fallback
+  // when a company has no override. Writes stay exact-company; only seeds and
+  // system jobs create platform rows, and those run unscoped by design.
   const filteredActions = new Set(['findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate', 'groupBy', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
-  const mayAccessPlatformAnnouncement = params.model === 'AnnouncementRead'
-    || (params.model === 'Announcement' && !TENANT_WRITE_ACTIONS.has(params.action));
-  const companyConstraint: Data = mayAccessPlatformAnnouncement
+  const mayReadPlatformRow = params.model === 'AnnouncementRead'
+    || (params.model !== undefined
+      && PLATFORM_FALLBACK_MODELS.has(params.model)
+      && !TENANT_WRITE_ACTIONS.has(params.action));
+  const companyConstraint: Data = mayReadPlatformRow
     ? { OR: [{ companyId }, { companyId: null }] }
     : { companyId };
   const tenant = parent
