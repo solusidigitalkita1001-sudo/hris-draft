@@ -51,6 +51,8 @@ jobs:
         run: bash -n scripts/server-deploy.sh
       - name: Verify the 24-operation sanitized smoke contract
         run: node scripts/checks/mobile-api-smoke.test.cjs
+      - name: Verify every frontend API call hits a declared backend route (blocking)
+        run: node scripts/checks/frontend-api-contract.cjs
       - name: Generate throwaway TLS files for Nginx syntax validation
         run: >-
           openssl req -x509 -nodes -newkey rsa:2048 -days 1

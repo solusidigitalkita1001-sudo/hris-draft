@@ -90,6 +90,36 @@ tenant-neutral reference data.
   transaction; export calls the same scoped list path. Document/payslip/payment downloads resolve
   the scoped database record before returning storage or bank data.
 
+## Tier 3 — data scope on sensitive fetch-by-path reads
+
+`OWN_*`/`MANAGER_TEAM` enforcement was only ever injected into `req.query`, so
+any read that takes its target from the path was governed by the coarse
+`resource:read` grant alone. Product decision (28 September 2026): enforce the
+actor's employee data scope on the **financially and personally sensitive**
+fetch-by-path reads first, rather than on every path at once, because a role
+holding `read` without a matching scope would otherwise start receiving 404s.
+
+Already covered before this pass: THR (`payroll.controller.ts`), payslip detail
+and employee-salary detail (both resolve through `employeeWhere` in their
+repository queries), and the work-calendar employee/team paths.
+
+Closed in this pass:
+
+| Site | Was | Now |
+|---|---|---|
+| `GET /attendance/:id` | Tenant-scoped only, so any `attendance:read` holder could read a colleague's check-in/out times, GPS coordinates and selfie reference by id. | Intersects the actor's employee predicate; out of scope is not-found. |
+| `GET /attendance-corrections` and `/:id` | Company-wide list and detail, including the other employee's attendance times and their stated reason. | Both carry the employee predicate. |
+
+Approval paths (`approve`, `reject`, `workflow-action`) deliberately keep using
+the workflow engine's own authority check, which can legitimately be wider than
+a read scope — an approver may sit outside the department they approve for.
+
+Still open by the same decision: the remaining fetch-by-path reads whose payload
+is not financial or biometric (leave detail, permission-request detail, generic
+employee sub-resources). Cross-company is closed on all of them; within-company
+they remain governed by the RBAC grant, so a `read` permission must be issued
+together with the scope that belongs to it.
+
 ## Scalar-FK sweep — two sites still trusted a client employeeId
 
 The middleware pins a row's `companyId` but never inspects scalar foreign keys,

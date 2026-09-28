@@ -105,6 +105,11 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 chars'),
   CSRF_SECRET: z.string().min(16, 'CSRF_SECRET must be at least 16 chars'),
   ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 chars (AES-256)'),
+  // Rotation: the key a stored value was encrypted with before the current one.
+  // Decryption falls back to it, encryption never uses it, so rotating the key
+  // does not strand existing TOTP secrets or device tokens. Unset once every
+  // stored value has been rewritten under the current key.
+  ENCRYPTION_KEY_PREVIOUS: z.string().min(32, 'ENCRYPTION_KEY_PREVIOUS must be at least 32 chars (AES-256)').optional(),
 
   // Native push providers. Optional as a group: delivery is persisted as
   // BLOCKED_CONFIG until the complete provider credential set is supplied.
@@ -237,7 +242,7 @@ export function buildConfig(env: Env) {
     cookies: { secure: env.COOKIE_SECURE ?? env.NODE_ENV === 'production' },
     session: { secret: env.SESSION_SECRET },
     csrf: { secret: env.CSRF_SECRET },
-    encryption: { key: env.ENCRYPTION_KEY },
+    encryption: { key: env.ENCRYPTION_KEY, previousKey: env.ENCRYPTION_KEY_PREVIOUS },
     push: {
       fcm: {
         projectId: env.FCM_PROJECT_ID,

@@ -26,7 +26,7 @@ import {
   OutsideRadiusAction,
   Prisma,
 } from '@prisma/client';
-import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
+import { assertEmployeeInScope, employeeAccessWhere } from '@/shared/security/employee-data-scope';
 import { attendanceContextService } from './attendance-context.service';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
@@ -441,7 +441,11 @@ export class AttendanceService {
   }
 
   async findById(id: string) {
-    const record = await attendanceRepository.findById(id);
+    // An attendance row carries a colleague's times, GPS coordinates and
+    // selfie reference, so the actor's employee data scope applies to reading
+    // one by id — `req.params` never went through the OWN_* query rewrite.
+    const employeeScope = await employeeAccessWhere('attendance');
+    const record = await attendanceRepository.findById(id, employeeScope);
     if (!record) throw new NotFoundError('Attendance record not found');
     return record;
   }

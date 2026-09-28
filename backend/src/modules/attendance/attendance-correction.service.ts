@@ -7,14 +7,22 @@ import { assertPayrollDateOpen } from '@/shared/payroll/payroll-period-guard';
 import { attendanceContextService } from './attendance-context.service';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import { getRequestContext } from '@/shared/context/RequestContext';
+import { employeeAccessWhere } from '@/shared/security/employee-data-scope';
 
 class AttendanceCorrectionService {
-  findAll(companyId: string, filters?: { employeeId?: string; status?: string }) {
-    return attendanceCorrectionRepository.findAll(companyId, filters);
+  // Reads intersect the actor's employee data scope, not just the tenant: an
+  // `attendance:read` grant with an OWN_DEPARTMENT/MANAGER_TEAM scope used to
+  // see every correction in the company. Out of scope resolves to not-found,
+  // matching the cross-tenant contract. Approval keeps using the workflow's own
+  // authority check, which can legitimately be wider than a read scope.
+  async findAll(companyId: string, filters?: { employeeId?: string; status?: string }) {
+    const employeeScope = await employeeAccessWhere('attendance');
+    return attendanceCorrectionRepository.findAll(companyId, filters, employeeScope);
   }
 
   async findById(id: string) {
-    const correction = await attendanceCorrectionRepository.findById(id);
+    const employeeScope = await employeeAccessWhere('attendance');
+    const correction = await attendanceCorrectionRepository.findById(id, employeeScope);
     if (!correction) throw new NotFoundError('Attendance correction not found');
     return correction;
   }

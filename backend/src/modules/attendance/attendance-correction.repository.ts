@@ -1,11 +1,19 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { CreateAttendanceCorrectionDTO } from './attendance-correction.dto';
 
 class AttendanceCorrectionRepository {
-  findAll(companyId: string, filters?: { employeeId?: string; status?: string }) {
+  findAll(
+    companyId: string,
+    filters?: { employeeId?: string; status?: string },
+    employeeScope?: Prisma.EmployeeWhereInput,
+  ) {
     const where: Record<string, unknown> = { companyId, deletedAt: null };
     if (filters?.employeeId) where.employeeId = filters.employeeId;
     if (filters?.status) where.status = filters.status;
+    // A correction carries another person's attendance times and their stated
+    // reason, so the actor's data scope has to reach it as well as the tenant.
+    if (employeeScope) where.employee = employeeScope;
     return prisma.attendanceCorrection.findMany({
       where,
       include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
@@ -13,9 +21,9 @@ class AttendanceCorrectionRepository {
     });
   }
 
-  findById(id: string) {
+  findById(id: string, employeeScope?: Prisma.EmployeeWhereInput) {
     return prisma.attendanceCorrection.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, ...(employeeScope ? { employee: employeeScope } : {}) },
       include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
     });
   }
