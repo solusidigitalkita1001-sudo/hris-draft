@@ -107,3 +107,25 @@ To fetch it:
 curl -H "Authorization: Bearer $TOKEN" \
   https://<host>/api/v1/meta/openapi.json > openapi.json
 ```
+
+## Frontend-to-backend path check
+
+`node scripts/checks/frontend-api-contract.cjs` compares every
+`api.<method>('/path')` call under `frontend/src` against every route declared
+under `backend/src`, resolving each mount prefix from `app.ts` and following the
+sub-routers a module mounts. Template literals (`/leave/${id}/cancel`) and
+Express params (`/leave/:id/cancel`) are normalised to the same shape.
+
+It exists because the frontend addresses the API by string: a renamed or removed
+route otherwise surfaces when a screen breaks in the browser. The check runs
+statically — importing the backend app would pull in config, Prisma and the
+schedulers, which a contract check should not need.
+
+It is deliberately fail-loud in both directions: the run asserts it parsed more
+than 200 backend paths and found more than 100 frontend calls, so a refactor
+that breaks either walker fails instead of silently reporting a clean contract.
+Current numbers: 375 declared backend paths, 408 frontend calls, 0 unmatched.
+
+What it does not check: request and response payload shapes. The generated
+OpenAPI document describes request bodies; payload assertions would need
+per-endpoint response schemas that do not exist yet.
