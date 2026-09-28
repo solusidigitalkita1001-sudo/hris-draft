@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodSchema, ZodError } from 'zod';
 import { ValidationError } from '@/shared/exceptions/AppError';
+import { tagRequestSchemas } from '@/shared/openapi/route-metadata';
 
 type ValidationTarget = 'body' | 'query' | 'params';
 
@@ -9,7 +10,9 @@ type ValidationTarget = 'body' | 'query' | 'params';
  * Validates request data against Zod schemas
  */
 export function validate(schema: ZodSchema, target: ValidationTarget = 'body') {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  // Tagged so the OpenAPI description is derived from the schema that actually
+  // guards the route.
+  return tagRequestSchemas((req: Request, _res: Response, next: NextFunction): void => {
     try {
       const parsed = schema.parse(req[target]);
       // Replace with parsed (sanitized) data
@@ -25,7 +28,7 @@ export function validate(schema: ZodSchema, target: ValidationTarget = 'body') {
       }
       throw error;
     }
-  };
+  }, { [target]: schema });
 }
 
 /**
@@ -38,7 +41,7 @@ export function validateRequest(
     params?: ZodSchema;
   }
 ) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return tagRequestSchemas((req: Request, _res: Response, next: NextFunction): void => {
     try {
       for (const [target, schema] of Object.entries(schemas)) {
         if (schema) {
@@ -57,5 +60,5 @@ export function validateRequest(
       }
       throw error;
     }
-  };
+  }, schemas);
 }

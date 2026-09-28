@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from './Authenticate';
 import { ForbiddenError, AuthError } from '@/shared/exceptions/AppError';
+import { tagPermissions } from '@/shared/openapi/route-metadata';
 
 export type PermissionCheck = {
   resource: string;
@@ -23,7 +24,9 @@ function toLegacyPermissionCode(resource: string, action: string) {
  * Authorization middleware factory - creates middleware that checks for specific permissions
  */
 export function authorize(...permissions: PermissionCheck[]) {
-  return (req: AuthenticatedRequest, _res: Response, next: NextFunction): void => {
+  // Tagged so the generated OpenAPI document states the permission a route
+  // demands, read from the guard itself.
+  return tagPermissions((req: AuthenticatedRequest, _res: Response, next: NextFunction): void => {
     if (!req.user) {
       throw new AuthError('Authentication required');
     }
@@ -55,7 +58,7 @@ export function authorize(...permissions: PermissionCheck[]) {
     }
 
     next();
-  };
+  }, permissions);
 }
 
 /**

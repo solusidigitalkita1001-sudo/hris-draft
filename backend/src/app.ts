@@ -15,6 +15,7 @@ import config from '@/config';
 import prisma from '@/shared/database/prisma';
 import { createReadinessProbe } from '@/shared/health/readiness';
 import { errorHandler } from '@/shared/middleware/ErrorHandler';
+import { buildOpenApiDocument } from '@/shared/openapi/generate';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
 import { rabbitMQBroker } from '@/infrastructure/messaging/RabbitMQBroker';
@@ -249,6 +250,23 @@ app.get(
       .map((endpoint) => ({ path: endpoint.path, methods: endpoint.methods, middlewares: endpoint.middlewares }))
       .sort((a, b) => a.path.localeCompare(b.path));
     res.json({ success: true, data: { count: endpoints.length, endpoints } });
+  }
+);
+
+// OpenAPI description, generated from this very router at request time so it
+// cannot drift from the server. Admin-gated for the same reason as the
+// inventory above.
+app.get(
+  `${apiPrefix}/meta/openapi.json`,
+  authenticate,
+  authorize({ resource: 'rbac', action: 'read' }),
+  (_req: Request, res: Response) => {
+    res.json(buildOpenApiDocument(app as never, {
+      title: `${config.app.name} API`,
+      // The package version is the only version this service actually has.
+      version: process.env.npm_package_version ?? '1.0.0',
+      serverUrl: `${config.app.url}${apiPrefix}`,
+    }));
   }
 );
 

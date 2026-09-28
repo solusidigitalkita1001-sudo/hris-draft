@@ -123,6 +123,21 @@ describe('container formats that share one signature', () => {
 });
 
 describe('discardUploadOnFailure', () => {
+  // Cleanup runs from a response 'finish' listener and is deliberately
+  // fire-and-forget, so the assertion polls instead of racing the unlink.
+  const untilGone = async (filePath: string, deadlineMs = 2000) => {
+    const started = process.hrtime.bigint();
+    for (;;) {
+      try {
+        await fs.access(filePath);
+      } catch {
+        return true;
+      }
+      if (Number(process.hrtime.bigint() - started) / 1e6 > deadlineMs) return false;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  };
+
   const finish = (statusCode: number, filePath: string) => {
     const listeners: Array<() => void> = [];
     const res = { statusCode, on: (_event: string, cb: () => void) => listeners.push(cb) } as unknown as Response;
@@ -141,7 +156,7 @@ describe('discardUploadOnFailure', () => {
 
     finish(422, filePath);
 
-    await expect(fs.access(filePath)).rejects.toBeDefined();
+    await expect(untilGone(filePath)).resolves.toBe(true);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -152,6 +167,8 @@ describe('discardUploadOnFailure', () => {
 
     finish(201, filePath);
 
+    // Give the listener the same chance to run; the file must survive it.
+    await expect(untilGone(filePath, 100)).resolves.toBe(false);
     await expect(fs.access(filePath)).resolves.toBeUndefined();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
