@@ -58,6 +58,7 @@ import { attendanceService } from '@/modules/attendance/attendance.service';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import { branchRepository } from '@/modules/organization/repositories/branch.repository';
 import { leaveService } from '@/modules/leave/leave.service';
+import { travelExpenseService } from '@/modules/travel-expense/travel-expense.service';
 import { NotFoundError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { runAs, userCompanyA, makeUserContext, COMPANY_A_ID, EMPLOYEE_A_ID, EMPLOYEE_B_ID, USER_B_ID, clearAllPrismaMocks } from '../helpers/setupTestApp';
 
@@ -162,6 +163,61 @@ describe('CompanyScope Sprint 2 #8 — cross-tenant FK validation', () => {
     ).rejects.toThrow(NotFoundError);
 
     expect(updateBalance).not.toHaveBeenCalled();
+  });
+
+  it('createOvertime by an elevated role for a foreign employee → NotFoundError, no row written', async () => {
+    // The tenant middleware pins the row's companyId but never inspects the
+    // client employeeId, so before the scoped lookup an HR actor could file
+    // overtime against another tenant's employee and read their name back
+    // through the create's employee include.
+    jest.spyOn(prisma.employee, 'findFirst').mockResolvedValue(null);
+    const createOvertimeRow = jest.spyOn(prisma.overtimeRequest, 'create');
+
+    await expect(
+      runAs(userCompanyA(['HR_MANAGER']), () => attendanceService.createOvertime({
+        employeeId: EMPLOYEE_B_ID,
+        companyId: COMPANY_A_ID,
+        date: '2026-01-05',
+        startTime: '2026-01-05T18:00:00Z',
+        endTime: '2026-01-05T20:00:00Z',
+        durationHours: 2,
+        reason: 'x',
+      } as any))
+    ).rejects.toThrow(NotFoundError);
+
+    expect(createOvertimeRow).not.toHaveBeenCalled();
+  });
+
+  it('createTrip and createClaim by an elevated role for a foreign employee → NotFoundError', async () => {
+    jest.spyOn(prisma.employee, 'findFirst').mockResolvedValue(null);
+    const createTripRow = jest.spyOn(prisma.businessTrip, 'create');
+    const createClaimRow = jest.spyOn(prisma.expenseClaim, 'create');
+
+    await expect(
+      runAs(userCompanyA(['HR_MANAGER']), () => travelExpenseService.createTrip({
+        employeeId: EMPLOYEE_B_ID,
+        companyId: COMPANY_A_ID,
+        destination: 'Bandung',
+        purpose: 'x',
+        startDate: '2026-01-05',
+        endDate: '2026-01-06',
+        estimatedCost: 1000,
+      } as any))
+    ).rejects.toThrow(NotFoundError);
+
+    await expect(
+      runAs(userCompanyA(['HR_MANAGER']), () => travelExpenseService.createClaim({
+        employeeId: EMPLOYEE_B_ID,
+        companyId: COMPANY_A_ID,
+        category: 'TRANSPORT',
+        amount: 1000,
+        description: 'x',
+        expenseDate: '2026-01-05',
+      } as any))
+    ).rejects.toThrow(NotFoundError);
+
+    expect(createTripRow).not.toHaveBeenCalled();
+    expect(createClaimRow).not.toHaveBeenCalled();
   });
 
   it('createOvertime by a custom non-elevated role for another employee → ForbiddenError (T3.3)', async () => {

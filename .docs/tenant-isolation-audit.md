@@ -90,6 +90,33 @@ tenant-neutral reference data.
   transaction; export calls the same scoped list path. Document/payslip/payment downloads resolve
   the scoped database record before returning storage or bank data.
 
+## Scalar-FK sweep — two sites still trusted a client employeeId
+
+The middleware pins a row's `companyId` but never inspects scalar foreign keys,
+so each write that accepts an `employeeId` from the request has to validate it
+itself. Re-walking every service that writes a client-supplied `employeeId`
+found the four known sites already fixed (asset assignment, training
+enrollment, daily activity, workflow delegation) and confirmed employee-loan,
+onboarding, benefit, and employee-salary resolve the target through a scoped
+lookup. Leave is covered indirectly but genuinely: it requires a
+`LeaveBalance` row for the active company, which a foreign employee cannot
+have. Attendance check-in resolves its context through a scoped
+`prisma.employee` lookup.
+
+Two writes were still unguarded:
+
+| ID | Site | Issue | Fix |
+|---|---|---|---|
+| T1.5 | `attendance.service.ts` `createOvertime` | An elevated actor's `employeeId` went straight into the row, and the create's `include: { employee }` returned that person's `fullName`/`employeeNumber` — cross-tenant PII, the same shape as the asset/training findings. | Resolve the target through `assertEmployeeInScope` before the advisory lock. |
+| T1.6 | `travel-expense.service.ts` `createTrip` / `createClaim` | Same trusted `employeeId`: a trip or claim could be opened in this company against another tenant's employee, which the list endpoints' employee include would then expose. | Same scoped resolution before each create. |
+
+`assertEmployeeInScope` was reused rather than re-implementing the lookup, so
+these three writes now also respect the actor's fine-grained data scope: a
+manager restricted to their own department can no longer file overtime or open
+a trip for someone outside it. An actor with no configured scope is unchanged
+apart from the tenant check. `company-scope-sprint2-gaps.test.ts` covers all
+three writes and asserts no row is created.
+
 ## Allowlist coverage is now verified against the schema
 
 The enforcement model's structural weakness was that `COMPANY_SCOPED_MODELS` is

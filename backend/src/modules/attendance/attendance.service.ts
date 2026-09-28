@@ -26,6 +26,7 @@ import {
   OutsideRadiusAction,
   Prisma,
 } from '@prisma/client';
+import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { attendanceContextService } from './attendance-context.service';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
@@ -965,6 +966,13 @@ export class AttendanceService {
     if (!canManageOthersOvertime && data.employeeId !== currentUser?.employeeId) {
       throw new ForbiddenError('IDOR: Employee cannot create overtime request for other employees');
     }
+
+    // The tenant middleware pins the row's companyId but never inspects the
+    // client employeeId, so an elevated actor could file overtime against
+    // another tenant's employee and read back their name/number through the
+    // include below. Resolving the target through the scoped predicate rejects
+    // both a foreign employee and one outside the actor's data scope.
+    await assertEmployeeInScope(data.employeeId, 'attendance');
 
     const requesterId = currentUser?.id ?? undefined;
 

@@ -689,6 +689,9 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
     });
 
     it('createOvertime EMPLOYEE dengan employeeId emp-A (diri) → bukan IDOR Forbidden', async () => {
+      // The target employee is now resolved through the scoped predicate before
+      // the row is written, so the self path needs the employee to be visible.
+      jest.spyOn(prisma.employee, 'findFirst').mockResolvedValue({ id: EMPLOYEE_A_ID } as any);
       jest.spyOn(prisma.workflowTemplate, 'findFirst').mockResolvedValue(null);
       jest.spyOn(prisma.overtimeRequest, 'findFirst').mockResolvedValue(null); // no duplicate
       jest.spyOn(prisma.overtimeRequest, 'create').mockResolvedValue({ id: 'ot-new' } as any);
