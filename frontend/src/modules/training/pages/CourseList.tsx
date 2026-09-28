@@ -7,9 +7,11 @@ import { Input } from '@/components/ui/input';
 import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, Plus, GraduationCap, BookOpen, Users, Clock, Award } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useI18n } from '@/i18n/provider';
 
 export function CourseList() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const [courses, setCourses] = useState<TrainingCourse[]>([]);
   const [categories, setCategories] = useState<TrainingCategory[]>([]);
@@ -36,11 +38,11 @@ export function CourseList() {
       setCategories(catData);
     } catch (error) {
       console.error('Failed to fetch courses:', error);
-      toast.error('Gagal memuat data course');
+      toast.error(t('ops.training.toast.loadCoursesFailed'));
     } finally {
       setLoading(false);
     }
-  }, [activeCompany?.id, categoryFilter]);
+  }, [activeCompany?.id, categoryFilter, t]);
 
   useEffect(() => {
     fetchData();
@@ -59,17 +61,17 @@ export function CourseList() {
   return (
     <div>
       <PageHeader
-        title="Learning Management"
-        description="Manage training courses, sessions, and employee enrollments"
+        title={t('ops.training.list.title')}
+        description={t('ops.training.list.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => navigate('/lms/courses/new')}>
               <Plus size={16} className="mr-2" />
-              New Course
+              {t('ops.training.newCourse')}
             </Button>
           </>
         }
@@ -79,19 +81,19 @@ export function CourseList() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <BookOpen size={14} /> Total Courses
+            <BookOpen size={14} /> {t('ops.training.list.stats.totalCourses')}
           </div>
           <p className="text-xl font-semibold">{courses.length}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Users size={14} /> Total Enrollments
+            <Users size={14} /> {t('ops.training.list.stats.totalEnrollments')}
           </div>
           <p className="text-xl font-semibold">{totalEnrollments}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Award size={14} /> Mandatory
+            <Award size={14} /> {t('ops.training.mandatory')}
           </div>
           <p className="text-xl font-semibold">{mandatoryCount}</p>
         </div>
@@ -102,7 +104,7 @@ export function CourseList() {
         <div className="relative flex-1 max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search courses..."
+            placeholder={t('ops.training.list.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -118,7 +120,7 @@ export function CourseList() {
                 : 'bg-background text-muted-foreground border-border hover:border-primary/50'
             }`}
           >
-            All Categories
+            {t('ops.training.list.allCategories')}
           </button>
           {categories.map((cat) => (
             <button
@@ -138,13 +140,13 @@ export function CourseList() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
-          <div className="col-span-full text-center py-12 text-sm text-muted-foreground">Loading...</div>
+          <div className="col-span-full text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <div className="flex flex-col items-center gap-2">
               <GraduationCap size={32} className="text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No courses found</p>
-              <p className="text-xs text-muted-foreground">Create training courses to get started</p>
+              <p className="text-sm text-muted-foreground">{t('ops.training.list.empty.title')}</p>
+              <p className="text-xs text-muted-foreground">{t('ops.training.list.empty.description')}</p>
             </div>
           </div>
         ) : (
@@ -164,7 +166,7 @@ export function CourseList() {
                 </div>
                 {course.isMandatory && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                    Mandatory
+                    {t('ops.training.mandatory')}
                   </span>
                 )}
               </div>
@@ -178,20 +180,20 @@ export function CourseList() {
                 {course.duration && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-600 dark:bg-gray-900 dark:text-gray-400">
                     <Clock size={12} />
-                    {course.duration} {course.durationUnit || 'hrs'}
+                    {course.duration} {course.durationUnit || t('ops.training.hoursShort')}
                   </span>
                 )}
               </div>
 
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                {course.provider && <span>By {course.provider}</span>}
+                {course.provider && <span>{t('ops.training.list.byProvider', { provider: course.provider })}</span>}
                 <span className="flex items-center gap-1">
                   <Users size={12} />
-                  {course._count?.enrollments || 0} enrolled
+                  {t('ops.training.enrolledCount', { count: course._count?.enrollments || 0 })}
                 </span>
                 <span className="flex items-center gap-1">
                   <BookOpen size={12} />
-                  {course._count?.sessions || 0} sessions
+                  {t('ops.training.list.sessionsCount', { count: course._count?.sessions || 0 })}
                 </span>
               </div>
 

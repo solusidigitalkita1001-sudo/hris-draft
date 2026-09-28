@@ -18,10 +18,24 @@ import {
   createEmployeeSkillSchema, updateEmployeeSkillSchema,
   createEmployeeExperienceSchema, updateEmployeeExperienceSchema,
   createEmployeeAttachmentSchema, updateEmployeeAttachmentSchema,
+  updateAttendanceMethodsSchema,
 } from './employee.dto';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
+import type { Request, Response, NextFunction } from 'express';
+import { ForbiddenError } from '@/shared/exceptions/AppError';
 
 const router = Router();
+
+// Matriks metode absensi per karyawan hanya boleh diatur SUPER_ADMIN
+// (keputusan pemilik proyek) — bukan permission biasa yang bisa didelegasikan.
+function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const roles = (req as Request & { user?: { roles?: string[] } }).user?.roles ?? [];
+  if (!roles.includes('SUPER_ADMIN')) {
+    next(new ForbiddenError('Hanya Super Admin yang dapat mengatur metode absensi karyawan'));
+    return;
+  }
+  next();
+}
 router.use(authenticate);
 router.use(requireCompanyAccess());
 
@@ -30,6 +44,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 router.get('/', authorize({ resource: 'employee', action: 'read' }), employeeController.findAll.bind(employeeController));
 router.get('/export', authorize({ resource: 'employee', action: 'read' }), auditView({ action: 'EXPORT_EMPLOYEES', entity: 'Employee' }), employeeController.exportCsv.bind(employeeController));
 router.get('/me/reporting-line', employeeController.getMyReportingLine.bind(employeeController));
+router.get('/attendance-methods', requireSuperAdmin, employeeController.getAttendanceMethodMatrix.bind(employeeController));
+router.patch('/:id/attendance-methods', requireSuperAdmin, validate(updateAttendanceMethodsSchema), auditLog({ action: 'UPDATE_ATTENDANCE_METHODS', entity: 'Employee' }), employeeController.updateAttendanceMethods.bind(employeeController));
 router.get('/:id', authorize({ resource: 'employee', action: 'read' }), employeeController.findById.bind(employeeController));
 router.get('/:id/face-profile', authorize({ resource: 'employee', action: 'read' }), employeeController.getFaceProfile.bind(employeeController));
 router.get('/:id/career-transactions', authorize({ resource: 'employee', action: 'read' }), employeeController.findCareerTransactions.bind(employeeController));

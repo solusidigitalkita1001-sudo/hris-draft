@@ -2212,6 +2212,10 @@ model User {
   twoFactorEnabled       Boolean    @default(false) @map("two_factor_enabled")
   twoFactorSecret        String?    @map("two_factor_secret") @db.VarChar(255)
   twoFactorRecoveryCodes String?    @map("two_factor_recovery_codes") @db.Text
+  /// PIN 6 digit untuk membuka nominal slip gaji sendiri (argon2id hash, bukan PIN asli).
+  payslipPinHash           String?   @map("payslip_pin_hash") @db.VarChar(255)
+  payslipPinFailedAttempts Int       @default(0) @map("payslip_pin_failed_attempts")
+  payslipPinLockedUntil    DateTime? @map("payslip_pin_locked_until")
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
   deletedAt              DateTime?  @map("deleted_at")
@@ -2281,6 +2285,12 @@ model Employee {
   referencePhotoUrl       String?          @map("reference_photo_url") @db.VarChar(500)
   referencePhotoUpdatedAt DateTime?        @map("reference_photo_updated_at")
   joinDate                DateTime?        @map("join_date")
+  // Matriks metode absensi per karyawan (diatur SUPER_ADMIN); default semua
+  // diizinkan sehingga perilaku existing tidak berubah. Efektif = intersect
+  // dengan kebijakan absensi cabang.
+  allowFingerprint        Boolean          @default(true) @map("allow_fingerprint")
+  allowFaceRecognition    Boolean          @default(true) @map("allow_face_recognition")
+  allowMobileGps          Boolean          @default(true) @map("allow_mobile_gps")
   employmentStatus        EmploymentStatus @default(ACTIVE) @map("employment_status")
   employmentType          EmploymentType   @default(PERMANENT) @map("employment_type")
   employeeCategory        EmployeeCategory @default(OFFICE) @map("employee_category")
@@ -3851,6 +3861,8 @@ enum AttendancePolicyMethod {
   MOBILE_GPS
   BOTH
   MANUAL
+  FACE_RECOGNITION
+  FACE_GPS
 }
 
 enum AttendanceCaptureMethod {
@@ -4057,6 +4069,8 @@ model PermissionRequest {
   reason     String         @db.Text
   status     RequestStatus  @default(PENDING)
   notes      String?        @db.Text
+  // Kebijakan pemilik proyek: pengajuan izin SELALU wajib lampiran (URL).
+  attachment String?        @db.VarChar(500)
   approverId String?        @map("approver_id") @db.VarChar(36)
   approvedAt DateTime?      @map("approved_at")
   createdAt  DateTime       @default(now()) @map("created_at")

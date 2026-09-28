@@ -8,21 +8,21 @@ import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { useI18n } from '@/i18n/provider';
 import { cn } from '@/utils/cn';
 import { getInitials } from '@/utils/format';
-import { Bell, Menu, ChevronDown, LogOut, User, Settings, Palette, X } from 'lucide-react';
+import { Bell, Menu, ChevronDown, LogOut, User, Settings, Sun, Moon, Building } from 'lucide-react';
 import { organizationService, type Company } from '@/services/organization.service';
-import { getThemePreset, themePresets } from '@/theme/theme-presets';
+import { notificationService } from '@/services/notification.service';
 
 export function TopNavigation() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { theme, setTheme, setSidebarMobileOpen } = useUIStore();
+  const { theme, setTheme, sidebarCollapsed, setSidebarMobileOpen, setSidebarCollapsed } = useUIStore();
   const { activeCompanyId, activeCompany, setActiveCompany, setCompanies: setStoredCompanies } = useCompanyStore();
   const { t } = useI18n();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
-  const [showThemePanel, setShowThemePanel] = useState(false);
   const [companies, setCompanyOptions] = useState<Company[]>([]);
-  const activeTheme = getThemePreset(theme);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const isDark = theme === 'dark';
   const canOpenSettings = canAccess(user, {
     requireAuth: true,
     requiredPermissions: [{ resource: 'settings', action: 'read' }],
@@ -91,6 +91,25 @@ export function TopNavigation() {
     };
   }, [activeCompanyId, getScopedCompanies, setActiveCompany, setStoredCompanies, user]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!user || !activeCompanyId) {
+      setUnreadCount(0);
+      return;
+    }
+    notificationService
+      .getUnreadCount()
+      .then((result) => {
+        if (!cancelled) setUnreadCount(Number(result?.count) || 0);
+      })
+      .catch(() => {
+        if (!cancelled) setUnreadCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeCompanyId]);
+
   const switchCompany = useCallback(
     (company: Company) => {
       setActiveCompany(company);
@@ -99,100 +118,100 @@ export function TopNavigation() {
     [setActiveCompany]
   );
 
+  // Tampilkan role dengan wewenang tertinggi, bukan urutan array dari server.
+  const ROLE_PRECEDENCE = ['SUPER_ADMIN', 'GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER', 'EMPLOYEE'];
+  const topRole = ROLE_PRECEDENCE.find((role) => user?.roles?.includes(role)) ?? user?.roles?.[0];
+  const roleLabel = topRole?.replace(/_/g, ' ').toLowerCase();
+
   return (
-    <header className="h-16 border-b border-border bg-background sticky top-0 z-30">
-      <div className="flex items-center justify-between h-full px-4 lg:px-6">
-        {/* Left side */}
-        <div className="flex items-center gap-4">
-          {/* Mobile menu button */}
+    <header className="topbar-blur sticky top-0 z-30">
+      <div className="flex h-16 items-center justify-between gap-2 px-4 lg:px-6">
+        {/* Kiri: hamburger + chip perusahaan */}
+        <div className="flex min-w-0 items-center gap-2">
           <button
-            className="lg:hidden p-2 hover:bg-muted rounded-md"
+            className="rounded-[13px] p-2 transition-colors hover:bg-secondary lg:hidden"
             onClick={() => setSidebarMobileOpen(true)}
+            aria-label="Buka menu"
           >
             <Menu size={20} />
           </button>
-
-          {/* Breadcrumb placeholder */}
-          <div className="hidden sm:flex items-center text-sm text-muted-foreground">
-            {/* Dynamic breadcrumb will go here */}
-          </div>
-        </div>
-
-        {/* Right side */}
-        <div className="flex items-center gap-2">
-          {/* Company Switcher */}
-          {activeCompany && (
+          {sidebarCollapsed && (
             <button
-              onClick={openCompanySwitcher}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm border border-border rounded-md hover:bg-muted transition-colors"
+              className="hidden rounded-[13px] p-2 transition-colors hover:bg-secondary lg:inline-flex"
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label="Buka sidebar"
             >
-              <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center">
-                <span className="text-[10px] font-bold text-primary">
-                  {getInitials(activeCompany.name)}
-                </span>
-              </div>
-              <span className="hidden sm:inline max-w-[120px] truncate">
-                {activeCompany.name}
-              </span>
-              <ChevronDown size={14} className="text-muted-foreground" />
+              <Menu size={18} />
             </button>
           )}
 
-          {/* Theme settings */}
-          <LanguageSwitcher compact />
+          {activeCompany && (
+            <button
+              onClick={openCompanySwitcher}
+              className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-1.5 pr-3 text-sm shadow-card transition-colors hover:bg-secondary"
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent">
+                <Building size={13} className="text-primary" aria-hidden="true" />
+              </span>
+              <span className="hidden max-w-[160px] truncate font-medium sm:inline">{activeCompany.name}</span>
+              <ChevronDown size={14} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+            </button>
+          )}
+        </div>
 
+        {/* Kanan: tema, bahasa, notifikasi, chip user */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowThemePanel(true)}
-            className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-muted"
-            title="Theme settings"
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+            className="rounded-[13px] border border-border bg-card p-2 shadow-card transition-colors hover:bg-secondary"
+            aria-label={isDark ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'}
+            title={isDark ? 'Tema terang' : 'Tema gelap'}
           >
-            <Palette size={16} />
-            <span className="hidden sm:inline">{activeTheme.name}</span>
+            {isDark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
 
-          {/* Notifications */}
+          <LanguageSwitcher />
+
           <button
-            className="relative p-2 hover:bg-muted rounded-md transition-colors"
+            className="relative rounded-[13px] border border-border bg-card p-2 shadow-card transition-colors hover:bg-secondary"
             onClick={() => navigate('/notifications')}
+            aria-label={unreadCount > 0 ? `Notifikasi, ${unreadCount} belum dibaca` : 'Notifikasi'}
           >
-            <Bell size={18} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
+            <Bell size={16} />
+            {unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-2 border-background bg-[#EF4444] px-0.5 text-[9px] font-semibold text-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
 
-          {/* User menu */}
+          {/* Chip user */}
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded-md transition-colors"
+              className="flex items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-2.5 shadow-card transition-colors hover:bg-secondary"
             >
-              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-xs font-medium text-primary">
-                  {user?.name ? getInitials(user.name) : 'U'}
-                </span>
-              </div>
-              <div className="hidden md:block text-left">
-                <p className="text-sm font-medium leading-tight">{user?.name || user?.email}</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">
-                  {user?.roles?.[0]?.replace(/_/g, ' ').toLowerCase()}
-                </p>
-              </div>
-              <ChevronDown size={14} className="text-muted-foreground" />
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                {user?.name ? getInitials(user.name) : 'U'}
+              </span>
+              <span className="hidden text-left md:block">
+                <span className="block text-sm font-medium leading-tight">{user?.name || user?.email}</span>
+                <span className="block text-[11px] capitalize leading-tight text-muted-foreground">{roleLabel}</span>
+              </span>
+              <ChevronDown size={14} className="hidden text-muted-foreground md:block" aria-hidden="true" />
             </button>
 
             {showUserMenu && (
               <>
-                <div
-                  className="fixed inset-0 z-50"
-                  onClick={() => setShowUserMenu(false)}
-                />
-                <div className="absolute right-0 top-full mt-1 w-56 bg-card border border-border rounded-lg shadow-lg z-50 py-1">
-                  <div className="px-3 py-2 border-b border-border">
+                <div className="fixed inset-0 z-50" onClick={() => setShowUserMenu(false)} />
+                <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-card-sm border border-border bg-card py-1 shadow-float">
+                  <div className="border-b border-border px-3 py-2">
                     <p className="text-sm font-medium">{user?.name || t('topnav.userFallback')}</p>
                     <p className="text-xs text-muted-foreground">{user?.email}</p>
                   </div>
                   <button
                     onClick={() => { navigate('/profile'); setShowUserMenu(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-secondary"
                   >
                     <User size={16} />
                     {t('topnav.profile')}
@@ -200,16 +219,16 @@ export function TopNavigation() {
                   {canOpenSettings && (
                     <button
                       onClick={() => { navigate('/admin/settings'); setShowUserMenu(false); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-secondary"
                     >
                       <Settings size={16} />
                       {t('topnav.settings')}
                     </button>
                   )}
-                  <hr className="border-border my-1" />
+                  <hr className="my-1 border-border" />
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[#EF4444] transition-colors hover:bg-danger-bg"
                   >
                     <LogOut size={16} />
                     {t('topnav.signOut')}
@@ -225,107 +244,37 @@ export function TopNavigation() {
       {showCompanySwitcher && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowCompanySwitcher(false)} />
-          <div className="relative w-full max-w-md bg-card border border-border rounded-lg shadow-lg">
-            <div className="p-4 border-b border-border">
+          <div className="relative w-full max-w-md rounded-card border border-border bg-card shadow-float">
+            <div className="border-b border-border p-4">
               <h3 className="font-semibold">{t('topnav.companySwitcher.title')}</h3>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {t('topnav.companySwitcher.description')}
               </p>
             </div>
-            <div className="p-2 max-h-80 overflow-y-auto">
+            <div className="max-h-80 overflow-y-auto p-2">
               {companies.map((company) => (
                 <button
                   key={company.id}
                   onClick={() => switchCompany(company)}
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-3 rounded-md text-sm transition-colors',
-                    activeCompany?.id === company.id
-                      ? 'bg-primary/10 text-primary'
-                      : 'hover:bg-muted'
+                    'flex w-full items-center gap-3 rounded-field px-3 py-3 text-sm transition-colors',
+                    activeCompany?.id === company.id ? 'bg-accent text-primary' : 'hover:bg-secondary'
                   )}
                 >
-                  <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                    <span className="text-xs font-bold text-primary">
-                      {getInitials(company.name)}
-                    </span>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
+                    <span className="text-xs font-semibold text-primary">{getInitials(company.name)}</span>
                   </div>
                   <div className="text-left">
                     <p className="font-medium">{company.name}</p>
                     <p className="text-xs text-muted-foreground">{company.code}</p>
                   </div>
                   {activeCompany?.id === company.id && (
-                    <span className="ml-auto text-xs text-primary font-medium">{t('topnav.companySwitcher.active')}</span>
+                    <span className="ml-auto text-xs font-medium text-primary">{t('topnav.companySwitcher.active')}</span>
                   )}
                 </button>
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {showThemePanel && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowThemePanel(false)} />
-          <aside className="absolute right-0 top-0 h-full w-full max-w-sm border-l border-border bg-card shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-              <div>
-                <h3 className="text-base font-semibold">Theme Settings</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Pilih tampilan yang paling nyaman untuk aktivitas harian kamu.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowThemePanel(false)}
-                className="rounded-md p-2 transition-colors hover:bg-muted"
-                aria-label="Close theme settings"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3 overflow-y-auto p-5">
-              {themePresets.map((preset) => {
-                const isActive = preset.id === theme;
-
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => setTheme(preset.id)}
-                    className={cn(
-                      'w-full rounded-2xl border p-4 text-left transition-all',
-                      isActive
-                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                        : 'border-border hover:border-primary/40 hover:bg-muted/40'
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold">{preset.name}</p>
-                          {isActive && (
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{preset.description}</p>
-                      </div>
-                      <div className="flex gap-1 rounded-full border border-border bg-background p-1">
-                        {preset.preview.map((color) => (
-                          <span
-                            key={color}
-                            className="h-5 w-5 rounded-full border border-black/5"
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </aside>
         </div>
       )}
     </header>

@@ -9,6 +9,8 @@ import { formatCurrency } from '@/utils/format';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 // ─── Status style map ────────────────────────────────────
 const STYLES: Record<string, string> = {
@@ -18,11 +20,11 @@ const STYLES: Record<string, string> = {
   DISPOSED: 'bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400',
 };
 
-const ASSET_STATUS_OPTIONS = [
-  { value: 'AVAILABLE', label: 'Available' },
-  { value: 'ASSIGNED', label: 'Assigned' },
-  { value: 'MAINTENANCE', label: 'Maintenance' },
-  { value: 'DISPOSED', label: 'Disposed' },
+const ASSET_STATUS_OPTIONS: { value: string; label: TranslationKey }[] = [
+  { value: 'AVAILABLE', label: 'ops.asset.status.available' },
+  { value: 'ASSIGNED', label: 'ops.asset.status.assigned' },
+  { value: 'MAINTENANCE', label: 'ops.asset.status.maintenance' },
+  { value: 'DISPOSED', label: 'ops.asset.status.disposed' },
 ];
 
 // ─── Modal wrapper ────────────────────────────────────────
@@ -50,6 +52,7 @@ function AssetForm({ onSave, onClose }: {
   onSave: (data: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
@@ -59,7 +62,7 @@ function AssetForm({ onSave, onClose }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return toast.error('Asset name is required');
+    if (!name.trim()) return toast.error(t('ops.asset.form.nameRequired'));
     setSaving(true);
     try {
       await onSave({
@@ -80,39 +83,39 @@ function AssetForm({ onSave, onClose }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Asset Name *</label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Dell Latitude 5450" required />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ops.asset.form.name')}</label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('ops.asset.form.namePlaceholder')} required />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Asset Code</label>
-        <Input value="" disabled placeholder="Akan dibuat otomatis oleh sistem" />
-        <p className="mt-1 text-[11px] text-muted-foreground">Asset code digenerate sistem saat create.</p>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ops.asset.form.code')}</label>
+        <Input value="" disabled placeholder={t('ops.asset.form.codePlaceholder')} />
+        <p className="mt-1 text-[11px] text-muted-foreground">{t('ops.asset.form.codeHint')}</p>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Category</label>
-        <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Laptop, Furniture, Vehicle" />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ops.asset.form.category')}</label>
+        <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('ops.asset.form.categoryPlaceholder')} />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Serial Number</label>
-        <Input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} placeholder="e.g. SN-12345-XYZ" />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ops.asset.form.serialNumber')}</label>
+        <Input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} placeholder={t('ops.asset.form.serialNumberPlaceholder')} />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Purchase Value</label>
-        <Input type="number" value={purchaseValue} onChange={(e) => setPurchaseValue(e.target.value === '' ? '' : Number(e.target.value))} placeholder="e.g. 15000000" min={0} />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ops.asset.form.purchaseValue')}</label>
+        <Input type="number" value={purchaseValue} onChange={(e) => setPurchaseValue(e.target.value === '' ? '' : Number(e.target.value))} placeholder={t('ops.asset.form.purchaseValuePlaceholder')} min={0} />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Status</label>
-        <Select2 value={status} onValueChange={setStatus} options={ASSET_STATUS_OPTIONS} />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ops.asset.form.status')}</label>
+        <Select2 value={status} onValueChange={setStatus} options={ASSET_STATUS_OPTIONS.map((option) => ({ value: option.value, label: t(option.label) }))} />
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('ops.asset.form.saving') : t('common.save')}</Button>
       </div>
     </form>
   );
@@ -120,6 +123,7 @@ function AssetForm({ onSave, onClose }: {
 
 // ─── Main Page ────────────────────────────────────────────
 export function AssetList() {
+  const { t } = useI18n();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,10 +147,10 @@ export function AssetList() {
   const handleCreate = async (data: Record<string, unknown>) => {
     try {
       await assetService.create({ ...data, companyId });
-      toast.success('Asset created successfully');
+      toast.success(t('ops.asset.toast.created'));
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to create asset'));
+      toast.error(apiErrorMessage(err, t('ops.asset.toast.createFailed')));
       throw err;
     }
   };
@@ -155,13 +159,13 @@ export function AssetList() {
 
   return (
     <div>
-      <PageHeader title="Asset Management" description="Manage company assets & assignments"
-        actions={<><Button variant="outline" size="sm" onClick={fetchData}><RefreshCw size={16} className="mr-2" />Refresh</Button>
-          <Button size="sm" onClick={() => setShowCreate(true)}><Plus size={16} className="mr-2" />Add Asset</Button></>} />
-      <div className="relative mb-4 max-w-xs"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Search assets..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" /></div>
+      <PageHeader title={t('ops.asset.title')} description={t('ops.asset.description')}
+        actions={<><Button variant="outline" size="sm" onClick={fetchData}><RefreshCw size={16} className="mr-2" />{t('common.refresh')}</Button>
+          <Button size="sm" onClick={() => setShowCreate(true)}><Plus size={16} className="mr-2" />{t('ops.asset.add')}</Button></>} />
+      <div className="relative mb-4 max-w-xs"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input placeholder={t('ops.asset.searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" /></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {loading ? <div className="col-span-full text-center py-12 text-sm text-muted-foreground">Loading...</div>
-        : filtered.length === 0 ? <div className="col-span-full text-center py-12"><Package size={32} className="mx-auto text-muted-foreground/40" /><p className="text-sm text-muted-foreground mt-2">No assets found</p></div>
+        {loading ? <div className="col-span-full text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
+        : filtered.length === 0 ? <div className="col-span-full text-center py-12"><Package size={32} className="mx-auto text-muted-foreground/40" /><p className="text-sm text-muted-foreground mt-2">{t('ops.asset.empty')}</p></div>
         : filtered.map((a) => (
           <div key={a.id} className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4 hover:border-primary/50 transition-colors">
             <div className="flex items-start gap-3 mb-3">
@@ -175,13 +179,13 @@ export function AssetList() {
                 <span key={as.id} className="flex items-center gap-1"><UserRound size={12} />{as.employee?.fullName}</span>
               ))}
             </div>
-            {a.serialNumber && <p className="text-xs text-muted-foreground mt-2">SN: {a.serialNumber}</p>}
+            {a.serialNumber && <p className="text-xs text-muted-foreground mt-2">{t('ops.asset.sn', { serial: a.serialNumber })}</p>}
           </div>
         ))}
       </div>
 
       {/* Create modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add Asset">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('ops.asset.add')}>
         <AssetForm onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
     </div>

@@ -9,6 +9,8 @@ import { Select2 } from '@/components/ui/select2';
 import { Plus, Search, RefreshCw, Heart, Users, Pencil } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 // ─── Modal ────────────────────────────────────────────────
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -29,24 +31,28 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 }
 
 // ─── Benefit Plan Form ────────────────────────────────────
-const PLAN_TYPES = [
-  { value: 'Health Insurance', label: 'Health Insurance' },
-  { value: 'Dental', label: 'Dental' },
-  { value: 'Vision', label: 'Vision' },
-  { value: 'Life Insurance', label: 'Life Insurance' },
-  { value: 'Retirement', label: 'Retirement' },
-  { value: 'Transportation', label: 'Transportation' },
-  { value: 'Meal', label: 'Meal' },
-  { value: 'Education', label: 'Education' },
-  { value: 'Wellness', label: 'Wellness' },
-  { value: 'Other', label: 'Other' },
-];
+/** Nilai tipe plan dikirim apa adanya ke server; hanya labelnya diterjemahkan. */
+const PLAN_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  'Health Insurance': 'fin.benefit.typeHealthInsurance',
+  Dental: 'fin.benefit.typeDental',
+  Vision: 'fin.benefit.typeVision',
+  'Life Insurance': 'fin.benefit.typeLifeInsurance',
+  Retirement: 'fin.benefit.typeRetirement',
+  Transportation: 'fin.benefit.typeTransportation',
+  Meal: 'fin.benefit.typeMeal',
+  Education: 'fin.benefit.typeEducation',
+  Wellness: 'fin.benefit.typeWellness',
+  Other: 'fin.benefit.typeOther',
+};
+
+const PLAN_TYPE_VALUES = Object.keys(PLAN_TYPE_LABEL_KEYS);
 
 function BenefitPlanForm({ initial, onSave, onClose }: {
   initial?: Partial<BenefitPlan>;
   onSave: (data: Partial<BenefitPlan>) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [name, setName] = useState(initial?.name || '');
   const [type, setType] = useState(initial?.type || '');
@@ -60,7 +66,7 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !type) {
-      return toast.error('Name and type are required');
+      return toast.error(t('fin.benefit.errRequired'));
     }
     setSaving(true);
     try {
@@ -83,39 +89,44 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Plan Name *</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Health Insurance" required />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('fin.benefit.nameLabel')} *</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('fin.benefit.namePlaceholder')} required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code</label>
-          <Input value={initial?.code || ''} disabled placeholder="Akan dibuat otomatis oleh sistem" />
-          <p className="mt-1 text-[11px] text-muted-foreground">Code benefit plan digenerate sistem dan tidak bisa diedit manual.</p>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('fin.common.code')}</label>
+          <Input value={initial?.code || ''} disabled placeholder={t('fin.common.codeAutoPlaceholder')} />
+          <p className="mt-1 text-[11px] text-muted-foreground">{t('fin.benefit.codeHint')}</p>
         </div>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Type *</label>
-        <Select2 value={type} onValueChange={setType} options={PLAN_TYPES} placeholder="Select plan type" />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('fin.common.type')} *</label>
+        <Select2
+          value={type}
+          onValueChange={setType}
+          options={PLAN_TYPE_VALUES.map((value) => ({ value, label: t(PLAN_TYPE_LABEL_KEYS[value]) }))}
+          placeholder={t('fin.benefit.selectType')}
+        />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Description</label>
-        <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Plan description" />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('fin.common.description')}</label>
+        <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('fin.benefit.descPlaceholder')} />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Provider</label>
-        <Input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g. BPJS, AXA, Manulife" />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('fin.benefit.provider')}</label>
+        <Input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder={t('fin.benefit.providerPlaceholder')} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Employee Contribution (%)</label>
-          <Input value={employeeContribution} onChange={(e) => setEmployeeContribution(e.target.value)} placeholder="e.g. 50" type="number" min="0" max="100" />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('fin.benefit.employeeContribution')}</label>
+          <Input value={employeeContribution} onChange={(e) => setEmployeeContribution(e.target.value)} placeholder={t('fin.benefit.pctPlaceholder')} type="number" min="0" max="100" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Employer Contribution (%)</label>
-          <Input value={employerContribution} onChange={(e) => setEmployerContribution(e.target.value)} placeholder="e.g. 50" type="number" min="0" max="100" />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('fin.benefit.employerContribution')}</label>
+          <Input value={employerContribution} onChange={(e) => setEmployerContribution(e.target.value)} placeholder={t('fin.benefit.pctPlaceholder')} type="number" min="0" max="100" />
         </div>
       </div>
 
@@ -126,12 +137,12 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
           onChange={(e) => setIsActive(e.target.checked)}
           className="rounded border-gray-300 text-primary focus:ring-primary/30 h-4 w-4"
         />
-        <span className="text-sm font-medium">Active</span>
+        <span className="text-sm font-medium">{t('common.active')}</span>
       </label>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('fin.common.saving') : t('common.save')}</Button>
       </div>
     </form>
   );
@@ -139,6 +150,7 @@ function BenefitPlanForm({ initial, onSave, onClose }: {
 
 // ─── Page ─────────────────────────────────────────────────
 export function BenefitPlanList() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [plans, setPlans] = useState<BenefitPlan[]>([]);
@@ -159,11 +171,11 @@ export function BenefitPlanList() {
       setPlans(data);
     } catch (error) {
       console.error('Failed to fetch benefit plans:', error);
-      toast.error('Failed to load benefit plans');
+      toast.error(t('fin.benefit.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     fetchData();
@@ -172,11 +184,11 @@ export function BenefitPlanList() {
   const handleCreate = async (data: Partial<BenefitPlan>) => {
     try {
       await benefitService.createPlan(data);
-      toast.success('Benefit plan created');
+      toast.success(t('fin.benefit.created'));
       setShowCreate(false);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to create plan'));
+      toast.error(apiErrorMessage(err, t('fin.benefit.createFailed')));
       throw err;
     }
   };
@@ -185,11 +197,11 @@ export function BenefitPlanList() {
     if (!editing) return;
     try {
       await benefitService.updatePlan(editing.id, data);
-      toast.success('Benefit plan updated');
+      toast.success(t('fin.benefit.updated'));
       setEditing(null);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to update plan'));
+      toast.error(apiErrorMessage(err, t('fin.benefit.updateFailed')));
       throw err;
     }
   };
@@ -201,17 +213,17 @@ export function BenefitPlanList() {
   return (
     <div>
       <PageHeader
-        title="Benefit Plans"
-        description="Manage employee benefit programs and enrollments"
+        title={t('fin.benefit.title')}
+        description={t('fin.benefit.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus size={16} className="mr-2" />
-              Add Plan
+              {t('fin.benefit.add')}
             </Button>
           </>
         }
@@ -220,7 +232,7 @@ export function BenefitPlanList() {
       <div className="relative mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search plans..."
+          placeholder={t('fin.benefit.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 h-9 max-w-xs"
@@ -229,12 +241,12 @@ export function BenefitPlanList() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
-          <div className="col-span-full text-center py-12 text-sm text-muted-foreground">Loading...</div>
+          <div className="col-span-full text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <div className="flex flex-col items-center gap-2">
               <Heart size={32} className="text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No benefit plans found</p>
+              <p className="text-sm text-muted-foreground">{t('fin.benefit.empty')}</p>
             </div>
           </div>
         ) : (
@@ -247,7 +259,7 @@ export function BenefitPlanList() {
               <button
                 onClick={(e) => { e.stopPropagation(); setEditing(plan); }}
                 className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted text-muted-foreground hover:text-foreground"
-                title="Edit plan"
+                title={t('fin.benefit.editTooltip')}
               >
                 <Pencil size={14} />
               </button>
@@ -264,21 +276,21 @@ export function BenefitPlanList() {
 
               <div className="flex items-center gap-2 mb-3">
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400">
-                  {plan.type}
+                  {PLAN_TYPE_LABEL_KEYS[plan.type] ? t(PLAN_TYPE_LABEL_KEYS[plan.type]) : plan.type}
                 </span>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                   plan.isActive
                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                     : 'bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400'
                 }`}>
-                  {plan.isActive ? 'Active' : 'Inactive'}
+                  {plan.isActive ? t('common.active') : t('common.inactive')}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Users size={14} />
-                  <span>{plan._count?.enrollments || 0} enrolled</span>
+                  <span>{t('fin.benefit.enrolledCount', { count: plan._count?.enrollments || 0 })}</span>
                 </div>
                 <span>
                   {plan.employeeContribution}% / {plan.employerContribution}%
@@ -287,7 +299,7 @@ export function BenefitPlanList() {
 
               {plan.provider && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  Provider: {plan.provider}
+                  {t('fin.benefit.providerLine', { provider: plan.provider })}
                 </p>
               )}
             </div>
@@ -295,11 +307,11 @@ export function BenefitPlanList() {
         )}
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Benefit Plan">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('fin.benefit.createTitle')}>
         <BenefitPlanForm onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
 
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Benefit Plan">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={t('fin.benefit.editTitle')}>
         {editing && <BenefitPlanForm initial={editing} onSave={handleUpdate} onClose={() => setEditing(null)} />}
       </Modal>
     </div>

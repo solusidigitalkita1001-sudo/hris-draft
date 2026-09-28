@@ -11,6 +11,17 @@ import {
 } from 'lucide-react';
 import { formatDateTime } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+const STATUS_LABELS: Record<string, TranslationKey> = {
+  SCHEDULED: 'ops.training.status.scheduled',
+  IN_PROGRESS: 'ops.training.status.inProgress',
+  COMPLETED: 'ops.training.status.completed',
+  CANCELLED: 'ops.training.status.cancelled',
+  ENROLLED: 'ops.training.status.enrolled',
+  DROPPED: 'ops.training.status.dropped',
+};
 
 const SESSION_STYLES: Record<string, string> = {
   SCHEDULED: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
@@ -28,9 +39,11 @@ const ENROLLMENT_STYLES: Record<string, string> = {
 };
 
 function Badge({ status, styles }: { status: string; styles: Record<string, string> }) {
+  const { t } = useI18n();
+  const labelKey = STATUS_LABELS[status];
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || ''}`}>
-      {status.replace(/_/g, ' ')}
+      {labelKey ? t(labelKey) : status.replace(/_/g, ' ')}
     </span>
   );
 }
@@ -38,6 +51,7 @@ function Badge({ status, styles }: { status: string; styles: Record<string, stri
 export function CourseDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [course, setCourse] = useState<TrainingCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
@@ -61,43 +75,43 @@ export function CourseDetail() {
     setEnrolling(true);
     try {
       await trainingService.enroll(id);
-      toast.success('Successfully enrolled in course');
+      toast.success(t('ops.training.toast.enrollSuccess'));
       fetchData();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Failed to enroll'));
+      toast.error(apiErrorMessage(error, t('ops.training.toast.enrollFailed')));
     } finally {
       setEnrolling(false);
     }
-  }, [id, fetchData]);
+  }, [id, fetchData, t]);
 
   const handleComplete = useCallback(async () => {
     if (!id) return;
     setCompleting(true);
     try {
       await trainingService.complete(id);
-      toast.success('Course marked as completed');
+      toast.success(t('ops.training.toast.completeSuccess'));
       fetchData();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Failed to complete course'));
+      toast.error(apiErrorMessage(error, t('ops.training.toast.completeFailed')));
     } finally {
       setCompleting(false);
     }
-  }, [id, fetchData]);
+  }, [id, fetchData, t]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   if (loading) {
-    return <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">Loading...</div>;
+    return <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   if (!course) {
     return (
       <div className="text-center py-12">
-        <p className="text-sm text-muted-foreground">Course not found</p>
+        <p className="text-sm text-muted-foreground">{t('ops.training.detail.notFound')}</p>
         <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/lms')}>
-          Back to Courses
+          {t('ops.training.detail.backToCourses')}
         </Button>
       </div>
     );
@@ -111,19 +125,19 @@ export function CourseDetail() {
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate(`/lms/courses/${course.id}/edit`)}>
-              Edit Course
+              {t('ops.training.editCourse')}
             </Button>
             <Button size="sm" onClick={handleEnroll} disabled={enrolling}>
               <UserPlus size={16} className="mr-2" />
-              {enrolling ? 'Enrolling...' : 'Enroll'}
+              {enrolling ? t('ops.training.detail.enrolling') : t('ops.training.detail.enroll')}
             </Button>
             <Button size="sm" onClick={handleComplete} disabled={completing}>
               <CheckSquare size={16} className="mr-2" />
-              {completing ? 'Completing...' : 'Complete'}
+              {completing ? t('ops.training.detail.completing') : t('ops.training.detail.complete')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/lms')}>
               <ArrowLeft size={16} className="mr-2" />
-              Back
+              {t('ops.training.back')}
             </Button>
           </div>
         }
@@ -136,37 +150,37 @@ export function CourseDetail() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <Clock size={14} /> Duration
+                <Clock size={14} /> {t('ops.training.fields.duration')}
               </div>
               <p className="text-sm font-medium">
-                {course.duration ? `${course.duration} ${course.durationUnit || 'hrs'}` : '-'}
+                {course.duration ? `${course.duration} ${course.durationUnit || t('ops.training.hoursShort')}` : '-'}
               </p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <Users size={14} /> Enrolled
+                <Users size={14} /> {t('ops.training.detail.enrolledLabel')}
               </div>
               <p className="text-sm font-medium">{course.enrollments?.length || 0}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <BookOpen size={14} /> Sessions
+                <BookOpen size={14} /> {t('ops.training.sessions')}
               </div>
               <p className="text-sm font-medium">{course.sessions?.length || 0}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                 {course.isMandatory ? <CheckCircle2 size={14} className="text-amber-500" /> : <AlertCircle size={14} />}
-                Type
+                {t('ops.training.detail.type')}
               </div>
-              <p className="text-sm font-medium">{course.isMandatory ? 'Mandatory' : 'Optional'}</p>
+              <p className="text-sm font-medium">{course.isMandatory ? t('ops.training.mandatory') : t('ops.training.detail.optional')}</p>
             </div>
           </div>
 
           {/* Description */}
           {course.description && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-2">Description</h3>
+              <h3 className="text-sm font-medium mb-2">{t('ops.training.fields.description')}</h3>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{course.description}</p>
             </div>
           )}
@@ -174,7 +188,7 @@ export function CourseDetail() {
           {/* Provider */}
           {course.provider && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-1">Provider</h3>
+              <h3 className="text-sm font-medium mb-1">{t('ops.training.fields.provider')}</h3>
               <p className="text-sm text-muted-foreground">{course.provider}</p>
             </div>
           )}
@@ -182,7 +196,7 @@ export function CourseDetail() {
           {/* Materials */}
           {course.materials && course.materials.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-3">Materials</h3>
+              <h3 className="text-sm font-medium mb-3">{t('ops.training.detail.materials')}</h3>
               <div className="space-y-2">
                 {course.materials.map((m) => (
                   <div key={m.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
@@ -198,7 +212,7 @@ export function CourseDetail() {
           {/* Sessions */}
           {course.sessions && course.sessions.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-3">Sessions</h3>
+              <h3 className="text-sm font-medium mb-3">{t('ops.training.sessions')}</h3>
               <div className="space-y-2">
                 {course.sessions.map((session) => (
                   <div key={session.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
@@ -223,7 +237,7 @@ export function CourseDetail() {
                         )}
                         {session.maxParticipants && (
                           <span className="flex items-center gap-1">
-                            <Users size={12} /> Max {session.maxParticipants}
+                            <Users size={12} /> {t('ops.training.detail.maxParticipants', { count: session.maxParticipants })}
                           </span>
                         )}
                       </div>
@@ -239,16 +253,16 @@ export function CourseDetail() {
         <div className="space-y-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium">Enrollments</h3>
+              <h3 className="text-sm font-medium">{t('ops.training.detail.enrollments')}</h3>
               <span className="text-xs text-muted-foreground">
-                {course.enrollments?.length || 0} enrolled
+                {t('ops.training.enrolledCount', { count: course.enrollments?.length || 0 })}
               </span>
             </div>
 
             {(!course.enrollments || course.enrollments.length === 0) ? (
               <div className="text-center py-8">
                 <Users size={24} className="mx-auto mb-2 text-muted-foreground/40" />
-                <p className="text-xs text-muted-foreground">No enrollments yet</p>
+                <p className="text-xs text-muted-foreground">{t('ops.training.detail.noEnrollments')}</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -261,7 +275,7 @@ export function CourseDetail() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">
-                        {enr.employee?.fullName || 'Unknown'}
+                        {enr.employee?.fullName || t('ops.training.detail.unknown')}
                       </p>
                       <div className="flex items-center gap-2">
                         <Badge status={enr.status} styles={ENROLLMENT_STYLES} />

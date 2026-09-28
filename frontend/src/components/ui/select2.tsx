@@ -1,6 +1,7 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { useI18n } from '@/i18n/provider';
 
 const EMPTY_VALUE = '__select2-empty__';
 
@@ -33,11 +34,14 @@ export function Select2({
   value,
   onValueChange,
   options,
-  placeholder = 'Pilih opsi',
+  placeholder,
   disabled,
   className,
   contentClassName,
 }: Select2Props) {
+  const { t } = useI18n();
+  const resolvedPlaceholder = placeholder ?? t('adm.select.placeholder');
+
   return (
     <SelectPrimitive.Root
       value={normalizeValue(value)}
@@ -51,7 +55,7 @@ export function Select2({
           className
         )}
       >
-        <SelectPrimitive.Value placeholder={placeholder} />
+        <SelectPrimitive.Value placeholder={resolvedPlaceholder} />
         <SelectPrimitive.Icon asChild>
           <ChevronDown size={16} className="text-muted-foreground" />
         </SelectPrimitive.Icon>

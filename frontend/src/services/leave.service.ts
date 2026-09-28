@@ -66,6 +66,14 @@ export interface WorkflowInstance {
 
 export type WorkflowAction = 'APPROVE' | 'REJECT' | 'ESCALATE';
 
+export interface UploadedLeaveAttachment {
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+}
+
 class LeaveService {
   async getTypes(companyId: string): Promise<LeaveType[]> {
     const r = await api.get('/leave/types', { params: { companyId } });
@@ -84,6 +92,22 @@ class LeaveService {
 
   async createRequest(data: Partial<LeaveRequest>): Promise<LeaveRequest> {
     const r = await api.post('/leave', data);
+    return r.data.data;
+  }
+
+  /** Unggah lampiran cuti (POST /leave/attachments); URL hasilnya disimpan ke field attachment. */
+  async uploadAttachment(file: File): Promise<UploadedLeaveAttachment> {
+    const formData = new FormData();
+    formData.append('attachment', file);
+    const r = await api.post('/leave/attachments', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return r.data.data;
+  }
+
+  /** Batalkan pengajuan cuti sendiri yang masih pending (PATCH /leave/:id/cancel). */
+  async cancelRequest(id: string): Promise<LeaveRequest> {
+    const r = await api.patch(`/leave/${id}/cancel`);
     return r.data.data;
   }
 

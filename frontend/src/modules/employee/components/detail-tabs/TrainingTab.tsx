@@ -3,22 +3,24 @@ import { BookOpen, Pencil, Trash2, Plus, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select2, type Select2Option } from '@/components/ui/select2';
+import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { employeeService, type EmployeeTraining } from '@/services/employee.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { formatDate } from '@/utils/format';
 
 interface TrainingTabProps {
   employeeId: string;
 }
 
-const TRAINING_TYPE_OPTIONS: Select2Option[] = [
-  { value: 'INTERNAL', label: 'Internal' },
-  { value: 'EXTERNAL', label: 'External' },
-  { value: 'CERTIFICATION', label: 'Certification' },
-  { value: 'SEMINAR', label: 'Seminar' },
-  { value: 'WORKSHOP', label: 'Workshop' },
-  { value: 'OTHER', label: 'Lainnya' },
+const TRAINING_TYPE_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'INTERNAL', labelKey: 'wf.training.type.internal' },
+  { value: 'EXTERNAL', labelKey: 'wf.training.type.external' },
+  { value: 'CERTIFICATION', labelKey: 'wf.training.type.certification' },
+  { value: 'SEMINAR', labelKey: 'wf.training.type.seminar' },
+  { value: 'WORKSHOP', labelKey: 'wf.training.type.workshop' },
+  { value: 'OTHER', labelKey: 'wf.training.type.other' },
 ];
 
 interface FormData {
@@ -46,6 +48,7 @@ const INITIAL_FORM_DATA: FormData = {
 };
 
 export default function TrainingTab({ employeeId }: TrainingTabProps) {
+  const { t } = useI18n();
   const [data, setData] = useState<EmployeeTraining[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,7 +67,7 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
       setData(result);
     } catch (error) {
       console.error('Failed to fetch trainings:', error);
-      toast.error('Gagal memuat data pelatihan');
+      toast.error(t('wf.training.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -101,7 +104,7 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
 
   async function handleSave() {
     if (!form.trainingName.trim()) {
-      toast.error('Nama pelatihan harus diisi');
+      toast.error(t('wf.training.validation.nameRequired'));
       return;
     }
 
@@ -121,17 +124,17 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
 
       if (editingItem) {
         await employeeService.updateTraining(employeeId, editingItem.id, payload);
-        toast.success('Data pelatihan berhasil diperbarui');
+        toast.success(t('wf.training.toast.updateSuccess'));
       } else {
         await employeeService.createTraining(employeeId, payload);
-        toast.success('Data pelatihan berhasil ditambahkan');
+        toast.success(t('wf.training.toast.createSuccess'));
       }
 
       handleCloseDialog();
       await fetchData();
     } catch (error) {
       console.error('Failed to save training:', error);
-      toast.error('Gagal menyimpan data pelatihan');
+      toast.error(t('wf.training.toast.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -139,21 +142,21 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
 
   async function handleDelete(item: EmployeeTraining) {
     const confirmed = await popup.confirm({
-      title: 'Hapus Training Record',
-      description: `Riwayat pelatihan ${item.trainingName} akan dihapus dari profil employee.`,
-      confirmText: 'Hapus',
-      cancelText: 'Batal',
+      title: t('wf.training.confirm.title'),
+      description: t('wf.training.confirm.description', { name: item.trainingName }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       intent: 'destructive',
     });
     if (!confirmed) return;
 
     try {
       await employeeService.deleteTraining(employeeId, item.id);
-      toast.success('Data pelatihan berhasil dihapus');
+      toast.success(t('wf.training.toast.deleteSuccess'));
       await fetchData();
     } catch (error) {
       console.error('Failed to delete training:', error);
-      toast.error('Gagal menghapus data pelatihan');
+      toast.error(t('wf.training.toast.deleteFailed'));
     }
   }
 
@@ -178,11 +181,11 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
       <div className="flex items-center justify-between border-b border-border px-6 py-4">
         <div className="flex items-center gap-2">
           <BookOpen size={20} className="text-primary" />
-          <h3 className="text-base font-semibold text-foreground">Riwayat Pelatihan</h3>
+          <h3 className="text-base font-semibold text-foreground">{t('wf.training.title')}</h3>
         </div>
         <Button size="sm" onClick={handleOpenAdd}>
           <Plus size={16} className="mr-1" />
-          Tambah
+          {t('wf.common.add')}
         </Button>
       </div>
 
@@ -193,10 +196,10 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <BookOpen size={24} className="text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">Belum ada data pelatihan</p>
+            <p className="text-sm text-muted-foreground">{t('wf.training.empty.title')}</p>
             <Button variant="outline" size="sm" className="mt-4" onClick={handleOpenAdd}>
               <Plus size={16} className="mr-1" />
-              Tambah Pelatihan
+              {t('wf.training.empty.add')}
             </Button>
           </div>
         ) : (
@@ -211,7 +214,10 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
                     <p className="font-medium text-foreground">{item.trainingName}</p>
                     {item.trainingType && (
                       <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                        {TRAINING_TYPE_OPTIONS.find((o) => o.value === item.trainingType)?.label || item.trainingType}
+                        {(() => {
+                          const typeOption = TRAINING_TYPE_OPTIONS.find((o) => o.value === item.trainingType);
+                          return typeOption ? t(typeOption.labelKey) : item.trainingType;
+                        })()}
                       </span>
                     )}
                   </div>
@@ -220,13 +226,13 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
                   )}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     {item.startDate && (
-                      <span>Mulai: {formatDate(item.startDate)}</span>
+                      <span>{t('wf.training.startedAt', { date: formatDate(item.startDate) })}</span>
                     )}
                     {item.endDate && (
-                      <span>Selesai: {formatDate(item.endDate)}</span>
+                      <span>{t('wf.training.endedAt', { date: formatDate(item.endDate) })}</span>
                     )}
                     {item.duration && (
-                      <span>Durasi: {item.duration}</span>
+                      <span>{t('wf.training.durationValue', { duration: item.duration })}</span>
                     )}
                   </div>
                   {item.description && (
@@ -262,7 +268,7 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
             {/* Dialog Header */}
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <h4 className="text-base font-semibold text-foreground">
-                {editingItem ? 'Edit Pelatihan' : 'Tambah Pelatihan'}
+                {editingItem ? t('wf.training.dialog.editTitle') : t('wf.training.dialog.addTitle')}
               </h4>
               <Button variant="ghost" size="icon" onClick={handleCloseDialog} disabled={saving}>
                 &times;
@@ -274,40 +280,40 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
               {/* trainingName */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">
-                  Nama Pelatihan <span className="text-destructive">*</span>
+                  {t('wf.training.fields.name')} <span className="text-destructive">*</span>
                 </label>
                 <Input
                   value={form.trainingName}
                   onChange={(e) => setForm((prev) => ({ ...prev, trainingName: e.target.value }))}
-                  placeholder="Nama pelatihan"
+                  placeholder={t('wf.training.fields.namePlaceholder')}
                 />
               </div>
 
               {/* organizer */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Penyelenggara</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.training.fields.organizer')}</label>
                 <Input
                   value={form.organizer}
                   onChange={(e) => setForm((prev) => ({ ...prev, organizer: e.target.value }))}
-                  placeholder="Nama penyelenggara"
+                  placeholder={t('wf.training.fields.organizerPlaceholder')}
                 />
               </div>
 
               {/* trainingType */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Tipe Pelatihan</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.training.fields.type')}</label>
                 <Select2
                   value={form.trainingType}
                   onValueChange={(value) => setForm((prev) => ({ ...prev, trainingType: value }))}
-                  options={TRAINING_TYPE_OPTIONS}
-                  placeholder="Pilih tipe pelatihan"
+                  options={TRAINING_TYPE_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                  placeholder={t('wf.training.fields.selectType')}
                 />
               </div>
 
               {/* startDate / endDate */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Tanggal Mulai</label>
+                  <label className="text-sm font-medium text-foreground">{t('wf.common.startDate')}</label>
                   <Input
                     type="date"
                     value={form.startDate}
@@ -315,7 +321,7 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Tanggal Selesai</label>
+                  <label className="text-sm font-medium text-foreground">{t('wf.common.endDate')}</label>
                   <Input
                     type="date"
                     value={form.endDate}
@@ -326,21 +332,21 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
 
               {/* duration */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Durasi</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.training.fields.duration')}</label>
                 <Input
                   value={form.duration}
                   onChange={(e) => setForm((prev) => ({ ...prev, duration: e.target.value }))}
-                  placeholder="Contoh: 2 hari, 3 bulan"
+                  placeholder={t('wf.training.fields.durationPlaceholder')}
                 />
               </div>
 
               {/* description */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Deskripsi</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.common.description')}</label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Deskripsi pelatihan"
+                  placeholder={t('wf.training.fields.descriptionPlaceholder')}
                   rows={3}
                   className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -348,7 +354,7 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
 
               {/* certificateUrl */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">URL Sertifikat</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.training.fields.certificateUrl')}</label>
                 <Input
                   value={form.certificateUrl}
                   onChange={(e) => setForm((prev) => ({ ...prev, certificateUrl: e.target.value }))}
@@ -358,11 +364,11 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
 
               {/* notes */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Catatan</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.common.notes')}</label>
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Catatan tambahan"
+                  placeholder={t('wf.common.notesPlaceholder')}
                   rows={3}
                   className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -372,11 +378,11 @@ export default function TrainingTab({ employeeId }: TrainingTabProps) {
             {/* Dialog Footer */}
             <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
               <Button variant="outline" onClick={handleCloseDialog} disabled={saving}>
-                Batal
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleSave} disabled={saving}>
                 {saving && <Loader2 size={16} className="mr-1 animate-spin" />}
-                {editingItem ? 'Simpan' : 'Tambah'}
+                {editingItem ? t('common.save') : t('wf.common.add')}
               </Button>
             </div>
           </div>

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { formatDate } from '@/utils/format';
 import { GraduationCap, Pencil, Trash2, Plus, Loader2 } from 'lucide-react';
 
@@ -20,9 +22,9 @@ const EDUCATION_LEVELS = [
   { value: 'S3', label: 'S3' },
 ];
 
-const YES_NO_OPTIONS = [
-  { value: 'true', label: 'Ya' },
-  { value: 'false', label: 'Tidak' },
+const YES_NO_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'true', labelKey: 'wf.common.yes' },
+  { value: 'false', labelKey: 'wf.common.no' },
 ];
 
 interface EducationForm {
@@ -56,6 +58,7 @@ interface EducationTabProps {
 }
 
 export function EducationTab({ employeeId }: EducationTabProps) {
+  const { t } = useI18n();
   const [educations, setEducations] = useState<EmployeeEducation[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -70,7 +73,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
       setEducations(data);
     } catch (error) {
       console.error('Failed to fetch educations:', error);
-      toast.error('Gagal memuat data pendidikan');
+      toast.error(t('wf.education.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -113,7 +116,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.level || !form.institutionName) {
-      toast.error('Level dan Institution Name harus diisi');
+      toast.error(t('wf.education.validation.required'));
       return;
     }
 
@@ -134,17 +137,17 @@ export function EducationTab({ employeeId }: EducationTabProps) {
 
       if (editingItem) {
         await employeeService.updateEducation(employeeId, editingItem.id, payload);
-        toast.success('Data pendidikan berhasil diperbarui');
+        toast.success(t('wf.education.toast.updateSuccess'));
       } else {
         await employeeService.createEducation(employeeId, payload);
-        toast.success('Data pendidikan berhasil ditambahkan');
+        toast.success(t('wf.education.toast.createSuccess'));
       }
 
       closeDialog();
       await fetchEducations();
     } catch (error) {
       console.error('Failed to save education:', error);
-      toast.error('Gagal menyimpan data pendidikan');
+      toast.error(t('wf.education.toast.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -152,21 +155,21 @@ export function EducationTab({ employeeId }: EducationTabProps) {
 
   const handleDelete = async (item: EmployeeEducation) => {
     const confirmed = await popup.confirm({
-      title: 'Hapus Data Pendidikan',
-      description: `Riwayat pendidikan ${item.institutionName} (${item.level}) akan dihapus dari profil employee.`,
-      confirmText: 'Hapus',
-      cancelText: 'Batal',
+      title: t('wf.education.confirm.title'),
+      description: t('wf.education.confirm.description', { institution: item.institutionName, level: item.level }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       intent: 'destructive',
     });
     if (!confirmed) return;
 
     try {
       await employeeService.deleteEducation(employeeId, item.id);
-      toast.success('Data pendidikan berhasil dihapus');
+      toast.success(t('wf.education.toast.deleteSuccess'));
       await fetchEducations();
     } catch (error) {
       console.error('Failed to delete education:', error);
-      toast.error('Gagal menghapus data pendidikan');
+      toast.error(t('wf.education.toast.deleteFailed'));
     }
   };
 
@@ -193,11 +196,11 @@ export function EducationTab({ employeeId }: EducationTabProps) {
       <div className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex items-center gap-2">
           <GraduationCap size={18} className="text-primary" />
-          <h3 className="text-sm font-semibold">Education</h3>
+          <h3 className="text-sm font-semibold">{t('employees.detail.tabs.education.label')}</h3>
         </div>
         <Button size="sm" onClick={openAddDialog}>
           <Plus size={16} className="mr-2" />
-          Tambah
+          {t('wf.common.add')}
         </Button>
       </div>
 
@@ -206,9 +209,9 @@ export function EducationTab({ employeeId }: EducationTabProps) {
         {educations.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-4 py-12 text-center">
             <GraduationCap size={40} className="mb-3 text-muted-foreground/50" />
-            <p className="text-sm font-medium text-muted-foreground">Belum ada data pendidikan</p>
+            <p className="text-sm font-medium text-muted-foreground">{t('wf.education.empty.title')}</p>
             <p className="mt-1 text-xs text-muted-foreground/60">
-              Klik tombol Tambah untuk menambahkan riwayat pendidikan.
+              {t('wf.education.empty.hint')}
             </p>
           </div>
         ) : (
@@ -247,11 +250,11 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                               : 'text-amber-600 dark:text-amber-400'
                           }
                         >
-                          {item.isGraduated ? 'Lulus' : 'Tidak Lulus'}
+                          {item.isGraduated ? t('wf.education.graduated') : t('wf.education.notGraduated')}
                         </span>
                       )}
                       {item.gpa != null && (
-                        <span>IPK: {item.gpa.toFixed(2)}</span>
+                        <span>{t('wf.education.gpaValue', { gpa: item.gpa.toFixed(2) })}</span>
                       )}
                     </div>
                     {item.city && (
@@ -263,7 +266,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                       </p>
                     )}
                     {item.degree && (
-                      <p className="mt-1 text-xs text-muted-foreground/60">Gelar: {item.degree}</p>
+                      <p className="mt-1 text-xs text-muted-foreground/60">{t('wf.education.degreeValue', { degree: item.degree })}</p>
                     )}
                   </div>
 
@@ -273,7 +276,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => openEditDialog(item)}
-                      title="Edit"
+                      title={t('common.edit')}
                     >
                       <Pencil size={14} />
                     </Button>
@@ -282,7 +285,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                       size="icon"
                       className="h-8 w-8 text-destructive hover:text-destructive"
                       onClick={() => handleDelete(item)}
-                      title="Hapus"
+                      title={t('common.delete')}
                     >
                       <Trash2 size={14} />
                     </Button>
@@ -305,14 +308,14 @@ export function EducationTab({ employeeId }: EducationTabProps) {
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {editingItem ? 'Edit' : 'Tambah'} Pendidikan
+                  {editingItem ? t('wf.education.dialog.editBadge') : t('wf.education.dialog.addBadge')}
                 </p>
                 <h3 className="mt-1 text-lg font-semibold">
-                  {editingItem ? 'Edit Data Pendidikan' : 'Tambah Data Pendidikan'}
+                  {editingItem ? t('wf.education.dialog.editTitle') : t('wf.education.dialog.addTitle')}
                 </h3>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={closeDialog} disabled={saving}>
-                Tutup
+                {t('wf.common.close')}
               </Button>
             </div>
 
@@ -322,54 +325,54 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                 {/* Level */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Level <span className="text-destructive">*</span>
+                    {t('wf.education.fields.level')} <span className="text-destructive">*</span>
                   </label>
                   <Select2
                     value={form.level}
                     onValueChange={(value) => updateForm('level', value)}
                     options={EDUCATION_LEVELS}
-                    placeholder="Pilih level"
+                    placeholder={t('wf.education.fields.selectLevel')}
                   />
                 </div>
 
                 {/* Institution Name */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Institution Name <span className="text-destructive">*</span>
+                    {t('wf.education.fields.institution')} <span className="text-destructive">*</span>
                   </label>
                   <Input
                     value={form.institutionName}
                     onChange={(e) => updateForm('institutionName', e.target.value)}
-                    placeholder="Nama institusi/universitas"
+                    placeholder={t('wf.education.fields.institutionPlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* Major */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Major</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.education.fields.major')}</label>
                   <Input
                     value={form.major}
                     onChange={(e) => updateForm('major', e.target.value)}
-                    placeholder="Jurusan"
+                    placeholder={t('wf.education.fields.majorPlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* Degree */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Degree</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.education.fields.degree')}</label>
                   <Input
                     value={form.degree}
                     onChange={(e) => updateForm('degree', e.target.value)}
-                    placeholder="Gelar akademik (misal: S.Kom)"
+                    placeholder={t('wf.education.fields.degreePlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* Start Date */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Start Date</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.common.startDate')}</label>
                   <Input
                     type="date"
                     value={form.startDate}
@@ -380,7 +383,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
 
                 {/* End Date */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">End Date</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.common.endDate')}</label>
                   <Input
                     type="date"
                     value={form.endDate}
@@ -391,18 +394,18 @@ export function EducationTab({ employeeId }: EducationTabProps) {
 
                 {/* Is Graduated */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Lulus?</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.education.fields.isGraduated')}</label>
                   <Select2
                     value={form.isGraduated}
                     onValueChange={(value) => updateForm('isGraduated', value)}
-                    options={YES_NO_OPTIONS}
-                    placeholder="Pilih"
+                    options={YES_NO_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                    placeholder={t('wf.common.select')}
                   />
                 </div>
 
                 {/* GPA */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">GPA</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.education.fields.gpa')}</label>
                   <Input
                     type="number"
                     step="0.01"
@@ -410,30 +413,30 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                     max="4"
                     value={form.gpa}
                     onChange={(e) => updateForm('gpa', e.target.value)}
-                    placeholder="IPK"
+                    placeholder={t('wf.education.fields.gpaPlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* City */}
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">City</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.common.city')}</label>
                   <Input
                     value={form.city}
                     onChange={(e) => updateForm('city', e.target.value)}
-                    placeholder="Kota lokasi institusi"
+                    placeholder={t('wf.education.fields.cityPlaceholder')}
                     className="h-10"
                   />
                 </div>
 
                 {/* Notes */}
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('wf.common.notes')}</label>
                   <textarea
                     value={form.notes}
                     onChange={(e) => updateForm('notes', e.target.value)}
                     className="h-20 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    placeholder="Catatan tambahan"
+                    placeholder={t('wf.common.notesPlaceholder')}
                   />
                 </div>
               </div>
@@ -441,7 +444,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
               {/* Form Actions */}
               <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-4">
                 <Button type="button" variant="outline" onClick={closeDialog} disabled={saving}>
-                  Batal
+                  {t('common.cancel')}
                 </Button>
                 <Button type="submit" disabled={saving}>
                   {saving ? (
@@ -449,7 +452,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                   ) : (
                     <GraduationCap size={16} className="mr-2" />
                   )}
-                  {saving ? 'Menyimpan...' : editingItem ? 'Perbarui' : 'Simpan'}
+                  {saving ? t('wf.common.saving') : editingItem ? t('wf.common.update') : t('common.save')}
                 </Button>
               </div>
             </form>

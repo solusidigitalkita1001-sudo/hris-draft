@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
+import { useI18n } from '@/i18n/provider';
 import { formatDateTime } from '@/utils/format';
 import { PhoneCall, Pencil, Trash2, Plus, Loader2 } from 'lucide-react';
 
@@ -23,6 +24,7 @@ interface EmergencyContactTabProps {
 }
 
 export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
+  const { t } = useI18n();
   const [contacts, setContacts] = useState<EmployeeEmergencyContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -38,11 +40,11 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
       setContacts(data);
     } catch (error) {
       console.error('Failed to fetch emergency contacts:', error);
-      toast.error('Gagal memuat data kontak darurat');
+      toast.error(t('wf.emergency.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [employeeId]);
+  }, [employeeId, t]);
 
   useEffect(() => {
     if (requestedRef.current) return;
@@ -78,7 +80,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
     event.preventDefault();
 
     if (!form.fullName.trim() || !form.relationship.trim() || !form.phone.trim()) {
-      toast.error('Harap isi nama, hubungan, dan nomor telepon');
+      toast.error(t('wf.emergency.validation.required'));
       return;
     }
 
@@ -96,17 +98,17 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
 
       if (editingItem) {
         await employeeService.updateEmergencyContact(employeeId, editingItem.id, payload);
-        toast.success('Kontak darurat berhasil diperbarui');
+        toast.success(t('wf.emergency.toast.updateSuccess'));
       } else {
         await employeeService.createEmergencyContact(employeeId, payload);
-        toast.success('Kontak darurat berhasil ditambahkan');
+        toast.success(t('wf.emergency.toast.createSuccess'));
       }
 
       setDialogOpen(false);
       await fetchData();
     } catch (error) {
       console.error('Failed to save emergency contact:', error);
-      toast.error('Gagal menyimpan kontak darurat');
+      toast.error(t('wf.emergency.toast.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -114,21 +116,21 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
 
   async function handleDelete(contact: EmployeeEmergencyContact) {
     const confirmed = await popup.confirm({
-      title: 'Hapus Kontak Darurat',
-      description: `Kontak darurat ${contact.fullName} akan dihapus dari profil employee.`,
-      confirmText: 'Hapus',
-      cancelText: 'Batal',
+      title: t('wf.emergency.confirm.title'),
+      description: t('wf.emergency.confirm.description', { name: contact.fullName }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       intent: 'destructive',
     });
     if (!confirmed) return;
 
     try {
       await employeeService.deleteEmergencyContact(employeeId, contact.id);
-      toast.success('Kontak darurat berhasil dihapus');
+      toast.success(t('wf.emergency.toast.deleteSuccess'));
       await fetchData();
     } catch (error) {
       console.error('Failed to delete emergency contact:', error);
-      toast.error('Gagal menghapus kontak darurat');
+      toast.error(t('wf.emergency.toast.deleteFailed'));
     }
   }
 
@@ -160,14 +162,14 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
       {/* Header */}
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-medium">Emergency Contact</h3>
+          <h3 className="text-sm font-medium">{t('employees.detail.tabs.emergency.label')}</h3>
           <p className="text-xs text-muted-foreground">
-            Kontak person yang dapat dihubungi dalam keadaan darurat.
+            {t('wf.emergency.subtitle')}
           </p>
         </div>
         <Button size="sm" onClick={openCreateDialog}>
           <Plus size={16} className="mr-2" />
-          Add
+          {t('wf.common.add')}
         </Button>
       </div>
 
@@ -177,9 +179,9 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
           <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
             <PhoneCall size={24} />
           </div>
-          <p className="text-sm text-muted-foreground">Belum ada kontak darurat</p>
+          <p className="text-sm text-muted-foreground">{t('wf.emergency.empty.title')}</p>
           <p className="mt-1 text-xs text-muted-foreground/60">
-            Tambahkan kontak darurat untuk employee ini.
+            {t('wf.emergency.empty.hint')}
           </p>
         </div>
       )}
@@ -201,7 +203,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                     <p className="truncate text-sm font-medium">{contact.fullName}</p>
                     {contact.isPrimary && (
                       <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        Primary
+                        {t('wf.emergency.primary')}
                       </span>
                     )}
                   </div>
@@ -209,7 +211,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                   <p className="mt-0.5 text-xs">{contact.phone}</p>
                   {contact.alternativePhone && (
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Alt: {contact.alternativePhone}
+                      {t('wf.emergency.altPhone', { phone: contact.alternativePhone })}
                     </p>
                   )}
                   {contact.address && (
@@ -223,7 +225,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                     </p>
                   )}
                   <p className="mt-1 text-[10px] text-muted-foreground/50">
-                    Diperbarui {formatDateTime(contact.updatedAt)}
+                    {t('wf.emergency.updatedAt', { date: formatDateTime(contact.updatedAt) })}
                   </p>
                 </div>
               </div>
@@ -234,7 +236,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => openEditDialog(contact)}
-                  title="Edit"
+                  title={t('common.edit')}
                 >
                   <Pencil size={14} />
                 </Button>
@@ -243,7 +245,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                   size="icon"
                   className="h-8 w-8 text-destructive hover:text-destructive"
                   onClick={() => handleDelete(contact)}
-                  title="Hapus"
+                  title={t('common.delete')}
                 >
                   <Trash2 size={14} />
                 </Button>
@@ -267,19 +269,19 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Emergency Contact
+                  {t('employees.detail.tabs.emergency.label')}
                 </p>
                 <h3 className="mt-1 text-lg font-semibold">
-                  {editingItem ? 'Edit Kontak Darurat' : 'Tambah Kontak Darurat'}
+                  {editingItem ? t('wf.emergency.dialog.editTitle') : t('wf.emergency.dialog.addTitle')}
                 </h3>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {editingItem
-                    ? 'Perbarui informasi kontak darurat.'
-                    : 'Tambahkan kontak person yang dapat dihubungi dalam keadaan darurat.'}
+                    ? t('wf.emergency.dialog.editSubtitle')
+                    : t('wf.emergency.dialog.addSubtitle')}
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
-                Tutup
+                {t('wf.common.close')}
               </Button>
             </div>
 
@@ -289,12 +291,12 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                 {/* fullName */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Nama Lengkap <span className="text-destructive">*</span>
+                    {t('wf.common.fullName')} <span className="text-destructive">*</span>
                   </label>
                   <Input
                     value={form.fullName}
                     onChange={(e) => handleFieldChange('fullName', e.target.value)}
-                    placeholder="Nama kontak darurat"
+                    placeholder={t('wf.emergency.fields.fullNamePlaceholder')}
                     required
                     className="h-10"
                   />
@@ -303,12 +305,12 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                 {/* relationship */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Hubungan <span className="text-destructive">*</span>
+                    {t('wf.common.relationship')} <span className="text-destructive">*</span>
                   </label>
                   <Input
                     value={form.relationship}
                     onChange={(e) => handleFieldChange('relationship', e.target.value)}
-                    placeholder="Suami / Istri / Orang Tua / dll"
+                    placeholder={t('wf.emergency.fields.relationshipPlaceholder')}
                     required
                     className="h-10"
                   />
@@ -317,7 +319,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                 {/* phone */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    No. Telepon <span className="text-destructive">*</span>
+                    {t('wf.common.phoneNumber')} <span className="text-destructive">*</span>
                   </label>
                   <Input
                     value={form.phone}
@@ -331,7 +333,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                 {/* alternativePhone */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    No. Alternatif
+                    {t('wf.emergency.fields.altPhone')}
                   </label>
                   <Input
                     value={form.alternativePhone}
@@ -344,42 +346,42 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                 {/* isPrimary */}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Kontak Utama
+                    {t('wf.emergency.fields.isPrimary')}
                   </label>
                   <Select2
                     value={form.isPrimary}
                     onValueChange={(value) => handleFieldChange('isPrimary', value)}
                     options={[
-                      { value: 'false', label: 'Tidak' },
-                      { value: 'true', label: 'Ya' },
+                      { value: 'false', label: t('wf.common.no') },
+                      { value: 'true', label: t('wf.common.yes') },
                     ]}
-                    placeholder="Pilih"
+                    placeholder={t('wf.common.select')}
                   />
                 </div>
 
                 {/* address - full width */}
                 <div className="md:col-span-2">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Alamat
+                    {t('employees.detail.cards.address.title')}
                   </label>
                   <textarea
                     value={form.address}
                     onChange={(e) => handleFieldChange('address', e.target.value)}
                     className="h-20 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    placeholder="Alamat lengkap kontak darurat"
+                    placeholder={t('wf.emergency.fields.addressPlaceholder')}
                   />
                 </div>
 
                 {/* notes - full width */}
                 <div className="md:col-span-2">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Catatan
+                    {t('wf.common.notes')}
                   </label>
                   <textarea
                     value={form.notes}
                     onChange={(e) => handleFieldChange('notes', e.target.value)}
                     className="h-20 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    placeholder="Catatan tambahan (opsional)"
+                    placeholder={t('wf.emergency.fields.notesPlaceholder')}
                   />
                 </div>
               </div>
@@ -387,7 +389,7 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
               {/* Modal Footer */}
               <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-4">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                  Batal
+                  {t('common.cancel')}
                 </Button>
                 <Button type="submit" disabled={saving}>
                   {saving ? (
@@ -396,10 +398,10 @@ export function EmergencyContactTab({ employeeId }: EmergencyContactTabProps) {
                     <Plus size={16} className="mr-2" />
                   )}
                   {saving
-                    ? 'Menyimpan...'
+                    ? t('wf.common.saving')
                     : editingItem
-                      ? 'Perbarui'
-                      : 'Tambah'}
+                      ? t('wf.common.update')
+                      : t('wf.common.add')}
                 </Button>
               </div>
             </form>

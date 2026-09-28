@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
+import { discardUploadOnFailure, validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
@@ -93,6 +93,20 @@ const attachmentStorage = multer.diskStorage({
   },
 });
 
+// Result and dispute attachments become managed Documents that other people
+// download, so they carry the document module's allowlist rather than the
+// narrower image/PDF set used for planning evidence.
+const PERFORMANCE_ATTACHMENT_ALLOWED_MIMES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+
 const attachmentUpload = multer({
   storage: attachmentStorage,
   limits: { fileSize: config.upload.maxFileSize },
@@ -171,7 +185,7 @@ router.post('/planning-assignments/:id/targets', authorize({ resource: 'performa
 router.put('/planning-targets/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformancePlanningTargetSchema), performanceController.updatePlanningTarget.bind(performanceController));
 router.delete('/planning-targets/:id', authorize({ resource: 'performance', action: 'update' }), performanceController.deletePlanningTarget.bind(performanceController));
 router.post('/planning-targets/:id/progress', authorize({ resource: 'performance', action: 'update' }), validate(createPerformanceTargetProgressSchema), performanceController.createPlanningTargetProgress.bind(performanceController));
-router.post('/planning-targets/:id/evidences', authorize({ resource: 'performance', action: 'update' }), evidenceUpload.single('file'), validateFileMagicBytes(), performanceController.uploadPlanningEvidence.bind(performanceController));
+router.post('/planning-targets/:id/evidences', authorize({ resource: 'performance', action: 'update' }), evidenceUpload.single('file'), discardUploadOnFailure(), validateFileMagicBytes(), performanceController.uploadPlanningEvidence.bind(performanceController));
 router.get('/execution/approval-queue', authorize({ resource: 'performance', action: 'read' }), performanceController.getExecutionApprovalQueue.bind(performanceController));
 router.get('/execution/my-assignments', authorize({ resource: 'performance', action: 'read' }), performanceController.getMyExecutionAssignments.bind(performanceController));
 router.get('/execution/assignments/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.getExecutionAssignmentById.bind(performanceController));
@@ -189,10 +203,10 @@ router.get('/periods/:id/automation-schedules', authorize({ resource: 'performan
 router.post('/periods/:id/automation-schedules', authorize({ resource: 'performance', action: 'update' }), validate(createPerformanceAutomationScheduleSchema), performanceController.createAutomationSchedule.bind(performanceController));
 router.get('/results/me', authorize({ resource: 'performance', action: 'read' }), performanceController.getMyPublishedResults.bind(performanceController));
 router.post('/results/:id/acknowledge', authorize({ resource: 'performance', action: 'read' }), validate(acknowledgePerformanceResultSchema), performanceController.acknowledgePerformanceResult.bind(performanceController));
-router.post('/results/:id/attachments', authorize({ resource: 'performance', action: 'read' }), attachmentUpload.single('file'), performanceController.uploadPerformanceResultAttachment.bind(performanceController));
+router.post('/results/:id/attachments', authorize({ resource: 'performance', action: 'read' }), attachmentUpload.single('file'), discardUploadOnFailure(), validateFileMagicBytes(PERFORMANCE_ATTACHMENT_ALLOWED_MIMES), performanceController.uploadPerformanceResultAttachment.bind(performanceController));
 router.post('/results/:id/disputes', authorize({ resource: 'performance', action: 'read' }), validate(createPerformanceResultDisputeSchema), performanceController.createPerformanceResultDispute.bind(performanceController));
 router.post('/results/:id/reopen', authorize({ resource: 'performance', action: 'approve' }), validate(reopenPerformanceResultSchema), performanceController.reopenPerformanceResult.bind(performanceController));
-router.post('/result-disputes/:id/attachments', authorize({ resource: 'performance', action: 'read' }), attachmentUpload.single('file'), performanceController.uploadPerformanceDisputeAttachment.bind(performanceController));
+router.post('/result-disputes/:id/attachments', authorize({ resource: 'performance', action: 'read' }), attachmentUpload.single('file'), discardUploadOnFailure(), validateFileMagicBytes(PERFORMANCE_ATTACHMENT_ALLOWED_MIMES), performanceController.uploadPerformanceDisputeAttachment.bind(performanceController));
 router.post('/result-disputes/:id/respond', authorize({ resource: 'performance', action: 'approve' }), validate(respondPerformanceResultDisputeSchema), performanceController.respondPerformanceResultDispute.bind(performanceController));
 router.get('/periods/:id/calibrations', authorize({ resource: 'performance', action: 'read' }), performanceController.getCalibrationSessions.bind(performanceController));
 router.post('/periods/:id/calibrations', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceCalibrationSessionSchema), performanceController.createCalibrationSession.bind(performanceController));

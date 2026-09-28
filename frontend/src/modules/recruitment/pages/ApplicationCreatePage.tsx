@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
+import { useI18n } from '@/i18n/provider';
 import { useCompanyStore } from '@/stores/company.store';
 import { recruitmentService, type Candidate, type JobPosting } from '@/services/recruitment.service';
 import toast from 'react-hot-toast';
@@ -11,6 +12,7 @@ import { ArrowLeft } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
 
 export function ApplicationCreatePage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { activeCompany } = useCompanyStore();
@@ -40,23 +42,23 @@ export function ApplicationCreatePage() {
         setCandidates(candidateData.filter((candidate) => candidate.status === 'ACTIVE'));
       } catch (error) {
         console.error(error);
-        toast.error('Gagal memuat data application');
+        toast.error(t('wf.rec.applicationForm.loadFailed'));
       } finally {
         setLoading(false);
       }
     };
 
     void loadData();
-  }, [companyId, id]);
+  }, [companyId, id, t]);
 
   const handleSubmit = useCallback(async () => {
     if (!id || !companyId) {
-      toast.error('Context application tidak valid');
+      toast.error(t('wf.rec.applicationForm.invalidContext'));
       return;
     }
 
     if (!candidateId) {
-      toast.error('Pilih candidate dulu');
+      toast.error(t('wf.rec.applicationForm.candidateRequired'));
       return;
     }
 
@@ -70,29 +72,29 @@ export function ApplicationCreatePage() {
         coverLetter: coverLetter.trim() || undefined,
         notes: notes.trim() || undefined,
       });
-      toast.success('Application berhasil dibuat');
+      toast.success(t('wf.rec.applicationForm.createSuccess'));
       navigate(`/recruitment/postings/${id}`);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal membuat application'));
+      toast.error(apiErrorMessage(error, t('wf.rec.applicationForm.createFailed')));
     } finally {
       setSubmitting(false);
     }
-  }, [candidateId, companyId, coverLetter, expectedSalary, id, navigate, notes]);
+  }, [candidateId, companyId, coverLetter, expectedSalary, id, navigate, notes, t]);
 
   if (loading) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>;
+    return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title="Create Application"
-        description={posting ? `Tambahkan kandidat ke lowongan ${posting.title}` : 'Tambahkan kandidat ke lowongan'}
+        title={t('wf.rec.applicationForm.title')}
+        description={posting ? t('wf.rec.applicationForm.descriptionWithPosting', { title: posting.title }) : t('wf.rec.applicationForm.description')}
         actions={(
           <Button variant="outline" size="sm" onClick={() => navigate(id ? `/recruitment/postings/${id}` : '/recruitment')}>
             <ArrowLeft size={16} className="mr-2" />
-            Back
+            {t('employees.detail.actions.back')}
           </Button>
         )}
       />
@@ -100,7 +102,7 @@ export function ApplicationCreatePage() {
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Candidate</label>
+            <label className="text-sm font-medium">{t('wf.rec.applicationForm.candidate')}</label>
             <Select2
               value={candidateId}
               onValueChange={setCandidateId}
@@ -108,42 +110,42 @@ export function ApplicationCreatePage() {
                 value: candidate.id,
                 label: `${candidate.firstName} ${candidate.lastName}${candidate.currentPosition ? ` • ${candidate.currentPosition}` : ''}`,
               }))}
-              placeholder="Pilih candidate aktif"
+              placeholder={t('wf.rec.applicationForm.selectCandidate')}
             />
             <p className="text-xs text-muted-foreground">
-              Candidate belum ada? Tambahkan dulu dari menu kandidat.
+              {t('wf.rec.applicationForm.candidateHint')}
             </p>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Expected Salary</label>
+            <label className="text-sm font-medium">{t('wf.rec.applicationForm.expectedSalary')}</label>
             <Input type="number" min={0} value={expectedSalary} onChange={(e) => setExpectedSalary(e.target.value)} placeholder="12000000" />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Cover Letter</label>
+            <label className="text-sm font-medium">{t('wf.rec.applicationForm.coverLetter')}</label>
             <textarea
               value={coverLetter}
               onChange={(e) => setCoverLetter(e.target.value)}
               className="min-h-28 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Ringkasan cover letter kandidat"
+              placeholder={t('wf.rec.applicationForm.coverLetterPlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Notes</label>
+            <label className="text-sm font-medium">{t('wf.common.notes')}</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Catatan internal rekrutmen"
+              placeholder={t('wf.rec.applicationForm.notesPlaceholder')}
             />
           </div>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={() => navigate(id ? `/recruitment/postings/${id}` : '/recruitment')}>
-            Batal
+            {t('common.cancel')}
           </Button>
           <Button size="sm" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Menyimpan...' : 'Buat Application'}
+            {submitting ? t('wf.common.saving') : t('wf.rec.applicationForm.submit')}
           </Button>
         </div>
       </div>

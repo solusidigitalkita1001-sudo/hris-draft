@@ -277,6 +277,17 @@ export const createEmployeeAttachmentSchema = z.object({
 
 export const updateEmployeeAttachmentSchema = createEmployeeAttachmentSchema.partial();
 
+// Matriks metode absensi per karyawan (SUPER_ADMIN)
+export const updateAttendanceMethodsSchema = z
+  .object({
+    allowFingerprint: z.boolean().optional(),
+    allowFaceRecognition: z.boolean().optional(),
+    allowMobileGps: z.boolean().optional(),
+  })
+  .refine((value) => Object.values(value).some((flag) => flag !== undefined), {
+    message: 'Minimal satu metode absensi harus diubah',
+  });
+
 // ============================================================
 // Type Exports
 // ============================================================

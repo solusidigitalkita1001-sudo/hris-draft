@@ -32,6 +32,7 @@ import {
 import { rbacService, type Role } from '@/services/rbac.service';
 import { useCompanyStore } from '@/stores/company.store';
 import { cn } from '@/utils/cn';
+import { useI18n } from '@/i18n/provider';
 
 interface ScopeEntity {
   id: string;
@@ -74,6 +75,7 @@ function ScopeEntityPicker({
   onChange: (ids: string[]) => void;
   loading: boolean;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -98,23 +100,23 @@ function ScopeEntityPicker({
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Cari nama atau kode"
+            placeholder={t('adm.dataScope.pickerSearchPlaceholder')}
             className="bg-background pl-9"
-            aria-label="Cari unit organisasi"
+            aria-label={t('adm.dataScope.pickerSearchAria')}
           />
         </div>
         <span className="text-sm text-muted-foreground" aria-live="polite">
-          {selectedIds.length} dipilih
+          {t('adm.dataScope.selectedCount', { count: selectedIds.length })}
         </span>
       </div>
       <div className="max-h-72 overflow-y-auto border-t border-border">
         {loading ? (
           <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
-            <RefreshCw size={16} className="animate-spin" /> Memuat unit organisasi…
+            <RefreshCw size={16} className="animate-spin" /> {t('adm.dataScope.loadingUnits')}
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-            Tidak ada unit yang cocok atau tersedia pada company ini.
+            {t('adm.dataScope.noUnits')}
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -149,6 +151,7 @@ function ScopeEntityPicker({
 }
 
 export function AdminDataScopePage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
   const [roles, setRoles] = useState<Role[]>([]);
@@ -218,10 +221,11 @@ export function AdminDataScopePage() {
           : activeRoles[0]?.code || ''
       ));
     } catch (error) {
-      setLoadError(messageFromError(error, 'Konteks role dan organisasi tidak dapat dimuat.'));
+      setLoadError(messageFromError(error, t('adm.dataScope.contextLoadFailed')));
     } finally {
       setLoadingContext(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t hanya untuk pesan error; fetch mengikuti company aktif
   }, [companyId]);
 
   const fetchScope = useCallback(async () => {
@@ -244,10 +248,11 @@ export function AdminDataScopePage() {
       const effective = await administrationService.getMyDataScope({ companyId, resource });
       setMyScope(effective);
     } catch (error) {
-      setLoadError(messageFromError(error, 'Data access tidak dapat dimuat. Perubahan belum dilakukan.'));
+      setLoadError(messageFromError(error, t('adm.dataScope.scopeLoadFailed')));
     } finally {
       setLoadingScope(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t hanya untuk pesan error; fetch mengikuti filter
   }, [companyId, resource, roleCode]);
 
   useEffect(() => { void fetchContext(); }, [fetchContext]);
@@ -259,7 +264,7 @@ export function AdminDataScopePage() {
     return () => window.removeEventListener('beforeunload', warnBeforeUnload);
   }, [isDirty]);
 
-  const confirmDiscard = () => !isDirty || window.confirm('Perubahan data access belum disimpan. Buang perubahan?');
+  const confirmDiscard = () => !isDirty || window.confirm(t('adm.dataScope.unsaved'));
 
   const handleRoleChange = (nextRole: string) => {
     if (confirmDiscard()) setRoleCode(nextRole);
@@ -278,7 +283,7 @@ export function AdminDataScopePage() {
   const handleSave = async () => {
     if (!companyId || !roleCode || !isDirty) return;
     if (scopeNeedsSelection(scopeType) && selectedIds.length === 0) {
-      toast.error('Pilih minimal satu unit organisasi untuk scope ini.');
+      toast.error(t('adm.dataScope.selectUnit'));
       return;
     }
 
@@ -292,10 +297,10 @@ export function AdminDataScopePage() {
         scopeValue: scopeNeedsSelection(scopeType) ? selectedIds.join(',') : undefined,
       });
       setSavedSnapshot(currentSnapshot);
-      toast.success('Data access berhasil disimpan');
+      toast.success(t('adm.dataScope.saveSuccess'));
       setMyScope(await administrationService.getMyDataScope({ companyId, resource }));
     } catch (error) {
-      toast.error(messageFromError(error, 'Data access gagal disimpan. Coba lagi.'));
+      toast.error(messageFromError(error, t('adm.dataScope.saveFailed')));
     } finally {
       setSaving(false);
     }
@@ -304,16 +309,16 @@ export function AdminDataScopePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Data Access"
-        description="Batasi baris data yang boleh dilihat setiap role berdasarkan company dan unit organisasi."
+        title={t('adm.dataScope.title')}
+        description={t('adm.dataScope.description')}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => void fetchScope()} disabled={loadingScope || !roleCode}>
-              <RefreshCw size={16} className={cn('mr-2', loadingScope && 'animate-spin')} /> Muat ulang
+              <RefreshCw size={16} className={cn('mr-2', loadingScope && 'animate-spin')} /> {t('adm.common.reload')}
             </Button>
             <Button size="sm" onClick={() => void handleSave()} disabled={saving || loadingScope || !isDirty}>
               <Save size={16} className="mr-2" />
-              {saving ? 'Menyimpan…' : isDirty ? 'Simpan perubahan' : 'Tersimpan'}
+              {saving ? t('adm.common.saving') : isDirty ? t('adm.common.saveChanges') : t('adm.common.saved')}
             </Button>
           </div>
         )}
@@ -325,7 +330,7 @@ export function AdminDataScopePage() {
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             <span>{loadError}</span>
           </span>
-          <Button variant="outline" size="sm" onClick={() => void fetchContext()}>Coba lagi</Button>
+          <Button variant="outline" size="sm" onClick={() => void fetchContext()}>{t('adm.common.retry')}</Button>
         </div>
       )}
 
@@ -337,36 +342,36 @@ export function AdminDataScopePage() {
                 <ShieldCheck size={20} />
               </span>
               <div>
-                <h2 id="data-access-config" className="text-lg font-semibold">Konfigurasi role</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Resource spesifik mengatur batas data untuk satu area aplikasi.</p>
+                <h2 id="data-access-config" className="text-lg font-semibold">{t('adm.dataScope.roleConfig')}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t('adm.dataScope.roleConfigDesc')}</p>
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Company</label>
-                <Input value={activeCompany?.name || 'Belum ada company aktif'} disabled />
+                <label className="mb-1.5 block text-sm font-medium">{t('adm.dataScope.company')}</label>
+                <Input value={activeCompany?.name || t('adm.dataScope.noActiveCompany')} disabled />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Role</label>
+                <label className="mb-1.5 block text-sm font-medium">{t('adm.common.role')}</label>
                 <Select2
                   value={roleCode}
                   onValueChange={handleRoleChange}
                   options={roleOptions}
-                  placeholder={loadingContext ? 'Memuat role…' : 'Pilih role'}
+                  placeholder={loadingContext ? t('adm.common.loadingRoles') : t('adm.common.selectRole')}
                   disabled={loadingContext || roleOptions.length === 0}
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Resource</label>
+                <label className="mb-1.5 block text-sm font-medium">{t('adm.dataScope.resource')}</label>
                 <Select2 value={resource} onValueChange={handleResourceChange} options={RESOURCE_OPTIONS} />
               </div>
             </div>
           </div>
 
           <div className="border-t border-border p-5 sm:p-6">
-            <h3 className="font-semibold">Cakupan data</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Pilih batas paling sesuai untuk role dan resource ini.</p>
+            <h3 className="font-semibold">{t('adm.dataScope.scopeSection')}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{t('adm.dataScope.scopeSectionDesc')}</p>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {SCOPE_TYPE_OPTIONS.map((option) => {
@@ -399,11 +404,11 @@ export function AdminDataScopePage() {
               <div className="mt-5">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h3 className="font-medium">Unit yang boleh diakses</h3>
-                    <p className="text-sm text-muted-foreground">Pilihan disimpan sebagai ID, tetapi admin bekerja dengan nama unit.</p>
+                    <h3 className="font-medium">{t('adm.dataScope.unitsTitle')}</h3>
+                    <p className="text-sm text-muted-foreground">{t('adm.dataScope.unitsDesc')}</p>
                   </div>
                   {selectedIds.length > 0 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>Hapus pilihan</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>{t('adm.dataScope.clearSelection')}</Button>
                   )}
                 </div>
                 <ScopeEntityPicker
@@ -423,42 +428,42 @@ export function AdminDataScopePage() {
               <UserCheck size={18} />
             </span>
             <div>
-              <h2 id="effective-scope-title" className="font-semibold">Akses efektif saya</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Preview hasil resolver untuk user yang sedang login.</p>
+              <h2 id="effective-scope-title" className="font-semibold">{t('adm.dataScope.effectiveTitle')}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{t('adm.dataScope.effectiveDesc')}</p>
             </div>
           </div>
 
           {loadingScope ? (
             <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
-              <RefreshCw size={16} className="animate-spin" /> Menghitung scope…
+              <RefreshCw size={16} className="animate-spin" /> {t('adm.dataScope.computing')}
             </div>
           ) : myScope ? (
             <dl className="mt-5 space-y-4 text-sm">
               <div>
-                <dt className="text-muted-foreground">Role terpilih resolver</dt>
-                <dd className="mt-1 font-medium">{myScope.roleCode ?? 'Tidak ada konfigurasi khusus'}</dd>
+                <dt className="text-muted-foreground">{t('adm.dataScope.resolverRole')}</dt>
+                <dd className="mt-1 font-medium">{myScope.roleCode ?? t('adm.dataScope.noCustomConfig')}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Resource</dt>
+                <dt className="text-muted-foreground">{t('adm.dataScope.resource')}</dt>
                 <dd className="mt-1 font-medium">{myScope.resource}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Scope efektif</dt>
+                <dt className="text-muted-foreground">{t('adm.dataScope.effectiveScope')}</dt>
                 <dd className="mt-1 inline-flex items-center gap-2 rounded-lg bg-muted px-2.5 py-1.5 font-medium">
                   <ScopeIcon type={myScope.scopeType} /> {myScope.scopeType}
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Filter yang diterapkan</dt>
+                <dt className="text-muted-foreground">{t('adm.dataScope.appliedFilter')}</dt>
                 <dd className="mt-1 break-words rounded-lg bg-muted p-3 text-xs">
                   {Object.keys(myScope.parsedFilter).length > 0
                     ? JSON.stringify(myScope.parsedFilter, null, 2)
-                    : 'Tidak ada filter tambahan'}
+                    : t('adm.dataScope.noExtraFilter')}
                 </dd>
               </div>
             </dl>
           ) : (
-            <p className="mt-5 text-sm text-muted-foreground">Preview belum tersedia.</p>
+            <p className="mt-5 text-sm text-muted-foreground">{t('adm.dataScope.previewUnavailable')}</p>
           )}
         </aside>
       </div>

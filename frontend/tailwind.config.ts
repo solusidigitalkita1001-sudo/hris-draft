@@ -17,7 +17,7 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
@@ -28,6 +28,19 @@ const config: Config = {
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
+          hover: 'hsl(var(--primary-hover))',
+        },
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          bg: 'hsl(var(--success-bg))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          bg: 'hsl(var(--warning-bg))',
+        },
+        danger: {
+          DEFAULT: 'hsl(var(--danger))',
+          bg: 'hsl(var(--danger-bg))',
         },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
@@ -66,6 +79,15 @@ const config: Config = {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        card: '26px',
+        'card-sm': '20px',
+        field: '16px',
+      },
+      boxShadow: {
+        card: '0 1px 2px rgba(15, 23, 42, 0.06)',
+        float: '0 22px 44px -32px rgba(15, 23, 42, 0.45)',
+        'primary-btn': '0 12px 20px -14px rgba(49, 91, 140, 0.95)',
+        nav: '0 18px 40px -18px rgba(15, 23, 42, 0.45)',
       },
       keyframes: {
         'accordion-down': {

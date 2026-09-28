@@ -11,10 +11,14 @@ import {
   Search,
   UserRound,
   Users,
+  X,
 } from 'lucide-react';
+import { StatusChip, statusTone } from '@/components/shared/StatusChip';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { employeeService, type Employee } from '@/services/employee.service';
 import {
   organizationService,
@@ -24,6 +28,8 @@ import {
   type Position,
 } from '@/services/organization.service';
 import { useCompanyStore } from '@/stores/company.store';
+
+type Translate = ReturnType<typeof useI18n>['t'];
 
 type OrgNodeType = 'company' | 'division' | 'department' | 'position';
 
@@ -54,11 +60,11 @@ const NODE_ICON_STYLES: Record<OrgNodeType, string> = {
 
 const CONNECTOR_CLASS = 'bg-slate-300 dark:bg-slate-600';
 
-const DETAIL_LABELS: Record<OrgNodeType, string> = {
-  company: 'Company',
-  division: 'Division',
-  department: 'Department',
-  position: 'Position',
+const DETAIL_LABEL_KEYS: Record<OrgNodeType, TranslationKey> = {
+  company: 'wf.org.chart.nodeType.company',
+  division: 'wf.org.chart.nodeType.division',
+  department: 'wf.org.chart.nodeType.department',
+  position: 'wf.org.chart.nodeType.position',
 };
 
 function normalizeNodeLabel(value: string) {
@@ -104,11 +110,6 @@ function collectExpandableIds(node: OrgChartNode, ids: Set<string>) {
   node.children.forEach((child) => collectExpandableIds(child, ids));
 }
 
-function formatCountLabel(count: number | undefined, singular: string, plural = `${singular}s`) {
-  if (!count) return `0 ${plural}`;
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
 function flattenDepartments(departments: Department[]): Department[] {
   const visited = new Set<string>();
   const result: Department[] = [];
@@ -127,19 +128,19 @@ function flattenDepartments(departments: Department[]): Department[] {
   return result;
 }
 
-function buildDepartmentNode(department: Department, positionsByDepartment: Map<string, Position[]>): OrgChartNode {
+function buildDepartmentNode(department: Department, positionsByDepartment: Map<string, Position[]>, t: Translate): OrgChartNode {
   const nestedDepartments = [
     ...(department.children || []),
     ...(department.subDepartments || []),
   ];
 
   const uniqueDepartments = Array.from(new Map(nestedDepartments.map((item) => [item.id, item])).values());
-  const departmentChildren = uniqueDepartments.map((child) => buildDepartmentNode(child, positionsByDepartment));
+  const departmentChildren = uniqueDepartments.map((child) => buildDepartmentNode(child, positionsByDepartment, t));
   const positionChildren = (positionsByDepartment.get(department.id) || []).map<OrgChartNode>((position) => ({
     id: position.id,
     type: 'position',
     label: position.name,
-    subtitle: `${position.code}${position.gradeLevel ? ` • Grade ${position.gradeLevel}` : ''}`,
+    subtitle: `${position.code}${position.gradeLevel ? ` • ${t('wf.org.chart.positionGrade', { grade: position.gradeLevel })}` : ''}`,
     status: position.status,
     employeeCount: position._count?.employees || 0,
     children: [],
@@ -160,7 +161,8 @@ function buildOrgChartTree(
   company: Company,
   divisions: Division[],
   hierarchy: Department[],
-  positions: Position[]
+  positions: Position[],
+  t: Translate
 ): OrgChartNode {
   const positionsByDepartment = new Map<string, Position[]>();
 
@@ -192,19 +194,19 @@ function buildOrgChartTree(
     status: division.status,
     headName: division.head?.fullName,
     children: (departmentsByDivision.get(division.id) || []).map((department) =>
-      buildDepartmentNode(department, positionsByDepartment)
+      buildDepartmentNode(department, positionsByDepartment, t)
     ),
   }));
 
   const orphanDepartmentNodes = rootDepartments.map((department) =>
-    buildDepartmentNode(department, positionsByDepartment)
+    buildDepartmentNode(department, positionsByDepartment, t)
   );
 
   return {
     id: company.id,
     type: 'company',
     label: company.name,
-    subtitle: `${company.code} • ${company.group?.name || 'No Group'}`,
+    subtitle: `${company.code} • ${company.group?.name || t('wf.org.chart.noGroup')}`,
     status: company.status,
     employeeCount: company._count?.employees || 0,
     children: [...divisionNodes, ...orphanDepartmentNodes],
@@ -224,6 +226,7 @@ function NodeCard({
   onToggle: (id: string) => void;
   onSelect: (node: OrgChartNode) => void;
 }) {
+  const { t } = useI18n();
   const Icon =
     node.type === 'company'
       ? Building2
@@ -251,7 +254,7 @@ function NodeCard({
                 <Icon size={14} className="shrink-0" />
               </span>
               <span className="text-[11px] font-semibold uppercase tracking-[0.2em] opacity-70">
-                {DETAIL_LABELS[node.type]}
+                {t(DETAIL_LABEL_KEYS[node.type])}
               </span>
             </div>
             <p className="mt-2 line-clamp-2 text-sm font-semibold">{node.label}</p>
@@ -259,10 +262,10 @@ function NodeCard({
               <p className="mt-1 line-clamp-2 text-xs opacity-75">{node.subtitle}</p>
             )}
             {node.headName && (
-              <p className="mt-2 text-xs opacity-80">Lead: {node.headName}</p>
+              <p className="mt-2 text-xs opacity-80">{t('wf.org.chart.lead', { name: node.headName })}</p>
             )}
             {typeof node.employeeCount === 'number' && (
-              <p className="mt-1 text-xs opacity-80">{formatCountLabel(node.employeeCount, 'person', 'people')}</p>
+              <p className="mt-1 text-xs opacity-80">{t('wf.org.chart.peopleCount', { count: node.employeeCount })}</p>
             )}
           </button>
         </div>
@@ -275,7 +278,7 @@ function NodeCard({
               onToggle(node.id);
             }}
             className="rounded-md border border-black/10 bg-black/5 p-1 transition-colors hover:bg-black/10 dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15"
-            aria-label={expanded ? 'Collapse node' : 'Expand node'}
+            aria-label={expanded ? t('wf.org.chart.collapseNode') : t('wf.org.chart.expandNode')}
           >
             {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
@@ -353,6 +356,7 @@ function PeopleDialog({
   total: number;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   if (!open || !node) return null;
 
   return (
@@ -364,24 +368,24 @@ function PeopleDialog({
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              People In {DETAIL_LABELS[node.type]}
+              {t('wf.org.chart.peopleIn', { unit: t(DETAIL_LABEL_KEYS[node.type]) })}
             </p>
             <h3 className="mt-1 text-lg font-semibold">{node.label}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {loading ? 'Memuat data orang...' : `${total} orang terkait node ini`}
+              {loading ? t('wf.org.chart.peopleLoading') : t('wf.org.chart.peopleRelated', { total })}
             </p>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Tutup
+            {t('wf.common.close')}
           </Button>
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto p-5">
           {loading ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">Memuat daftar orang...</div>
+            <div className="py-12 text-center text-sm text-muted-foreground">{t('wf.org.chart.peopleListLoading')}</div>
           ) : employees.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground">
-              Belum ada orang yang terhubung ke node ini.
+              {t('wf.org.chart.peopleEmpty')}
             </div>
           ) : (
             <div className="space-y-3">
@@ -422,6 +426,7 @@ function PeopleDialog({
 }
 
 export function OrganizationChartPage() {
+  const { t } = useI18n();
   const [company, setCompany] = useState<Company | null>(null);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [hierarchy, setHierarchy] = useState<Department[]>([]);
@@ -465,11 +470,11 @@ export function OrganizationChartPage() {
       setPositions(positionData);
     } catch (error) {
       console.error('Failed to load organization chart:', error);
-      toast.error('Gagal memuat struktur organisasi');
+      toast.error(t('wf.org.chart.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     fetchData();
@@ -477,8 +482,8 @@ export function OrganizationChartPage() {
 
   const tree = useMemo(() => {
     if (!company) return null;
-    return buildOrgChartTree(company, divisions, hierarchy, positions);
-  }, [company, divisions, hierarchy, positions]);
+    return buildOrgChartTree(company, divisions, hierarchy, positions, t);
+  }, [company, divisions, hierarchy, positions, t]);
 
   const filteredTree = useMemo(() => {
     if (!tree) return null;
@@ -521,8 +526,13 @@ export function OrganizationChartPage() {
     setCollapsedIds(ids);
   };
 
-  const handleSelectNode = useCallback(async (node: OrgChartNode) => {
+  // Klik node hanya memilih (panel detail); daftar karyawan dibuka eksplisit
+  // lewat tombol di panel supaya modal tidak menyergap setiap klik.
+  const handleSelectNode = useCallback((node: OrgChartNode) => {
     setSelectedNode(node);
+  }, []);
+
+  const handleShowPeople = useCallback(async (node: OrgChartNode) => {
     setPeopleNode(node);
     setPeopleDialogOpen(true);
     setPeopleLoading(true);
@@ -586,11 +596,11 @@ export function OrganizationChartPage() {
       setPeopleTotal(result.total || result.data.length);
     } catch (error) {
       console.error('Failed to load people for node:', error);
-      toast.error('Gagal memuat daftar orang');
+      toast.error(t('wf.org.chart.peopleLoadFailed'));
     } finally {
       setPeopleLoading(false);
     }
-  }, [companyId, flattenedDepartments]);
+  }, [companyId, flattenedDepartments, t]);
 
   const stats = useMemo(() => ({
     divisions: divisions.length,
@@ -602,19 +612,19 @@ export function OrganizationChartPage() {
   return (
     <div>
       <PageHeader
-        title="Organization Chart"
-        description="Visualisasi struktur organisasi yang interaktif per company aktif."
+        title={t('wf.org.chart.title')}
+        description={t('wf.org.chart.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button variant="outline" size="sm" onClick={handleExpandAll} disabled={!tree}>
-              Expand All
+              {t('wf.org.chart.expandAll')}
             </Button>
             <Button variant="outline" size="sm" onClick={handleCollapseAll} disabled={!tree}>
-              Collapse All
+              {t('wf.org.chart.collapseAll')}
             </Button>
           </>
         }
@@ -622,19 +632,19 @@ export function OrganizationChartPage() {
 
       <div className="mb-4 grid gap-4 md:grid-cols-4">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Divisions</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('wf.org.chart.stats.divisions')}</p>
           <p className="mt-2 text-2xl font-semibold">{stats.divisions}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Top Departments</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('wf.org.chart.stats.topDepartments')}</p>
           <p className="mt-2 text-2xl font-semibold">{stats.topDepartments}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Positions</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('wf.org.chart.stats.positions')}</p>
           <p className="mt-2 text-2xl font-semibold">{stats.positions}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Company</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('wf.org.chart.stats.company')}</p>
           <p className="mt-2 truncate text-sm font-semibold">{company?.name || '-'}</p>
         </div>
       </div>
@@ -646,7 +656,7 @@ export function OrganizationChartPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="pl-9"
-            placeholder="Cari division, department, position, atau lead"
+            placeholder={t('wf.org.chart.searchPlaceholder')}
           />
         </div>
         
@@ -654,17 +664,17 @@ export function OrganizationChartPage() {
 
       {!companyId ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          Company aktif belum tersedia. Pilih company dulu untuk melihat struktur organisasi.
+          {t('wf.org.chart.noActiveCompany')}
         </div>
       ) : loading ? (
         <div className="rounded-xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
-          Memuat organization chart...
+          {t('wf.org.chart.loading')}
         </div>
       ) : !filteredTree ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
           <Network size={36} className="mx-auto text-muted-foreground/40" />
           <p className="mt-3 text-sm text-muted-foreground">
-            {search ? 'Tidak ada node yang cocok dengan pencarian.' : 'Belum ada struktur organisasi untuk company ini.'}
+            {search ? t('wf.org.chart.emptyFiltered') : t('wf.org.chart.emptyDefault')}
           </p>
         </div>
       ) : (
@@ -681,61 +691,96 @@ export function OrganizationChartPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-5">
+          <aside className="self-start rounded-card border border-border bg-card p-5 shadow-card xl:sticky xl:top-24">
             {selectedNode ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                    {selectedNode.type === 'company' ? <Building2 size={18} /> :
-                     selectedNode.type === 'division' ? <GitBranch size={18} /> :
-                     selectedNode.type === 'department' ? <Network size={18} /> :
-                     <Briefcase size={18} />}
+              <div key={selectedNode.id} className="animate-in fade-in slide-in-from-right-2 duration-200">
+                {/* Header: ikon tipe + label + nama + tutup */}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 flex-none items-center justify-center rounded-[14px] bg-accent text-primary">
+                    {selectedNode.type === 'company' ? <Building2 size={19} /> :
+                     selectedNode.type === 'division' ? <GitBranch size={19} /> :
+                     selectedNode.type === 'department' ? <Network size={19} /> :
+                     <Briefcase size={19} />}
                   </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      {DETAIL_LABELS[selectedNode.type]}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9.5px] font-semibold uppercase tracking-[1px] text-muted-foreground">
+                      {t(DETAIL_LABEL_KEYS[selectedNode.type])}
                     </p>
-                    <h3 className="text-base font-semibold">{selectedNode.label}</h3>
+                    <h3 className="text-balance text-base font-semibold leading-snug tracking-[-0.3px]">
+                      {selectedNode.label}
+                    </h3>
+                    {selectedNode.subtitle && (
+                      <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{selectedNode.subtitle}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNode(null)}
+                    aria-label={t('wf.org.chart.closeDetail')}
+                    className="flex h-7 w-7 flex-none items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {selectedNode.status && (
+                  <StatusChip tone={statusTone(selectedNode.status)} className="mt-3">
+                    {selectedNode.status === 'ACTIVE' ? t('common.active') : selectedNode.status}
+                  </StatusChip>
+                )}
+
+                {/* Statistik ringkas */}
+                <div className="mt-4 grid grid-cols-2 gap-2.5">
+                  <div className="rounded-2xl bg-secondary px-3.5 py-3">
+                    <p className="text-[10.5px] text-muted-foreground">{t('wf.org.chart.subUnits')}</p>
+                    <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.8px] tabular-nums">
+                      {selectedNode.children.length}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-secondary px-3.5 py-3">
+                    <p className="text-[10.5px] text-muted-foreground">{t('wf.org.chart.employees')}</p>
+                    <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.8px] tabular-nums">
+                      {typeof selectedNode.employeeCount === 'number' ? selectedNode.employeeCount : '—'}
+                    </p>
                   </div>
                 </div>
 
-                <div className="mt-5 space-y-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Identifier</p>
-                    <p className="mt-1 text-sm font-medium">{selectedNode.subtitle || '-'}</p>
+                {/* Pimpinan */}
+                <div className="mt-4 flex items-center gap-3 rounded-2xl bg-accent/60 px-3.5 py-3">
+                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                    {selectedNode.headName
+                      ? selectedNode.headName.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase()
+                      : <UserRound size={15} />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10.5px] text-muted-foreground">{t('wf.org.chart.leader')}</p>
+                    <p className="truncate text-sm font-medium">
+                      {selectedNode.headName || t('wf.org.chart.notAssigned')}
+                    </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Status</p>
-                    <p className="mt-1 text-sm font-medium">{selectedNode.status || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Lead / Head</p>
-                    <div className="mt-1 flex items-center gap-2 text-sm font-medium">
-                      <UserRound size={14} className="text-muted-foreground" />
-                      <span>{selectedNode.headName || '-'}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Direct Children</p>
-                    <div className="mt-1 flex items-center gap-2 text-sm font-medium">
-                      <Users size={14} className="text-muted-foreground" />
-                      <span>{selectedNode.children.length}</span>
-                    </div>
-                  </div>
-                  {typeof selectedNode.employeeCount === 'number' && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">People / Assigned</p>
-                      <p className="mt-1 text-sm font-medium">{selectedNode.employeeCount}</p>
-                    </div>
-                  )}
                 </div>
-              </>
+
+                <Button
+                  variant="outline"
+                  className="mt-4 w-full"
+                  onClick={() => void handleShowPeople(selectedNode)}
+                >
+                  <Users size={15} className="mr-2" />
+                  {t('wf.org.chart.viewEmployees')}
+                </Button>
+              </div>
             ) : (
-              <div className="flex h-full min-h-[240px] items-center justify-center text-center text-sm text-muted-foreground">
-                Klik node mana pun di chart untuk melihat detailnya.
+              <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2.5 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-secondary text-muted-foreground">
+                  <Network size={19} />
+                </span>
+                <p className="text-sm font-medium">{t('wf.org.chart.noneSelected')}</p>
+                <p className="max-w-[220px] text-xs text-muted-foreground">
+                  {t('wf.org.chart.noneSelectedHint')}
+                </p>
               </div>
             )}
-          </div>
+          </aside>
         </div>
       )}
 

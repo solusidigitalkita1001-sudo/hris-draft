@@ -61,3 +61,35 @@ describe('loadEnv (Task 0.1 env validation)', () => {
     },
   );
 });
+
+describe('production placeholder secret guard', () => {
+  const prodEnv: NodeJS.ProcessEnv = { ...validEnv, NODE_ENV: 'production' };
+
+  it.each([
+    ['JWT_ACCESS_SECRET', 'dev-access-secret-key-min-32-chars-long'],
+    ['JWT_REFRESH_SECRET', 'dev-refresh-secret-key-min-32-chars-long'],
+    ['SESSION_SECRET', 'your-session-secret-key-min-32-chars'],
+    ['CSRF_SECRET', 'your-csrf-secret-key-min-32-chars'],
+    ['ENCRYPTION_KEY', 'your-32-char-encryption-key-here-1234'],
+  ] as const)('rejects placeholder %s in production', (key, value) => {
+    expect(() => loadEnv({ ...prodEnv, [key]: value })).toThrow(new RegExp(key));
+  });
+
+  it('lists every offending secret at once', () => {
+    expect(() =>
+      loadEnv({
+        ...prodEnv,
+        JWT_ACCESS_SECRET: 'dev-access-secret-key-min-32-chars-long',
+        ENCRYPTION_KEY: 'your-32-char-encryption-key-here-1234',
+      })
+    ).toThrow(/JWT_ACCESS_SECRET[\s\S]*ENCRYPTION_KEY/);
+  });
+
+  it('still accepts dev placeholders outside production', () => {
+    expect(() => loadEnv({ ...validEnv, JWT_ACCESS_SECRET: 'dev-access-secret-key-min-32-chars-long' })).not.toThrow();
+  });
+
+  it('accepts strong secrets in production', () => {
+    expect(() => loadEnv(prodEnv)).not.toThrow();
+  });
+});

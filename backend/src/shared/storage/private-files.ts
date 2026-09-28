@@ -8,6 +8,8 @@ import { authorize, authorizeRole } from '@/shared/middleware/Authorize';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { administrationService } from '@/modules/administration/administration.service';
 import { ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
+import { LEAVE_ATTACHMENT_URL_PREFIX } from '@/shared/storage/leave-attachment-reference';
+import { PERMISSION_ATTACHMENT_URL_PREFIX } from '@/shared/storage/permission-attachment-reference';
 
 async function employeeScope(req: AuthenticatedRequest, resource: string) {
   const user = req.user;
@@ -47,6 +49,54 @@ privateFilesRouter.get('/receipts/:id', authorizeRole('GROUP_ADMIN', 'COMPANY_AD
     if (!pathname.startsWith(prefix)) throw new NotFoundError('Receipt not found');
     const relative = decodeURIComponent(pathname.slice(prefix.length));
     const file = await resolvePrivatePath(path.resolve('uploads/travel-expenses/receipts'), relative);
+    download(res, file, path.basename(file), next);
+  } catch (error) { next(error); }
+});
+
+privateFilesRouter.get('/leave-attachments/:id', authorize({ resource: 'leave', action: 'read' }), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const employee = await employeeScope(req, 'leave');
+    const user = req.user!;
+    const administersLeave = user.roles?.some(role => ['SUPER_ADMIN', 'GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(role));
+    const request = await prisma.leaveRequest.findFirst({
+      where: {
+        id: req.params.id as string, companyId: req.company!.id, deletedAt: null, employee,
+        OR: [
+          ...(user.employeeId ? [{ employeeId: user.employeeId }] : []),
+          ...(administersLeave ? [{ companyId: req.company!.id }] : []),
+        ],
+      },
+      select: { attachment: true },
+    });
+    if (!request?.attachment) throw new NotFoundError('Lampiran cuti tidak ditemukan');
+    const pathname = new URL(request.attachment, config.app.url).pathname;
+    if (!pathname.startsWith(LEAVE_ATTACHMENT_URL_PREFIX)) throw new NotFoundError('Lampiran cuti tidak ditemukan');
+    const relative = decodeURIComponent(pathname.slice(LEAVE_ATTACHMENT_URL_PREFIX.length));
+    const file = await resolvePrivatePath(path.resolve('uploads/leave/attachments'), relative);
+    download(res, file, path.basename(file), next);
+  } catch (error) { next(error); }
+});
+
+privateFilesRouter.get('/permission-attachments/:id', authorizeRole('GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER', 'EMPLOYEE'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const employee = await employeeScope(req, 'permission-request');
+    const user = req.user!;
+    const administersPermissions = user.roles?.some(role => ['SUPER_ADMIN', 'GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER'].includes(role));
+    const request = await prisma.permissionRequest.findFirst({
+      where: {
+        id: req.params.id as string, companyId: req.company!.id, employee,
+        OR: [
+          ...(user.employeeId ? [{ employeeId: user.employeeId }] : []),
+          ...(administersPermissions ? [{ companyId: req.company!.id }] : []),
+        ],
+      },
+      select: { attachment: true },
+    });
+    if (!request?.attachment) throw new NotFoundError('Lampiran izin tidak ditemukan');
+    const pathname = new URL(request.attachment, config.app.url).pathname;
+    if (!pathname.startsWith(PERMISSION_ATTACHMENT_URL_PREFIX)) throw new NotFoundError('Lampiran izin tidak ditemukan');
+    const relative = decodeURIComponent(pathname.slice(PERMISSION_ATTACHMENT_URL_PREFIX.length));
+    const file = await resolvePrivatePath(path.resolve('uploads/permission-requests/attachments'), relative);
     download(res, file, path.basename(file), next);
   } catch (error) { next(error); }
 });

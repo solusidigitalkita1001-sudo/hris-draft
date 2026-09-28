@@ -481,6 +481,75 @@ class EmployeeService {
   async deleteAttachment(employeeId: string, attachmentId: string): Promise<void> {
     await api.delete(`/employees/${employeeId}/attachments/${attachmentId}`);
   }
+
+  // ============================================================
+  // Matriks metode absensi per karyawan (khusus SUPER_ADMIN)
+  // ============================================================
+  async getAttendanceMethodMatrix(params: {
+    companyId: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: EmployeeAttendanceMethods[]; total: number; page: number; limit: number }> {
+    const response = await api.get('/employees/attendance-methods', { params });
+    const body = response.data;
+    return {
+      data: body.data,
+      total: body.meta?.total ?? body.total ?? body.data.length,
+      page: body.meta?.page ?? params.page ?? 1,
+      limit: body.meta?.limit ?? params.limit ?? 20,
+    };
+  }
+
+  async updateAttendanceMethods(
+    employeeId: string,
+    flags: Partial<Pick<EmployeeAttendanceMethods, 'allowFingerprint' | 'allowFaceRecognition' | 'allowMobileGps'>>
+  ): Promise<EmployeeAttendanceMethods> {
+    const response = await api.patch(`/employees/${employeeId}/attendance-methods`, flags);
+    return response.data.data;
+  }
+
+  // ============================================================
+  // Reporting line (self-service): atasan langsung user saat ini
+  // ============================================================
+  async getMyReportingLine(): Promise<MyReportingLine> {
+    const response = await api.get('/employees/me/reporting-line');
+    return response.data.data;
+  }
+}
+
+export interface EmployeeAttendanceMethods {
+  id: string;
+  employeeNumber: string;
+  fullName: string;
+  departmentName: string | null;
+  positionName: string | null;
+  allowFingerprint: boolean;
+  allowFaceRecognition: boolean;
+  allowMobileGps: boolean;
+}
+
+export interface ReportingLinePerson {
+  id: string;
+  employeeNumber: string;
+  fullName: string;
+  email?: string;
+  avatar?: string | null;
+  position?: { id: string; name: string } | null;
+  department?: { id: string; name: string } | null;
+}
+
+export interface MyReportingLine {
+  source: 'POSITION_REPORTS_TO';
+  employee: {
+    id: string;
+    employeeNumber: string;
+    fullName: string;
+    position: { id: string; name: string } | null;
+  };
+  reportsToPosition: { id: string; name: string } | null;
+  primarySupervisor: ReportingLinePerson | null;
+  alternateSupervisors: ReportingLinePerson[];
 }
 
 export const employeeService = new EmployeeService();

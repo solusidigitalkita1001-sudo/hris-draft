@@ -43,7 +43,8 @@ describe('daily activity list company context', () => {
     }, () => controller.listRequests(req, res, next));
 
     expect(dailyActivityService.findAll).toHaveBeenCalledWith('company-a', req.query);
-    expect(json).toHaveBeenCalledWith({ success: true, data: [] });
+    // Every success response carries the standard envelope's message.
+    expect(json).toHaveBeenCalledWith({ success: true, message: 'Success', data: [] });
     expect(next).not.toHaveBeenCalled();
   });
 });

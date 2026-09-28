@@ -12,7 +12,18 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   late_deduction_daily_cap_percent: '10',
   absence_deduction_daily_basic_percent: '100',
   attendance_default_working_days_per_month: '22',
+  attendance_workweek_days: '5',
 };
+
+const WORKWEEK_DAYS_KEY = 'attendance_workweek_days';
+
+/**
+ * PP 35/2021 hanya mengenal pola 5 atau 6 hari kerja/minggu untuk band upah
+ * lembur hari libur; nilai lain jatuh ke 5 (default konservatif).
+ */
+export function parseWorkweekDays(raw: string): 5 | 6 {
+  return Number(raw) === 6 ? 6 : 5;
+}
 
 const ABSENCE_DEDUCTION_KEY = 'absence_deduction_daily_basic_percent';
 const LATE_DEDUCTION_ENABLED = 'late_deduction_enabled';
@@ -141,6 +152,17 @@ export class CompanySettingsService {
       absenceDailyPercentOfBasic: Number.isFinite(absence) && absence >= 0 && absence <= 500 ? absence : Number(DEFAULT_COMPANY_SETTINGS[ABSENCE_DEDUCTION_KEY]),
       defaultWorkingDaysPerMonth: Number.isFinite(wd) && wd >= 1 && wd <= 31 ? wd : Number(DEFAULT_COMPANY_SETTINGS['attendance_default_working_days_per_month']),
     };
+  }
+
+  /**
+   * Jumlah hari kerja per minggu (5 | 6) untuk band lembur PP 35/2021.
+   * Dipakai payroll run & EWA agar tenant 6-hari-kerja dibayar dengan band
+   * hari libur yang benar (jam 1–7 @2x, jam-8 @3x, jam-9+ @4x).
+   */
+  async getWorkweekDays(explicitCompanyId?: string, database: Prisma.TransactionClient = prisma): Promise<5 | 6> {
+    const companyId = this.resolveCompanyIdWithPermission(explicitCompanyId);
+    const raw = await this.readRawKeyOrFallback(WORKWEEK_DAYS_KEY, companyId, database);
+    return parseWorkweekDays(raw);
   }
 
   // ==================== Internal Permission Resolver ====================

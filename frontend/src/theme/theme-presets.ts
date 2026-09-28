@@ -1,10 +1,4 @@
-export type ThemePreset =
-  | 'light'
-  | 'dark'
-  | 'ocean'
-  | 'forest'
-  | 'sunset'
-  | 'midnight';
+export type ThemePreset = 'light' | 'dark';
 
 export interface ThemePresetOption {
   id: ThemePreset;
@@ -20,42 +14,14 @@ export const themePresets: ThemePresetOption[] = [
     name: 'Light',
     description: 'Bersih dan netral untuk kerja harian.',
     isDark: false,
-    preview: ['#ffffff', '#eff6ff', '#2563eb'],
+    preview: ['#F3F4F6', '#FFFFFF', '#315B8C'],
   },
   {
     id: 'dark',
     name: 'Dark',
     description: 'Kontras nyaman untuk fokus malam hari.',
     isDark: true,
-    preview: ['#111827', '#1f2937', '#f97316'],
-  },
-  {
-    id: 'ocean',
-    name: 'Ocean',
-    description: 'Nuansa biru lembut dan modern.',
-    isDark: false,
-    preview: ['#f8fbff', '#dbeafe', '#0284c7'],
-  },
-  {
-    id: 'forest',
-    name: 'Forest',
-    description: 'Hijau tenang untuk nuansa natural.',
-    isDark: false,
-    preview: ['#f7fcf9', '#dcfce7', '#059669'],
-  },
-  {
-    id: 'sunset',
-    name: 'Sunset',
-    description: 'Gelap hangat dengan aksen amber.',
-    isDark: true,
-    preview: ['#1c1917', '#292524', '#f59e0b'],
-  },
-  {
-    id: 'midnight',
-    name: 'Midnight',
-    description: 'Gelap dingin dengan aksen violet.',
-    isDark: true,
-    preview: ['#0f172a', '#1e1b4b', '#8b5cf6'],
+    preview: ['#121A28', '#1A2434', '#8FB4DC'],
   },
 ];
 

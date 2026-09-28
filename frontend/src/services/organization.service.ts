@@ -32,7 +32,13 @@ export interface Branch {
   attendancePolicy?: BranchAttendancePolicy | null;
 }
 
-export type AttendancePolicyMethod = 'FINGERPRINT' | 'MOBILE_GPS' | 'BOTH' | 'MANUAL';
+export type AttendancePolicyMethod =
+  | 'FINGERPRINT'
+  | 'MOBILE_GPS'
+  | 'BOTH'
+  | 'MANUAL'
+  | 'FACE_RECOGNITION'
+  | 'FACE_GPS';
 export type OutsideRadiusAction = 'REJECT' | 'FLAG' | 'REVIEW';
 
 export interface BranchAttendancePolicy {

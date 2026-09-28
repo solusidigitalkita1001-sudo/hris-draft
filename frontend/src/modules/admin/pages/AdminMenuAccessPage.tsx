@@ -23,6 +23,7 @@ import {
 import { rbacService, type Role } from '@/services/rbac.service';
 import { useCompanyStore } from '@/stores/company.store';
 import { cn } from '@/utils/cn';
+import { useI18n } from '@/i18n/provider';
 
 type MenuRowState = Record<string, MenuAccessType>;
 
@@ -35,6 +36,7 @@ function messageFromError(error: unknown, fallback: string) {
 }
 
 export function AdminMenuAccessPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
   const [roles, setRoles] = useState<Role[]>([]);
@@ -83,10 +85,11 @@ export function AdminMenuAccessPage() {
     } catch (error) {
       setRoles([]);
       setRoleCode('');
-      setLoadError(messageFromError(error, 'Role tidak dapat dimuat. Periksa koneksi lalu coba lagi.'));
+      setLoadError(messageFromError(error, t('adm.menuAccess.rolesLoadFailed')));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t hanya untuk pesan error; fetch mengikuti company aktif
   }, [companyId]);
 
   const fetchAccess = useCallback(async () => {
@@ -102,10 +105,11 @@ export function AdminMenuAccessPage() {
       setRowState(next);
       setSavedState(next);
     } catch (error) {
-      setLoadError(messageFromError(error, 'Menu access tidak dapat dimuat. Perubahan belum dilakukan.'));
+      setLoadError(messageFromError(error, t('adm.menuAccess.accessLoadFailed')));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t hanya untuk pesan error; fetch mengikuti company & role
   }, [companyId, roleCode]);
 
   useEffect(() => { void fetchRoles(); }, [fetchRoles]);
@@ -118,7 +122,7 @@ export function AdminMenuAccessPage() {
   }, [isDirty]);
 
   const handleRoleChange = (nextRole: string) => {
-    if (isDirty && !window.confirm('Perubahan menu belum disimpan. Pindah role dan buang perubahan?')) return;
+    if (isDirty && !window.confirm(t('adm.menuAccess.unsavedSwitch'))) return;
     setRoleCode(nextRole);
   };
 
@@ -132,9 +136,9 @@ export function AdminMenuAccessPage() {
       }));
       await administrationService.bulkUpsertRoleMenuAccess({ companyId, roleCode, items });
       setSavedState({ ...rowState });
-      toast.success(`Menu access ${selectedRole?.name ?? roleCode} berhasil disimpan`);
+      toast.success(t('adm.menuAccess.saveSuccess', { role: selectedRole?.name ?? roleCode }));
     } catch (error) {
-      toast.error(messageFromError(error, 'Menu access gagal disimpan. Coba lagi.'));
+      toast.error(messageFromError(error, t('adm.menuAccess.saveFailed')));
     } finally {
       setSaving(false);
     }
@@ -173,17 +177,17 @@ export function AdminMenuAccessPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Menu Access"
-        description="Atur menu yang terlihat untuk setiap role pada company aktif. Permission API tetap menjadi lapisan otorisasi utama."
+        title={t('adm.menuAccess.title')}
+        description={t('adm.menuAccess.description')}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => void fetchAccess()} disabled={loading || !roleCode}>
               <RefreshCw size={16} className={cn('mr-2', loading && 'animate-spin')} />
-              Muat ulang
+              {t('adm.common.reload')}
             </Button>
             <Button size="sm" onClick={() => void handleSave()} disabled={saving || loading || !isDirty}>
               <Save size={16} className="mr-2" />
-              {saving ? 'Menyimpan…' : isDirty ? 'Simpan perubahan' : 'Tersimpan'}
+              {saving ? t('adm.common.saving') : isDirty ? t('adm.common.saveChanges') : t('adm.common.saved')}
             </Button>
           </div>
         )}
@@ -192,37 +196,37 @@ export function AdminMenuAccessPage() {
       <section className="rounded-2xl bg-card p-5 shadow-sm" aria-labelledby="menu-access-context">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
           <div className="min-w-0">
-            <label id="menu-access-context" className="mb-1.5 block text-sm font-medium">Role</label>
+            <label id="menu-access-context" className="mb-1.5 block text-sm font-medium">{t('adm.common.role')}</label>
             <Select2
               value={roleCode}
               onValueChange={handleRoleChange}
               options={roleOptions}
-              placeholder={loading ? 'Memuat role…' : 'Pilih role'}
+              placeholder={loading ? t('adm.common.loadingRoles') : t('adm.common.selectRole')}
               disabled={loading || roleOptions.length === 0}
             />
             <p className="mt-1.5 text-sm text-muted-foreground">
-              {selectedRole?.description || 'Role aktif dari konfigurasi RBAC company ini.'}
+              {selectedRole?.description || t('adm.menuAccess.roleFallbackDesc')}
             </p>
           </div>
           <div className="min-w-0">
-            <label htmlFor="menu-access-search" className="mb-1.5 block text-sm font-medium">Cari menu</label>
+            <label htmlFor="menu-access-search" className="mb-1.5 block text-sm font-medium">{t('adm.menuAccess.searchMenu')}</label>
             <div className="relative">
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="menu-access-search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Nama, kelompok, atau path"
+                placeholder={t('adm.menuAccess.searchMenuPlaceholder')}
                 className="pl-9"
               />
             </div>
           </div>
           <div className="flex min-h-10 items-center gap-4 text-sm" aria-live="polite">
             <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
-              <Eye size={16} /> {stats.visible} terlihat
+              <Eye size={16} /> {t('adm.menuAccess.visibleCount', { count: stats.visible })}
             </span>
             <span className="inline-flex items-center gap-1.5 text-rose-700 dark:text-rose-300">
-              <EyeOff size={16} /> {stats.hidden} disembunyikan
+              <EyeOff size={16} /> {t('adm.menuAccess.hiddenCount', { count: stats.hidden })}
             </span>
           </div>
         </div>
@@ -234,16 +238,16 @@ export function AdminMenuAccessPage() {
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             <span>{loadError}</span>
           </span>
-          <Button variant="outline" size="sm" onClick={() => void fetchRoles()}>Coba lagi</Button>
+          <Button variant="outline" size="sm" onClick={() => void fetchRoles()}>{t('adm.common.retry')}</Button>
         </div>
       )}
 
       {!loadError && !loading && roles.length === 0 && (
         <div className="rounded-2xl bg-card px-6 py-12 text-center shadow-sm">
           <ShieldCheck className="mx-auto mb-3 text-muted-foreground" size={28} />
-          <h2 className="text-lg font-semibold">Belum ada role aktif</h2>
+          <h2 className="text-lg font-semibold">{t('adm.menuAccess.noActiveRole')}</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-            Buat role pada halaman Roles & Permissions sebelum mengatur visibilitas menu.
+            {t('adm.menuAccess.noActiveRoleDesc')}
           </p>
         </div>
       )}
@@ -252,13 +256,13 @@ export function AdminMenuAccessPage() {
         <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
           {loading ? (
             <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground">
-              <RefreshCw size={17} className="animate-spin" /> Memuat konfigurasi menu…
+              <RefreshCw size={17} className="animate-spin" /> {t('adm.menuAccess.loadingMenus')}
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <Search className="mx-auto mb-3 text-muted-foreground" size={26} />
-              <h2 className="font-semibold">Menu tidak ditemukan</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Coba kata kunci lain atau hapus pencarian.</p>
+              <h2 className="font-semibold">{t('adm.menuAccess.menuNotFound')}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{t('adm.menuAccess.menuNotFoundDesc')}</p>
             </div>
           ) : (
             Object.entries(groupedItems).map(([group, items]) => (
@@ -266,11 +270,11 @@ export function AdminMenuAccessPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/45 px-4 py-3 sm:px-5">
                   <div>
                     <h2 id={`menu-group-${group}`} className="font-semibold">{group}</h2>
-                    <p className="text-sm text-muted-foreground">{items.length} menu pada kelompok ini</p>
+                    <p className="text-sm text-muted-foreground">{t('adm.menuAccess.groupCount', { count: items.length })}</p>
                   </div>
-                  <div className="flex items-center gap-1" aria-label={`Aksi massal ${group}`}>
-                    <Button variant="ghost" size="sm" onClick={() => setGroupAccess(items, 'ALLOW')}>Tampilkan semua</Button>
-                    <Button variant="ghost" size="sm" onClick={() => setGroupAccess(items, 'DENY')}>Sembunyikan semua</Button>
+                  <div className="flex items-center gap-1" aria-label={t('adm.menuAccess.bulkAria', { group })}>
+                    <Button variant="ghost" size="sm" onClick={() => setGroupAccess(items, 'ALLOW')}>{t('adm.menuAccess.showAll')}</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setGroupAccess(items, 'DENY')}>{t('adm.menuAccess.hideAll')}</Button>
                   </div>
                 </div>
                 <div className="divide-y divide-border">
@@ -282,7 +286,7 @@ export function AdminMenuAccessPage() {
                           <p className="font-medium text-foreground">{item.label}</p>
                           <code className="mt-1 block truncate text-xs text-muted-foreground">{item.path}</code>
                         </div>
-                        <div role="radiogroup" aria-label={`Visibilitas ${item.label}`} className="grid grid-cols-2 gap-2">
+                        <div role="radiogroup" aria-label={t('adm.menuAccess.visibilityAria', { label: item.label })} className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
                             role="radio"
@@ -295,7 +299,7 @@ export function AdminMenuAccessPage() {
                                 : 'bg-muted text-muted-foreground hover:text-foreground',
                             )}
                           >
-                            <CheckCircle2 size={16} /> Terlihat
+                            <CheckCircle2 size={16} /> {t('adm.menuAccess.visible')}
                           </button>
                           <button
                             type="button"
@@ -309,7 +313,7 @@ export function AdminMenuAccessPage() {
                                 : 'bg-muted text-muted-foreground hover:text-foreground',
                             )}
                           >
-                            <EyeOff size={16} /> Disembunyikan
+                            <EyeOff size={16} /> {t('adm.menuAccess.hidden')}
                           </button>
                         </div>
                       </div>

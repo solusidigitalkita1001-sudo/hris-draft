@@ -10,6 +10,7 @@ export interface PermissionRequest {
   duration: number;
   reason: string;
   status: RequestStatus;
+  attachment?: string | null;
   notes?: string | null;
   approverId?: string | null;
   approvedAt?: string | null;
@@ -41,6 +42,14 @@ export const PERMISSION_TYPE_LABELS: Record<PermissionType, string> = {
   OTHER: 'Lainnya',
 };
 
+export interface UploadedPermissionAttachment {
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+}
+
 export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   PENDING: 'Pending',
   APPROVED: 'Disetujui',
@@ -71,6 +80,16 @@ class PermissionRequestService {
   async create(data: Partial<PermissionRequest>) {
     const r = await api.post('/permission-requests', data);
     return r.data.data as PermissionRequest;
+  }
+
+  /** Unggah lampiran izin (POST /permission-requests/attachments); URL hasilnya dikirim ke field attachment saat create. */
+  async uploadAttachment(file: File): Promise<UploadedPermissionAttachment> {
+    const formData = new FormData();
+    formData.append('attachment', file);
+    const r = await api.post('/permission-requests/attachments', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return r.data.data;
   }
 
   async cancel(id: string, employeeId: string) {

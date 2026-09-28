@@ -5,6 +5,12 @@ import { assertPayrollRangeOpen } from '@/shared/payroll/payroll-period-guard';
 import { logger } from '@/shared/logger/WinstonLogger';
 import prisma from '@/shared/database/prisma';
 import { calculateOpeningBalance } from '@/shared/leave/accrual';
+import { leaveNeedsAttachment } from '@/shared/leave/attachment-policy';
+import {
+  evaluateLeaveBalance,
+  leaveBalanceViolationMessage,
+  leaveBalanceYear,
+} from '@/shared/leave/balance-policy';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
@@ -74,6 +80,12 @@ export class LeaveService {
       throw new BadRequestError('Tanggal selesai cuti harus setelah atau sama dengan tanggal mulai');
     }
 
+    // Kebijakan H-7: pengajuan kurang dari 7 hari kalender sebelum tanggal
+    // mulai wajib menyertakan lampiran (aturan murni di shared/leave/attachment-policy).
+    if (leaveNeedsAttachment(start, new Date()) && !data.attachment) {
+      throw new BadRequestError('Pengajuan cuti kurang dari H-7 wajib menyertakan lampiran');
+    }
+
     // LeaveType rules (checklist §13): per-request cap and attachment flag.
     const leaveType = await prisma.leaveType.findFirst({
       where: { id: data.leaveTypeId, companyId: data.companyId, deletedAt: null },
@@ -105,10 +117,33 @@ export class LeaveService {
       throw new ConflictError(`Sudah ada pengajuan cuti ${overlap.status} yang tumpang tindih pada rentang tanggal tersebut`);
     }
 
-    const balances = await leaveRepository.findLeaveBalances(data.employeeId);
-    const balance = balances.find((b) => b.leaveTypeId === data.leaveTypeId);
-    if (balance && balance.remainingDays <= 0) {
-      throw new BadRequestError('Insufficient leave balance');
+    // Saldo divalidasi SEBELUM request dibuat. Sebelumnya cek ini hanya menolak
+    // saat baris saldo ADA dan sudah 0, sehingga jenis cuti tanpa alokasi sama
+    // sekali (mis. Sick Leave yang tidak diseed) lolos masuk lalu baru ditolak
+    // di meja approver oleh finalizeApprovalEffects.
+    //
+    // Berlaku untuk SEMUA jenis cuti — termasuk yang isPaid=false — karena
+    // finalizeApprovalEffects juga mewajibkan baris saldo ada dan mencukupi
+    // untuk semua jenis. Melonggarkan aturan di sini hanya akan mengembalikan
+    // bug yang sama pada jenis yang dilonggarkan.
+    const balanceYear = leaveBalanceYear(start);
+    const balance = await prisma.leaveBalance.findFirst({
+      where: {
+        companyId: data.companyId,
+        employeeId: data.employeeId,
+        leaveTypeId: data.leaveTypeId,
+        year: balanceYear,
+      },
+      select: { remainingDays: true },
+    });
+    const balanceViolation = evaluateLeaveBalance({
+      leaveTypeName: leaveType.name,
+      year: balanceYear,
+      requestedDays: computedTotalDays,
+      remainingDays: balance ? Number(balance.remainingDays) : null,
+    });
+    if (balanceViolation) {
+      throw new BadRequestError(leaveBalanceViolationMessage(balanceViolation, 'REQUESTER'));
     }
 
     const requesterId = currentUser?.id ?? undefined;
@@ -117,7 +152,9 @@ export class LeaveService {
     // atomicity is achieved by compensating (deleting the fresh request) when
     // the workflow cannot start — an approval-less request is unapprovable.
     {
-      const request = await leaveRepository.createLeaveRequest(data);
+      // totalDays yang sudah divalidasi (cap per jenis + saldo) diteruskan agar
+      // angka yang tersimpan persis angka yang diuji, bukan hasil hitung ulang.
+      const request = await leaveRepository.createLeaveRequest(data, computedTotalDays);
 
       try {
         const templateId = await this.resolveDefaultWorkflowTemplateId(data.companyId);
@@ -210,6 +247,51 @@ export class LeaveService {
     }
 
     throw new BadRequestError(`Pengajuan cuti berstatus ${request.status} tidak dapat dibatalkan`);
+  }
+
+  /**
+   * Memastikan saldo cuti mencukupi tanpa mengubah apa pun. Dipakai sebagai
+   * pra-syarat approve agar kegagalan saldo tidak menyisakan workflow yang
+   * sudah disetujui di atas dokumen yang masih menunggu.
+   */
+  async assertLeaveBalanceSufficient(leaveRequestId: string) {
+    const request = await prisma.leaveRequest.findFirst({
+      where: { id: leaveRequestId, deletedAt: null },
+      select: {
+        companyId: true,
+        employeeId: true,
+        leaveTypeId: true,
+        totalDays: true,
+        startDate: true,
+        status: true,
+        leaveType: { select: { name: true } },
+      },
+    });
+    if (!request) throw new NotFoundError('Leave request not found');
+    if (request.status === 'APPROVED') return;
+
+    const year = leaveBalanceYear(new Date(request.startDate));
+    const balance = await prisma.leaveBalance.findFirst({
+      where: {
+        companyId: request.companyId,
+        employeeId: request.employeeId,
+        leaveTypeId: request.leaveTypeId,
+        year,
+      },
+      select: { remainingDays: true },
+    });
+
+    // Aturan yang sama dipakai saat pengajuan dibuat (createLeaveRequest),
+    // hanya beda audiens pesan — supaya kedua gerbang tidak bisa berbeda.
+    const violation = evaluateLeaveBalance({
+      leaveTypeName: request.leaveType?.name ?? 'cuti',
+      year,
+      requestedDays: Number(request.totalDays),
+      remainingDays: balance ? Number(balance.remainingDays) : null,
+    });
+    if (violation) {
+      throw new BadRequestError(leaveBalanceViolationMessage(violation, 'APPROVER'));
+    }
   }
 
   async finalizeApprovalEffects(leaveRequestId: string) {
@@ -315,6 +397,14 @@ export class LeaveService {
           `Self approval not allowed: you cannot ${action.action.toLowerCase()} your own leave request`
         );
       }
+    }
+
+    // Saldo divalidasi SEBELUM transisi engine. Bila dicek hanya saat
+    // finalisasi, transisi sudah ter-commit lebih dulu sehingga instance
+    // berakhir APPROVED sementara dokumennya tetap PENDING — dan langkah
+    // approval tidak bisa diulang, jadi pengajuan macet selamanya.
+    if (action.action === 'APPROVE') {
+      await this.assertLeaveBalanceSufficient(leaveRequestId);
     }
 
     const updatedInstance = await workflowEngineRepository.applyAction(

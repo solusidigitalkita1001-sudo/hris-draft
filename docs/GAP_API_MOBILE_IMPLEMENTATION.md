@@ -1,7 +1,7 @@
 # Implementasi Gap API Mobile
 
 Tanggal implementasi: 17 September 2026
-Verifikasi terakhir: 20 September 2026
+Verifikasi terakhir: 28 September 2026
 
 Dokumen ini mencatat bagian `gap_api_mobile.md` yang dapat ditutup langsung
 di source backend tanpa menebak keputusan produk, credential, atau konfigurasi
@@ -122,3 +122,7 @@ baru:
   payload invalid sesuai kontrak, 2 endpoint aktif tanpa positive fixture, dan
   2 operasi terblokir karena kalender/shift akun uji. Acceptance HTTPS, provider
   push/email, dan perangkat nyata tetap belum selesai.
+- Smoke 28 September 2026 terhadap stack developer lokal: 30 dari 30 check lulus
+  (`0 failed, 0 blocked`). Dua operasi yang dulu `BLOCKED` kini punya fixture
+  karena seed mengalokasikan semua tipe cuti dan menambatkan tanggal absensi ke
+  UTC. Ini `PASS lokal`, bukan bukti deployment — target masih HTTP localhost.

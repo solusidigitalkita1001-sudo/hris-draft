@@ -92,6 +92,12 @@ const COMPANY_SCOPED_MODELS = new Set([
   'JobApplication',
   'Interview',
   'Announcement',
+  // Statutory payroll reference tables: company overrides plus platform
+  // fallback rows. Their loader hand-filters company already; the middleware
+  // makes another tenant's overrides unreachable even if a call site forgets.
+  'TaxBracket',
+  'PtkpTable',
+  'BpjsReference',
   'Survey',
   'Employee',
   'EmployeeCompanyAssignment',

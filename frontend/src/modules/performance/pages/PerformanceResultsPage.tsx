@@ -16,6 +16,58 @@ import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { AlertCircle, BellRing, Calculator, CheckCircle2, Gauge, RefreshCw, RotateCcw, Send, Trophy } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+const RESULT_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  CALCULATED: 'perf.resultStatus.calculated',
+  CALIBRATION_IN_PROGRESS: 'perf.resultStatus.calibrationInProgress',
+  CALIBRATED: 'perf.resultStatus.calibrated',
+  FINALIZED: 'perf.resultStatus.finalized',
+  PUBLISHED: 'perf.resultStatus.published',
+};
+
+const SESSION_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.sessionStatus.draft',
+  OPEN: 'perf.sessionStatus.open',
+  CLOSED: 'perf.sessionStatus.closed',
+  FINALIZED: 'perf.sessionStatus.finalized',
+};
+
+const DISPUTE_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  OPEN: 'perf.disputeStatus.open',
+  RESPONDED: 'perf.disputeStatus.responded',
+  RESOLVED: 'perf.disputeStatus.resolved',
+  REJECTED: 'perf.disputeStatus.rejected',
+  CLOSED: 'perf.disputeStatus.closed',
+};
+
+const DEV_REC_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  PENDING: 'perf.devRecStatus.pending',
+  ASSIGNED: 'perf.devRecStatus.assigned',
+  ENROLLED: 'perf.devRecStatus.enrolled',
+  COMPLETED: 'perf.devRecStatus.completed',
+  DISMISSED: 'perf.devRecStatus.dismissed',
+};
+
+const DEV_REC_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  TRAINING: 'perf.devRecType.training',
+  DEVELOPMENT_PLAN: 'perf.devRecType.developmentPlan',
+  SUCCESSION: 'perf.devRecType.succession',
+  COMPENSATION: 'perf.devRecType.compensation',
+};
+
+const REMINDER_TARGET_LABEL_KEYS: Record<string, TranslationKey> = {
+  ALL: 'perf.reminderTarget.all',
+  UNACKNOWLEDGED_RESULTS: 'perf.reminderTarget.unacknowledgedResults',
+  OPEN_DISPUTES: 'perf.reminderTarget.openDisputes',
+};
+
+const VISIBILITY_LABEL_KEYS: Record<string, TranslationKey> = {
+  INTERNAL: 'perf.visibility.internal',
+  RESTRICTED: 'perf.visibility.restricted',
+  PUBLIC: 'perf.visibility.public',
+};
 
 const RESULT_STATUS_STYLES: Record<string, string> = {
   CALCULATED: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
@@ -57,6 +109,7 @@ function toNumber(value?: string | number | null) {
 }
 
 export function PerformanceResultsPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
 
@@ -129,6 +182,22 @@ export function PerformanceResultsPage() {
     [periods]
   );
 
+  const reminderTargetOptions = useMemo(
+    () => (['ALL', 'UNACKNOWLEDGED_RESULTS', 'OPEN_DISPUTES'] as const).map((value) => ({
+      value,
+      label: t(REMINDER_TARGET_LABEL_KEYS[value]),
+    })),
+    [t]
+  );
+
+  const disputeStatusOptions = useMemo(
+    () => (['RESPONDED', 'RESOLVED', 'REJECTED', 'CLOSED'] as const).map((value) => ({
+      value,
+      label: t(DISPUTE_STATUS_LABEL_KEYS[value]),
+    })),
+    [t]
+  );
+
   const selectedResult = useMemo(
     () => results.find((result) => result.id === selectedResultId) ?? null,
     [results, selectedResultId]
@@ -198,11 +267,11 @@ export function PerformanceResultsPage() {
       setSelectedRecommendationId(nextRecommendationId);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal memuat result workspace'));
+      toast.error(apiErrorMessage(error, t('perf.results.loadWorkspaceFailed')));
     } finally {
       setWorkspaceLoading(false);
     }
-  }, [selectedResultId, selectedSessionId]);
+  }, [selectedResultId, selectedSessionId, t]);
 
   const loadBootstrap = useCallback(async () => {
     if (!companyId) {
@@ -236,11 +305,11 @@ export function PerformanceResultsPage() {
       setSelectedPeriodId(nextPeriodId);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal memuat data performance result'));
+      toast.error(apiErrorMessage(error, t('perf.results.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [companyId, selectedPeriodId]);
+  }, [companyId, selectedPeriodId, t]);
 
   useEffect(() => {
     void loadBootstrap();
@@ -327,7 +396,7 @@ export function PerformanceResultsPage() {
 
   const handleCalculate = useCallback(async () => {
     if (!selectedPeriodId) {
-      toast.error('Pilih period terlebih dahulu');
+      toast.error(t('perf.results.selectPeriodFirst'));
       return;
     }
 
@@ -336,23 +405,23 @@ export function PerformanceResultsPage() {
       const data = await performanceService.calculatePerformanceResults(selectedPeriodId);
       setResults(data);
       setSelectedResultId(data[0]?.id || '');
-      toast.success('Performance result berhasil dihitung');
+      toast.success(t('perf.results.calculateSuccess'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menghitung performance result'));
+      toast.error(apiErrorMessage(error, t('perf.results.calculateFailed')));
     } finally {
       setCalculating(false);
     }
-  }, [refreshWorkspace, selectedPeriodId]);
+  }, [refreshWorkspace, selectedPeriodId, t]);
 
   const handleCreateSession = useCallback(async () => {
     if (!selectedPeriodId) {
-      toast.error('Pilih period terlebih dahulu');
+      toast.error(t('perf.results.selectPeriodFirst'));
       return;
     }
     if (!sessionForm.name.trim()) {
-      toast.error('Nama session wajib diisi');
+      toast.error(t('perf.results.sessionNameRequired'));
       return;
     }
 
@@ -364,7 +433,7 @@ export function PerformanceResultsPage() {
         try {
           forcedDistribution = JSON.parse(rawForcedDistribution);
         } catch {
-          toast.error('Forced distribution harus valid JSON');
+          toast.error(t('perf.results.forcedDistributionInvalid'));
           setCreatingSession(false);
           return;
         }
@@ -377,19 +446,19 @@ export function PerformanceResultsPage() {
       });
       setSessionForm({ name: '', code: '', forcedDistribution: '', notes: '' });
       setSelectedSessionId(created.id);
-      toast.success('Calibration session berhasil dibuat');
+      toast.success(t('perf.results.sessionCreated'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal membuat calibration session'));
+      toast.error(apiErrorMessage(error, t('perf.results.sessionCreateFailed')));
     } finally {
       setCreatingSession(false);
     }
-  }, [refreshWorkspace, selectedPeriodId, sessionForm]);
+  }, [refreshWorkspace, selectedPeriodId, sessionForm, t]);
 
   const handlePublishResults = useCallback(async () => {
     if (!selectedPeriodId) {
-      toast.error('Pilih period terlebih dahulu');
+      toast.error(t('perf.results.selectPeriodFirst'));
       return;
     }
 
@@ -406,19 +475,19 @@ export function PerformanceResultsPage() {
       });
       setResults(data);
       setSelectedResultId(data[0]?.id || '');
-      toast.success('Performance result berhasil dipublish');
+      toast.success(t('perf.results.publishSuccess'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal publish performance result'));
+      toast.error(apiErrorMessage(error, t('perf.results.publishFailed')));
     } finally {
       setPublishing(false);
     }
-  }, [publishForm, refreshWorkspace, selectedPeriodId]);
+  }, [publishForm, refreshWorkspace, selectedPeriodId, t]);
 
   const handleApproveResults = useCallback(async () => {
     if (!selectedPeriodId) {
-      toast.error('Pilih period terlebih dahulu');
+      toast.error(t('perf.results.selectPeriodFirst'));
       return;
     }
 
@@ -429,19 +498,19 @@ export function PerformanceResultsPage() {
       });
       setResults(data);
       setSelectedResultId(data[0]?.id || '');
-      toast.success('Performance result berhasil final approved');
+      toast.success(t('perf.results.approveSuccess'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal final approve performance result'));
+      toast.error(apiErrorMessage(error, t('perf.results.approveFailed')));
     } finally {
       setApproving(false);
     }
-  }, [approvalNotes, refreshWorkspace, selectedPeriodId]);
+  }, [approvalNotes, refreshWorkspace, selectedPeriodId, t]);
 
   const handleSessionAction = useCallback(async (action: 'open' | 'close' | 'finalize') => {
     if (!selectedSession) {
-      toast.error('Pilih calibration session terlebih dahulu');
+      toast.error(t('perf.results.selectSessionFirst'));
       return;
     }
 
@@ -450,24 +519,30 @@ export function PerformanceResultsPage() {
       if (action === 'open') await performanceService.openCalibrationSession(selectedSession.id);
       if (action === 'close') await performanceService.closeCalibrationSession(selectedSession.id);
       if (action === 'finalize') await performanceService.finalizeCalibrationSession(selectedSession.id);
-      toast.success(`Calibration session berhasil di-${action}`);
+      toast.success(
+        action === 'open'
+          ? t('perf.results.sessionOpened')
+          : action === 'close'
+            ? t('perf.results.sessionClosed')
+            : t('perf.results.sessionFinalized')
+      );
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal memproses calibration session'));
+      toast.error(apiErrorMessage(error, t('perf.results.sessionActionFailed')));
     } finally {
       setActingSession(false);
     }
-  }, [refreshWorkspace, selectedSession]);
+  }, [refreshWorkspace, selectedSession, t]);
 
   const handleApplyDecision = useCallback(async () => {
     if (!selectedParticipant) {
-      toast.error('Pilih participant calibration terlebih dahulu');
+      toast.error(t('perf.results.selectParticipantFirst'));
       return;
     }
 
     if (!decisionForm.finalScore.trim() || !decisionForm.reason.trim()) {
-      toast.error('Final score dan reason wajib diisi');
+      toast.error(t('perf.results.decisionValidation'));
       return;
     }
 
@@ -477,24 +552,24 @@ export function PerformanceResultsPage() {
         finalScore: Number(decisionForm.finalScore),
         reason: decisionForm.reason.trim(),
       });
-      toast.success('Calibration decision berhasil disimpan');
+      toast.success(t('perf.results.decisionSaved'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menyimpan calibration decision'));
+      toast.error(apiErrorMessage(error, t('perf.results.decisionSaveFailed')));
     } finally {
       setSavingDecision(false);
     }
-  }, [decisionForm, refreshWorkspace, selectedParticipant]);
+  }, [decisionForm, refreshWorkspace, selectedParticipant, t]);
 
   const handleRespondDispute = useCallback(async () => {
     if (!selectedDispute) {
-      toast.error('Pilih dispute terlebih dahulu');
+      toast.error(t('perf.results.selectDisputeFirst'));
       return;
     }
 
     if (!disputeResponseForm.response.trim()) {
-      toast.error('Response dispute wajib diisi');
+      toast.error(t('perf.results.responseRequired'));
       return;
     }
 
@@ -504,24 +579,24 @@ export function PerformanceResultsPage() {
         response: disputeResponseForm.response.trim(),
         status: disputeResponseForm.status,
       });
-      toast.success('Response dispute berhasil disimpan');
+      toast.success(t('perf.results.responseSaved'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menyimpan response dispute'));
+      toast.error(apiErrorMessage(error, t('perf.results.responseSaveFailed')));
     } finally {
       setRespondingDispute(false);
     }
-  }, [disputeResponseForm, refreshWorkspace, selectedDispute]);
+  }, [disputeResponseForm, refreshWorkspace, selectedDispute, t]);
 
   const handleReopenResult = useCallback(async () => {
     if (!selectedResult) {
-      toast.error('Pilih result terlebih dahulu');
+      toast.error(t('perf.results.selectResultFirst'));
       return;
     }
 
     if (!reopenReason.trim()) {
-      toast.error('Reason reopen wajib diisi');
+      toast.error(t('perf.results.reopenReasonRequired'));
       return;
     }
 
@@ -530,20 +605,20 @@ export function PerformanceResultsPage() {
       await performanceService.reopenPerformanceResult(selectedResult.id, {
         reason: reopenReason.trim(),
       });
-      toast.success('Performance result berhasil dibuka ulang');
+      toast.success(t('perf.results.reopenSuccess'));
       setReopenReason('');
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal reopen performance result'));
+      toast.error(apiErrorMessage(error, t('perf.results.reopenFailed')));
     } finally {
       setReopening(false);
     }
-  }, [refreshWorkspace, reopenReason, selectedResult]);
+  }, [refreshWorkspace, reopenReason, selectedResult, t]);
 
   const handleSendReminders = useCallback(async () => {
     if (!selectedPeriodId) {
-      toast.error('Pilih period terlebih dahulu');
+      toast.error(t('perf.results.selectPeriodFirst'));
       return;
     }
 
@@ -553,19 +628,19 @@ export function PerformanceResultsPage() {
         target: reminderTarget,
         notes: reminderNotes.trim() || undefined,
       });
-      toast.success(`Reminder terkirim ke ${summary.notificationCount} notifikasi`);
+      toast.success(t('perf.results.remindersSent', { count: summary.notificationCount }));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal mengirim reminder'));
+      toast.error(apiErrorMessage(error, t('perf.results.remindersFailed')));
     } finally {
       setSendingReminders(false);
     }
-  }, [refreshWorkspace, reminderNotes, reminderTarget, selectedPeriodId]);
+  }, [refreshWorkspace, reminderNotes, reminderTarget, selectedPeriodId, t]);
 
   const handleSyncRecommendations = useCallback(async () => {
     if (!selectedPeriodId) {
-      toast.error('Pilih period terlebih dahulu');
+      toast.error(t('perf.results.selectPeriodFirst'));
       return;
     }
 
@@ -574,24 +649,24 @@ export function PerformanceResultsPage() {
       await performanceService.syncDevelopmentRecommendations(selectedPeriodId, {
         strategy: 'UPSERT_MISSING',
       });
-      toast.success('Development recommendation berhasil disinkronkan');
+      toast.success(t('perf.results.recommendationsSynced'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal sinkronisasi recommendation'));
+      toast.error(apiErrorMessage(error, t('perf.results.recommendationsSyncFailed')));
     } finally {
       setSyncingRecommendations(false);
     }
-  }, [refreshWorkspace, selectedPeriodId]);
+  }, [refreshWorkspace, selectedPeriodId, t]);
 
   const handleAssignRecommendation = useCallback(async () => {
     if (!selectedRecommendation) {
-      toast.error('Pilih recommendation terlebih dahulu');
+      toast.error(t('perf.results.selectRecommendationFirst'));
       return;
     }
 
     if (!recommendationCourseId) {
-      toast.error('Pilih course training');
+      toast.error(t('perf.results.selectCourse'));
       return;
     }
 
@@ -601,23 +676,23 @@ export function PerformanceResultsPage() {
         courseId: recommendationCourseId,
         notes: recommendationNotes.trim() || undefined,
       });
-      toast.success('Recommendation berhasil di-assign ke training');
+      toast.success(t('perf.results.recommendationAssigned'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal assign recommendation'));
+      toast.error(apiErrorMessage(error, t('perf.results.recommendationAssignFailed')));
     } finally {
       setAssigningRecommendation(false);
     }
-  }, [recommendationCourseId, recommendationNotes, refreshWorkspace, selectedRecommendation]);
+  }, [recommendationCourseId, recommendationNotes, refreshWorkspace, selectedRecommendation, t]);
 
   const handleUploadResultAttachment = useCallback(async () => {
     if (!selectedResult) {
-      toast.error('Pilih result terlebih dahulu');
+      toast.error(t('perf.results.selectResultFirst'));
       return;
     }
     if (!resultAttachmentFile) {
-      toast.error('Pilih file attachment');
+      toast.error(t('perf.results.selectAttachmentFile'));
       return;
     }
 
@@ -629,23 +704,23 @@ export function PerformanceResultsPage() {
         visibility: 'RESTRICTED',
       });
       setResultAttachmentFile(null);
-      toast.success('Attachment result berhasil diupload');
+      toast.success(t('perf.results.resultAttachmentUploaded'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal upload attachment result'));
+      toast.error(apiErrorMessage(error, t('perf.results.resultAttachmentFailed')));
     } finally {
       setUploadingResultAttachment(false);
     }
-  }, [refreshWorkspace, resultAttachmentFile, selectedResult]);
+  }, [refreshWorkspace, resultAttachmentFile, selectedResult, t]);
 
   const handleUploadDisputeAttachment = useCallback(async () => {
     if (!selectedDispute) {
-      toast.error('Pilih dispute terlebih dahulu');
+      toast.error(t('perf.results.selectDisputeFirst'));
       return;
     }
     if (!disputeAttachmentFile) {
-      toast.error('Pilih file attachment');
+      toast.error(t('perf.results.selectAttachmentFile'));
       return;
     }
 
@@ -657,24 +732,24 @@ export function PerformanceResultsPage() {
         visibility: 'RESTRICTED',
       });
       setDisputeAttachmentFile(null);
-      toast.success('Attachment dispute berhasil diupload');
+      toast.success(t('perf.results.disputeAttachmentUploaded'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal upload attachment dispute'));
+      toast.error(apiErrorMessage(error, t('perf.results.disputeAttachmentFailed')));
     } finally {
       setUploadingDisputeAttachment(false);
     }
-  }, [disputeAttachmentFile, refreshWorkspace, selectedDispute]);
+  }, [disputeAttachmentFile, refreshWorkspace, selectedDispute, t]);
 
   const handleCreateSchedule = useCallback(async () => {
     if (!selectedPeriodId) {
-      toast.error('Pilih period terlebih dahulu');
+      toast.error(t('perf.results.selectPeriodFirst'));
       return;
     }
 
     if (!scheduleForm.name.trim()) {
-      toast.error('Nama schedule wajib diisi');
+      toast.error(t('perf.results.scheduleNameRequired'));
       return;
     }
 
@@ -692,55 +767,55 @@ export function PerformanceResultsPage() {
         cadenceHours: '24',
         notes: '',
       });
-      toast.success('Automation schedule berhasil dibuat');
+      toast.success(t('perf.results.scheduleCreated'));
       await refreshWorkspace();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal membuat automation schedule'));
+      toast.error(apiErrorMessage(error, t('perf.results.scheduleCreateFailed')));
     } finally {
       setCreatingSchedule(false);
     }
-  }, [refreshWorkspace, scheduleForm, selectedPeriodId]);
+  }, [refreshWorkspace, scheduleForm, selectedPeriodId, t]);
 
   const handleDownloadAttachment = useCallback(async (documentId: string, fileName: string) => {
     try {
       await documentManagementService.download(documentId, fileName);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal download attachment'));
+      toast.error(apiErrorMessage(error, t('perf.results.downloadFailed')));
     }
-  }, []);
+  }, [t]);
 
   const avgScore = String(dashboard?.widgets.averageScore ?? (results.length
     ? Number((results.reduce((sum, result) => sum + toNumber(result.finalScore), 0) / results.length).toFixed(2))
     : 0));
 
   if (loading) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>;
+    return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title="Performance Results"
-        description="Workspace Phase 6-7 untuk final approval, reopen result, publish, reminder notification, dispute response, dan analytics advanced."
+        title={t('perf.results.title')}
+        description={t('perf.results.description')}
         actions={(
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => void loadBootstrap()}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => void handleCalculate()} disabled={calculating || !selectedPeriodId}>
               <Calculator size={16} className="mr-2" />
-              {calculating ? 'Calculating...' : 'Calculate Results'}
+              {calculating ? t('perf.results.calculating') : t('perf.results.calculateResults')}
             </Button>
             <Button size="sm" variant="outline" onClick={() => void handlePublishResults()} disabled={publishing || !results.length}>
               <Send size={16} className="mr-2" />
-              {publishing ? 'Publishing...' : 'Publish Results'}
+              {publishing ? t('perf.results.publishing') : t('perf.results.publishResults')}
             </Button>
             <Button size="sm" variant="outline" onClick={() => void handleApproveResults()} disabled={approving || !results.length}>
               <CheckCircle2 size={16} className="mr-2" />
-              {approving ? 'Approving...' : 'Final Approve'}
+              {approving ? t('perf.results.approving') : t('perf.results.finalApprove')}
             </Button>
           </div>
         )}
@@ -749,18 +824,18 @@ export function PerformanceResultsPage() {
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="grid gap-4 lg:grid-cols-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Result Period</label>
+            <label className="text-sm font-medium">{t('perf.results.periodLabel')}</label>
             <Select2
               value={selectedPeriodId}
               onValueChange={setSelectedPeriodId}
               options={periodOptions}
-              placeholder="Pilih period result"
+              placeholder={t('perf.results.periodPlaceholder')}
             />
           </div>
-          <StatCard label="Results" value={dashboard?.widgets.resultCount ?? results.length} icon={<Trophy size={16} />} />
-          <StatCard label="Avg Final Score" value={avgScore} icon={<Gauge size={16} />} />
-          <StatCard label="Published Results" value={dashboard?.widgets.publishedResultCount ?? results.filter((result) => result.status === 'PUBLISHED').length} icon={<CheckCircle2 size={16} />} />
-          <StatCard label="Open Disputes" value={dashboard?.widgets.openDisputeCount ?? 0} icon={<AlertCircle size={16} />} />
+          <StatCard label={t('perf.results.stats.results')} value={dashboard?.widgets.resultCount ?? results.length} icon={<Trophy size={16} />} />
+          <StatCard label={t('perf.results.stats.avgFinalScore')} value={avgScore} icon={<Gauge size={16} />} />
+          <StatCard label={t('perf.results.stats.publishedResults')} value={dashboard?.widgets.publishedResultCount ?? results.filter((result) => result.status === 'PUBLISHED').length} icon={<CheckCircle2 size={16} />} />
+          <StatCard label={t('perf.results.stats.openDisputes')} value={dashboard?.widgets.openDisputeCount ?? 0} icon={<AlertCircle size={16} />} />
         </div>
       </div>
 
@@ -769,19 +844,19 @@ export function PerformanceResultsPage() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Calculated Results</h3>
-                <p className="text-xs text-muted-foreground">Daftar hasil score, grade, dan recommendation per employee.</p>
+                <h3 className="text-sm font-semibold">{t('perf.results.calculatedResults')}</h3>
+                <p className="text-xs text-muted-foreground">{t('perf.results.calculatedResultsHint')}</p>
               </div>
-              <span className="text-xs text-muted-foreground">{results.length} item</span>
+              <span className="text-xs text-muted-foreground">{t('perf.common.itemCount', { count: results.length })}</span>
             </div>
             <div className="space-y-3">
               {workspaceLoading ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  Loading result workspace...
+                  {t('perf.results.loadingWorkspace')}
                 </div>
               ) : !results.length ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  Belum ada hasil. Jalankan calculate result dulu.
+                  {t('perf.results.emptyResults')}
                 </div>
               ) : (
                 results.map((result) => (
@@ -797,17 +872,17 @@ export function PerformanceResultsPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold">{result.employee?.fullName || 'Tanpa employee'}</p>
+                        <p className="text-sm font-semibold">{result.employee?.fullName || t('perf.results.noEmployee')}</p>
                         <p className="text-xs text-muted-foreground">{result.employee?.employeeNumber || '-'}</p>
                       </div>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${RESULT_STATUS_STYLES[result.status] || RESULT_STATUS_STYLES.CALCULATED}`}>
-                        {result.status}
+                        {RESULT_STATUS_LABEL_KEYS[result.status] ? t(RESULT_STATUS_LABEL_KEYS[result.status]) : result.status}
                       </span>
                     </div>
                     <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-                      <p>Final Score: {result.finalScore ?? '-'}</p>
-                      <p>Grade: {result.gradeLabel || '-'}</p>
-                      <p>Calculated: {formatDateTime(result.calculatedAt)}</p>
+                      <p>{t('perf.results.finalScoreLabel', { value: result.finalScore ?? '-' })}</p>
+                      <p>{t('perf.results.gradeLabel', { value: result.gradeLabel || '-' })}</p>
+                      <p>{t('perf.results.calculatedLabel', { value: formatDateTime(result.calculatedAt) })}</p>
                     </div>
                   </button>
                 ))
@@ -817,66 +892,58 @@ export function PerformanceResultsPage() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Final Approval & Reminder</h3>
-              <p className="text-xs text-muted-foreground">Lock hasil sebelum publish dan kirim reminder in-app untuk follow-up inti.</p>
+              <h3 className="text-sm font-semibold">{t('perf.results.approvalReminderTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.results.approvalReminderHint')}</p>
             </div>
             <div className="space-y-3">
               <Input
                 value={approvalNotes}
                 onChange={(event) => setApprovalNotes(event.target.value)}
-                placeholder="Catatan final approval"
+                placeholder={t('perf.results.approvalNotesPlaceholder')}
               />
               <Button size="sm" className="w-full" variant="outline" onClick={() => void handleApproveResults()} disabled={approving || !results.length}>
                 <CheckCircle2 size={16} className="mr-2" />
-                {approving ? 'Approving...' : 'Final Approve Results'}
+                {approving ? t('perf.results.approving') : t('perf.results.finalApproveResults')}
               </Button>
               <Select2
                 value={reminderTarget}
                 onValueChange={(value) => setReminderTarget(value as 'UNACKNOWLEDGED_RESULTS' | 'OPEN_DISPUTES' | 'ALL')}
-                options={[
-                  { value: 'ALL', label: 'All Pending' },
-                  { value: 'UNACKNOWLEDGED_RESULTS', label: 'Unacknowledged Results' },
-                  { value: 'OPEN_DISPUTES', label: 'Open Disputes' },
-                ]}
-                placeholder="Pilih target reminder"
+                options={reminderTargetOptions}
+                placeholder={t('perf.results.reminderTargetPlaceholder')}
               />
               <textarea
                 value={reminderNotes}
                 onChange={(event) => setReminderNotes(event.target.value)}
-                placeholder="Catatan reminder"
+                placeholder={t('perf.results.reminderNotesPlaceholder')}
                 className="min-h-[84px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
               <Button size="sm" className="w-full" variant="outline" onClick={() => void handleSendReminders()} disabled={sendingReminders || !results.length}>
                 <BellRing size={16} className="mr-2" />
-                {sendingReminders ? 'Mengirim...' : 'Send Reminders'}
+                {sendingReminders ? t('perf.common.sending') : t('perf.results.sendReminders')}
               </Button>
               <Button size="sm" className="w-full" variant="outline" onClick={() => void handleSyncRecommendations()} disabled={syncingRecommendations || !results.length}>
                 <RefreshCw size={16} className="mr-2" />
-                {syncingRecommendations ? 'Syncing...' : 'Sync Development Recommendations'}
+                {syncingRecommendations ? t('perf.results.syncing') : t('perf.results.syncRecommendations')}
               </Button>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Automation Schedule</h3>
-              <p className="text-xs text-muted-foreground">Cadence reminder otomatis via queue worker untuk result period ini.</p>
+              <h3 className="text-sm font-semibold">{t('perf.results.automationTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.results.automationHint')}</p>
             </div>
             <div className="space-y-3">
               <Input
                 value={scheduleForm.name}
                 onChange={(event) => setScheduleForm((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="Nama schedule"
+                placeholder={t('perf.results.scheduleNamePlaceholder')}
               />
               <Select2
                 value={scheduleForm.reminderTarget}
                 onValueChange={(value) => setScheduleForm((prev) => ({ ...prev, reminderTarget: value as 'UNACKNOWLEDGED_RESULTS' | 'OPEN_DISPUTES' | 'ALL' }))}
-                options={[
-                  { value: 'ALL', label: 'All Pending' },
-                  { value: 'UNACKNOWLEDGED_RESULTS', label: 'Unacknowledged Results' },
-                  { value: 'OPEN_DISPUTES', label: 'Open Disputes' },
-                ]}
-                placeholder="Pilih target automation"
+                options={reminderTargetOptions}
+                placeholder={t('perf.results.automationTargetPlaceholder')}
               />
               <Input
                 type="number"
@@ -884,37 +951,44 @@ export function PerformanceResultsPage() {
                 max={168}
                 value={scheduleForm.cadenceHours}
                 onChange={(event) => setScheduleForm((prev) => ({ ...prev, cadenceHours: event.target.value }))}
-                placeholder="Cadence (jam)"
+                placeholder={t('perf.results.cadencePlaceholder')}
               />
               <textarea
                 value={scheduleForm.notes}
                 onChange={(event) => setScheduleForm((prev) => ({ ...prev, notes: event.target.value }))}
-                placeholder="Catatan automation"
+                placeholder={t('perf.results.automationNotesPlaceholder')}
                 className="min-h-[84px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
               <Button size="sm" className="w-full" variant="outline" onClick={() => void handleCreateSchedule()} disabled={creatingSchedule || !selectedPeriodId}>
                 <BellRing size={16} className="mr-2" />
-                {creatingSchedule ? 'Membuat...' : 'Buat Automation Schedule'}
+                {creatingSchedule ? t('perf.results.creating') : t('perf.results.createSchedule')}
               </Button>
             </div>
             <div className="mt-4 space-y-2">
               {!schedules.length ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
-                  Belum ada automation schedule.
+                  {t('perf.results.emptySchedules')}
                 </div>
               ) : schedules.map((schedule) => (
                 <div key={schedule.id} className="rounded-lg border border-border px-3 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">{schedule.name}</p>
-                      <p className="text-xs text-muted-foreground">{schedule.reminderTarget} • tiap {schedule.cadenceHours} jam</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t('perf.results.scheduleCadence', {
+                          target: REMINDER_TARGET_LABEL_KEYS[schedule.reminderTarget]
+                            ? t(REMINDER_TARGET_LABEL_KEYS[schedule.reminderTarget])
+                            : schedule.reminderTarget,
+                          hours: schedule.cadenceHours,
+                        })}
+                      </p>
                     </div>
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${schedule.isActive ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-slate-50 text-slate-700 dark:bg-slate-950 dark:text-slate-400'}`}>
-                      {schedule.isActive ? 'ACTIVE' : 'INACTIVE'}
+                      {schedule.isActive ? t('perf.common.activeUpper') : t('perf.common.inactiveUpper')}
                     </span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Last Run {formatDateTime(schedule.lastRunAt)} • Next Run {formatDateTime(schedule.nextRunAt)}
+                    {t('perf.results.scheduleRuns', { last: formatDateTime(schedule.lastRunAt), next: formatDateTime(schedule.nextRunAt) })}
                   </p>
                 </div>
               ))}
@@ -923,8 +997,8 @@ export function PerformanceResultsPage() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Publish Policy</h3>
-              <p className="text-xs text-muted-foreground">Atur visibility policy employee dan dispute window saat publish result.</p>
+              <h3 className="text-sm font-semibold">{t('perf.results.publishPolicyTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.results.publishPolicyHint')}</p>
             </div>
             <div className="space-y-3">
               <label className="flex items-center gap-2 text-sm">
@@ -933,7 +1007,7 @@ export function PerformanceResultsPage() {
                   checked={publishForm.showCalculation}
                   onChange={(event) => setPublishForm((prev) => ({ ...prev, showCalculation: event.target.checked }))}
                 />
-                Tampilkan detail calculation ke employee
+                {t('perf.results.showCalculation')}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -941,7 +1015,7 @@ export function PerformanceResultsPage() {
                   checked={publishForm.showRecommendations}
                   onChange={(event) => setPublishForm((prev) => ({ ...prev, showRecommendations: event.target.checked }))}
                 />
-                Tampilkan recommendation ke employee
+                {t('perf.results.showRecommendations')}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -949,7 +1023,7 @@ export function PerformanceResultsPage() {
                   checked={publishForm.showCalibrationHistory}
                   onChange={(event) => setPublishForm((prev) => ({ ...prev, showCalibrationHistory: event.target.checked }))}
                 />
-                Tampilkan calibration history ke employee
+                {t('perf.results.showCalibrationHistory')}
               </label>
               <Input
                 type="number"
@@ -957,12 +1031,12 @@ export function PerformanceResultsPage() {
                 max={90}
                 value={publishForm.disputeWindowDays}
                 onChange={(event) => setPublishForm((prev) => ({ ...prev, disputeWindowDays: event.target.value }))}
-                placeholder="Dispute window (hari)"
+                placeholder={t('perf.results.disputeWindowPlaceholder')}
               />
               <textarea
                 value={publishForm.notes}
                 onChange={(event) => setPublishForm((prev) => ({ ...prev, notes: event.target.value }))}
-                placeholder="Catatan publish"
+                placeholder={t('perf.results.publishNotesPlaceholder')}
                 className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </div>
@@ -970,35 +1044,35 @@ export function PerformanceResultsPage() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Calibration Session Builder</h3>
-              <p className="text-xs text-muted-foreground">Buat session calibration dari result period yang sudah dihitung.</p>
+              <h3 className="text-sm font-semibold">{t('perf.results.sessionBuilderTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.results.sessionBuilderHint')}</p>
             </div>
             <div className="space-y-3">
               <Input
                 value={sessionForm.name}
                 onChange={(event) => setSessionForm((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="Nama session calibration"
+                placeholder={t('perf.results.sessionNamePlaceholder')}
               />
               <Input
                 value=""
-                placeholder="Akan dibuat otomatis oleh sistem"
+                placeholder={t('perf.results.autoCodePlaceholder')}
                 disabled
               />
-              <p className="text-xs text-muted-foreground">Code calibration session digenerate otomatis saat create.</p>
+              <p className="text-xs text-muted-foreground">{t('perf.results.sessionCodeHint')}</p>
               <textarea
                 value={sessionForm.forcedDistribution}
                 onChange={(event) => setSessionForm((prev) => ({ ...prev, forcedDistribution: event.target.value }))}
-                placeholder={'Forced distribution (JSON)\n{"mode":"COUNT","buckets":{"A":3,"B":5,"C":2},"tolerance":0}'}
+                placeholder={`${t('perf.results.forcedDistributionPlaceholder')}\n{"mode":"COUNT","buckets":{"A":3,"B":5,"C":2},"tolerance":0}`}
                 className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
               <textarea
                 value={sessionForm.notes}
                 onChange={(event) => setSessionForm((prev) => ({ ...prev, notes: event.target.value }))}
-                placeholder="Catatan session"
+                placeholder={t('perf.results.sessionNotesPlaceholder')}
                 className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
               <Button size="sm" className="w-full" onClick={() => void handleCreateSession()} disabled={creatingSession || !results.length}>
-                {creatingSession ? 'Membuat...' : 'Buat Calibration Session'}
+                {creatingSession ? t('perf.results.creating') : t('perf.results.createSession')}
               </Button>
             </div>
           </div>
@@ -1007,46 +1081,46 @@ export function PerformanceResultsPage() {
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Result Detail</h3>
-              <p className="text-xs text-muted-foreground">Breakdown score, grade, dan recommendation dari result terpilih.</p>
+              <h3 className="text-sm font-semibold">{t('perf.results.detailTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.results.detailHint')}</p>
             </div>
             {!selectedResult ? (
-              <p className="text-sm text-muted-foreground">Pilih result dari panel kiri.</p>
+              <p className="text-sm text-muted-foreground">{t('perf.results.selectResultLeft')}</p>
             ) : (
               <div className="space-y-4">
                 <div className="rounded-xl border border-border bg-background px-4 py-3">
                   <p className="text-sm font-semibold">{selectedResult.employee?.fullName}</p>
                   <p className="text-xs text-muted-foreground">
-                    Final Score {selectedResult.finalScore ?? '-'} • Grade {selectedResult.gradeLabel || '-'}
+                    {t('perf.results.scoreGradeInline', { score: selectedResult.finalScore ?? '-', grade: selectedResult.gradeLabel || '-' })}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Published {formatDateTime(selectedResult.publishedAt)} • Dispute Deadline {formatDateTime(selectedResult.disputeDeadline)}
+                    {t('perf.results.publishedDisputeInline', { published: formatDateTime(selectedResult.publishedAt), deadline: formatDateTime(selectedResult.disputeDeadline) })}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Final Approved {formatDateTime(selectedResult.finalApprovedAt)} • Reminder #{selectedResult.reminderCount ?? 0}
+                    {t('perf.results.approvedReminderInline', { approved: formatDateTime(selectedResult.finalApprovedAt), count: selectedResult.reminderCount ?? 0 })}
                   </p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <MiniStat label="Raw Score" value={selectedResult.rawScore ?? '-'} />
-                  <MiniStat label="Normalized" value={selectedResult.normalizedScore ?? '-'} />
-                  <MiniStat label="Weighted" value={selectedResult.weightedScore ?? '-'} />
-                  <MiniStat label="Calculation Ver." value={selectedResult.calculationVersion} />
+                  <MiniStat label={t('perf.results.rawScore')} value={selectedResult.rawScore ?? '-'} />
+                  <MiniStat label={t('perf.results.normalized')} value={selectedResult.normalizedScore ?? '-'} />
+                  <MiniStat label={t('perf.results.weighted')} value={selectedResult.weightedScore ?? '-'} />
+                  <MiniStat label={t('perf.results.calculationVersion')} value={selectedResult.calculationVersion} />
                 </div>
                 <div className="rounded-xl border border-border bg-background p-4">
-                  <p className="text-sm font-medium">Recommendation</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{selectedResult.recommendationSummary || 'Belum ada recommendation yang match.'}</p>
+                  <p className="text-sm font-medium">{t('perf.results.recommendation')}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{selectedResult.recommendationSummary || t('perf.results.emptyRecommendation')}</p>
                 </div>
                 <div className="rounded-xl border border-border bg-background p-4">
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium">Development Recommendations</p>
-                      <p className="text-xs text-muted-foreground">Sinkronkan recommendation ke training course dan enrollment nyata.</p>
+                      <p className="text-sm font-medium">{t('perf.results.devRecTitle')}</p>
+                      <p className="text-xs text-muted-foreground">{t('perf.results.devRecHint')}</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">{selectedResult.developmentRecommendations?.length || 0} item</span>
+                    <span className="text-xs text-muted-foreground">{t('perf.common.itemCount', { count: selectedResult.developmentRecommendations?.length || 0 })}</span>
                   </div>
                   {!selectedResult.developmentRecommendations?.length ? (
                     <div className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
-                      Belum ada development recommendation untuk result ini.
+                      {t('perf.results.emptyDevRec')}
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -1064,10 +1138,13 @@ export function PerformanceResultsPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-medium">{recommendation.title}</p>
-                              <p className="text-xs text-muted-foreground">{recommendation.sourceRuleLabel || recommendation.type}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {recommendation.sourceRuleLabel
+                                  || (DEV_REC_TYPE_LABEL_KEYS[recommendation.type] ? t(DEV_REC_TYPE_LABEL_KEYS[recommendation.type]) : recommendation.type)}
+                              </p>
                             </div>
                             <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-400">
-                              {recommendation.status}
+                              {DEV_REC_STATUS_LABEL_KEYS[recommendation.status] ? t(DEV_REC_STATUS_LABEL_KEYS[recommendation.status]) : recommendation.status}
                             </span>
                           </div>
                           <p className="mt-2 text-xs text-muted-foreground">{recommendation.description || recommendation.notes || '-'}</p>
@@ -1083,17 +1160,17 @@ export function PerformanceResultsPage() {
                               value: course.id,
                               label: `${course.title} • ${course.code}`,
                             }))}
-                            placeholder="Pilih training course"
+                            placeholder={t('perf.results.coursePlaceholder')}
                           />
                           <textarea
                             value={recommendationNotes}
                             onChange={(event) => setRecommendationNotes(event.target.value)}
-                            placeholder="Catatan assignment"
+                            placeholder={t('perf.results.assignmentNotesPlaceholder')}
                             className="mt-3 min-h-[84px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                           />
                           <Button size="sm" className="mt-3 w-full" onClick={() => void handleAssignRecommendation()} disabled={assigningRecommendation}>
                             <Send size={16} className="mr-2" />
-                            {assigningRecommendation ? 'Assigning...' : 'Assign to Training'}
+                            {assigningRecommendation ? t('perf.results.assigning') : t('perf.results.assignToTraining')}
                           </Button>
                         </div>
                       )}
@@ -1102,8 +1179,8 @@ export function PerformanceResultsPage() {
                 </div>
                 <div className="rounded-xl border border-border bg-background p-4">
                   <div className="mb-3">
-                    <p className="text-sm font-medium">Result Attachments</p>
-                    <p className="text-xs text-muted-foreground">Dokumen resmi result yang tersimpan ke document management.</p>
+                    <p className="text-sm font-medium">{t('perf.results.attachmentsTitle')}</p>
+                    <p className="text-xs text-muted-foreground">{t('perf.results.attachmentsHint')}</p>
                   </div>
                   <div className="flex gap-2">
                     <input
@@ -1112,21 +1189,23 @@ export function PerformanceResultsPage() {
                       onChange={(event) => setResultAttachmentFile(event.target.files?.[0] || null)}
                     />
                     <Button size="sm" variant="outline" onClick={() => void handleUploadResultAttachment()} disabled={uploadingResultAttachment || !selectedResult}>
-                      {uploadingResultAttachment ? 'Uploading...' : 'Upload'}
+                      {uploadingResultAttachment ? t('perf.common.uploading') : t('perf.common.upload')}
                     </Button>
                   </div>
                   <div className="mt-3 space-y-2">
                     {!selectedResult.attachments?.length ? (
-                      <p className="text-xs text-muted-foreground">Belum ada attachment result.</p>
+                      <p className="text-xs text-muted-foreground">{t('perf.results.emptyAttachments')}</p>
                     ) : selectedResult.attachments.map((attachment) => (
                       <div key={attachment.id} className="rounded-lg border border-border px-3 py-2">
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-medium">{attachment.document.title}</p>
-                            <p className="text-xs text-muted-foreground">{attachment.document.fileName} • {attachment.document.visibility}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {attachment.document.fileName} • {VISIBILITY_LABEL_KEYS[attachment.document.visibility] ? t(VISIBILITY_LABEL_KEYS[attachment.document.visibility]) : attachment.document.visibility}
+                            </p>
                           </div>
                           <Button size="sm" variant="outline" onClick={() => void handleDownloadAttachment(attachment.document.id, attachment.document.fileName)}>
-                            Download
+                            {t('perf.common.download')}
                           </Button>
                         </div>
                       </div>
@@ -1134,32 +1213,32 @@ export function PerformanceResultsPage() {
                   </div>
                 </div>
                 <div className="rounded-xl border border-border bg-background p-4">
-                  <p className="text-sm font-medium">Widgets</p>
+                  <p className="text-sm font-medium">{t('perf.results.widgets')}</p>
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <MiniStat label="Completion Rate" value={`${dashboard?.widgets.completionRate ?? 0}%`} />
-                    <MiniStat label="Published Results" value={dashboard?.widgets.publishedResultCount ?? 0} />
-                    <MiniStat label="Open Disputes" value={dashboard?.widgets.openDisputeCount ?? 0} />
+                    <MiniStat label={t('perf.results.completionRate')} value={`${dashboard?.widgets.completionRate ?? 0}%`} />
+                    <MiniStat label={t('perf.results.stats.publishedResults')} value={dashboard?.widgets.publishedResultCount ?? 0} />
+                    <MiniStat label={t('perf.results.stats.openDisputes')} value={dashboard?.widgets.openDisputeCount ?? 0} />
                   </div>
                 </div>
                 <div className="rounded-xl border border-border bg-background p-4">
-                  <p className="text-sm font-medium">Advanced Analytics</p>
+                  <p className="text-sm font-medium">{t('perf.results.advancedAnalytics')}</p>
                   <div className="mt-3 grid gap-4 lg:grid-cols-3">
                     <div className="rounded-lg border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Pending Final Approval</p>
+                      <p className="text-xs text-muted-foreground">{t('perf.results.pendingFinalApproval')}</p>
                       <p className="mt-2 text-sm font-semibold">{dashboard?.widgets.pendingFinalApprovalCount ?? 0}</p>
                     </div>
                     <div className="rounded-lg border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Pending Acknowledgment</p>
+                      <p className="text-xs text-muted-foreground">{t('perf.results.pendingAcknowledgment')}</p>
                       <p className="mt-2 text-sm font-semibold">{dashboard?.widgets.pendingAcknowledgmentCount ?? 0}</p>
                     </div>
                     <div className="rounded-lg border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Reminder Pending</p>
+                      <p className="text-xs text-muted-foreground">{t('perf.results.reminderPending')}</p>
                       <p className="mt-2 text-sm font-semibold">{dashboard?.widgets.reminderPendingCount ?? 0}</p>
                     </div>
                   </div>
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground">Department Comparison</p>
+                      <p className="text-xs font-medium text-muted-foreground">{t('perf.results.departmentComparison')}</p>
                       <div className="mt-2 space-y-2">
                         {(dashboard?.departmentComparison || []).slice(0, 5).map((item) => (
                           <div key={item.departmentName} className="rounded-lg border border-border px-3 py-2 text-sm">
@@ -1167,14 +1246,14 @@ export function PerformanceResultsPage() {
                               <span>{item.departmentName}</span>
                               <span className="font-medium">{item.averageScore}</span>
                             </div>
-                            <p className="mt-1 text-xs text-muted-foreground">{item.employeeCount} employee</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{t('perf.results.employeeCount', { count: item.employeeCount })}</p>
                           </div>
                         ))}
                       </div>
                     </div>
                     <div className="grid gap-4">
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground">Top Performers</p>
+                        <p className="text-xs font-medium text-muted-foreground">{t('perf.results.topPerformers')}</p>
                         <div className="mt-2 space-y-2">
                           {(dashboard?.topPerformers || []).slice(0, 3).map((item) => (
                             <div key={item.id} className="rounded-lg border border-border px-3 py-2 text-sm">
@@ -1188,7 +1267,7 @@ export function PerformanceResultsPage() {
                         </div>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground">Bottom Performers</p>
+                        <p className="text-xs font-medium text-muted-foreground">{t('perf.results.bottomPerformers')}</p>
                         <div className="mt-2 space-y-2">
                           {(dashboard?.bottomPerformers || []).slice(0, 3).map((item) => (
                             <div key={item.id} className="rounded-lg border border-border px-3 py-2 text-sm">
@@ -1205,7 +1284,7 @@ export function PerformanceResultsPage() {
                   </div>
                 </div>
                 <div className="rounded-xl border border-border bg-background p-4">
-                  <p className="text-sm font-medium">Calculation Snapshot</p>
+                  <p className="text-sm font-medium">{t('perf.results.calculationSnapshot')}</p>
                   <pre className="mt-3 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-100">
                     {JSON.stringify(selectedResult.calculationSnapshot || {}, null, 2)}
                   </pre>
@@ -1217,16 +1296,16 @@ export function PerformanceResultsPage() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Calibration Sessions</h3>
-                <p className="text-xs text-muted-foreground">Buka session, review participant, lalu finalize hasil calibration.</p>
+                <h3 className="text-sm font-semibold">{t('perf.results.sessionsTitle')}</h3>
+                <p className="text-xs text-muted-foreground">{t('perf.results.sessionsHint')}</p>
               </div>
-              <span className="text-xs text-muted-foreground">{sessions.length} item</span>
+              <span className="text-xs text-muted-foreground">{t('perf.common.itemCount', { count: sessions.length })}</span>
             </div>
 
             <div className="space-y-3">
               {!sessions.length ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  Belum ada calibration session.
+                  {t('perf.results.emptySessions')}
                 </div>
               ) : (
                 sessions.map((session) => (
@@ -1246,12 +1325,12 @@ export function PerformanceResultsPage() {
                         <p className="text-xs text-muted-foreground">{session.code}</p>
                       </div>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${SESSION_STATUS_STYLES[session.status] || SESSION_STATUS_STYLES.DRAFT}`}>
-                        {session.status}
+                        {SESSION_STATUS_LABEL_KEYS[session.status] ? t(SESSION_STATUS_LABEL_KEYS[session.status]) : session.status}
                       </span>
                     </div>
                     <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-                      <p>Participants: {session.participants.length}</p>
-                      <p>Created: {formatDateTime(session.createdAt)}</p>
+                      <p>{t('perf.results.participantCount', { count: session.participants.length })}</p>
+                      <p>{t('perf.results.createdLabel', { value: formatDateTime(session.createdAt) })}</p>
                     </div>
                   </button>
                 ))
@@ -1261,13 +1340,13 @@ export function PerformanceResultsPage() {
             {selectedSession && (
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => void handleSessionAction('open')} disabled={actingSession}>
-                  Open
+                  {t('perf.results.openSession')}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => void handleSessionAction('close')} disabled={actingSession}>
-                  Close
+                  {t('perf.results.closeSession')}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => void handleSessionAction('finalize')} disabled={actingSession}>
-                  Finalize
+                  {t('perf.results.finalizeSession')}
                 </Button>
               </div>
             )}
@@ -1276,8 +1355,8 @@ export function PerformanceResultsPage() {
               <div className="mt-4 rounded-xl border border-border bg-background p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold">Distribution Analysis</p>
-                    <p className="text-xs text-muted-foreground">Target vs actual distribution untuk calibration session.</p>
+                    <p className="text-sm font-semibold">{t('perf.results.distributionTitle')}</p>
+                    <p className="text-xs text-muted-foreground">{t('perf.results.distributionHint')}</p>
                   </div>
                   {selectedSession.distributionAnalysis ? (
                     <span
@@ -1287,15 +1366,15 @@ export function PerformanceResultsPage() {
                           : 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-400'
                       }`}
                     >
-                      {selectedSession.distributionAnalysis.isCompliant ? 'COMPLIANT' : 'VIOLATION'}
+                      {selectedSession.distributionAnalysis.isCompliant ? t('perf.results.compliant') : t('perf.results.violation')}
                     </span>
                   ) : selectedSession.forcedDistribution ? (
                     <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                      INVALID CONFIG
+                      {t('perf.results.invalidConfig')}
                     </span>
                   ) : (
                     <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-950 dark:text-slate-400">
-                      NONE
+                      {t('perf.results.none')}
                     </span>
                   )}
                 </div>
@@ -1303,8 +1382,8 @@ export function PerformanceResultsPage() {
                 {!selectedSession.distributionAnalysis ? (
                   <p className="mt-3 text-xs text-muted-foreground">
                     {selectedSession.forcedDistribution
-                      ? 'Forced distribution ada, tapi formatnya belum bisa dianalisis. Pakai format {"mode":"COUNT","buckets":{...},"tolerance":0}.'
-                      : 'Session ini tidak memakai forced distribution.'}
+                      ? t('perf.results.distributionUnparsed')
+                      : t('perf.results.noForcedDistribution')}
                   </p>
                 ) : (
                   <div className="mt-3 space-y-2">
@@ -1314,15 +1393,15 @@ export function PerformanceResultsPage() {
                     ])).map((key) => (
                       <div key={key} className="grid grid-cols-4 gap-2 rounded-lg border border-border px-3 py-2 text-xs">
                         <span className="font-medium">{key}</span>
-                        <span className="text-muted-foreground">Target {selectedSession.distributionAnalysis?.target?.[key] ?? 0}</span>
-                        <span className="text-muted-foreground">Actual {selectedSession.distributionAnalysis?.actual?.[key] ?? 0}</span>
+                        <span className="text-muted-foreground">{t('perf.results.targetValue', { value: selectedSession.distributionAnalysis?.target?.[key] ?? 0 })}</span>
+                        <span className="text-muted-foreground">{t('perf.results.actualValue', { value: selectedSession.distributionAnalysis?.actual?.[key] ?? 0 })}</span>
                         <span className="text-muted-foreground">Δ {selectedSession.distributionAnalysis?.delta?.[key] ?? 0}</span>
                       </div>
                     ))}
 
                     {selectedSession.distributionAnalysis.violations?.length ? (
                       <div className="rounded-lg border border-border bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950 dark:text-rose-300">
-                        <p className="font-medium">Violations</p>
+                        <p className="font-medium">{t('perf.results.violations')}</p>
                         <p className="mt-1">{selectedSession.distributionAnalysis.violations.join(', ')}</p>
                       </div>
                     ) : null}
@@ -1336,18 +1415,18 @@ export function PerformanceResultsPage() {
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Calibration & Dispute</h3>
-              <p className="text-xs text-muted-foreground">Kelola override calibration dan response dispute hasil employee.</p>
+              <h3 className="text-sm font-semibold">{t('perf.results.calibrationDisputeTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.results.calibrationDisputeHint')}</p>
             </div>
             <div className="space-y-6">
               <div className="space-y-4">
                 {!selectedSession ? (
-                  <p className="text-sm text-muted-foreground">Pilih calibration session terlebih dahulu.</p>
+                  <p className="text-sm text-muted-foreground">{t('perf.results.selectSessionHint')}</p>
                 ) : (
                   <div className="space-y-3">
                     {selectedSession.participants.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                        Belum ada participant di session ini.
+                        {t('perf.results.emptyParticipants')}
                       </div>
                     ) : (
                       selectedSession.participants.map((participant) => (
@@ -1363,13 +1442,16 @@ export function PerformanceResultsPage() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold">{participant.result?.employee?.fullName || 'Tanpa employee'}</p>
+                              <p className="text-sm font-semibold">{participant.result?.employee?.fullName || t('perf.results.noEmployee')}</p>
                               <p className="text-xs text-muted-foreground">
-                                Before {participant.beforeScore ?? participant.result?.finalScore ?? '-'} • After {participant.afterScore ?? '-'}
+                                {t('perf.results.beforeAfterInline', {
+                                  before: participant.beforeScore ?? participant.result?.finalScore ?? '-',
+                                  after: participant.afterScore ?? '-',
+                                })}
                               </p>
                             </div>
                             <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${SESSION_STATUS_STYLES[participant.status] || SESSION_STATUS_STYLES.DRAFT}`}>
-                              {participant.status}
+                              {SESSION_STATUS_LABEL_KEYS[participant.status] ? t(SESSION_STATUS_LABEL_KEYS[participant.status]) : participant.status}
                             </span>
                           </div>
                         </button>
@@ -1382,24 +1464,27 @@ export function PerformanceResultsPage() {
                   <div className="rounded-xl border border-border bg-background p-4">
                     <p className="text-sm font-medium">{selectedParticipant.result?.employee?.fullName}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Current Grade {selectedParticipant.result?.gradeLabel || '-'} • Final Score {selectedParticipant.result?.finalScore ?? '-'}
+                      {t('perf.results.currentGradeInline', {
+                        grade: selectedParticipant.result?.gradeLabel || '-',
+                        score: selectedParticipant.result?.finalScore ?? '-',
+                      })}
                     </p>
                     <div className="mt-4 space-y-3">
                       <Input
                         type="number"
                         value={decisionForm.finalScore}
                         onChange={(event) => setDecisionForm((prev) => ({ ...prev, finalScore: event.target.value }))}
-                        placeholder="Final score override"
+                        placeholder={t('perf.results.finalScorePlaceholder')}
                       />
                       <textarea
                         value={decisionForm.reason}
                         onChange={(event) => setDecisionForm((prev) => ({ ...prev, reason: event.target.value }))}
-                        placeholder="Reason wajib"
+                        placeholder={t('perf.results.reasonPlaceholder')}
                         className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       />
                       <Button size="sm" className="w-full" onClick={() => void handleApplyDecision()} disabled={savingDecision || selectedSession?.status !== 'OPEN'}>
                         <CheckCircle2 size={16} className="mr-2" />
-                        {savingDecision ? 'Menyimpan...' : 'Simpan Calibration Decision'}
+                        {savingDecision ? t('perf.common.saving') : t('perf.results.saveDecision')}
                       </Button>
                     </div>
                     <div className="mt-4 space-y-2">
@@ -1421,14 +1506,14 @@ export function PerformanceResultsPage() {
 
               <div className="rounded-xl border border-border bg-background p-4">
                 <div className="mb-3">
-                  <p className="text-sm font-medium">Result Disputes</p>
-                  <p className="text-xs text-muted-foreground">Response dispute employee dari result yang sedang dipilih.</p>
+                  <p className="text-sm font-medium">{t('perf.results.disputesTitle')}</p>
+                  <p className="text-xs text-muted-foreground">{t('perf.results.disputesHint')}</p>
                 </div>
                 {!selectedResult ? (
-                  <p className="text-sm text-muted-foreground">Pilih result terlebih dahulu.</p>
+                  <p className="text-sm text-muted-foreground">{t('perf.results.selectResultHint')}</p>
                 ) : !selectedResult.disputes?.length ? (
                   <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                    Belum ada dispute untuk result ini.
+                    {t('perf.results.emptyDisputes')}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1449,7 +1534,7 @@ export function PerformanceResultsPage() {
                             <p className="text-xs text-muted-foreground">{dispute.employee?.fullName || '-'} • {formatDateTime(dispute.createdAt)}</p>
                           </div>
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${DISPUTE_STATUS_STYLES[dispute.status] || DISPUTE_STATUS_STYLES.OPEN}`}>
-                            {dispute.status}
+                            {DISPUTE_STATUS_LABEL_KEYS[dispute.status] ? t(DISPUTE_STATUS_LABEL_KEYS[dispute.status]) : dispute.status}
                           </span>
                         </div>
                       </button>
@@ -1463,26 +1548,21 @@ export function PerformanceResultsPage() {
                           <Select2
                             value={disputeResponseForm.status}
                             onValueChange={(value) => setDisputeResponseForm((prev) => ({ ...prev, status: value as 'RESPONDED' | 'RESOLVED' | 'REJECTED' | 'CLOSED' }))}
-                            options={[
-                              { value: 'RESPONDED', label: 'Responded' },
-                              { value: 'RESOLVED', label: 'Resolved' },
-                              { value: 'REJECTED', label: 'Rejected' },
-                              { value: 'CLOSED', label: 'Closed' },
-                            ]}
-                            placeholder="Pilih status response"
+                            options={disputeStatusOptions}
+                            placeholder={t('perf.results.responseStatusPlaceholder')}
                           />
                           <textarea
                             value={disputeResponseForm.response}
                             onChange={(event) => setDisputeResponseForm((prev) => ({ ...prev, response: event.target.value }))}
-                            placeholder="Response dispute"
+                            placeholder={t('perf.results.responsePlaceholder')}
                             className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                           />
                           <Button size="sm" className="w-full" onClick={() => void handleRespondDispute()} disabled={respondingDispute}>
                             <Send size={16} className="mr-2" />
-                            {respondingDispute ? 'Menyimpan...' : 'Simpan Response Dispute'}
+                            {respondingDispute ? t('perf.common.saving') : t('perf.results.saveResponse')}
                           </Button>
                           <div className="rounded-lg border border-border p-3">
-                            <p className="text-xs font-medium text-muted-foreground">Dispute Attachments</p>
+                            <p className="text-xs font-medium text-muted-foreground">{t('perf.results.disputeAttachments')}</p>
                             <div className="mt-3 flex gap-2">
                               <input
                                 type="file"
@@ -1490,12 +1570,12 @@ export function PerformanceResultsPage() {
                                 onChange={(event) => setDisputeAttachmentFile(event.target.files?.[0] || null)}
                               />
                               <Button size="sm" variant="outline" onClick={() => void handleUploadDisputeAttachment()} disabled={uploadingDisputeAttachment}>
-                                {uploadingDisputeAttachment ? 'Uploading...' : 'Upload'}
+                                {uploadingDisputeAttachment ? t('perf.common.uploading') : t('perf.common.upload')}
                               </Button>
                             </div>
                             <div className="mt-3 space-y-2">
                               {!selectedDispute.attachments?.length ? (
-                                <p className="text-xs text-muted-foreground">Belum ada attachment dispute.</p>
+                                <p className="text-xs text-muted-foreground">{t('perf.results.emptyDisputeAttachments')}</p>
                               ) : selectedDispute.attachments.map((attachment) => (
                                 <div key={attachment.id} className="rounded-lg border border-border px-3 py-2">
                                   <div className="flex items-center justify-between gap-3">
@@ -1504,7 +1584,7 @@ export function PerformanceResultsPage() {
                                       <p className="text-xs text-muted-foreground">{attachment.document.fileName}</p>
                                     </div>
                                     <Button size="sm" variant="outline" onClick={() => void handleDownloadAttachment(attachment.document.id, attachment.document.fileName)}>
-                                      Download
+                                      {t('perf.common.download')}
                                     </Button>
                                   </div>
                                 </div>
@@ -1519,25 +1599,25 @@ export function PerformanceResultsPage() {
               </div>
               <div className="rounded-xl border border-border bg-background p-4">
                 <div className="mb-3">
-                  <p className="text-sm font-medium">Reopen Result</p>
-                  <p className="text-xs text-muted-foreground">Jalur resmi untuk membuka ulang hasil final/published dengan audit trail.</p>
+                  <p className="text-sm font-medium">{t('perf.results.reopenTitle')}</p>
+                  <p className="text-xs text-muted-foreground">{t('perf.results.reopenHint')}</p>
                 </div>
                 {!selectedResult ? (
-                  <p className="text-sm text-muted-foreground">Pilih result terlebih dahulu.</p>
+                  <p className="text-sm text-muted-foreground">{t('perf.results.selectResultHint')}</p>
                 ) : (
                   <div className="space-y-3">
                     <textarea
                       value={reopenReason}
                       onChange={(event) => setReopenReason(event.target.value)}
-                      placeholder="Reason reopen result"
+                      placeholder={t('perf.results.reopenReasonPlaceholder')}
                       className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     />
                     <Button size="sm" className="w-full" variant="outline" onClick={() => void handleReopenResult()} disabled={reopening}>
                       <RotateCcw size={16} className="mr-2" />
-                      {reopening ? 'Membuka ulang...' : 'Reopen Result'}
+                      {reopening ? t('perf.results.reopening') : t('perf.results.reopenResult')}
                     </Button>
                     <p className="text-xs text-muted-foreground">
-                      Last reopen {formatDateTime(selectedResult.reopenedAt)} • Count {selectedResult.reopenCount ?? 0}
+                      {t('perf.results.reopenInfo', { value: formatDateTime(selectedResult.reopenedAt), count: selectedResult.reopenCount ?? 0 })}
                     </p>
                   </div>
                 )}

@@ -10,17 +10,20 @@ import {
   type JobApplication,
 } from '@/services/recruitment.service';
 import { employeeService, type Employee } from '@/services/employee.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { useCompanyStore } from '@/stores/company.store';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 
-const INTERVIEW_TYPE_OPTIONS = [
-  { value: 'ONLINE', label: 'Online' },
-  { value: 'OFFLINE', label: 'Offline' },
+const INTERVIEW_TYPE_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'ONLINE', labelKey: 'wf.rec.interviewForm.typeOnline' },
+  { value: 'OFFLINE', labelKey: 'wf.rec.interviewForm.typeOffline' },
 ];
 
 export function InterviewFormPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
@@ -65,14 +68,14 @@ export function InterviewFormPage() {
         setEmployees(employeeData.data);
       } catch (error) {
         console.error(error);
-        toast.error('Gagal memuat referensi interview');
+        toast.error(t('wf.rec.interviewForm.loadRefsFailed'));
       } finally {
         setLoading(false);
       }
     };
 
     void loadReferences();
-  }, [companyId]);
+  }, [companyId, t]);
 
   const selectedApplication = useMemo(
     () => applications.find((application) => application.id === form.applicationId) || null,
@@ -83,45 +86,45 @@ export function InterviewFormPage() {
     () =>
       applications.map((application) => ({
         value: application.id,
-        label: `${application.candidate?.firstName || ''} ${application.candidate?.lastName || ''} • ${application.jobPosting?.title || 'Unknown Posting'}`.trim(),
+        label: `${application.candidate?.firstName || ''} ${application.candidate?.lastName || ''} • ${application.jobPosting?.title || t('wf.rec.interviewForm.unknownPosting')}`.trim(),
       })),
-    [applications]
+    [applications, t]
   );
 
   const interviewerOptions = useMemo(
     () => [
-      { value: '', label: 'Tanpa interviewer spesifik' },
+      { value: '', label: t('wf.rec.interviewForm.noInterviewer') },
       ...employees.map((employee) => ({
         value: employee.id,
         label: `${employee.fullName} • ${employee.employeeNumber}`,
       })),
     ],
-    [employees]
+    [employees, t]
   );
 
   const handleSubmit = useCallback(async () => {
     if (!companyId) {
-      toast.error('Company belum aktif');
+      toast.error(t('wf.rec.noActiveCompany'));
       return;
     }
 
     if (!form.applicationId || !selectedApplication?.candidate?.id) {
-      toast.error('Pilih application yang valid');
+      toast.error(t('wf.rec.interviewForm.invalidApplication'));
       return;
     }
 
     if (!form.title.trim() || !form.scheduledAt) {
-      toast.error('Title dan jadwal interview wajib diisi');
+      toast.error(t('wf.rec.interviewForm.titleScheduleRequired'));
       return;
     }
 
     if (form.type === 'ONLINE' && !form.meetingLink.trim()) {
-      toast.error('Meeting link wajib diisi untuk interview online');
+      toast.error(t('wf.rec.interviewForm.meetingLinkRequired'));
       return;
     }
 
     if (form.type === 'OFFLINE' && !form.location.trim()) {
-      toast.error('Lokasi wajib diisi untuk interview offline');
+      toast.error(t('wf.rec.interviewForm.locationRequired'));
       return;
     }
 
@@ -142,29 +145,29 @@ export function InterviewFormPage() {
       };
 
       await recruitmentService.createInterview(payload);
-      toast.success('Interview berhasil dijadwalkan');
+      toast.success(t('wf.rec.interviewForm.createSuccess'));
       navigate('/recruitment/interviews');
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal membuat interview'));
+      toast.error(apiErrorMessage(error, t('wf.rec.interviewForm.createFailed')));
     } finally {
       setSaving(false);
     }
-  }, [companyId, form, navigate, selectedApplication]);
+  }, [companyId, form, navigate, selectedApplication, t]);
 
   if (loading) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>;
+    return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title="Schedule Interview"
-        description="Atur interview kandidat dari application yang masih aktif di pipeline."
+        title={t('wf.rec.interviews.schedule')}
+        description={t('wf.rec.interviewForm.description')}
         actions={(
           <Button variant="outline" size="sm" onClick={() => navigate('/recruitment/interviews')}>
             <ArrowLeft size={16} className="mr-2" />
-            Back
+            {t('employees.detail.actions.back')}
           </Button>
         )}
       />
@@ -172,36 +175,36 @@ export function InterviewFormPage() {
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2 md:col-span-2">
-            <label className="text-sm font-medium">Application</label>
+            <label className="text-sm font-medium">{t('wf.rec.interviewForm.application')}</label>
             <Select2
               value={form.applicationId}
               onValueChange={(value) => setForm((prev) => ({ ...prev, applicationId: value }))}
               options={applicationOptions}
-              placeholder="Pilih application"
+              placeholder={t('wf.rec.interviewForm.selectApplication')}
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Interview Title</label>
+            <label className="text-sm font-medium">{t('wf.rec.interviewForm.interviewTitle')}</label>
             <Input
               value={form.title}
               onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="HR Screening Interview"
+              placeholder={t('wf.rec.interviewForm.titlePlaceholder')}
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Type</label>
+            <label className="text-sm font-medium">{t('wf.common.type')}</label>
             <Select2
               value={form.type}
               onValueChange={(value) => setForm((prev) => ({ ...prev, type: value }))}
-              options={INTERVIEW_TYPE_OPTIONS}
-              placeholder="Pilih tipe interview"
+              options={INTERVIEW_TYPE_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+              placeholder={t('wf.rec.interviewForm.selectType')}
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Scheduled At</label>
+            <label className="text-sm font-medium">{t('wf.rec.interviewForm.scheduledAt')}</label>
             <Input
               type="datetime-local"
               value={form.scheduledAt}
@@ -210,7 +213,7 @@ export function InterviewFormPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Duration (minutes)</label>
+            <label className="text-sm font-medium">{t('wf.rec.interviewForm.durationMinutes')}</label>
             <Input
               type="number"
               min={15}
@@ -221,31 +224,31 @@ export function InterviewFormPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Interviewer</label>
+            <label className="text-sm font-medium">{t('wf.rec.interviewForm.interviewer')}</label>
             <Select2
               value={form.interviewerId}
               onValueChange={(value) => setForm((prev) => ({ ...prev, interviewerId: value }))}
               options={interviewerOptions}
-              placeholder="Pilih interviewer"
+              placeholder={t('wf.rec.interviewForm.selectInterviewer')}
             />
           </div>
 
           {form.type === 'ONLINE' ? (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Meeting Link</label>
+              <label className="text-sm font-medium">{t('wf.rec.interviewForm.meetingLink')}</label>
               <Input
                 value={form.meetingLink}
                 onChange={(e) => setForm((prev) => ({ ...prev, meetingLink: e.target.value }))}
-                placeholder="https://meet.google.com/..."
+                placeholder={t('wf.rec.interviewForm.meetingLinkPlaceholder')}
               />
             </div>
           ) : (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Location</label>
+              <label className="text-sm font-medium">{t('wf.common.location')}</label>
               <Input
                 value={form.location}
                 onChange={(e) => setForm((prev) => ({ ...prev, location: e.target.value }))}
-                placeholder="Meeting Room 3 / Kantor Jakarta"
+                placeholder={t('wf.rec.interviewForm.locationPlaceholder')}
               />
             </div>
           )}
@@ -257,27 +260,27 @@ export function InterviewFormPage() {
               {selectedApplication.candidate?.firstName} {selectedApplication.candidate?.lastName}
             </p>
             <p className="text-xs text-muted-foreground">
-              {selectedApplication.jobPosting?.title || 'Unknown Posting'} • Status application {selectedApplication.status}
+              {selectedApplication.jobPosting?.title || t('wf.rec.interviewForm.unknownPosting')} • {t('wf.rec.interviewForm.applicationStatus', { status: selectedApplication.status })}
             </p>
           </div>
         )}
 
         <div className="mt-4 space-y-2">
-          <label className="text-sm font-medium">Notes</label>
+          <label className="text-sm font-medium">{t('wf.common.notes')}</label>
           <textarea
             value={form.notes}
             onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
             className="min-h-28 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-            placeholder="Catatan interviewer atau agenda interview."
+            placeholder={t('wf.rec.interviewForm.notesPlaceholder')}
           />
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={() => navigate('/recruitment/interviews')}>
-            Batal
+            {t('common.cancel')}
           </Button>
           <Button size="sm" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Menyimpan...' : 'Jadwalkan Interview'}
+            {saving ? t('wf.common.saving') : t('wf.rec.interviewForm.submit')}
           </Button>
         </div>
       </div>

@@ -6,8 +6,11 @@ import {
   type AttendanceRecord,
   type CreateAttendancePayload,
   type AttendanceCaptureMethod,
+  type MyAttendanceToday,
 } from '@/services/attendance.service';
 import { employeeService } from '@/services/employee.service';
+import { useAuthStore } from '@/stores/auth.store';
+import { hasAnyRole, OPERATIONAL_ROLES } from '@/lib/access-control';
 import {
   createLivenessChallengeSession,
   CHALLENGE_INSTRUCTIONS,
@@ -23,6 +26,8 @@ import { useCompanyStore } from '@/stores/company.store';
 import { Search, RefreshCw, Clock, CheckCircle2, XCircle, AlertTriangle, LogIn, LogOut, Clock9, MapPin, Camera, RotateCcw, X } from 'lucide-react';
 import { formatDate, formatTime } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PRESENT: <CheckCircle2 size={14} className="text-emerald-500" />,
@@ -38,17 +43,28 @@ const STATUS_STYLES: Record<string, string> = {
   EXCUSED: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
 };
 
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  PRESENT: 'ess.status.present',
+  ABSENT: 'ess.status.absent',
+  LATE: 'ess.status.late',
+  EXCUSED: 'ess.status.excused',
+};
+
 function toIsoDateTime(date: string, time: string) {
   return new Date(`${date}T${time}:00`).toISOString();
 }
 
+/**
+ * Tanggal kalender (bukan momen): dipatok UTC supaya tidak mundur sehari di
+ * zona timur UTC. Jam check-in/out tetap lewat toIsoDateTime (waktu lokal).
+ */
 function toIsoDate(date: string) {
-  return new Date(`${date}T00:00:00`).toISOString();
+  return new Date(`${date}T00:00:00Z`).toISOString();
 }
 
-async function getCurrentLocation() {
+async function getCurrentLocation(messages: { unsupported: string; failed: string }) {
   if (!navigator.geolocation) {
-    throw new Error('Browser tidak mendukung geolocation');
+    throw new Error(messages.unsupported);
   }
 
   return new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
@@ -58,7 +74,7 @@ async function getCurrentLocation() {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         }),
-      () => reject(new Error('Gagal mengambil lokasi saat ini')),
+      () => reject(new Error(messages.failed)),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   });
@@ -83,13 +99,17 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 }
 
 /* ---------- Check-In form ---------- */
-function CheckInForm({ employees, companyId, onSave, onClose }: {
+function CheckInForm({ employees, companyId, selfEmployeeId, onSave, onClose }: {
   employees: { id: string; fullName: string }[];
   companyId: string;
+  /** Mode self-service: employee terkunci ke user login, tanggal & jam ditentukan server. */
+  selfEmployeeId?: string;
   onSave: (data: CreateAttendancePayload) => Promise<void>;
   onClose: () => void;
 }) {
-  const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
+  const { t } = useI18n();
+  const isSelf = Boolean(selfEmployeeId);
+  const [employeeId, setEmployeeId] = useState(selfEmployeeId || employees[0]?.id || '');
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date().toTimeString().slice(0, 5);
   const [date, setDate] = useState(today);
@@ -130,14 +150,14 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
         setMethod((current) => (nextContext.allowedMethods.includes(current) ? current : nextContext.allowedMethods[0] || 'MANUAL'));
       } catch (error) {
         setContext(null);
-        toast.error(apiErrorMessage(error, 'Gagal memuat policy attendance'));
+        toast.error(apiErrorMessage(error, t('ess.attendance.toast.loadPolicyFailed')));
       } finally {
         setLoadingContext(false);
       }
     };
 
     void fetchContext();
-  }, [companyId, date, employeeId]);
+  }, [companyId, date, employeeId, t]);
 
   const stopWebcamStream = useCallback(() => {
     if (mediaStreamRef.current) {
@@ -172,17 +192,17 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
   const captureSelfieImage = useCallback(() => {
     const video = webcamVideoRef.current;
     if (!video || video.videoWidth < 160 || video.videoHeight < 160) {
-      throw new Error('Frame kamera belum siap. Silakan ulangi pengambilan wajah.');
+      throw new Error(t('ess.attendance.error.cameraFrameNotReady'));
     }
     const canvas = document.createElement('canvas');
     const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
     canvas.width = Math.round(video.videoWidth * scale);
     canvas.height = Math.round(video.videoHeight * scale);
     const context2d = canvas.getContext('2d');
-    if (!context2d) throw new Error('Browser tidak dapat menangkap frame kamera.');
+    if (!context2d) throw new Error(t('ess.attendance.error.cameraCaptureUnsupported'));
     context2d.drawImage(video, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL('image/jpeg', 0.9);
-  }, []);
+  }, [t]);
 
   const startWebcamAndCapture = useCallback(async () => {
     setLivenessError(null);
@@ -191,7 +211,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
     setCapturedFrames([]);
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      setLivenessError('Browser tidak mendukung akses kamera. Mohon gunakan browser modern (Chrome/Firefox/Safari).');
+      setLivenessError(t('ess.attendance.error.cameraUnsupported'));
       return;
     }
 
@@ -247,7 +267,10 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
                 method === 'FACE_RECOGNITION' ||
                 context?.policy.requiresLocation
               ) {
-                location = await getCurrentLocation();
+                location = await getCurrentLocation({
+                  unsupported: t('ess.attendance.geo.unsupported'),
+                  failed: t('ess.attendance.geo.failed'),
+                });
               }
               const combinedNotes = notes.trim()
                 ? `${notes.trim()}\n\n[LivenessChallenge ${challengeSession.challenge} PASS score=${Math.round((result.score ?? 0) * 100)}%]`
@@ -268,7 +291,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
             } catch { /* handled by caller */ }
             finally { setSaving(false); }
           } else {
-            setLivenessError(result.reason || 'Liveness challenge gagal. Silakan ulangi.');
+            setLivenessError(result.reason || t('ess.attendance.liveness.failed'));
           }
         } finally {
           setVerifyingChallenge(false);
@@ -276,9 +299,9 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
       }
     } catch (e) {
       stopWebcamStream();
-      setLivenessError(apiErrorMessage(e, 'Gagal mengakses kamera. Pastikan izin kamera diizinkan.'));
+      setLivenessError(apiErrorMessage(e, t('ess.attendance.error.cameraAccessFailed')));
     }
-  }, [captureSelfieImage, challengeSession.challenge, companyId, context?.policy.requiresLocation, date, employeeId, method, notes, onClose, onSave, stopWebcamStream, time]);
+  }, [captureSelfieImage, challengeSession.challenge, companyId, context?.policy.requiresLocation, date, employeeId, method, notes, onClose, onSave, stopWebcamStream, t, time]);
 
   useEffect(() => {
     if (showLiveness) {
@@ -291,8 +314,8 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!employeeId || !date || !time || !companyId) return toast.error('Employee, date, dan time wajib diisi');
-    if (!context) return toast.error('Attendance context belum siap');
+    if (!employeeId || !date || !time || !companyId) return toast.error(t('ess.attendance.toast.requiredFields'));
+    if (!context) return toast.error(t('ess.attendance.toast.contextNotReady'));
 
     // Step 4e: PRE-CHECK LIVENESS CHALLENGE sebelum submit actual attendance
     // KECUALI method MANUAL (HR input data untuk karyawan lain → tidak perlu selfie/liveness)
@@ -309,7 +332,10 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
       let location: { latitude: number; longitude: number } | undefined;
 
       if ((method as unknown as string) === 'MOBILE_GPS' || context.policy.requiresLocation) {
-        location = await getCurrentLocation();
+        location = await getCurrentLocation({
+          unsupported: t('ess.attendance.geo.unsupported'),
+          failed: t('ess.attendance.geo.failed'),
+        });
       }
 
       await onSave({
@@ -331,73 +357,82 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {!isSelf && (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.common.employee')} *</label>
+              <Select2
+                value={employeeId}
+                onValueChange={setEmployeeId}
+                options={employees.map((e) => ({ value: e.id, label: e.fullName }))}
+                placeholder={t('ess.attendance.form.selectEmployee')}
+                className="h-9"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.common.date')} *</label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.attendance.form.time')} *</label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
+            </div>
+          </>
+        )}
+        {isSelf && (
+          <p className="text-xs text-muted-foreground">
+            {t('ess.attendance.form.selfInfo')}
+          </p>
+        )}
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Employee *</label>
-          <Select2
-            value={employeeId}
-            onValueChange={setEmployeeId}
-            options={employees.map((e) => ({ value: e.id, label: e.fullName }))}
-            placeholder="Select employee"
-            className="h-9"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Date *</label>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Time *</label>
-          <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Method *</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.attendance.form.method')} *</label>
           <Select2
             value={method}
             onValueChange={(value) => setMethod(value as AttendanceCaptureMethod)}
             options={(context?.allowedMethods || ['MANUAL']).map((value) => ({ value, label: value }))}
-            placeholder="Pilih method"
+            placeholder={t('ess.attendance.form.selectMethod')}
             disabled={loadingContext}
             className="h-9"
           />
           {method === 'FACE_RECOGNITION' && (
             <p className="mt-1.5 text-[11px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
-              <Camera size={12} /> Check-in ini memakai tantangan gerakan aktif lalu mencocokkan wajah di server.
+              <Camera size={12} /> {t('ess.attendance.form.faceHint')}
             </p>
           )}
           {method === 'MANUAL' && (
-            <p className="mt-1.5 text-[11px] text-muted-foreground">Mode Manual (HR input) — Liveness Challenge dilewati.</p>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{t('ess.attendance.form.manualHint')}</p>
           )}
           {method !== 'MANUAL' && method !== 'FACE_RECOGNITION' && (
-            <p className="mt-1.5 text-[11px] text-muted-foreground">Metode ini tidak menggunakan verifikasi wajah.</p>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{t('ess.attendance.form.noFaceHint')}</p>
           )}
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Notes</label>
-          <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Catatan opsional" />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.common.notes')}</label>
+          <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('ess.attendance.form.notesPlaceholder')} />
         </div>
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs">
           {loadingContext ? (
-            <p className="text-muted-foreground">Memuat context attendance...</p>
+            <p className="text-muted-foreground">{t('ess.attendance.form.loadingContext')}</p>
           ) : !context ? (
-            <p className="text-muted-foreground">Context attendance belum tersedia.</p>
+            <p className="text-muted-foreground">{t('ess.attendance.form.contextUnavailable')}</p>
           ) : (
             <div className="space-y-1.5">
-              <p><span className="font-medium">Branch:</span> {context.branch?.name || '-'}</p>
-              <p><span className="font-medium">Schedule:</span> {context.schedule.workStart || '-'} - {context.schedule.workEnd || '-'}</p>
-              <p><span className="font-medium">Policy:</span> {context.policy.attendanceMethod}</p>
-              <p><span className="font-medium">Radius:</span> {context.policy.gpsRadiusMeters ? `${context.policy.gpsRadiusMeters} m` : 'Tidak pakai geofence'}</p>
-              <p><span className="font-medium">Lokasi:</span> {context.policy.requiresLocation || method === 'MOBILE_GPS' || method === 'FACE_RECOGNITION' ? 'Wajib ambil lokasi saat submit' : 'Opsional'}</p>
+              <p><span className="font-medium">{t('ess.common.branch')}:</span> {context.branch?.name || '-'}</p>
+              <p><span className="font-medium">{t('ess.attendance.today.schedule')}:</span> {context.schedule.workStart || '-'} - {context.schedule.workEnd || '-'}</p>
+              <p><span className="font-medium">{t('ess.attendance.form.ctx.policy')}:</span> {context.policy.attendanceMethod}</p>
+              <p><span className="font-medium">{t('ess.attendance.form.ctx.radius')}:</span> {context.policy.gpsRadiusMeters ? `${context.policy.gpsRadiusMeters} m` : t('ess.attendance.form.ctx.noGeofence')}</p>
+              <p><span className="font-medium">{t('ess.attendance.form.ctx.location')}:</span> {context.policy.requiresLocation || method === 'MOBILE_GPS' || method === 'FACE_RECOGNITION' ? t('ess.attendance.form.ctx.locationRequired') : t('ess.attendance.form.ctx.locationOptional')}</p>
               {context.warnings.length > 0 && (
                 <p className="text-amber-600 dark:text-amber-400">
-                  Warning: {context.warnings.join(', ')}
+                  {t('ess.attendance.form.ctx.warning')}: {context.warnings.join(', ')}
                 </p>
               )}
             </div>
           )}
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Check In'}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button type="submit" size="sm" disabled={saving}>{saving ? t('ess.common.saving') : t('ess.attendance.action.checkIn')}</Button>
         </div>
       </form>
 
@@ -410,7 +445,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
                 <span className="text-2xl" aria-hidden>{CHALLENGE_INSTRUCTIONS[challengeSession.challenge].icon}</span>
                 <div>
                   <h3 className="text-sm font-bold text-foreground leading-tight">{CHALLENGE_INSTRUCTIONS[challengeSession.challenge].title}</h3>
-                  <p className="text-[11px] text-muted-foreground">Liveness Challenge · Anti Spoofing</p>
+                  <p className="text-[11px] text-muted-foreground">{t('ess.attendance.liveness.subtitle')}</p>
                 </div>
               </div>
               <button onClick={closeLivenessModal} className="text-muted-foreground hover:text-foreground p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors" aria-label="Close liveness">
@@ -435,7 +470,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
                 />
                 <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 bg-red-600/90 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-white shadow">
                   <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                  LIVE CAMERA
+                  {t('ess.attendance.liveness.live')}
                 </div>
                 <div className="absolute bottom-3 left-3 right-3">
                   <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden backdrop-blur-sm">
@@ -446,26 +481,26 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
                   </div>
                   <p className="mt-1 text-[11px] text-white/90 font-medium text-center drop-shadow">
                     {verifyingChallenge
-                      ? '🔍 Memverifikasi gerakan...'
+                      ? t('ess.attendance.liveness.verifying')
                       : capturingProgress < 100
-                        ? `📸 Capture frame ${Math.ceil((capturingProgress / 100) * 5)} / 5 — terus lakukan gerakan!`
-                        : `✅ Frame tercapture. Menganalisis...`}
+                        ? t('ess.attendance.liveness.capturing', { current: Math.ceil((capturingProgress / 100) * 5), total: 5 })
+                        : t('ess.attendance.liveness.captured')}
                   </p>
                 </div>
                 {baselineMetrics && !baselineMetrics.detected && capturedFrames.length < 3 && (
                   <div className="absolute top-12 left-1/2 -translate-x-1/2 bg-amber-500/95 backdrop-blur px-3 py-1.5 rounded-lg shadow-lg">
-                    <p className="text-[11px] font-bold text-white text-center">⚠️ Wajah tidak terdeteksi. Pastikan wajah Anda berada di tengah frame.</p>
+                    <p className="text-[11px] font-bold text-white text-center">{t('ess.attendance.liveness.noFace')}</p>
                   </div>
                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div className="rounded-md bg-muted/50 px-2.5 py-1.5 border border-border">
-                  <p className="text-muted-foreground">Challenge:</p>
+                  <p className="text-muted-foreground">{t('ess.attendance.liveness.challengeLabel')}</p>
                   <p className="font-semibold text-foreground">{challengeSession.challenge}</p>
                 </div>
                 <div className="rounded-md bg-muted/50 px-2.5 py-1.5 border border-border">
-                  <p className="text-muted-foreground">Frames captured:</p>
+                  <p className="text-muted-foreground">{t('ess.attendance.liveness.framesLabel')}</p>
                   <p className="font-semibold text-foreground">{capturedFrames.length} / 5</p>
                 </div>
               </div>
@@ -473,7 +508,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
               {livenessError && (
                 <div className="rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-3 py-2.5">
                   <p className="text-xs font-bold text-red-700 dark:text-red-400 mb-0.5 flex items-center gap-1">
-                    <XCircle size={12} /> Challenge Gagal
+                    <XCircle size={12} /> {t('ess.attendance.liveness.failedTitle')}
                   </p>
                   <p className="text-[11px] text-red-600 dark:text-red-300">{livenessError}</p>
                 </div>
@@ -489,7 +524,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
                   className="flex-1 justify-center"
                 >
                   <RotateCcw size={14} className="mr-1.5" />
-                  Ulangi Challenge
+                  {t('ess.attendance.liveness.retry')}
                 </Button>
                 <Button
                   type="button"
@@ -499,7 +534,7 @@ function CheckInForm({ employees, companyId, onSave, onClose }: {
                   className="flex-1 justify-center"
                   disabled={verifyingChallenge}
                 >
-                  Batal
+                  {t('common.cancel')}
                 </Button>
               </div>
             </div>
@@ -516,6 +551,7 @@ function OvertimeForm({ employees, onSave, onClose }: {
   onSave: (data: { employeeId: string; date: string; startTime: string; endTime: string; durationHours: number; reason: string }) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date().toTimeString().slice(0, 5);
@@ -529,7 +565,7 @@ function OvertimeForm({ employees, onSave, onClose }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!employeeId || !date || !startTime || !endTime || !reason.trim()) {
-      return toast.error('All fields are required');
+      return toast.error(t('ess.attendance.overtime.allRequired'));
     }
     setSaving(true);
     try {
@@ -553,61 +589,86 @@ function OvertimeForm({ employees, onSave, onClose }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Employee *</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.common.employee')} *</label>
         <Select2
           value={employeeId}
           onValueChange={setEmployeeId}
           options={employees.map((e) => ({ value: e.id, label: e.fullName }))}
-          placeholder="Select employee"
+          placeholder={t('ess.attendance.form.selectEmployee')}
           className="h-9"
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Date *</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.common.date')} *</label>
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Start Time *</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.attendance.overtime.startTime')} *</label>
           <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">End Time *</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.attendance.overtime.endTime')} *</label>
           <Input type="time" value={endTime} onChange={(e) => handleEndTimeChange(e.target.value)} required />
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Duration (hours)</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.attendance.overtime.duration')}</label>
         <Input type="number" step="0.5" min="0.5" value={durationHours} onChange={(e) => setDurationHours(parseFloat(e.target.value) || 0)} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Reason *</label>
-        <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Overtime reason" required />
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.common.reason')} *</label>
+        <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('ess.attendance.overtime.reasonPlaceholder')} required />
       </div>
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Create Overtime'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('ess.common.saving') : t('ess.attendance.modal.overtimeTitle')}</Button>
       </div>
     </form>
   );
 }
 
 export function AttendanceList() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
+  const { user } = useAuthStore();
+  // Pengguna operasional (HR/admin/manager) memakai jalur admin; pengguna biasa memakai jalur self-service /attendance/me.
+  const isOperational = hasAnyRole(user, OPERATIONAL_ROLES);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [employees, setEmployees] = useState<{ id: string; fullName: string }[]>([]);
+  const [myToday, setMyToday] = useState<MyAttendanceToday | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
 
   // Modal state
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showOvertime, setShowOvertime] = useState(false);
+  const [selfCheckingOut, setSelfCheckingOut] = useState(false);
 
   const companyId = activeCompany?.id || '';
 
   const fetchData = useCallback(async () => {
+    if (!isOperational) {
+      // Jalur self-service: riwayat sendiri + status hari ini dari server.
+      setLoading(true);
+      try {
+        const [mine, today] = await Promise.all([
+          attendanceService.getMyAttendance({ month: monthFilter || undefined, limit: 100 }),
+          attendanceService.getMyToday().catch(() => null),
+        ]);
+        setRecords(mine.items);
+        setMyToday(today);
+      } catch (error) {
+        console.error('Failed to fetch my attendance:', error);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!companyId) {
       setRecords([]);
       setLoading(false);
@@ -627,10 +688,10 @@ export function AttendanceList() {
     } finally {
       setLoading(false);
     }
-  }, [companyId, statusFilter, dateFilter]);
+  }, [companyId, statusFilter, dateFilter, monthFilter, isOperational]);
 
   const fetchEmployees = useCallback(async () => {
-    if (!companyId) {
+    if (!companyId || !isOperational) {
       setEmployees([]);
       return;
     }
@@ -641,16 +702,20 @@ export function AttendanceList() {
     } catch {
       // silent
     }
-  }, [companyId]);
+  }, [companyId, isOperational]);
 
   useEffect(() => {
     fetchData();
     fetchEmployees();
   }, [fetchData, fetchEmployees]);
 
-  const filtered = records.filter(
-    (r) => r.employee?.fullName.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = records.filter((r) => {
+    if (isOperational) {
+      return r.employee?.fullName.toLowerCase().includes(search.toLowerCase());
+    }
+    // Self-service: filter status dilakukan di sisi klien.
+    return !statusFilter || r.status === statusFilter;
+  });
 
   const present = records.filter((r) => r.status === 'PRESENT').length;
   const late = records.filter((r) => r.status === 'LATE').length;
@@ -660,11 +725,23 @@ export function AttendanceList() {
 
   const handleCheckIn = async (data: CreateAttendancePayload) => {
     try {
-      await attendanceService.createRecord(data);
-      toast.success('Check-in recorded');
+      if (isOperational) {
+        await attendanceService.createRecord(data);
+      } else {
+        // Self check-in: identitas, tanggal, dan jam ditentukan server dari sesi.
+        await attendanceService.selfCheckIn({
+          method: data.method,
+          notes: data.notes,
+          checkInLatitude: data.checkInLatitude,
+          checkInLongitude: data.checkInLongitude,
+          faceRecognition: data.faceRecognition,
+        });
+      }
+      toast.success(t('ess.attendance.toast.checkInSuccess'));
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to check in'));
+      toast.error(apiErrorMessage(err, t('ess.attendance.toast.checkInFailed')));
+      throw err;
     }
   };
 
@@ -675,19 +752,41 @@ export function AttendanceList() {
         record.method === 'MOBILE_GPS' || Boolean(record.policySnapshot && (record.policySnapshot as Record<string, unknown>).requiresLocation);
 
       if (requiresLocation) {
-        location = await getCurrentLocation();
+        location = await getCurrentLocation({
+          unsupported: t('ess.attendance.geo.unsupported'),
+          failed: t('ess.attendance.geo.failed'),
+        });
       }
 
-      await attendanceService.checkout(record.id, {
-        checkOut: new Date().toISOString(),
-        method: record.method,
-        checkOutLatitude: location?.latitude,
-        checkOutLongitude: location?.longitude,
-      });
-      toast.success('Check-out recorded');
+      if (isOperational) {
+        await attendanceService.checkout(record.id, {
+          checkOut: new Date().toISOString(),
+          method: record.method,
+          checkOutLatitude: location?.latitude,
+          checkOutLongitude: location?.longitude,
+        });
+      } else {
+        // Self check-out: server mencari record terbuka milik user & mengisi jam sendiri.
+        await attendanceService.selfCheckOut({
+          method: record.method,
+          checkOutLatitude: location?.latitude,
+          checkOutLongitude: location?.longitude,
+        });
+      }
+      toast.success(t('ess.attendance.toast.checkOutSuccess'));
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to check out'));
+      toast.error(apiErrorMessage(err, t('ess.attendance.toast.checkOutFailed')));
+    }
+  };
+
+  const handleSelfCheckOutToday = async () => {
+    if (!myToday?.record) return;
+    setSelfCheckingOut(true);
+    try {
+      await handleCheckOut(myToday.record);
+    } finally {
+      setSelfCheckingOut(false);
     }
   };
 
@@ -702,53 +801,98 @@ export function AttendanceList() {
         durationHours: data.durationHours,
         reason: data.reason,
       });
-      toast.success('Overtime created');
+      toast.success(t('ess.attendance.toast.overtimeCreated'));
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to create overtime'));
+      toast.error(apiErrorMessage(err, t('ess.attendance.toast.overtimeFailed')));
     }
   };
 
   return (
     <div>
       <PageHeader
-        title="Attendance"
-        description="Track employee daily attendance"
+        title={t('ess.attendance.title')}
+        description={isOperational ? t('ess.attendance.description.admin') : t('ess.attendance.description.self')}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowOvertime(true)}>
-              <Clock9 size={16} className="mr-2" />
-              Overtime
-            </Button>
-            <Button size="sm" onClick={() => setShowCheckIn(true)}>
-              <LogIn size={16} className="mr-2" />
-              Check In
-            </Button>
+            {isOperational && (
+              <Button variant="outline" size="sm" onClick={() => setShowOvertime(true)}>
+                <Clock9 size={16} className="mr-2" />
+                {t('ess.attendance.action.overtime')}
+              </Button>
+            )}
+            {(isOperational || !myToday || myToday.canCheckIn) && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!isOperational && !user?.employeeId) {
+                    toast.error(t('ess.attendance.toast.notLinkedCheckIn'));
+                    return;
+                  }
+                  setShowCheckIn(true);
+                }}
+                disabled={!isOperational && myToday !== null && !myToday.canCheckIn}
+              >
+                <LogIn size={16} className="mr-2" />
+                {t('ess.attendance.action.checkIn')}
+              </Button>
+            )}
+            {!isOperational && myToday?.canCheckOut && (
+              <Button size="sm" variant="outline" onClick={handleSelfCheckOutToday} disabled={selfCheckingOut}>
+                <LogOut size={16} className="mr-2" />
+                {selfCheckingOut ? t('ess.attendance.action.checkingOut') : t('ess.attendance.action.checkOut')}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
           </div>
         }
       />
 
+      {/* Info hari ini (self-service) */}
+      {!isOperational && myToday && (
+        <div className="mb-6 rounded-xl border border-border bg-white dark:bg-gray-800 p-4 text-sm">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5">
+            <p><span className="text-xs text-muted-foreground">{t('ess.attendance.today.serverDate')}:</span> <span className="font-medium">{formatDate(myToday.serverDate)}</span></p>
+            <p>
+              <span className="text-xs text-muted-foreground">{t('ess.attendance.today.schedule')}:</span>{' '}
+              <span className="font-medium">
+                {myToday.context.schedule.workStart || '-'} - {myToday.context.schedule.workEnd || '-'}
+              </span>
+            </p>
+            <p>
+              <span className="text-xs text-muted-foreground">{t('ess.attendance.today.status')}:</span>{' '}
+              <span className="font-medium">
+                {myToday.record
+                  ? myToday.record.checkOut
+                    ? t('ess.attendance.today.checkedOut')
+                    : t('ess.attendance.today.checkedInAt', { time: myToday.record.checkIn ? formatTime(myToday.record.checkIn) : '' })
+                  : t('ess.attendance.today.notCheckedIn')}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <CheckCircle2 size={14} className="text-emerald-500" /> Present
+            <CheckCircle2 size={14} className="text-emerald-500" /> {t('ess.status.present')}
           </div>
           <p className="text-xl font-semibold">{present}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <AlertTriangle size={14} className="text-amber-500" /> Late
+            <AlertTriangle size={14} className="text-amber-500" /> {t('ess.status.late')}
           </div>
           <p className="text-xl font-semibold">{late}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <XCircle size={14} className="text-red-500" /> Absent
+            <XCircle size={14} className="text-red-500" /> {t('ess.status.absent')}
           </div>
           <p className="text-xl font-semibold">{absent}</p>
         </div>
@@ -756,17 +900,24 @@ export function AttendanceList() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search employee..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
-        </div>
-        <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
-          className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground" />
+        {isOperational ? (
+          <>
+            <div className="relative flex-1 max-w-xs">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder={t('ess.attendance.filter.searchEmployee')} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+            </div>
+            <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
+              className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground" />
+          </>
+        ) : (
+          <input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}
+            className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground" />
+        )}
         <div className="flex gap-1">
           {['', 'PRESENT', 'ABSENT', 'LATE', 'EXCUSED'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${statusFilter === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'}`}>
-              {s || 'All'}
+              {s ? (STATUS_LABEL_KEYS[s] ? t(STATUS_LABEL_KEYS[s]) : s) : t('ess.common.all')}
             </button>
           ))}
         </div>
@@ -776,25 +927,25 @@ export function AttendanceList() {
         <table className="w-full">
           <thead className="table-header">
             <tr>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Employee</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Branch</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Date</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Check In</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Check Out</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Method</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Notes</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Actions</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.common.employee')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.common.branch')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.common.date')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.attendance.action.checkIn')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.attendance.action.checkOut')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.common.status')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.attendance.table.method')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.common.notes')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('ess.common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
-              <tr><td colSpan={9} className="text-center py-12 text-sm text-muted-foreground">Loading...</td></tr>
+              <tr><td colSpan={9} className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={9} className="text-center py-12">
                 <div className="flex flex-col items-center gap-2">
                   <Clock size={32} className="text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">No attendance records</p>
+                  <p className="text-sm text-muted-foreground">{t('ess.attendance.empty')}</p>
                 </div>
               </td></tr>
             ) : (
@@ -804,7 +955,7 @@ export function AttendanceList() {
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-1">{STATUS_ICONS[r.status]}</div>
                       <div>
-                        <p className="text-sm font-medium">{r.employee?.fullName || '-'}</p>
+                        <p className="text-sm font-medium">{r.employee?.fullName || (!isOperational ? user?.name || user?.email || '-' : '-')}</p>
                         <p className="text-xs text-muted-foreground font-mono">{r.employee?.employeeNumber}</p>
                       </div>
                     </div>
@@ -815,10 +966,10 @@ export function AttendanceList() {
                   <td className="px-4 py-3 text-sm text-muted-foreground">{r.checkOut ? formatTime(r.checkOut) : '-'}</td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex flex-col items-center gap-1">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status] || ''}`}>{r.status}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status] || ''}`}>{STATUS_LABEL_KEYS[r.status] ? t(STATUS_LABEL_KEYS[r.status]) : r.status}</span>
                       {r.requiresReview && (
                         <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                          Review
+                          {t('ess.attendance.table.review')}
                         </span>
                       )}
                     </div>
@@ -841,7 +992,7 @@ export function AttendanceList() {
                     {r.checkIn && !r.checkOut && (
                       <Button size="sm" variant="outline" onClick={() => handleCheckOut(r)}>
                         <LogOut size={14} className="mr-1" />
-                        Check Out
+                        {t('ess.attendance.action.checkOut')}
                       </Button>
                     )}
                   </td>
@@ -853,17 +1004,18 @@ export function AttendanceList() {
       </div>
 
       {/* Check-In Modal */}
-      <Modal open={showCheckIn} onClose={() => setShowCheckIn(false)} title="Check In">
+      <Modal open={showCheckIn} onClose={() => setShowCheckIn(false)} title={t('ess.attendance.modal.checkInTitle')}>
         <CheckInForm
           employees={employees}
           companyId={companyId}
+          selfEmployeeId={isOperational ? undefined : user?.employeeId}
           onSave={handleCheckIn}
           onClose={() => setShowCheckIn(false)}
         />
       </Modal>
 
       {/* Overtime Modal */}
-      <Modal open={showOvertime} onClose={() => setShowOvertime(false)} title="Create Overtime">
+      <Modal open={showOvertime} onClose={() => setShowOvertime(false)} title={t('ess.attendance.modal.overtimeTitle')}>
         <OvertimeForm
           employees={employees}
           onSave={handleOvertime}

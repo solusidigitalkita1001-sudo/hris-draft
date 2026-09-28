@@ -28,10 +28,13 @@ import { formatDate } from '@/utils/format';
 import { cn } from '@/utils/cn';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import { statusLabel } from '@/components/shared/StatusChip';
 
 type FormMode = 'create' | 'edit';
 
 export function AdminUsersPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const [users, setUsers] = useState<UserData[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -89,10 +92,11 @@ export function AdminUsersPage() {
       setEmployees(employeeData.data);
     } catch (e) {
       console.error(e);
-      toast.error('Gagal memuat data user');
+      toast.error(t('adm.users.loadFailed'));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t hanya untuk pesan error; fetch mengikuti company aktif
   }, [companyId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -133,27 +137,27 @@ export function AdminUsersPage() {
 
   const handleSubmit = async () => {
     if (!companyId) {
-      toast.error('Company belum aktif');
+      toast.error(t('adm.common.noActiveCompany'));
       return;
     }
 
     if (!form.email.trim()) {
-      toast.error('Email wajib diisi');
+      toast.error(t('adm.users.validation.emailRequired'));
       return;
     }
 
     if (formMode === 'create' && !form.password.trim()) {
-      toast.error('Password wajib diisi saat create user');
+      toast.error(t('adm.users.validation.passwordRequired'));
       return;
     }
 
     if (formMode === 'edit' && !form.roleIds.length) {
-      toast.error('Minimal pilih satu role');
+      toast.error(t('adm.users.validation.roleRequired'));
       return;
     }
 
     if (formMode === 'create' && !employeeRoleId) {
-      toast.error('Role EMPLOYEE tidak ditemukan. Pastikan roles sudah diseed.');
+      toast.error(t('adm.users.validation.employeeRoleMissing'));
       return;
     }
 
@@ -171,7 +175,7 @@ export function AdminUsersPage() {
           companyId,
           scopeType: 'COMPANY',
         });
-        toast.success('User berhasil dibuat');
+        toast.success(t('adm.users.createSuccess'));
       } else if (editingUserId) {
         const payload: UpdateUserPayload = {
           email: form.email.trim(),
@@ -184,7 +188,7 @@ export function AdminUsersPage() {
           companyId,
           scopeType: 'COMPANY',
         });
-        toast.success('User berhasil diperbarui');
+        toast.success(t('adm.users.updateSuccess'));
       }
 
       resetForm();
@@ -192,19 +196,19 @@ export function AdminUsersPage() {
       await fetchData();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menyimpan user'));
+      toast.error(apiErrorMessage(error, t('adm.users.saveFailed')));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteUser = async (user: UserData) => {
-    const confirmed = window.confirm(`Hapus user ${user.email}?`);
+    const confirmed = window.confirm(t('adm.users.deleteConfirm', { email: user.email }));
     if (!confirmed) return;
 
     try {
       await userService.delete(user.id);
-      toast.success('User berhasil dihapus');
+      toast.success(t('adm.users.deleteSuccess'));
       if (editingUserId === user.id) {
         resetForm();
         setFormOpen(false);
@@ -212,18 +216,18 @@ export function AdminUsersPage() {
       await fetchData();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menghapus user'));
+      toast.error(apiErrorMessage(error, t('adm.users.deleteFailed')));
     }
   };
 
   return (
     <div>
-      <PageHeader title="User Management" description="Manage system users and their roles"
-        actions={<><Button variant="outline" size="sm" onClick={fetchData}><RefreshCw size={16} className="mr-2" />Refresh</Button>
-          <Button size="sm" onClick={handleAddUser}><Plus size={16} className="mr-2" />Add User</Button></>} />
+      <PageHeader title={t('adm.users.title')} description={t('adm.users.description')}
+        actions={<><Button variant="outline" size="sm" onClick={fetchData}><RefreshCw size={16} className="mr-2" />{t('common.refresh')}</Button>
+          <Button size="sm" onClick={handleAddUser}><Plus size={16} className="mr-2" />{t('adm.users.addUser')}</Button></>} />
       <div className="relative mb-4 max-w-xs">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+        <Input placeholder={t('adm.users.searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
       </div>
       <Dialog.Root
         open={formOpen}
@@ -243,12 +247,12 @@ export function AdminUsersPage() {
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div>
                 <Dialog.Title className="text-base font-semibold">
-                  {formMode === 'create' ? 'Tambah User' : 'Edit User'}
+                  {formMode === 'create' ? t('adm.users.form.createTitle') : t('adm.users.form.editTitle')}
                 </Dialog.Title>
                 <Dialog.Description className="mt-1 text-sm text-muted-foreground">
                   {formMode === 'create'
-                    ? 'Sambungkan user ke employee (opsional).'
-                    : 'Sambungkan user ke employee dan update role sesuai kebutuhan.'}
+                    ? t('adm.users.form.createDescription')
+                    : t('adm.users.form.editDescription')}
                 </Dialog.Description>
               </div>
               <button
@@ -263,7 +267,7 @@ export function AdminUsersPage() {
             <div className="space-y-5 px-5 py-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Email</label>
+                  <label className="text-sm font-medium">{t('adm.users.form.email')}</label>
                   <Input
                     value={form.email}
                     onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
@@ -273,36 +277,36 @@ export function AdminUsersPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
-                    Password
-                    {formMode === 'edit' && <span className="ml-2 text-xs text-muted-foreground">Kosongkan, password tidak diubah di flow ini</span>}
+                    {t('adm.users.form.password')}
+                    {formMode === 'edit' && <span className="ml-2 text-xs text-muted-foreground">{t('adm.users.form.passwordEditHint')}</span>}
                   </label>
                   <Input
                     type="password"
                     value={form.password}
                     onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-                    placeholder={formMode === 'create' ? 'Minimal 8 karakter' : 'Tidak diubah'}
+                    placeholder={formMode === 'create' ? t('adm.users.form.passwordCreatePlaceholder') : t('adm.users.form.passwordEditPlaceholder')}
                     disabled={formMode === 'edit'}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Employee</label>
+                  <label className="text-sm font-medium">{t('adm.users.form.employee')}</label>
                   <Select2
                     value={form.employeeId}
                     onValueChange={(value) => setForm((prev) => ({ ...prev, employeeId: value }))}
                     options={[
-                      { value: '', label: 'Tanpa employee link' },
+                      { value: '', label: t('adm.users.form.noEmployeeLink') },
                       ...employees.map((employee) => ({
                         value: employee.id,
                         label: `${employee.fullName} • ${employee.employeeNumber}`,
                       })),
                     ]}
-                    placeholder="Pilih employee"
+                    placeholder={t('adm.users.form.selectEmployee')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Status</label>
+                  <label className="text-sm font-medium">{t('adm.common.status')}</label>
                   <Select2
                     value={form.status}
                     onValueChange={(value) => setForm((prev) => ({
@@ -310,11 +314,11 @@ export function AdminUsersPage() {
                       status: value as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
                     }))}
                     options={[
-                      { value: 'ACTIVE', label: 'ACTIVE' },
-                      { value: 'INACTIVE', label: 'INACTIVE' },
-                      { value: 'SUSPENDED', label: 'SUSPENDED' },
+                      { value: 'ACTIVE', label: t('adm.status.active') },
+                      { value: 'INACTIVE', label: t('adm.status.inactive') },
+                      { value: 'SUSPENDED', label: t('adm.status.suspended') },
                     ]}
-                    placeholder="Pilih status"
+                    placeholder={t('adm.users.form.selectStatus')}
                   />
                 </div>
               </div>
@@ -323,7 +327,7 @@ export function AdminUsersPage() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <KeyRound size={16} className="text-muted-foreground" />
-                    <h4 className="text-sm font-medium">Roles</h4>
+                    <h4 className="text-sm font-medium">{t('adm.users.form.roles')}</h4>
                   </div>
                   <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                     {roles.map((role) => {
@@ -355,10 +359,10 @@ export function AdminUsersPage() {
 
             <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
               <Button variant="outline" size="sm" onClick={() => setFormOpen(false)} disabled={submitting}>
-                Batal
+                {t('common.cancel')}
               </Button>
               <Button size="sm" onClick={handleSubmit} disabled={submitting}>
-                {submitting ? 'Menyimpan...' : formMode === 'create' ? 'Buat User' : 'Simpan Perubahan'}
+                {submitting ? t('adm.common.saving') : formMode === 'create' ? t('adm.users.form.createUser') : t('adm.users.form.saveChanges')}
               </Button>
             </div>
           </Dialog.Content>
@@ -368,18 +372,18 @@ export function AdminUsersPage() {
         <table className="w-full">
           <thead className="table-header">
             <tr>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">User</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Email</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Roles</th>
-              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Last Login</th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Actions</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.users.th.user')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.users.th.email')}</th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.users.th.roles')}</th>
+              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.common.status')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.users.th.lastLogin')}</th>
+              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('adm.common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {loading ? <tr><td colSpan={6} className="text-center py-12 text-sm text-muted-foreground">Loading...</td></tr>
+            {loading ? <tr><td colSpan={6} className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</td></tr>
             : filtered.length === 0
-              ? <tr><td colSpan={6} className="text-center py-12"><Shield size={32} className="mx-auto text-muted-foreground/40" /><p className="text-sm text-muted-foreground mt-2">No users found</p></td></tr>
+              ? <tr><td colSpan={6} className="text-center py-12"><Shield size={32} className="mx-auto text-muted-foreground/40" /><p className="text-sm text-muted-foreground mt-2">{t('adm.users.empty')}</p></td></tr>
               : filtered.map((u) => (
                   <tr key={u.id} className="table-row-hover">
                     <td className="px-4 py-3">
@@ -399,18 +403,18 @@ export function AdminUsersPage() {
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                         u.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-600'
-                      }`}>{u.status}</span>
+                      }`}>{statusLabel(u.status, t)}</span>
                     </td>
-                    <td className="px-4 py-3 text-right text-xs text-muted-foreground">{u.lastLoginAt ? formatDate(u.lastLoginAt) : 'Never'}</td>
+                    <td className="px-4 py-3 text-right text-xs text-muted-foreground">{u.lastLoginAt ? formatDate(u.lastLoginAt) : t('adm.users.never')}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <Button variant="outline" size="sm" onClick={() => handleEditUser(u)}>
                           <Pencil size={14} className="mr-2" />
-                          Edit
+                          {t('common.edit')}
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => handleDeleteUser(u)}>
                           <Trash2 size={14} className="mr-2" />
-                          Delete
+                          {t('common.delete')}
                         </Button>
                       </div>
                     </td>

@@ -78,7 +78,11 @@ describe('payroll run and payslip HTTP boundary', () => {
     expect(service.findPayslipsByEmployee).toHaveBeenCalledTimes(1);
   });
   it('validates run, slip and attendance IDs and preserves scoped not-found errors', async () => {
-    for (const path of ['/runs/invalid', '/payslips/invalid', '/periods/invalid/attendance-summary']) await request(app()).get(`${BASE}${path}`).expect(422);
+    // Payslip IDs are deliberately not UUID-strict (seed/import codes like
+    // "ps-EMP001-2606" are legitimate), so the invalid case has to break the
+    // charset/length bound instead of merely not being a UUID.
+    const OVERLONG_SLIP = 'p'.repeat(37);
+    for (const path of ['/runs/invalid', `/payslips/${OVERLONG_SLIP}`, '/periods/invalid/attendance-summary']) await request(app()).get(`${BASE}${path}`).expect(422);
     await request(app()).put(`${BASE}/periods/invalid/confirm-attendance`).send({}).expect(422);
     for (const operation of Object.values(service)) expect(operation).not.toHaveBeenCalled();
     service.findPayslipById.mockRejectedValueOnce(new AppError('Payslip not found', 404));

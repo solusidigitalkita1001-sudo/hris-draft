@@ -113,6 +113,80 @@ export interface Payslip {
   createdAt: string;
 }
 
+/** Ringkasan payslip self-service: tanpa angka finansial (backend hanya
+ * mengirim id, status, createdAt, payrollRun.period + flag locked). */
+export interface MyPayslipSummary {
+  id: string;
+  status: string;
+  createdAt: string;
+  locked?: boolean;
+  payrollRun?: {
+    id: string;
+    name: string;
+    runNumber: number;
+    status: string;
+    period?: {
+      id: string;
+      name: string;
+      code: string;
+      frequency: string;
+      startDate: string;
+      endDate: string;
+      payDate: string;
+    };
+  };
+}
+
+// ==================== Slip gaji self-service (dilindungi PIN) ====================
+
+export interface PayslipPinStatus {
+  pinSet: boolean;
+  /** ISO datetime saat lock percobaan PIN berakhir (hanya ada saat terkunci). */
+  lockedUntil?: string;
+}
+
+export interface PayslipUnlockGrant {
+  unlockToken: string;
+  expiresAt: string;
+}
+
+export interface PayslipBreakdownRow {
+  id?: string;
+  name: string;
+  amount: number;
+  type: 'ALLOWANCE' | 'DEDUCTION';
+  code?: string;
+  description?: string;
+  isTaxable?: boolean;
+}
+
+export interface PayslipBreakdown {
+  baseSalary: number;
+  earnings: PayslipBreakdownRow[];
+  totalEarnings: number;
+  deductions: PayslipBreakdownRow[];
+  totalDeductions: number;
+  takeHomePay: number;
+  statutorySummary: { bpjsTK: number; bpjsKesehatan: number; pph21: number; otherStatutory: number };
+}
+
+/** Detail payslip milik sendiri — hanya tersedia setelah unlock PIN (server-side). */
+export interface MyPayslipDetail {
+  id: string;
+  employeeId: string;
+  companyId: string;
+  baseSalary: number;
+  totalEarnings: number;
+  totalDeductions: number;
+  netPay: number;
+  status: string;
+  createdAt: string;
+  employee?: { id: string; fullName: string; employeeNumber: string };
+  payrollRun?: MyPayslipSummary['payrollRun'];
+  components: { id: string; name: string; type: string; amount: number; isTaxable: boolean }[];
+  breakdown: PayslipBreakdown;
+}
+
 class PayrollService {
   // Salary Components
   async getSalaryComponents(companyId: string): Promise<SalaryComponent[]> {
@@ -205,9 +279,56 @@ class PayrollService {
     return response.data.data;
   }
 
-  async getMyPayslips(employeeId: string): Promise<Payslip[]> {
-    const response = await api.get('/payroll/payslips', { params: { employeeId } });
+  /**
+   * Daftar payslip milik sendiri (GET /payroll/payslips).
+   * Identitas karyawan diambil backend dari sesi; response hanya berisi
+   * ringkasan periode tanpa angka finansial (locked: true) — detail finansial
+   * butuh payroll unlock token terpisah.
+   */
+  async getMyPayslips(): Promise<MyPayslipSummary[]> {
+    const response = await api.get('/payroll/payslips');
     return response.data.data;
+  }
+
+  /** Unduh PDF slip gaji (GET /payroll/payslips/:id/pdf). */
+  async downloadPayslipPdf(id: string): Promise<Blob> {
+    const response = await api.get(`/payroll/payslips/${id}/pdf`, { responseType: 'blob' });
+    return response.data;
+  }
+
+  // ==================== Slip gaji self-service (dilindungi PIN) ====================
+
+  /** Set/ubah PIN slip gaji — password akun diverifikasi server-side. */
+  async setPayslipPin(currentPassword: string, pin: string): Promise<void> {
+    await api.put('/payroll/payslips/pin', { currentPassword, pin });
+  }
+
+  async getPayslipPinStatus(): Promise<PayslipPinStatus> {
+    const response = await api.get('/payroll/payslips/pin/status');
+    return response.data.data;
+  }
+
+  /** Verifikasi PIN → token unlock 15 menit. Simpan HANYA di memory, bukan storage. */
+  async unlockMyPayslips(pin: string): Promise<PayslipUnlockGrant> {
+    const response = await api.post('/payroll/payslips/my/unlock', { pin });
+    return response.data.data;
+  }
+
+  /** Detail lengkap payslip milik sendiri; butuh unlock token di header X-Payslip-Unlock. */
+  async getMyPayslipDetail(id: string, unlockToken: string): Promise<MyPayslipDetail> {
+    const response = await api.get(`/payroll/payslips/my/${id}`, {
+      headers: { 'X-Payslip-Unlock': unlockToken },
+    });
+    return response.data.data;
+  }
+
+  /** PDF slip gaji milik sendiri; butuh unlock token di header X-Payslip-Unlock. */
+  async downloadMyPayslipPdf(id: string, unlockToken: string): Promise<Blob> {
+    const response = await api.get(`/payroll/payslips/my/${id}/pdf`, {
+      responseType: 'blob',
+      headers: { 'X-Payslip-Unlock': unlockToken },
+    });
+    return response.data;
   }
 }
 

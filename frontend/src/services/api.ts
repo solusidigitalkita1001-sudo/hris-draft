@@ -206,7 +206,8 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError);
         clearClientSession();
-        window.location.href = '/login';
+        // reason=expired → halaman login menampilkan notice kenapa terlempar.
+        window.location.href = '/login?reason=expired';
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

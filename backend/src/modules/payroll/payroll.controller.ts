@@ -4,6 +4,7 @@ import { payrollService } from './payroll.service';
 import { Result } from '@/shared/core/Result';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
+import { payslipPinService } from './payslip-pin.service';
 import PDFDocument from 'pdfkit';
 import { AppError } from '@/shared/exceptions/AppError';
 
@@ -17,6 +18,12 @@ function requiresPayrollUnlock(req: AuthenticatedRequest): boolean {
 
 function payrollUnlockToken(req: AuthenticatedRequest): string | undefined {
   const value = req.headers['x-payroll-unlock-token'];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/** Token unlock PIN self-payslip — header terpisah dari jalur admin. */
+function payslipSelfUnlockToken(req: AuthenticatedRequest): string | undefined {
+  const value = req.headers['x-payslip-unlock'];
   return Array.isArray(value) ? value[0] : value;
 }
 
@@ -370,6 +377,72 @@ export class PayrollController {
       }
       const data = await payrollService.findPayslipsByEmployee(employeeId);
       res.json(Result.success(data.map((item) => ({ ...item, locked: true }))));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ==================== Payslips (self-service, dilindungi PIN) ====================
+
+  /** PUT /payroll/payslips/pin — set/ubah PIN setelah verifikasi password akun. */
+  async setPayslipPin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      await payslipPinService.setPin(req.user!, req.body);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(Result.updated(null, 'PIN slip gaji berhasil disimpan'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /payroll/payslips/pin/status — { pinSet, lockedUntil? }. */
+  async getPayslipPinStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await payslipPinService.getStatus(req.user!);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /payroll/payslips/my/unlock — verifikasi PIN → token unlock 15 menit. */
+  async unlockMyPayslips(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await payslipPinService.unlock(req.user!, req.body.pin);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(Result.success(data, 'Slip gaji terbuka'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /payroll/payslips/my/:id — detail lengkap milik sendiri (header X-Payslip-Unlock). */
+  async findMyPayslipDetail(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      payslipPinService.assertUnlockToken(req.user!, payslipSelfUnlockToken(req));
+      const data = await payslipPinService.getMyPayslipDetail(req.user!, req.params.id as string);
+      res.setHeader('Cache-Control', 'no-store, private');
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /payroll/payslips/my/:id/pdf — PDF slip milik sendiri (header X-Payslip-Unlock). */
+  async downloadMyPayslipPdf(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      payslipPinService.assertUnlockToken(req.user!, payslipSelfUnlockToken(req));
+      const payslip = await payslipPinService.getMyPayslipDetail(req.user!, req.params.id as string);
+      const pdf = await createPayslipPdf(payslip);
+      if (pdf.byteLength > 5 * 1024 * 1024) {
+        throw new AppError('Generated payslip PDF exceeds the 5 MB limit', 413, 'PAYSLIP_PDF_TOO_LARGE', true);
+      }
+      res.setHeader('Cache-Control', 'no-store, private');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', String(pdf.byteLength));
+      res.setHeader('Content-Disposition', `attachment; filename="payslip-${payslip.id}.pdf"`);
+      res.send(pdf);
     } catch (error) {
       next(error);
     }

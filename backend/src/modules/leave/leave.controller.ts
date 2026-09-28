@@ -3,6 +3,9 @@ import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { leaveService } from './leave.service';
 import { Result } from '@/shared/core/Result';
 import { runYearlyLeaveAccrual } from './leave.scheduler';
+import { BadRequestError } from '@/shared/exceptions/AppError';
+import { LEAVE_ATTACHMENT_URL_PREFIX, leaveAttachmentOwnerDirectory } from '@/shared/storage/leave-attachment-reference';
+import config from '@/config';
 
 export class LeaveController {
   async findAllLeaveTypes(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -35,6 +38,28 @@ export class LeaveController {
     try {
       if (req.user?.employeeId) req.body.employeeId = req.user.employeeId;
       res.status(201).json(Result.created(await leaveService.createLeaveRequest(req.body)));
+    } catch (error) { next(error); }
+  }
+
+  async uploadAttachment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.file) {
+        throw new BadRequestError('File lampiran wajib diunggah');
+      }
+      const ownerDirectory = leaveAttachmentOwnerDirectory(req.user?.companyId, req.user?.employeeId);
+      const attachmentUrl = `${config.app.url}${LEAVE_ATTACHMENT_URL_PREFIX}${ownerDirectory}/${req.file.filename}`;
+      res.status(201).json(
+        Result.created(
+          {
+            fileName: req.file.filename,
+            originalName: req.file.originalname,
+            mimeType: req.file.mimetype,
+            size: req.file.size,
+            url: attachmentUrl,
+          },
+          'Lampiran cuti berhasil diunggah'
+        )
+      );
     } catch (error) { next(error); }
   }
 

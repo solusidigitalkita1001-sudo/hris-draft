@@ -11,6 +11,36 @@ import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { AlertCircle, CheckCircle2, MessageSquare, RefreshCw, Trophy } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+const RESULT_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  PUBLISHED: 'perf.resultStatus.published',
+  FINALIZED: 'perf.resultStatus.finalized',
+};
+
+const DISPUTE_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  OPEN: 'perf.disputeStatus.open',
+  RESPONDED: 'perf.disputeStatus.responded',
+  RESOLVED: 'perf.disputeStatus.resolved',
+  REJECTED: 'perf.disputeStatus.rejected',
+  CLOSED: 'perf.disputeStatus.closed',
+};
+
+const DEV_REC_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  PENDING: 'perf.devRecStatus.pending',
+  ASSIGNED: 'perf.devRecStatus.assigned',
+  ENROLLED: 'perf.devRecStatus.enrolled',
+  COMPLETED: 'perf.devRecStatus.completed',
+  DISMISSED: 'perf.devRecStatus.dismissed',
+};
+
+const DEV_REC_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  TRAINING: 'perf.devRecType.training',
+  DEVELOPMENT_PLAN: 'perf.devRecType.developmentPlan',
+  SUCCESSION: 'perf.devRecType.succession',
+  COMPENSATION: 'perf.devRecType.compensation',
+};
 
 const RESULT_STATUS_STYLES: Record<string, string> = {
   PUBLISHED: 'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-400',
@@ -37,6 +67,7 @@ function formatDateTime(value?: string | null) {
 }
 
 export function PerformanceMyResultsPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
   const [results, setResults] = useState<PerformanceResult[]>([]);
@@ -72,11 +103,11 @@ export function PerformanceMyResultsPage() {
       setSelectedResultId((current) => (current && data.some((result) => result.id === current) ? current : data[0]?.id || ''));
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal memuat published result'));
+      toast.error(apiErrorMessage(error, t('perf.myResults.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     void fetchData();
@@ -84,7 +115,7 @@ export function PerformanceMyResultsPage() {
 
   const handleAcknowledge = useCallback(async () => {
     if (!selectedResult) {
-      toast.error('Pilih result terlebih dahulu');
+      toast.error(t('perf.myResults.selectResultFirst'));
       return;
     }
 
@@ -93,25 +124,25 @@ export function PerformanceMyResultsPage() {
       await performanceService.acknowledgePerformanceResult(selectedResult.id, {
         notes: acknowledgeNotes.trim() || undefined,
       });
-      toast.success('Hasil performance berhasil di-acknowledge');
+      toast.success(t('perf.myResults.acknowledgeSuccess'));
       setAcknowledgeNotes('');
       await fetchData();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal acknowledge result'));
+      toast.error(apiErrorMessage(error, t('perf.myResults.acknowledgeFailed')));
     } finally {
       setAcknowledging(false);
     }
-  }, [acknowledgeNotes, fetchData, selectedResult]);
+  }, [acknowledgeNotes, fetchData, selectedResult, t]);
 
   const handleCreateDispute = useCallback(async () => {
     if (!selectedResult) {
-      toast.error('Pilih result terlebih dahulu');
+      toast.error(t('perf.myResults.selectResultFirst'));
       return;
     }
 
     if (!disputeForm.title.trim() || !disputeForm.message.trim()) {
-      toast.error('Judul dan pesan dispute wajib diisi');
+      toast.error(t('perf.myResults.disputeValidation'));
       return;
     }
 
@@ -121,21 +152,21 @@ export function PerformanceMyResultsPage() {
         title: disputeForm.title.trim(),
         message: disputeForm.message.trim(),
       });
-      toast.success('Dispute berhasil dikirim');
+      toast.success(t('perf.myResults.disputeSuccess'));
       setDisputeForm({ title: '', message: '' });
       await fetchData();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal mengirim dispute'));
+      toast.error(apiErrorMessage(error, t('perf.myResults.disputeFailed')));
     } finally {
       setSubmittingDispute(false);
     }
-  }, [disputeForm, fetchData, selectedResult]);
+  }, [disputeForm, fetchData, selectedResult, t]);
 
   const handleUploadDisputeAttachment = useCallback(async (disputeId: string) => {
     const file = disputeAttachmentFiles[disputeId];
     if (!file) {
-      toast.error('Pilih file attachment');
+      toast.error(t('perf.myResults.selectAttachmentFile'));
       return;
     }
 
@@ -147,34 +178,34 @@ export function PerformanceMyResultsPage() {
         visibility: 'RESTRICTED',
       });
       setDisputeAttachmentFiles((prev) => ({ ...prev, [disputeId]: null }));
-      toast.success('Attachment dispute berhasil diupload');
+      toast.success(t('perf.myResults.attachmentUploaded'));
       await fetchData();
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal upload attachment dispute'));
+      toast.error(apiErrorMessage(error, t('perf.myResults.attachmentUploadFailed')));
     } finally {
       setUploadingDisputeAttachment(false);
     }
-  }, [disputeAttachmentFiles, fetchData]);
+  }, [disputeAttachmentFiles, fetchData, t]);
 
   const handleDownloadAttachment = useCallback(async (documentId: string, fileName: string) => {
     try {
       await documentManagementService.download(documentId, fileName);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal download attachment'));
+      toast.error(apiErrorMessage(error, t('perf.myResults.downloadFailed')));
     }
-  }, []);
+  }, [t]);
 
   return (
     <div>
       <PageHeader
-        title="My Performance Results"
-        description="Lihat hasil performance yang sudah dipublish, acknowledge hasil, dan ajukan dispute bila perlu."
+        title={t('perf.myResults.title')}
+        description={t('perf.myResults.description')}
         actions={(
           <Button variant="outline" size="sm" onClick={() => void fetchData()}>
             <RefreshCw size={16} className="mr-2" />
-            Refresh
+            {t('common.refresh')}
           </Button>
         )}
       />
@@ -183,19 +214,19 @@ export function PerformanceMyResultsPage() {
         <div className="rounded-xl border border-border bg-card p-5">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">Published Results</h3>
-              <p className="text-xs text-muted-foreground">Result yang sudah dibuka untuk employee sesuai visibility policy.</p>
+              <h3 className="text-sm font-semibold">{t('perf.myResults.publishedResults')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.myResults.publishedResultsHint')}</p>
             </div>
-            <span className="text-xs text-muted-foreground">{results.length} item</span>
+            <span className="text-xs text-muted-foreground">{t('perf.common.itemCount', { count: results.length })}</span>
           </div>
           <div className="space-y-3">
             {loading ? (
               <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                Loading...
+                {t('common.loading')}
               </div>
             ) : !results.length ? (
               <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                Belum ada result yang dipublish.
+                {t('perf.myResults.emptyResults')}
               </div>
             ) : (
               results.map((result) => (
@@ -211,17 +242,17 @@ export function PerformanceMyResultsPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold">{result.period?.name || 'Tanpa period'}</p>
+                      <p className="text-sm font-semibold">{result.period?.name || t('perf.common.noPeriod')}</p>
                       <p className="text-xs text-muted-foreground">{result.period?.code || '-'}</p>
                     </div>
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${RESULT_STATUS_STYLES[result.status] || RESULT_STATUS_STYLES.PUBLISHED}`}>
-                      {result.status}
+                      {RESULT_STATUS_LABEL_KEYS[result.status] ? t(RESULT_STATUS_LABEL_KEYS[result.status]) : result.status}
                     </span>
                   </div>
                   <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-                    <p>Final Score: {result.finalScore ?? '-'}</p>
-                    <p>Grade: {result.gradeLabel || '-'}</p>
-                    <p>Published: {formatDateTime(result.publishedAt)}</p>
+                    <p>{t('perf.myResults.finalScoreLabel', { value: result.finalScore ?? '-' })}</p>
+                    <p>{t('perf.myResults.gradeLabel', { value: result.gradeLabel || '-' })}</p>
+                    <p>{t('perf.myResults.publishedLabel', { value: formatDateTime(result.publishedAt) })}</p>
                   </div>
                 </button>
               ))
@@ -232,42 +263,42 @@ export function PerformanceMyResultsPage() {
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold">Result Detail</h3>
-              <p className="text-xs text-muted-foreground">Detail score akan tampil sesuai visibility policy dari HR/manager.</p>
+              <h3 className="text-sm font-semibold">{t('perf.myResults.detailTitle')}</h3>
+              <p className="text-xs text-muted-foreground">{t('perf.myResults.detailHint')}</p>
             </div>
             {!selectedResult ? (
-              <p className="text-sm text-muted-foreground">Pilih result dari panel kiri.</p>
+              <p className="text-sm text-muted-foreground">{t('perf.myResults.selectResultLeft')}</p>
             ) : (
               <div className="space-y-4">
                 <div className="rounded-xl border border-border bg-background px-4 py-3">
                   <p className="text-sm font-semibold">{selectedResult.period?.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    Final Score {selectedResult.finalScore ?? '-'} • Grade {selectedResult.gradeLabel || '-'}
+                    {t('perf.myResults.scoreGradeInline', { score: selectedResult.finalScore ?? '-', grade: selectedResult.gradeLabel || '-' })}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Published {formatDateTime(selectedResult.publishedAt)} • Dispute Deadline {formatDateTime(selectedResult.disputeDeadline)}
+                    {t('perf.myResults.publishedDisputeInline', { published: formatDateTime(selectedResult.publishedAt), deadline: formatDateTime(selectedResult.disputeDeadline) })}
                   </p>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-3">
-                  <MiniStat label="Final Score" value={selectedResult.finalScore ?? '-'} icon={<Trophy size={16} />} />
-                  <MiniStat label="Grade" value={selectedResult.gradeLabel || '-'} icon={<CheckCircle2 size={16} />} />
-                  <MiniStat label="Disputes" value={selectedResult.disputes?.length || 0} icon={<AlertCircle size={16} />} />
+                  <MiniStat label={t('perf.myResults.stats.finalScore')} value={selectedResult.finalScore ?? '-'} icon={<Trophy size={16} />} />
+                  <MiniStat label={t('perf.myResults.stats.grade')} value={selectedResult.gradeLabel || '-'} icon={<CheckCircle2 size={16} />} />
+                  <MiniStat label={t('perf.myResults.stats.disputes')} value={selectedResult.disputes?.length || 0} icon={<AlertCircle size={16} />} />
                 </div>
 
                 {selectedResult.visibilityPolicy?.showRecommendations && (
                   <>
                     <div className="rounded-xl border border-border bg-background p-4">
-                      <p className="text-sm font-medium">Recommendation</p>
-                      <p className="mt-2 text-sm text-muted-foreground">{selectedResult.recommendationSummary || 'Belum ada recommendation yang dipublish.'}</p>
+                      <p className="text-sm font-medium">{t('perf.myResults.recommendation')}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">{selectedResult.recommendationSummary || t('perf.myResults.emptyRecommendation')}</p>
                     </div>
                     <div className="rounded-xl border border-border bg-background p-4">
                       <div className="mb-3">
-                        <p className="text-sm font-medium">Development Recommendations</p>
-                        <p className="text-xs text-muted-foreground">Course atau tindak lanjut development yang sudah ditautkan dari result performance.</p>
+                        <p className="text-sm font-medium">{t('perf.myResults.devRecTitle')}</p>
+                        <p className="text-xs text-muted-foreground">{t('perf.myResults.devRecHint')}</p>
                       </div>
                       {!selectedResult.developmentRecommendations?.length ? (
-                        <p className="text-sm text-muted-foreground">Belum ada development recommendation yang dipublish.</p>
+                        <p className="text-sm text-muted-foreground">{t('perf.myResults.emptyDevRec')}</p>
                       ) : (
                         <div className="space-y-2">
                           {selectedResult.developmentRecommendations.map((recommendation) => (
@@ -275,10 +306,13 @@ export function PerformanceMyResultsPage() {
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <p className="text-sm font-medium">{recommendation.title}</p>
-                                  <p className="text-xs text-muted-foreground">{recommendation.course?.title || recommendation.type}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {recommendation.course?.title
+                                      || (DEV_REC_TYPE_LABEL_KEYS[recommendation.type] ? t(DEV_REC_TYPE_LABEL_KEYS[recommendation.type]) : recommendation.type)}
+                                  </p>
                                 </div>
                                 <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-400">
-                                  {recommendation.status}
+                                  {DEV_REC_STATUS_LABEL_KEYS[recommendation.status] ? t(DEV_REC_STATUS_LABEL_KEYS[recommendation.status]) : recommendation.status}
                                 </span>
                               </div>
                               <p className="mt-2 text-xs text-muted-foreground">{recommendation.description || recommendation.notes || '-'}</p>
@@ -292,11 +326,11 @@ export function PerformanceMyResultsPage() {
 
                 <div className="rounded-xl border border-border bg-background p-4">
                   <div className="mb-3">
-                    <p className="text-sm font-medium">Result Attachments</p>
-                    <p className="text-xs text-muted-foreground">Dokumen resmi result yang disimpan ke document management.</p>
+                    <p className="text-sm font-medium">{t('perf.myResults.attachmentsTitle')}</p>
+                    <p className="text-xs text-muted-foreground">{t('perf.myResults.attachmentsHint')}</p>
                   </div>
                   {!selectedResult.attachments?.length ? (
-                    <p className="text-sm text-muted-foreground">Belum ada attachment result.</p>
+                    <p className="text-sm text-muted-foreground">{t('perf.myResults.emptyAttachments')}</p>
                   ) : (
                     <div className="space-y-2">
                       {selectedResult.attachments.map((attachment) => (
@@ -307,7 +341,7 @@ export function PerformanceMyResultsPage() {
                               <p className="text-xs text-muted-foreground">{attachment.document.fileName}</p>
                             </div>
                             <Button size="sm" variant="outline" onClick={() => void handleDownloadAttachment(attachment.document.id, attachment.document.fileName)}>
-                              Download
+                              {t('perf.common.download')}
                             </Button>
                           </div>
                         </div>
@@ -318,7 +352,7 @@ export function PerformanceMyResultsPage() {
 
                 {selectedResult.visibilityPolicy?.showCalculation && (
                   <div className="rounded-xl border border-border bg-background p-4">
-                    <p className="text-sm font-medium">Calculation Snapshot</p>
+                    <p className="text-sm font-medium">{t('perf.myResults.calculationSnapshot')}</p>
                     <pre className="mt-3 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-100">
                       {JSON.stringify(selectedResult.calculationSnapshot || {}, null, 2)}
                     </pre>
@@ -327,7 +361,7 @@ export function PerformanceMyResultsPage() {
 
                 {selectedResult.visibilityPolicy?.showCalibrationHistory && (
                   <div className="rounded-xl border border-border bg-background p-4">
-                    <p className="text-sm font-medium">Calibration Snapshot</p>
+                    <p className="text-sm font-medium">{t('perf.myResults.calibrationSnapshot')}</p>
                     <pre className="mt-3 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-100">
                       {JSON.stringify(selectedResult.calibrationSnapshot || {}, null, 2)}
                     </pre>
@@ -341,22 +375,26 @@ export function PerformanceMyResultsPage() {
             <>
               <div className="rounded-xl border border-border bg-card p-5">
                 <div className="mb-4">
-                  <h3 className="text-sm font-semibold">Acknowledge Result</h3>
-                  <p className="text-xs text-muted-foreground">Konfirmasi bahwa hasil performance sudah dibaca.</p>
+                  <h3 className="text-sm font-semibold">{t('perf.myResults.acknowledgeTitle')}</h3>
+                  <p className="text-xs text-muted-foreground">{t('perf.myResults.acknowledgeHint')}</p>
                 </div>
                 <div className="space-y-3">
                   <Input
                     value={acknowledgeNotes}
                     onChange={(event) => setAcknowledgeNotes(event.target.value)}
-                    placeholder="Catatan acknowledge"
+                    placeholder={t('perf.myResults.acknowledgeNotePlaceholder')}
                   />
                   <Button size="sm" className="w-full" onClick={() => void handleAcknowledge()} disabled={acknowledging || Boolean(selectedResult.acknowledgedAt)}>
                     <CheckCircle2 size={16} className="mr-2" />
-                    {selectedResult.acknowledgedAt ? 'Sudah Acknowledged' : acknowledging ? 'Menyimpan...' : 'Acknowledge Result'}
+                    {selectedResult.acknowledgedAt
+                      ? t('perf.myResults.alreadyAcknowledged')
+                      : acknowledging
+                        ? t('perf.common.saving')
+                        : t('perf.myResults.acknowledgeButton')}
                   </Button>
                   {selectedResult.acknowledgedAt && (
                     <p className="text-xs text-muted-foreground">
-                      Di-acknowledge pada {formatDateTime(selectedResult.acknowledgedAt)}
+                      {t('perf.myResults.acknowledgedAt', { value: formatDateTime(selectedResult.acknowledgedAt) })}
                     </p>
                   )}
                 </div>
@@ -364,24 +402,24 @@ export function PerformanceMyResultsPage() {
 
               <div className="rounded-xl border border-border bg-card p-5">
                 <div className="mb-4">
-                  <h3 className="text-sm font-semibold">Dispute Result</h3>
-                  <p className="text-xs text-muted-foreground">Ajukan dispute jika ada keberatan terhadap hasil final yang dipublish.</p>
+                  <h3 className="text-sm font-semibold">{t('perf.myResults.disputeTitle')}</h3>
+                  <p className="text-xs text-muted-foreground">{t('perf.myResults.disputeHint')}</p>
                 </div>
                 <div className="space-y-3">
                   <Input
                     value={disputeForm.title}
                     onChange={(event) => setDisputeForm((prev) => ({ ...prev, title: event.target.value }))}
-                    placeholder="Judul dispute"
+                    placeholder={t('perf.myResults.disputeTitlePlaceholder')}
                   />
                   <textarea
                     value={disputeForm.message}
                     onChange={(event) => setDisputeForm((prev) => ({ ...prev, message: event.target.value }))}
-                    placeholder="Jelaskan dispute Anda"
+                    placeholder={t('perf.myResults.disputeMessagePlaceholder')}
                     className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   />
                   <Button size="sm" className="w-full" onClick={() => void handleCreateDispute()} disabled={submittingDispute}>
                     <MessageSquare size={16} className="mr-2" />
-                    {submittingDispute ? 'Mengirim...' : 'Kirim Dispute'}
+                    {submittingDispute ? t('perf.common.sending') : t('perf.myResults.submitDispute')}
                   </Button>
                 </div>
 
@@ -394,12 +432,12 @@ export function PerformanceMyResultsPage() {
                           <p className="mt-1 text-xs text-muted-foreground">{dispute.message}</p>
                         </div>
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${DISPUTE_STATUS_STYLES[dispute.status] || DISPUTE_STATUS_STYLES.OPEN}`}>
-                          {dispute.status}
+                          {DISPUTE_STATUS_LABEL_KEYS[dispute.status] ? t(DISPUTE_STATUS_LABEL_KEYS[dispute.status]) : dispute.status}
                         </span>
                       </div>
                       {dispute.responseMessage && (
                         <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2">
-                          <p className="text-xs font-medium">Response</p>
+                          <p className="text-xs font-medium">{t('perf.myResults.responseLabel')}</p>
                           <p className="mt-1 text-xs text-muted-foreground">{dispute.responseMessage}</p>
                           <p className="mt-1 text-[11px] text-muted-foreground">
                             {dispute.respondedBy?.fullName || '-'} • {formatDateTime(dispute.respondedAt)}
@@ -407,7 +445,7 @@ export function PerformanceMyResultsPage() {
                         </div>
                       )}
                       <div className="mt-3 rounded-lg border border-border px-3 py-3">
-                        <p className="text-xs font-medium text-muted-foreground">Attachment Evidence</p>
+                        <p className="text-xs font-medium text-muted-foreground">{t('perf.myResults.attachmentEvidence')}</p>
                         <div className="mt-3 flex gap-2">
                           <input
                             type="file"
@@ -415,12 +453,12 @@ export function PerformanceMyResultsPage() {
                             onChange={(event) => setDisputeAttachmentFiles((prev) => ({ ...prev, [dispute.id]: event.target.files?.[0] || null }))}
                           />
                           <Button size="sm" variant="outline" onClick={() => void handleUploadDisputeAttachment(dispute.id)} disabled={uploadingDisputeAttachment}>
-                            {uploadingDisputeAttachment ? 'Uploading...' : 'Upload'}
+                            {uploadingDisputeAttachment ? t('perf.common.uploading') : t('perf.common.upload')}
                           </Button>
                         </div>
                         <div className="mt-3 space-y-2">
                           {!dispute.attachments?.length ? (
-                            <p className="text-xs text-muted-foreground">Belum ada attachment dispute.</p>
+                            <p className="text-xs text-muted-foreground">{t('perf.myResults.emptyDisputeAttachments')}</p>
                           ) : dispute.attachments.map((attachment) => (
                             <div key={attachment.id} className="rounded-lg border border-border px-3 py-2">
                               <div className="flex items-center justify-between gap-3">
@@ -429,7 +467,7 @@ export function PerformanceMyResultsPage() {
                                   <p className="text-xs text-muted-foreground">{attachment.document.fileName}</p>
                                 </div>
                                 <Button size="sm" variant="outline" onClick={() => void handleDownloadAttachment(attachment.document.id, attachment.document.fileName)}>
-                                  Download
+                                  {t('perf.common.download')}
                                 </Button>
                               </div>
                             </div>

@@ -15,12 +15,14 @@ import { useCompanyStore } from '@/stores/company.store';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
-const DURATION_UNIT_OPTIONS = [
-  { value: 'HOUR', label: 'Hour' },
-  { value: 'DAY', label: 'Day' },
-  { value: 'WEEK', label: 'Week' },
-  { value: 'MONTH', label: 'Month' },
+const DURATION_UNIT_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'HOUR', labelKey: 'ops.training.durationUnits.hour' },
+  { value: 'DAY', labelKey: 'ops.training.durationUnits.day' },
+  { value: 'WEEK', labelKey: 'ops.training.durationUnits.week' },
+  { value: 'MONTH', labelKey: 'ops.training.durationUnits.month' },
 ];
 
 interface CourseFormState {
@@ -51,6 +53,7 @@ function getInitialForm(): CourseFormState {
 
 export function CourseFormPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
@@ -64,10 +67,15 @@ export function CourseFormPage() {
 
   const categoryOptions = useMemo(
     () => [
-      { value: '', label: 'Tanpa kategori' },
+      { value: '', label: t('ops.training.form.noCategory') },
       ...categories.map((category) => ({ value: category.id, label: `${category.name} • ${category.code}` })),
     ],
-    [categories]
+    [categories, t]
+  );
+
+  const durationUnitOptions = useMemo(
+    () => DURATION_UNIT_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) })),
+    [t]
   );
 
   useEffect(() => {
@@ -82,12 +90,12 @@ export function CourseFormPage() {
         setCategories(data);
       } catch (error) {
         console.error(error);
-        toast.error('Gagal memuat kategori training');
+        toast.error(t('ops.training.toast.loadCategoriesFailed'));
       }
     };
 
     void loadCategories();
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     if (!id) {
@@ -115,23 +123,23 @@ export function CourseFormPage() {
         });
       } catch (error) {
         console.error(error);
-        toast.error('Gagal memuat detail course');
+        toast.error(t('ops.training.toast.loadCourseFailed'));
       } finally {
         setLoading(false);
       }
     };
 
     void loadCourse();
-  }, [id]);
+  }, [id, t]);
 
   const handleSubmit = useCallback(async () => {
     if (!companyId) {
-      toast.error('Company belum aktif');
+      toast.error(t('ops.training.toast.noActiveCompany'));
       return;
     }
 
     if (!form.title.trim()) {
-      toast.error('Title course wajib diisi');
+      toast.error(t('ops.training.toast.titleRequired'));
       return;
     }
 
@@ -149,7 +157,7 @@ export function CourseFormPage() {
           isActive: form.isActive,
         };
         const updated = await trainingService.updateCourse(id, payload);
-        toast.success('Course berhasil diperbarui');
+        toast.success(t('ops.training.toast.updateSuccess'));
         navigate(`/lms/courses/${updated.id}`);
         return;
       }
@@ -165,25 +173,25 @@ export function CourseFormPage() {
         isMandatory: form.isMandatory,
       };
       const created = await trainingService.createCourse(payload);
-      toast.success('Course berhasil dibuat');
+      toast.success(t('ops.training.toast.createSuccess'));
       navigate(`/lms/courses/${created.id}`);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menyimpan course'));
+      toast.error(apiErrorMessage(error, t('ops.training.toast.saveFailed')));
     } finally {
       setSaving(false);
     }
-  }, [companyId, form, id, isEditMode, navigate]);
+  }, [companyId, form, id, isEditMode, navigate, t]);
 
   if (loading) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>;
+    return <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title={isEditMode ? 'Edit Course' : 'New Course'}
-        description={isEditMode ? `Perbarui detail course ${course?.title || ''}` : 'Buat course training baru untuk LMS perusahaan.'}
+        title={isEditMode ? t('ops.training.editCourse') : t('ops.training.newCourse')}
+        description={isEditMode ? t('ops.training.form.editDescription', { title: course?.title || '' }) : t('ops.training.form.createDescription')}
         actions={(
           <Button
             variant="outline"
@@ -191,7 +199,7 @@ export function CourseFormPage() {
             onClick={() => navigate(isEditMode && id ? `/lms/courses/${id}` : '/lms')}
           >
             <ArrowLeft size={16} className="mr-2" />
-            Back
+            {t('ops.training.back')}
           </Button>
         )}
       />
@@ -199,41 +207,41 @@ export function CourseFormPage() {
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Title</label>
+            <label className="text-sm font-medium">{t('ops.training.fields.title')}</label>
             <Input
               value={form.title}
               onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="Leadership Essentials"
+              placeholder={t('ops.training.form.titlePlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Code</label>
+            <label className="text-sm font-medium">{t('ops.training.fields.code')}</label>
             <Input
               value={isEditMode ? form.code : ''}
-              placeholder="Akan dibuat otomatis oleh sistem"
+              placeholder={t('ops.training.form.codePlaceholder')}
               disabled
             />
-            {!isEditMode ? <p className="text-xs text-muted-foreground">Code course digenerate otomatis saat create.</p> : null}
+            {!isEditMode ? <p className="text-xs text-muted-foreground">{t('ops.training.form.codeHint')}</p> : null}
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Category</label>
+            <label className="text-sm font-medium">{t('ops.training.fields.category')}</label>
             <Select2
               value={form.categoryId}
               onValueChange={(value) => setForm((prev) => ({ ...prev, categoryId: value }))}
               options={categoryOptions}
-              placeholder="Pilih kategori"
+              placeholder={t('ops.training.form.categoryPlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Provider</label>
+            <label className="text-sm font-medium">{t('ops.training.fields.provider')}</label>
             <Input
               value={form.provider}
               onChange={(e) => setForm((prev) => ({ ...prev, provider: e.target.value }))}
-              placeholder="Internal HR Academy"
+              placeholder={t('ops.training.form.providerPlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Duration</label>
+            <label className="text-sm font-medium">{t('ops.training.fields.duration')}</label>
             <Input
               type="number"
               min={1}
@@ -243,23 +251,23 @@ export function CourseFormPage() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Duration Unit</label>
+            <label className="text-sm font-medium">{t('ops.training.fields.durationUnit')}</label>
             <Select2
               value={form.durationUnit}
               onValueChange={(value) => setForm((prev) => ({ ...prev, durationUnit: value }))}
-              options={DURATION_UNIT_OPTIONS}
-              placeholder="Pilih durasi"
+              options={durationUnitOptions}
+              placeholder={t('ops.training.form.durationUnitPlaceholder')}
             />
           </div>
         </div>
 
         <div className="mt-4 space-y-2">
-          <label className="text-sm font-medium">Description</label>
+          <label className="text-sm font-medium">{t('ops.training.fields.description')}</label>
           <textarea
             value={form.description}
             onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
             className="min-h-32 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-            placeholder="Deskripsi course, objective, dan ringkasan materi."
+            placeholder={t('ops.training.form.descriptionPlaceholder')}
           />
         </div>
 
@@ -271,8 +279,8 @@ export function CourseFormPage() {
               onChange={(e) => setForm((prev) => ({ ...prev, isMandatory: e.target.checked }))}
             />
             <div>
-              <p className="text-sm font-medium">Mandatory course</p>
-              <p className="text-xs text-muted-foreground">Tandai jika course wajib diikuti employee.</p>
+              <p className="text-sm font-medium">{t('ops.training.form.mandatoryLabel')}</p>
+              <p className="text-xs text-muted-foreground">{t('ops.training.form.mandatoryHint')}</p>
             </div>
           </label>
 
@@ -284,8 +292,8 @@ export function CourseFormPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
               />
               <div>
-                <p className="text-sm font-medium">Course active</p>
-                <p className="text-xs text-muted-foreground">Nonaktifkan jika course sudah tidak dibuka.</p>
+                <p className="text-sm font-medium">{t('ops.training.form.activeLabel')}</p>
+                <p className="text-xs text-muted-foreground">{t('ops.training.form.activeHint')}</p>
               </div>
             </label>
           )}
@@ -297,10 +305,10 @@ export function CourseFormPage() {
             size="sm"
             onClick={() => navigate(isEditMode && id ? `/lms/courses/${id}` : '/lms')}
           >
-            Batal
+            {t('common.cancel')}
           </Button>
           <Button size="sm" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Menyimpan...' : isEditMode ? 'Simpan Perubahan' : 'Buat Course'}
+            {saving ? t('ops.training.form.saving') : isEditMode ? t('ops.training.form.saveChanges') : t('ops.training.form.createCourse')}
           </Button>
         </div>
       </div>

@@ -26,6 +26,7 @@ import {
   OutsideRadiusAction,
   Prisma,
 } from '@prisma/client';
+import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { attendanceContextService } from './attendance-context.service';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
@@ -176,10 +177,50 @@ function resolveAllowedMethods(policyMethod: string): AttendanceCaptureMethod[] 
         AttendanceCaptureMethod.MOBILE_GPS,
         AttendanceCaptureMethod.FACE_RECOGNITION,
       ];
+    // FACE_RECOGNITION: wajah wajib (geofence opsional, mengikuti requiresLocation/koordinat).
+    // FACE_GPS: wajah wajib + geofence wajib (dikonfigurasi saat menyimpan policy).
+    case 'FACE_RECOGNITION':
+    case 'FACE_GPS':
+      return [AttendanceCaptureMethod.FACE_RECOGNITION];
     case 'MANUAL':
     default:
       return [AttendanceCaptureMethod.MANUAL, AttendanceCaptureMethod.FACE_RECOGNITION];
   }
+}
+
+/** Kebijakan bermetode FACE_* mewajibkan verifikasi wajah walau toggle selfie mati. */
+function policyRequiresFace(policyMethod: string): boolean {
+  return policyMethod === 'FACE_RECOGNITION' || policyMethod === 'FACE_GPS';
+}
+
+interface EmployeeMethodFlags {
+  allowFingerprint: boolean;
+  allowFaceRecognition: boolean;
+  allowMobileGps: boolean;
+}
+
+/**
+ * Matriks metode per karyawan (diatur SUPER_ADMIN): metode efektif =
+ * kebijakan cabang ∩ izin karyawan. MANUAL tidak difilter (jalur admin/HR).
+ */
+export function filterMethodsByEmployeeFlags(
+  methods: AttendanceCaptureMethod[],
+  flags: EmployeeMethodFlags | null,
+): AttendanceCaptureMethod[] {
+  if (!flags) return methods;
+  return methods.filter((method) => {
+    if (method === AttendanceCaptureMethod.FINGERPRINT) return flags.allowFingerprint;
+    if (method === AttendanceCaptureMethod.MOBILE_GPS) return flags.allowMobileGps;
+    if (method === AttendanceCaptureMethod.FACE_RECOGNITION) return flags.allowFaceRecognition;
+    return true;
+  });
+}
+
+async function fetchEmployeeMethodFlags(employeeId: string): Promise<EmployeeMethodFlags | null> {
+  return prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { allowFingerprint: true, allowFaceRecognition: true, allowMobileGps: true },
+  });
 }
 
 function isHolidayLikeDayType(dayType: string) {
@@ -215,7 +256,13 @@ function evaluateGpsAttendance(options: {
     phaseLabel = 'attendance',
   } = options;
 
-  const mustEvaluateLocation = method === AttendanceCaptureMethod.MOBILE_GPS || method === AttendanceCaptureMethod.FACE_RECOGNITION || requiresLocation;
+  // FACE_RECOGNITION: geofence dievaluasi bila diwajibkan policy ATAU geofence
+  // memang terkonfigurasi — kebijakan FACE tanpa koordinat (kerja remote) tetap sah.
+  const policyHasGeofence = policyLatitude !== null && policyLongitude !== null && policyRadiusMeters !== null;
+  const mustEvaluateLocation =
+    method === AttendanceCaptureMethod.MOBILE_GPS ||
+    requiresLocation ||
+    (method === AttendanceCaptureMethod.FACE_RECOGNITION && policyHasGeofence);
   if (!mustEvaluateLocation) {
     return {
       distanceMeters: null as number | null,
@@ -293,7 +340,9 @@ export class AttendanceService {
       lateToleranceMinutes: context.policy.lateToleranceMinutes,
       earlyCheckoutToleranceMinutes: context.policy.earlyCheckoutToleranceMinutes,
       requiresLocation: context.policy.requiresLocation,
-      requiresSelfie: context.policy.requiresSelfie,
+      // Efektif: metode FACE_* mewajibkan selfie walau toggle policy mati,
+      // supaya klien (web/mobile) langsung menyalakan alur kamera.
+      requiresSelfie: context.policy.requiresSelfie || policyRequiresFace(context.policy.attendanceMethod),
       gpsLatitude: context.policy.gpsLatitude,
       gpsLongitude: context.policy.gpsLongitude,
       gpsRadiusMeters: context.policy.gpsRadiusMeters,
@@ -400,7 +449,10 @@ export class AttendanceService {
   async getResolvedContext(employeeId: string, attendanceDate: string, companyId?: string) {
     const resolvedDate = new Date(attendanceDate);
     const context = await attendanceContextService.resolve(employeeId, resolvedDate, companyId);
-    const allowedMethods = resolveAllowedMethods(context.policy.attendanceMethod);
+    const allowedMethods = filterMethodsByEmployeeFlags(
+      resolveAllowedMethods(context.policy.attendanceMethod),
+      await fetchEmployeeMethodFlags(employeeId),
+    );
 
     return {
       ...context,
@@ -418,10 +470,13 @@ export class AttendanceService {
 
     const context = await attendanceContextService.resolve(data.employeeId, attendanceDate, data.companyId);
     const method = data.method as AttendanceCaptureMethod;
-    const allowedMethods = resolveAllowedMethods(context.policy.attendanceMethod);
+    const allowedMethods = filterMethodsByEmployeeFlags(
+      resolveAllowedMethods(context.policy.attendanceMethod),
+      await fetchEmployeeMethodFlags(data.employeeId),
+    );
 
     if (!allowedMethods.includes(method)) {
-      throw new BadRequestError('Attendance method is not allowed for the resolved branch attendance policy');
+      throw new BadRequestError('Metode absensi ini tidak diizinkan untuk karyawan tersebut pada kebijakan cabang yang berlaku');
     }
 
     if (!context.schedule.isWorkingDay) {
@@ -466,7 +521,9 @@ export class AttendanceService {
 
     const faceInput = data.faceRecognition as any;
     const requiresFaceVerification =
-      method === AttendanceCaptureMethod.FACE_RECOGNITION || context.policy.requiresSelfie;
+      method === AttendanceCaptureMethod.FACE_RECOGNITION ||
+      context.policy.requiresSelfie ||
+      policyRequiresFace(context.policy.attendanceMethod);
     const hasFacePayload = requiresFaceVerification || !!faceInput;
 
     const employeeForFace = hasFacePayload
@@ -490,7 +547,7 @@ export class AttendanceService {
       method,
       faceInput,
       Boolean(employeeForFace?.faceProfile),
-      context.policy.requiresSelfie,
+      context.policy.requiresSelfie || policyRequiresFace(context.policy.attendanceMethod),
     );
 
     let similarity = 0;
@@ -909,6 +966,13 @@ export class AttendanceService {
     if (!canManageOthersOvertime && data.employeeId !== currentUser?.employeeId) {
       throw new ForbiddenError('IDOR: Employee cannot create overtime request for other employees');
     }
+
+    // The tenant middleware pins the row's companyId but never inspects the
+    // client employeeId, so an elevated actor could file overtime against
+    // another tenant's employee and read back their name/number through the
+    // include below. Resolving the target through the scoped predicate rejects
+    // both a foreign employee and one outside the actor's data scope.
+    await assertEmployeeInScope(data.employeeId, 'attendance');
 
     const requesterId = currentUser?.id ?? undefined;
 

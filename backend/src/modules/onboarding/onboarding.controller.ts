@@ -36,6 +36,10 @@ export class OnboardingController {
     try { res.json(Result.updated(await onboardingService.rejectResignation(req.params.id as string))); }
     catch (error) { next(error); }
   }
+  async completeResignation(req: Request, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await onboardingService.completeResignation(req.params.id as string))); }
+    catch (error) { next(error); }
+  }
   async updateClearance(req: Request, res: Response, next: NextFunction) {
     try { res.json(Result.updated(await onboardingService.updateClearance(req.params.id as string, req.body.status, req.body.notes))); }
     catch (error) { next(error); }

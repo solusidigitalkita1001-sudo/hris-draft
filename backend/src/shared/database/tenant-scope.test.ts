@@ -59,6 +59,22 @@ describe('tenant constraint enforcement', () => {
       announcement: { OR: [{ companyId: 'A' }, { companyId: null }] },
     }]);
   });
+  it.each(['TaxBracket', 'PtkpTable', 'BpjsReference'] as const)(
+    'lets %s fall back to platform rows while hiding another tenant override', async model => {
+      const read = params('findMany', { where: { year: { lte: 2026 } } }, model);
+      await enforceTenantScope(read, 'A');
+      expect(read.args.where.AND).toEqual([{ OR: [{ companyId: 'A' }, { companyId: null }] }]);
+
+      // A forged filter cannot widen the constraint to company B.
+      const forged = params('findMany', { where: { companyId: 'B' } }, model);
+      await enforceTenantScope(forged, 'A');
+      expect(forged.args.where.AND).toEqual([{ OR: [{ companyId: 'A' }, { companyId: null }] }]);
+
+      await expect(
+        enforceTenantScope(params('create', { data: { companyId: 'B', year: 2026 } }, model), 'A'),
+      ).rejects.toThrow(ForbiddenError);
+    },
+  );
   it('does not allow a tenant to mutate a platform announcement', async () => {
     const announcement = params('update', { where: { id: 'platform' }, data: { title: 'Changed' } }, 'Announcement');
     await enforceTenantScope(announcement, 'A');

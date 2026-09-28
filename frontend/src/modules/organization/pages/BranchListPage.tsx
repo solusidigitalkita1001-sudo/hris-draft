@@ -47,6 +47,8 @@ const ATTENDANCE_METHOD_OPTIONS: Array<{ value: AttendancePolicyMethod; labelKey
   { value: 'FINGERPRINT', labelKey: 'organization.branches.policy.method.fingerprint' },
   { value: 'MOBILE_GPS', labelKey: 'organization.branches.policy.method.mobileGps' },
   { value: 'BOTH', labelKey: 'organization.branches.policy.method.both' },
+  { value: 'FACE_RECOGNITION', labelKey: 'organization.branches.policy.method.faceRecognition' },
+  { value: 'FACE_GPS', labelKey: 'organization.branches.policy.method.faceGps' },
   { value: 'MANUAL', labelKey: 'organization.branches.policy.method.manual' },
 ];
 
@@ -253,7 +255,11 @@ function PolicyForm({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const needsGps = attendanceMethod === 'MOBILE_GPS' || attendanceMethod === 'BOTH' || requiresLocation;
+  const needsGps =
+    attendanceMethod === 'MOBILE_GPS' ||
+    attendanceMethod === 'BOTH' ||
+    attendanceMethod === 'FACE_GPS' ||
+    requiresLocation;
   const toggleFields: Array<{
     key: TranslationKey;
     checked: boolean;

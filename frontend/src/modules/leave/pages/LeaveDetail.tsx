@@ -11,6 +11,17 @@ import {
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { appConfig } from '@/config/app';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  PENDING: 'ess.status.pending',
+  APPROVED: 'ess.status.approved',
+  REJECTED: 'ess.status.rejected',
+  CANCELLED: 'ess.status.cancelled',
+  WITHDRAWN: 'ess.status.withdrawn',
+};
 
 function getStepIcon(status: string, isCurrent: boolean) {
   if (status === 'APPROVED') {
@@ -47,23 +58,24 @@ function WorkflowTimelineCard({
   onReject: () => void;
   canAct: boolean;
 }) {
+  const { t } = useI18n();
   const currentStep = workflow.steps.find((s) => s.isCurrent);
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-border shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div>
-          <h3 className="text-sm font-semibold">Approval Workflow Timeline</h3>
+          <h3 className="text-sm font-semibold">{t('ess.leave.detail.workflow.title')}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Status: <span className="font-medium text-foreground">{workflow.status}</span>
+            {t('ess.common.status')}: <span className="font-medium text-foreground">{STATUS_LABEL_KEYS[workflow.status] ? t(STATUS_LABEL_KEYS[workflow.status]) : workflow.status}</span>
           </p>
         </div>
         {canAct && workflow.status === 'PENDING' && currentStep && (
           <div className="flex gap-2">
             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onApprove}>
-              <CheckCircle2 size={14} className="mr-1.5" /> Approve
+              <CheckCircle2 size={14} className="mr-1.5" /> {t('ess.actions.approve')}
             </Button>
             <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950" onClick={onReject}>
-              <XCircle size={14} className="mr-1.5" /> Reject
+              <XCircle size={14} className="mr-1.5" /> {t('ess.actions.reject')}
             </Button>
           </div>
         )}
@@ -78,28 +90,28 @@ function WorkflowTimelineCard({
               <div className="pt-0.5">
                 <div className="flex items-center gap-2">
                   <h4 className="text-sm font-semibold">
-                    Level {step.level} &middot; {step.name}
+                    {t('ess.leave.detail.workflow.level', { level: step.level })} &middot; {step.name}
                   </h4>
                   {step.isCurrent && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      CURRENT
+                      {t('ess.leave.detail.workflow.current')}
                     </span>
                   )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                   <span>
-                    Approver: <span className="font-medium text-foreground">{step.approverRoleCode || (step.approverId ? 'User' : '-')}</span>
+                    {t('ess.leave.detail.workflow.approver')}: <span className="font-medium text-foreground">{step.approverRoleCode || (step.approverId ? t('ess.leave.detail.workflow.userFallback') : '-')}</span>
                   </span>
                   {step.actedAt && (
-                    <span>Acted: {formatDateTime(step.actedAt)}</span>
+                    <span>{t('ess.leave.detail.workflow.actedAt', { time: formatDateTime(step.actedAt) })}</span>
                   )}
                   {step.actedBy && (
-                    <span>By: <span className="font-mono">{step.actedBy.slice(0, 8)}...</span></span>
+                    <span>{t('ess.leave.detail.workflow.by')}: <span className="font-mono">{step.actedBy.slice(0, 8)}...</span></span>
                   )}
                 </div>
                 {step.comment && (
                   <div className="mt-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-900/60 border border-border text-xs text-muted-foreground whitespace-pre-wrap">
-                    <span className="font-medium text-foreground">Comment:</span> {step.comment}
+                    <span className="font-medium text-foreground">{t('ess.leave.detail.workflow.comment')}:</span> {step.comment}
                   </div>
                 )}
               </div>
@@ -113,6 +125,7 @@ function WorkflowTimelineCard({
 }
 
 export function LeaveDetail() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const auth = useAuthStore();
@@ -137,11 +150,11 @@ export function LeaveDetail() {
       setWorkflow(wfData);
     } catch (error) {
       console.error('Failed to fetch leave request:', error);
-      toast.error(apiErrorMessage(error, 'Failed to load data'));
+      toast.error(apiErrorMessage(error, t('ess.common.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     fetchData();
@@ -160,12 +173,12 @@ export function LeaveDetail() {
     setActionLoading('APPROVE');
     try {
       await leaveService.submitWorkflowAction(id, 'APPROVE', approveComment || undefined);
-      toast.success('Leave request approved via workflow');
+      toast.success(t('ess.leave.toast.approved'));
       setShowApproveModal(false);
       setApproveComment('');
       await fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to approve request'));
+      toast.error(apiErrorMessage(err, t('ess.leave.toast.approveFailed')));
     } finally {
       setActionLoading('');
     }
@@ -176,26 +189,26 @@ export function LeaveDetail() {
     setActionLoading('REJECT');
     try {
       await leaveService.submitWorkflowAction(id, 'REJECT', rejectReason || undefined);
-      toast.success('Leave request rejected via workflow');
+      toast.success(t('ess.leave.toast.rejected'));
       setShowRejectModal(false);
       setRejectReason('');
       await fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to reject request'));
+      toast.error(apiErrorMessage(err, t('ess.leave.toast.rejectFailed')));
     } finally {
       setActionLoading('');
     }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">Loading...</div>;
+    return <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>;
   }
 
   if (!request) {
     return (
       <div className="text-center py-12">
-        <p className="text-sm text-muted-foreground">Leave request not found</p>
-        <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/leave')}>Back to Leave</Button>
+        <p className="text-sm text-muted-foreground">{t('ess.leave.detail.notFound')}</p>
+        <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/leave')}>{t('ess.leave.detail.backToLeave')}</Button>
       </div>
     );
   }
@@ -203,11 +216,11 @@ export function LeaveDetail() {
   return (
     <div>
       <PageHeader
-        title="Leave Request Detail"
-        description={`Status: ${request.status}`}
+        title={t('ess.leave.detail.title')}
+        description={t('ess.leave.detail.statusLine', { status: STATUS_LABEL_KEYS[request.status] ? t(STATUS_LABEL_KEYS[request.status]) : request.status })}
         actions={
           <Button variant="outline" size="sm" onClick={() => navigate('/leave')}>
-            <ArrowLeft size={16} className="mr-2" /> Back
+            <ArrowLeft size={16} className="mr-2" /> {t('ess.common.back')}
           </Button>
         }
       />
@@ -217,32 +230,32 @@ export function LeaveDetail() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <CalendarDays size={14} /> Start Date
+                <CalendarDays size={14} /> {t('ess.leave.detail.startDate')}
               </div>
               <p className="text-sm font-medium">{formatDate(request.startDate)}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <CalendarDays size={14} /> End Date
+                <CalendarDays size={14} /> {t('ess.leave.detail.endDate')}
               </div>
               <p className="text-sm font-medium">{formatDate(request.endDate)}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <Clock size={14} /> Total Days
+                <Clock size={14} /> {t('ess.leave.detail.totalDays')}
               </div>
-              <p className="text-sm font-medium">{request.totalDays} day(s)</p>
+              <p className="text-sm font-medium">{t('ess.common.daysCount', { count: request.totalDays })}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <FileText size={14} /> Leave Type
+                <FileText size={14} /> {t('ess.leave.table.leaveType')}
               </div>
               <p className="text-sm font-medium">{request.leaveType?.name || '-'}</p>
             </div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-            <h3 className="text-sm font-medium mb-3">Employee Information</h3>
+            <h3 className="text-sm font-medium mb-3">{t('ess.leave.detail.employeeInfo')}</h3>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                 <UserRound size={20} className="text-primary" />
@@ -255,23 +268,23 @@ export function LeaveDetail() {
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-            <h3 className="text-sm font-medium mb-2">Reason</h3>
+            <h3 className="text-sm font-medium mb-2">{t('ess.common.reason')}</h3>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{request.reason}</p>
           </div>
 
           {request.attachment && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-2">Attachment</h3>
-              <a href={request.attachment} target="_blank" rel="noopener noreferrer"
+              <h3 className="text-sm font-medium mb-2">{t('ess.common.attachment')}</h3>
+              <a href={`${appConfig.apiUrl}/private-files/leave-attachments/${request.id}`} target="_blank" rel="noopener noreferrer"
                 className="text-sm text-primary hover:underline flex items-center gap-1">
-                <FileText size={14} /> View Document
+                <FileText size={14} /> {t('ess.leave.detail.viewDocument')}
               </a>
             </div>
           )}
 
           {request.status === 'REJECTED' && request.rejectionReason && (
             <div className="bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900 p-4">
-              <h3 className="text-sm font-medium text-red-700 dark:text-red-400 mb-1">Rejection Reason</h3>
+              <h3 className="text-sm font-medium text-red-700 dark:text-red-400 mb-1">{t('ess.leave.rejectModal.reasonLabel')}</h3>
               <p className="text-sm text-red-600 dark:text-red-400">{request.rejectionReason}</p>
             </div>
           )}
@@ -290,10 +303,10 @@ export function LeaveDetail() {
           {request.status === 'PENDING' && !workflow && (
             <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900 p-4">
               <h3 className="text-sm font-medium text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1.5">
-                <AlertTriangle size={14} /> Workflow not available
+                <AlertTriangle size={14} /> {t('ess.leave.detail.workflow.notAvailableTitle')}
               </h3>
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                No workflow instance attached. Legacy actions still available below.
+                {t('ess.leave.detail.workflow.notAvailableBody')}
               </p>
             </div>
           )}
@@ -301,7 +314,7 @@ export function LeaveDetail() {
           {request.status === 'PENDING' && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
               <h3 className="text-sm font-medium mb-3">
-                {workflow ? 'Legacy Actions (deprecated)' : 'Actions'}
+                {workflow ? t('ess.leave.detail.actions.legacy') : t('ess.leave.detail.actions.title')}
               </h3>
               <div className="space-y-3">
                 <Button
@@ -312,7 +325,7 @@ export function LeaveDetail() {
                   disabled={actionLoading === 'APPROVE' || !!workflow}
                 >
                   <CheckCircle2 size={16} className="mr-2" />
-                  {actionLoading === 'APPROVE' ? 'Approving...' : 'Approve'}
+                  {actionLoading === 'APPROVE' ? t('ess.leave.approveModal.loading') : t('ess.actions.approve')}
                 </Button>
 
                 {!showRejectModal ? (
@@ -324,23 +337,23 @@ export function LeaveDetail() {
                     disabled={actionLoading === 'REJECT' || !!workflow}
                   >
                     <XCircle size={16} className="mr-2" />
-                    Reject
+                    {actionLoading === 'REJECT' ? t('ess.leave.rejectModal.loading') : t('ess.actions.reject')}
                   </Button>
                 ) : (
                   <div className="space-y-2 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
-                    <p className="text-xs font-medium text-red-700 dark:text-red-400">Reason for rejection:</p>
+                    <p className="text-xs font-medium text-red-700 dark:text-red-400">{t('ess.leave.detail.rejectPrompt')}</p>
                     <textarea
                       value={rejectReason}
                       onChange={(e) => setRejectReason(e.target.value)}
                       className="w-full h-20 text-xs p-2 rounded border border-border bg-background resize-none"
-                      placeholder="Enter rejection reason..."
+                      placeholder={t('ess.leave.rejectModal.reasonPlaceholder')}
                     />
                     <div className="flex gap-2">
                       <Button size="sm" variant="destructive" onClick={handleReject} disabled={actionLoading === 'REJECT' || !rejectReason}>
-                        {actionLoading === 'REJECT' ? 'Rejecting...' : 'Confirm Reject'}
+                        {actionLoading === 'REJECT' ? t('ess.leave.rejectModal.loading') : t('ess.leave.rejectModal.confirm')}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => { setShowRejectModal(false); setRejectReason(''); }}>
-                        Cancel
+                        {t('common.cancel')}
                       </Button>
                     </div>
                   </div>
@@ -351,14 +364,14 @@ export function LeaveDetail() {
 
           {!workflow && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-3">Timeline</h3>
+              <h3 className="text-sm font-medium mb-3">{t('ess.leave.detail.timeline.title')}</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex items-start gap-3">
                   <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-0.5">
                     <FileText size={12} className="text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
-                    <p className="text-xs font-medium">Submitted</p>
+                    <p className="text-xs font-medium">{t('ess.leave.detail.timeline.submitted')}</p>
                     <p className="text-xs text-muted-foreground">{formatDateTime(request.createdAt)}</p>
                   </div>
                 </div>
@@ -368,7 +381,7 @@ export function LeaveDetail() {
                       <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-400" />
                     </div>
                     <div>
-                      <p className="text-xs font-medium">Approved</p>
+                      <p className="text-xs font-medium">{t('ess.status.approved')}</p>
                       <p className="text-xs text-muted-foreground">{formatDateTime(request.approvedAt)}</p>
                     </div>
                   </div>
@@ -379,18 +392,18 @@ export function LeaveDetail() {
 
           {request.leaveType && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium mb-2">Leave Type Details</h3>
+              <h3 className="text-sm font-medium mb-2">{t('ess.leave.detail.typeDetails.title')}</h3>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Type</span>
+                  <span className="text-muted-foreground">{t('ess.common.type')}</span>
                   <span>{request.leaveType.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Paid</span>
-                  <span>{request.leaveType.isPaid ? 'Yes' : 'No'}</span>
+                  <span className="text-muted-foreground">{t('ess.leave.detail.typeDetails.paid')}</span>
+                  <span>{request.leaveType.isPaid ? t('ess.common.yes') : t('ess.common.no')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Code</span>
+                  <span className="text-muted-foreground">{t('ess.leave.detail.typeDetails.code')}</span>
                   <span className="font-mono text-xs">{request.leaveType.code}</span>
                 </div>
               </div>
@@ -404,17 +417,17 @@ export function LeaveDetail() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
             <div className="p-5">
               <h3 className="text-base font-semibold mb-2 flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-emerald-600" /> Approve Leave Request
+                <CheckCircle2 size={18} className="text-emerald-600" /> {t('ess.leave.approveModal.title')}
               </h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Are you sure you want to approve this leave request? You can add an optional comment below.
+                {t('ess.leave.approveModal.description')}
               </p>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Comment (optional)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.leave.approveModal.commentLabel')}</label>
                 <textarea
                   value={approveComment}
                   onChange={(e) => setApproveComment(e.target.value)}
-                  placeholder="Enter approval comment..."
+                  placeholder={t('ess.leave.approveModal.commentPlaceholder')}
                   rows={3}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
                 />
@@ -422,10 +435,10 @@ export function LeaveDetail() {
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
               <Button variant="outline" size="sm" onClick={() => setShowApproveModal(false)} disabled={actionLoading === 'APPROVE'}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleApprove} disabled={actionLoading === 'APPROVE'}>
-                {actionLoading === 'APPROVE' ? 'Approving...' : 'Confirm Approve'}
+                {actionLoading === 'APPROVE' ? t('ess.leave.approveModal.loading') : t('ess.leave.approveModal.confirm')}
               </Button>
             </div>
           </div>
@@ -437,17 +450,17 @@ export function LeaveDetail() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
             <div className="p-5">
               <h3 className="text-base font-semibold mb-2 flex items-center gap-2">
-                <XCircle size={18} className="text-red-600" /> Reject Leave Request
+                <XCircle size={18} className="text-red-600" /> {t('ess.leave.rejectModal.title')}
               </h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Provide a reason for rejecting this leave request.
+                {t('ess.leave.rejectModal.description')}
               </p>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Rejection Reason</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('ess.leave.rejectModal.reasonLabel')}</label>
                 <textarea
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Enter rejection reason..."
+                  placeholder={t('ess.leave.rejectModal.reasonPlaceholder')}
                   rows={3}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
                 />
@@ -455,10 +468,10 @@ export function LeaveDetail() {
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
               <Button variant="outline" size="sm" onClick={() => setShowRejectModal(false)} disabled={actionLoading === 'REJECT'}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button size="sm" variant="destructive" onClick={handleReject} disabled={actionLoading === 'REJECT' || !rejectReason}>
-                {actionLoading === 'REJECT' ? 'Rejecting...' : 'Confirm Reject'}
+                {actionLoading === 'REJECT' ? t('ess.leave.rejectModal.loading') : t('ess.leave.rejectModal.confirm')}
               </Button>
             </div>
           </div>

@@ -3,18 +3,20 @@ import { Briefcase, Pencil, Trash2, Plus, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select2, type Select2Option } from '@/components/ui/select2';
+import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { employeeService, type EmployeeExperience } from '@/services/employee.service';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { formatDate } from '@/utils/format';
 
 interface ExperienceTabProps {
   employeeId: string;
 }
 
-const YES_NO_OPTIONS: Select2Option[] = [
-  { value: 'true', label: 'Ya' },
-  { value: 'false', label: 'Tidak' },
+const YES_NO_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'true', labelKey: 'wf.common.yes' },
+  { value: 'false', labelKey: 'wf.common.no' },
 ];
 
 interface FormData {
@@ -48,6 +50,7 @@ const INITIAL_FORM_DATA: FormData = {
 };
 
 export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
+  const { t } = useI18n();
   const [data, setData] = useState<EmployeeExperience[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,7 +71,7 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
       setData(result);
     } catch (error) {
       console.error('Failed to fetch experiences:', error);
-      toast.error('Gagal memuat data pengalaman kerja');
+      toast.error(t('wf.experience.toast.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -108,15 +111,15 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
 
   async function handleSave() {
     if (!form.companyName.trim()) {
-      toast.error('Nama perusahaan harus diisi');
+      toast.error(t('wf.experience.validation.companyRequired'));
       return;
     }
     if (!form.position.trim()) {
-      toast.error('Posisi/jabatan harus diisi');
+      toast.error(t('wf.experience.validation.positionRequired'));
       return;
     }
     if (!form.startDate) {
-      toast.error('Tanggal mulai harus diisi');
+      toast.error(t('wf.experience.validation.startDateRequired'));
       return;
     }
 
@@ -141,17 +144,17 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
 
       if (editingItem) {
         await employeeService.updateExperience(employeeId, editingItem.id, payload);
-        toast.success('Data pengalaman kerja berhasil diperbarui');
+        toast.success(t('wf.experience.toast.updateSuccess'));
       } else {
         await employeeService.createExperience(employeeId, payload);
-        toast.success('Data pengalaman kerja berhasil ditambahkan');
+        toast.success(t('wf.experience.toast.createSuccess'));
       }
 
       handleCloseDialog();
       await fetchData();
     } catch (error) {
       console.error('Failed to save experience:', error);
-      toast.error('Gagal menyimpan data pengalaman kerja');
+      toast.error(t('wf.experience.toast.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -159,21 +162,24 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
 
   async function handleDelete(item: EmployeeExperience) {
     const confirmed = await popup.confirm({
-      title: 'Hapus Experience',
-      description: `Riwayat kerja di ${item.companyName} sebagai ${item.position} akan dihapus dari profil employee.`,
-      confirmText: 'Hapus',
-      cancelText: 'Batal',
+      title: t('wf.experience.confirm.title'),
+      description: t('wf.experience.confirm.description', {
+        company: item.companyName,
+        position: item.position,
+      }),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       intent: 'destructive',
     });
     if (!confirmed) return;
 
     try {
       await employeeService.deleteExperience(employeeId, item.id);
-      toast.success('Data pengalaman kerja berhasil dihapus');
+      toast.success(t('wf.experience.toast.deleteSuccess'));
       await fetchData();
     } catch (error) {
       console.error('Failed to delete experience:', error);
-      toast.error('Gagal menghapus data pengalaman kerja');
+      toast.error(t('wf.experience.toast.deleteFailed'));
     }
   }
 
@@ -198,11 +204,11 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
       <div className="flex items-center justify-between border-b border-border px-6 py-4">
         <div className="flex items-center gap-2">
           <Briefcase size={20} className="text-primary" />
-          <h3 className="text-base font-semibold text-foreground">Pengalaman Kerja</h3>
+          <h3 className="text-base font-semibold text-foreground">{t('wf.experience.title')}</h3>
         </div>
         <Button size="sm" onClick={handleOpenAdd}>
           <Plus size={16} className="mr-1" />
-          Tambah
+          {t('wf.common.add')}
         </Button>
       </div>
 
@@ -213,10 +219,10 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <Briefcase size={24} className="text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">Belum ada data pengalaman kerja</p>
+            <p className="text-sm text-muted-foreground">{t('wf.experience.empty.title')}</p>
             <Button variant="outline" size="sm" className="mt-4" onClick={handleOpenAdd}>
               <Plus size={16} className="mr-1" />
-              Tambah Pengalaman
+              {t('wf.experience.empty.add')}
             </Button>
           </div>
         ) : (
@@ -231,7 +237,7 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
                     <p className="font-medium text-foreground">{item.position}</p>
                     {item.isCurrentPosition && (
                       <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                        Current
+                        {t('wf.experience.current')}
                       </span>
                     )}
                   </div>
@@ -239,7 +245,7 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{formatDate(item.startDate)}</span>
                     <span>—</span>
-                    <span>{item.isCurrentPosition ? 'Sekarang' : formatDate(item.endDate)}</span>
+                    <span>{item.isCurrentPosition ? t('wf.experience.present') : formatDate(item.endDate)}</span>
                     {item.city && <span>{item.city}</span>}
                   </div>
                   {item.jobDescription && (
@@ -275,7 +281,7 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
             {/* Dialog Header */}
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <h4 className="text-base font-semibold text-foreground">
-                {editingItem ? 'Edit Pengalaman Kerja' : 'Tambah Pengalaman Kerja'}
+                {editingItem ? t('wf.experience.dialog.editTitle') : t('wf.experience.dialog.addTitle')}
               </h4>
               <Button variant="ghost" size="icon" onClick={handleCloseDialog} disabled={saving}>
                 &times;
@@ -287,24 +293,24 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
               {/* companyName */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">
-                  Nama Perusahaan <span className="text-destructive">*</span>
+                  {t('wf.experience.fields.company')} <span className="text-destructive">*</span>
                 </label>
                 <Input
                   value={form.companyName}
                   onChange={(e) => setForm((prev) => ({ ...prev, companyName: e.target.value }))}
-                  placeholder="Nama perusahaan"
+                  placeholder={t('wf.experience.fields.companyPlaceholder')}
                 />
               </div>
 
               {/* position */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">
-                  Posisi / Jabatan <span className="text-destructive">*</span>
+                  {t('wf.experience.fields.position')} <span className="text-destructive">*</span>
                 </label>
                 <Input
                   value={form.position}
                   onChange={(e) => setForm((prev) => ({ ...prev, position: e.target.value }))}
-                  placeholder="Posisi atau jabatan"
+                  placeholder={t('wf.experience.fields.positionPlaceholder')}
                 />
               </div>
 
@@ -312,7 +318,7 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">
-                    Tanggal Mulai <span className="text-destructive">*</span>
+                    {t('wf.common.startDate')} <span className="text-destructive">*</span>
                   </label>
                   <Input
                     type="date"
@@ -322,7 +328,7 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
                 </div>
                 {!isCurrent && (
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">Tanggal Selesai</label>
+                    <label className="text-sm font-medium text-foreground">{t('wf.common.endDate')}</label>
                     <Input
                       type="date"
                       value={form.endDate}
@@ -334,7 +340,7 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
 
               {/* isCurrentPosition */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Posisi Saat Ini</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.experience.fields.isCurrent')}</label>
                 <Select2
                   value={form.isCurrentPosition}
                   onValueChange={(value) => {
@@ -344,18 +350,18 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
                       endDate: value === 'true' ? '' : prev.endDate,
                     }));
                   }}
-                  options={YES_NO_OPTIONS}
-                  placeholder="Pilih"
+                  options={YES_NO_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                  placeholder={t('wf.common.select')}
                 />
               </div>
 
               {/* jobDescription */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Deskripsi Pekerjaan</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.experience.fields.jobDescription')}</label>
                 <textarea
                   value={form.jobDescription}
                   onChange={(e) => setForm((prev) => ({ ...prev, jobDescription: e.target.value }))}
-                  placeholder="Deskripsi tanggung jawab pekerjaan"
+                  placeholder={t('wf.experience.fields.jobDescriptionPlaceholder')}
                   rows={3}
                   className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -363,11 +369,11 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
 
               {/* achievements */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Pencapaian</label>
+                <label className="text-sm font-medium text-foreground">{t('wf.experience.fields.achievements')}</label>
                 <textarea
                   value={form.achievements}
                   onChange={(e) => setForm((prev) => ({ ...prev, achievements: e.target.value }))}
-                  placeholder="Pencapaian selama bekerja"
+                  placeholder={t('wf.experience.fields.achievementsPlaceholder')}
                   rows={3}
                   className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -376,19 +382,19 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
               {/* industry / city */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Industri</label>
+                  <label className="text-sm font-medium text-foreground">{t('wf.experience.fields.industry')}</label>
                   <Input
                     value={form.industry}
                     onChange={(e) => setForm((prev) => ({ ...prev, industry: e.target.value }))}
-                    placeholder="Bidang industri"
+                    placeholder={t('wf.experience.fields.industryPlaceholder')}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Kota</label>
+                  <label className="text-sm font-medium text-foreground">{t('wf.common.city')}</label>
                   <Input
                     value={form.city}
                     onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
-                    placeholder="Kota"
+                    placeholder={t('wf.experience.fields.cityPlaceholder')}
                   />
                 </div>
               </div>
@@ -396,11 +402,11 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
               {/* reasonForLeaving */}
               {!isCurrent && (
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Alasan Keluar</label>
+                  <label className="text-sm font-medium text-foreground">{t('wf.experience.fields.reasonForLeaving')}</label>
                   <textarea
                     value={form.reasonForLeaving}
                     onChange={(e) => setForm((prev) => ({ ...prev, reasonForLeaving: e.target.value }))}
-                    placeholder="Alasan meninggalkan perusahaan"
+                    placeholder={t('wf.experience.fields.reasonPlaceholder')}
                     rows={2}
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   />
@@ -410,19 +416,19 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
               {/* referenceName / referencePhone */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Nama Referensi</label>
+                  <label className="text-sm font-medium text-foreground">{t('wf.experience.fields.referenceName')}</label>
                   <Input
                     value={form.referenceName}
                     onChange={(e) => setForm((prev) => ({ ...prev, referenceName: e.target.value }))}
-                    placeholder="Nama referensi"
+                    placeholder={t('wf.experience.fields.referenceNamePlaceholder')}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Telepon Referensi</label>
+                  <label className="text-sm font-medium text-foreground">{t('wf.experience.fields.referencePhone')}</label>
                   <Input
                     value={form.referencePhone}
                     onChange={(e) => setForm((prev) => ({ ...prev, referencePhone: e.target.value }))}
-                    placeholder="Nomor telepon"
+                    placeholder={t('wf.experience.fields.referencePhonePlaceholder')}
                   />
                 </div>
               </div>
@@ -431,11 +437,11 @@ export default function ExperienceTab({ employeeId }: ExperienceTabProps) {
             {/* Dialog Footer */}
             <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
               <Button variant="outline" onClick={handleCloseDialog} disabled={saving}>
-                Batal
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleSave} disabled={saving}>
                 {saving && <Loader2 size={16} className="mr-1 animate-spin" />}
-                {editingItem ? 'Simpan' : 'Tambah'}
+                {editingItem ? t('common.save') : t('wf.common.add')}
               </Button>
             </div>
           </div>

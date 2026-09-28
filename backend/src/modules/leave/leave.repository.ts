@@ -75,10 +75,15 @@ export class LeaveRepository {
     return Math.max(1, count);
   }
 
-  async createLeaveRequest(data: CreateLeaveRequestDTO) {
+  /**
+   * @param precomputedTotalDays hari kerja yang SUDAH divalidasi service (cap
+   *   per jenis cuti + saldo). Diteruskan agar angka tersimpan identik dengan
+   *   angka yang diuji; tanpa itu hitungan diulang di sini.
+   */
+  async createLeaveRequest(data: CreateLeaveRequestDTO, precomputedTotalDays?: number) {
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
-    const totalDays = await this.countLeaveDays(data.employeeId, data.companyId, start, end);
+    const totalDays = precomputedTotalDays ?? await this.countLeaveDays(data.employeeId, data.companyId, start, end);
 
     return prisma.leaveRequest.create({
       data: {

@@ -166,3 +166,20 @@ case above; no synthetic image was used to manufacture a biometric pass.
 The HTTPS Nginx configuration passed `nginx -t` with a disposable certificate.
 This validates syntax and mounts only—it is not evidence of public DNS,
 certificate-chain, firewall, or port-443 readiness.
+
+## 7. Local verification record — 28 September 2026
+
+The runner was pointed at the developer stack (`http://localhost:3000/api/v1`,
+MySQL/Redis/RabbitMQ from `docker-compose.yml`) with the seeded demo employee and
+manager accounts. All 30 checks passed: 24 core operations, five supplemental
+manager operations, and the token-rotation assertion — `30 passed, 0 failed,
+0 blocked`.
+
+This closes the two operations that the 20 September live run reported as
+`BLOCKED`. Both were fixture gaps rather than contract gaps: the seed now
+allocates every leave type and anchors attendance dates to UTC, so the leave
+detail and notification read checks find a fixture instead of skipping.
+
+Per section 5 this remains `PASS lokal`. It is not live-deployment evidence:
+the target was HTTP on localhost, and the manual device table in section 3 is
+still unrecorded.

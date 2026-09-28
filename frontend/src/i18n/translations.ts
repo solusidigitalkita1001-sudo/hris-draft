@@ -1,10 +1,17 @@
+import { essDictionary } from './dictionaries/ess';
+import { financeDictionary } from './dictionaries/finance';
+import { workforceDictionary } from './dictionaries/workforce';
+import { operationsDictionary } from './dictionaries/operations';
+import { adminDictionary } from './dictionaries/admin';
+import { performanceDictionary } from './dictionaries/performance';
+
 export type Language = 'id' | 'en';
 
 export type TranslationParams = Record<string, string | number>;
 
 export const defaultLanguage: Language = 'id';
 
-export const translations = {
+const base = {
   id: {
     'common.language': 'Bahasa',
     'common.indonesian': 'Indonesia',
@@ -17,7 +24,6 @@ export const translations = {
     'common.delete': 'Hapus',
     'common.active': 'Aktif',
     'common.inactive': 'Nonaktif',
-    'common.defaultCredentials': 'Default: admin@hrms.com / Admin123!',
 
     'sidebar.dashboard': 'Dashboard',
     'sidebar.organization': 'Organisasi',
@@ -27,7 +33,9 @@ export const translations = {
     'sidebar.organization.branches': 'Cabang',
     'sidebar.organization.departments': 'Departemen',
     'sidebar.organization.positions': 'Posisi',
+    'sidebar.organization.attendanceMethods': 'Metode Absensi',
     'sidebar.selfService': 'Self Service',
+    'sidebar.myPayslips': 'Slip Gaji Saya',
     'sidebar.loan': 'Pinjaman',
     'sidebar.ewa': 'Tarik Gaji Awal',
     'sidebar.dailyActivity': 'Aktivitas Harian',
@@ -100,6 +108,12 @@ export const translations = {
     'auth.login.submitting': 'Sedang masuk...',
     'auth.login.success': 'Berhasil masuk',
     'auth.login.failed': 'Login gagal. Silakan periksa kredensial Anda.',
+    'auth.login.remember': 'Ingat saya',
+    'auth.login.verifying': 'Memverifikasi…',
+    'auth.login.overlayTitle': 'Berhasil masuk',
+    'auth.login.overlaySubtitle': 'Menyiapkan dashboard Anda…',
+    'auth.cover.headline': 'Satu portal untuk absensi, cuti, dan payroll tim Anda.',
+    'auth.cover.serverActive': 'Server absensi aktif',
 
     'auth.forgot.back': 'Kembali ke halaman login',
     'auth.forgot.title': 'Reset kata sandi',
@@ -110,6 +124,24 @@ export const translations = {
     'auth.forgot.successTitle': 'Cek email Anda',
     'auth.forgot.successDescription': 'Kami telah mengirim link reset kata sandi ke {{email}}',
     'auth.forgot.failed': 'Gagal mengirim email reset. Silakan coba lagi.',
+
+    'auth.reset.title': 'Buat kata sandi baru',
+    'auth.reset.description': 'Masukkan kata sandi baru untuk akun Anda.',
+    'auth.reset.password': 'Kata sandi baru',
+    'auth.reset.confirm': 'Ulangi kata sandi',
+    'auth.reset.mismatch': 'Konfirmasi kata sandi tidak sama',
+    'auth.reset.submit': 'Simpan kata sandi',
+    'auth.reset.submitting': 'Menyimpan…',
+    'auth.reset.success': 'Kata sandi berhasil diubah. Silakan masuk kembali.',
+    'auth.reset.failed': 'Gagal mengubah kata sandi. Link mungkin kedaluwarsa.',
+    'auth.reset.invalidToken': 'Link reset tidak valid. Minta link baru dari halaman lupa kata sandi.',
+
+    'idle.title': 'Masih di sana?',
+    'idle.body': 'Demi keamanan, sesi Anda akan berakhir dalam {{seconds}} detik karena tidak ada aktivitas.',
+    'idle.stay': 'Tetap Masuk',
+    'idle.logout': 'Keluar Sekarang',
+    'idle.expired': 'Sesi berakhir karena tidak ada aktivitas. Silakan masuk kembali.',
+    'login.notice.expired': 'Sesi Anda telah berakhir. Silakan masuk kembali.',
 
     'dashboard.welcome': 'Selamat datang kembali, {{name}}',
     'dashboard.description': 'Berikut ringkasan aktivitas organisasi Anda hari ini.',
@@ -307,6 +339,8 @@ export const translations = {
     'organization.branches.policy.method.fingerprint': 'Fingerprint',
     'organization.branches.policy.method.mobileGps': 'Mobile GPS',
     'organization.branches.policy.method.both': 'Fingerprint + GPS',
+    'organization.branches.policy.method.faceRecognition': 'Face Recognition',
+    'organization.branches.policy.method.faceGps': 'Face Recognition + GPS',
     'organization.branches.policy.method.manual': 'Manual',
     'organization.branches.policy.outsideRadius.reject': 'Tolak',
     'organization.branches.policy.outsideRadius.flag': 'Terima & tandai',
@@ -334,7 +368,6 @@ export const translations = {
     'common.delete': 'Delete',
     'common.active': 'Active',
     'common.inactive': 'Inactive',
-    'common.defaultCredentials': 'Default: admin@hrms.com / Admin123!',
 
     'sidebar.dashboard': 'Dashboard',
     'sidebar.organization': 'Organization',
@@ -344,7 +377,9 @@ export const translations = {
     'sidebar.organization.branches': 'Branches',
     'sidebar.organization.departments': 'Departments',
     'sidebar.organization.positions': 'Positions',
+    'sidebar.organization.attendanceMethods': 'Attendance Methods',
     'sidebar.selfService': 'Self Service',
+    'sidebar.myPayslips': 'My Payslips',
     'sidebar.loan': 'Loan',
     'sidebar.ewa': 'Earned Wage Access',
     'sidebar.dailyActivity': 'Daily Activity',
@@ -417,6 +452,12 @@ export const translations = {
     'auth.login.submitting': 'Signing in...',
     'auth.login.success': 'Login successful',
     'auth.login.failed': 'Login failed. Please check your credentials.',
+    'auth.login.remember': 'Remember me',
+    'auth.login.verifying': 'Verifying…',
+    'auth.login.overlayTitle': 'Signed in',
+    'auth.login.overlaySubtitle': 'Preparing your dashboard…',
+    'auth.cover.headline': 'One portal for your team’s attendance, leave, and payroll.',
+    'auth.cover.serverActive': 'Attendance server online',
 
     'auth.forgot.back': 'Back to sign in',
     'auth.forgot.title': 'Reset password',
@@ -427,6 +468,24 @@ export const translations = {
     'auth.forgot.successTitle': 'Check your email',
     'auth.forgot.successDescription': 'We have sent a password reset link to {{email}}',
     'auth.forgot.failed': 'Failed to send reset email. Please try again.',
+
+    'auth.reset.title': 'Create a new password',
+    'auth.reset.description': 'Enter a new password for your account.',
+    'auth.reset.password': 'New password',
+    'auth.reset.confirm': 'Repeat password',
+    'auth.reset.mismatch': 'Password confirmation does not match',
+    'auth.reset.submit': 'Save password',
+    'auth.reset.submitting': 'Saving…',
+    'auth.reset.success': 'Password changed successfully. Please sign in again.',
+    'auth.reset.failed': 'Failed to change the password. The link may have expired.',
+    'auth.reset.invalidToken': 'Invalid reset link. Request a new one from the forgot-password page.',
+
+    'idle.title': 'Still there?',
+    'idle.body': 'For security, your session will end in {{seconds}} seconds due to inactivity.',
+    'idle.stay': 'Stay Signed In',
+    'idle.logout': 'Sign Out Now',
+    'idle.expired': 'Your session ended due to inactivity. Please sign in again.',
+    'login.notice.expired': 'Your session has expired. Please sign in again.',
 
     'dashboard.welcome': 'Welcome back, {{name}}',
     'dashboard.description': "Here's what's happening across your organization today.",
@@ -624,6 +683,8 @@ export const translations = {
     'organization.branches.policy.method.fingerprint': 'Fingerprint',
     'organization.branches.policy.method.mobileGps': 'Mobile GPS',
     'organization.branches.policy.method.both': 'Fingerprint + GPS',
+    'organization.branches.policy.method.faceRecognition': 'Face Recognition',
+    'organization.branches.policy.method.faceGps': 'Face Recognition + GPS',
     'organization.branches.policy.method.manual': 'Manual',
     'organization.branches.policy.outsideRadius.reject': 'Reject',
     'organization.branches.policy.outsideRadius.flag': 'Accept & flag',
@@ -638,6 +699,29 @@ export const translations = {
     'error.403.title': 'Access denied',
     'error.403.description': 'You do not have permission to access this page.',
     'error.backToDashboard': 'Go to Dashboard',
+  },
+} as const;
+
+// Gabungan kamus dasar + kamus per-modul. Kunci per-modul memakai prefix unik
+// (ess.*, fin.*, wf.*, ops.*, adm.*) sehingga tidak mungkin bertabrakan.
+export const translations = {
+  id: {
+    ...base.id,
+    ...essDictionary.id,
+    ...financeDictionary.id,
+    ...workforceDictionary.id,
+    ...operationsDictionary.id,
+    ...adminDictionary.id,
+    ...performanceDictionary.id,
+  },
+  en: {
+    ...base.en,
+    ...essDictionary.en,
+    ...financeDictionary.en,
+    ...workforceDictionary.en,
+    ...operationsDictionary.en,
+    ...adminDictionary.en,
+    ...performanceDictionary.en,
   },
 } as const;
 

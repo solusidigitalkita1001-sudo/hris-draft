@@ -93,6 +93,23 @@ export class EmployeeService {
     return reportingLine;
   }
 
+  // ── Matriks metode absensi per karyawan (SUPER_ADMIN) ──────────────────
+  async getAttendanceMethodMatrix(params: { companyId: string; search?: string; page: number; limit: number }) {
+    if (!params.companyId) throw new BadRequestError('companyId wajib diisi');
+    return employeeRepository.findAttendanceMethodMatrix(params);
+  }
+
+  async updateAttendanceMethods(
+    id: string,
+    companyId: string,
+    flags: { allowFingerprint?: boolean; allowFaceRecognition?: boolean; allowMobileGps?: boolean }
+  ) {
+    if (!companyId) throw new BadRequestError('companyId wajib diisi');
+    const updated = await employeeRepository.updateAttendanceMethodFlags(id, companyId, flags);
+    if (!updated) throw new NotFoundError('Karyawan tidak ditemukan pada company aktif');
+    return updated;
+  }
+
   async getFaceProfile(id: string) {
     const employee = await this.findScopedEmployee(id);
     const profile = await prisma.employeeFaceProfile.findUnique({

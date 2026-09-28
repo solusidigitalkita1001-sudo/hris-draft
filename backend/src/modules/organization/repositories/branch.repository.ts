@@ -3,11 +3,20 @@ import { CreateBranchDTO, UpdateBranchDTO, UpsertBranchAttendancePolicyDTO } fro
 
 export class BranchRepository {
   async findAll(companyId: string) {
-    return prisma.branch.findMany({
+    const branches = await prisma.branch.findMany({
       where: { companyId, deletedAt: null },
-      include: { company: true },
+      include: {
+        company: true,
+        // Kartu daftar cabang menampilkan ringkasan policy; tanpa include ini
+        // UI selalu menganggap policy "belum dikonfigurasi".
+        attendancePolicies: { where: { deletedAt: null }, take: 1 },
+      },
       orderBy: { name: 'asc' },
     });
+    return branches.map(({ attendancePolicies, ...branch }) => ({
+      ...branch,
+      attendancePolicy: attendancePolicies[0] ?? null,
+    }));
   }
 
   async findById(id: string) {

@@ -93,6 +93,84 @@ export class EmployeeRepository {
     });
   }
 
+  // ── Matriks metode absensi per karyawan (SUPER_ADMIN) ──────────────────
+  async findAttendanceMethodMatrix(params: { companyId: string; search?: string; page: number; limit: number }) {
+    const where = {
+      companyId: params.companyId,
+      deletedAt: null,
+      status: 'ACTIVE' as const,
+      ...(params.search
+        ? {
+            OR: [
+              { fullName: { contains: params.search } },
+              { employeeNumber: { contains: params.search } },
+            ],
+          }
+        : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      prisma.employee.findMany({
+        where,
+        select: {
+          id: true,
+          employeeNumber: true,
+          fullName: true,
+          department: { select: { name: true } },
+          position: { select: { name: true } },
+          allowFingerprint: true,
+          allowFaceRecognition: true,
+          allowMobileGps: true,
+        },
+        orderBy: { employeeNumber: 'asc' },
+        skip: (params.page - 1) * params.limit,
+        take: params.limit,
+      }),
+      prisma.employee.count({ where }),
+    ]);
+
+    return {
+      data: rows.map((row) => ({
+        id: row.id,
+        employeeNumber: row.employeeNumber,
+        fullName: row.fullName,
+        departmentName: row.department?.name ?? null,
+        positionName: row.position?.name ?? null,
+        allowFingerprint: row.allowFingerprint,
+        allowFaceRecognition: row.allowFaceRecognition,
+        allowMobileGps: row.allowMobileGps,
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+    };
+  }
+
+  async updateAttendanceMethodFlags(
+    id: string,
+    companyId: string,
+    flags: { allowFingerprint?: boolean; allowFaceRecognition?: boolean; allowMobileGps?: boolean }
+  ) {
+    // updateMany dengan scope companyId supaya tenant lain tidak bisa disentuh
+    // walau id bocor; count 0 = tidak ditemukan pada company aktif.
+    const result = await prisma.employee.updateMany({
+      where: { id, companyId, deletedAt: null },
+      data: flags,
+    });
+    if (result.count === 0) return null;
+    return prisma.employee.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        employeeNumber: true,
+        fullName: true,
+        allowFingerprint: true,
+        allowFaceRecognition: true,
+        allowMobileGps: true,
+      },
+    });
+  }
+
   async findMyReportingLine(employeeId: string, companyId: string) {
     const employee = await prisma.employee.findFirst({
       where: { id: employeeId, companyId, deletedAt: null, status: 'ACTIVE' },

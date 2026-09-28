@@ -139,6 +139,36 @@ export class OnboardingService {
     return this.findResignationById(id);
   }
 
+  /**
+   * Tutup proses offboarding (checklist §30): hanya resignation APPROVED yang
+   * seluruh exit clearance-nya sudah CLEARED boleh ditandai COMPLETED.
+   * Efek offboarding (karyawan nonaktif + akses user dicabut) dipastikan
+   * terpasang sebelum status berpindah — exactly-once via effectsAppliedAt.
+   */
+  async completeResignation(id: string) {
+    const resignation = await this.findResignationById(id);
+    if (resignation.status !== 'APPROVED') {
+      throw new ConflictError('Hanya pengajuan resign berstatus APPROVED yang dapat diselesaikan');
+    }
+    const uncleared = resignation.clearances.filter((c) => c.status !== 'CLEARED');
+    if (uncleared.length) {
+      throw new ConflictError('Semua exit clearance harus berstatus CLEARED sebelum resign dapat diselesaikan');
+    }
+
+    // Effects must be applied while status is still APPROVED (the claim query
+    // requires it); idempotent no-op when the sweep already applied them.
+    await this.applyResignationEffects(id);
+
+    // Guarded transition: only APPROVED completes; concurrent complete/flip is rejected.
+    const completed = await prisma.resignation.updateMany({
+      where: { id, status: 'APPROVED' },
+      data: { status: 'COMPLETED' },
+    });
+    if (completed.count !== 1) throw new ConflictError('Pengajuan resign sudah diproses');
+    logger.info('Resignation completed', { resignationId: id, employeeId: resignation.employeeId });
+    return this.findResignationById(id);
+  }
+
   async updateClearance(id: string, status: string, notes?: string) {
     const allowed = ['PENDING', 'IN_PROGRESS', 'CLEARED', 'REJECTED', 'OVERDUE'];
     if (!allowed.includes(status)) {

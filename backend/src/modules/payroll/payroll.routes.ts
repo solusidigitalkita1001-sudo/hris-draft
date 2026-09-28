@@ -20,7 +20,8 @@ import {
   calculateBpjsSchema,
   calculateJknSchema,
 } from './payroll.dto';
-import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema, payrollUnlockSchema } from './payroll.validation';
+import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema, payrollUnlockSchema, setPayslipPinSchema, payslipPinUnlockSchema } from './payroll.validation';
+import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
 
@@ -254,6 +255,52 @@ router.get(
   authorize({ resource: 'payroll', action: 'read' }),
   validate(payrollRunIdParamSchema, 'params'),
   payrollController.getDisbursements.bind(payrollController)
+);
+
+// ==================== Payslips — self-service PIN ====================
+// Rute self (tanpa authorize admin): identitas selalu dari sesi. Backstop utama
+// brute-force adalah lockout counter di kolom users.payslip_pin_*; limiter
+// in-memory ini hanya meredam volume request per IP.
+const payslipPinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Terlalu banyak permintaan PIN slip gaji. Coba lagi beberapa menit lagi.' },
+});
+
+// Didaftarkan SEBELUM '/payslips/:id' agar 'pin' dan 'my' tidak tertangkap param :id.
+router.put(
+  '/payslips/pin',
+  payslipPinLimiter,
+  validate(setPayslipPinSchema, 'body'),
+  payrollController.setPayslipPin.bind(payrollController)
+);
+
+router.get(
+  '/payslips/pin/status',
+  payrollController.getPayslipPinStatus.bind(payrollController)
+);
+
+router.post(
+  '/payslips/my/unlock',
+  payslipPinLimiter,
+  validate(payslipPinUnlockSchema, 'body'),
+  payrollController.unlockMyPayslips.bind(payrollController)
+);
+
+router.get(
+  '/payslips/my/:id/pdf',
+  validate(payslipIdParamSchema, 'params'),
+  auditView({ action: 'DOWNLOAD_PAYSLIP', entity: 'Payslip' }),
+  payrollController.downloadMyPayslipPdf.bind(payrollController)
+);
+
+router.get(
+  '/payslips/my/:id',
+  validate(payslipIdParamSchema, 'params'),
+  auditView({ action: 'VIEW_PAYSLIP', entity: 'Payslip' }),
+  payrollController.findMyPayslipDetail.bind(payrollController)
 );
 
 // ==================== Payslips ====================

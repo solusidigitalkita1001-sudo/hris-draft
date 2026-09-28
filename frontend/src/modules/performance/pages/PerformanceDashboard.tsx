@@ -7,6 +7,8 @@ import { useCompanyStore } from '@/stores/company.store';
 import toast from 'react-hot-toast';
 import { RefreshCw, BarChart3, Target, MessageSquare, ChevronRight, Star } from 'lucide-react';
 import { formatDate } from '@/utils/format';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 const CYCLE_STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -22,15 +24,33 @@ const REVIEW_STATUS_STYLES: Record<string, string> = {
   COMPLETED: 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
 };
 
+const CYCLE_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.status.draft',
+  ACTIVE: 'perf.status.active',
+  COMPLETED: 'perf.status.completed',
+  ARCHIVED: 'perf.status.archived',
+};
+
+const REVIEW_STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.status.draft',
+  SUBMITTED: 'perf.status.submitted',
+  APPROVED: 'perf.status.approved',
+  COMPLETED: 'perf.status.completed',
+};
+
 function CycleStatusBadge({ status }: { status: string }) {
+  const { t } = useI18n();
+  const labelKey = CYCLE_STATUS_LABEL_KEYS[status];
+
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CYCLE_STATUS_STYLES[status] || CYCLE_STATUS_STYLES.DRAFT}`}>
-      {status}
+      {labelKey ? t(labelKey) : status}
     </span>
   );
 }
 
 export function PerformanceDashboard() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { activeCompany } = useCompanyStore();
   const [cycles, setCycles] = useState<ReviewCycle[]>([]);
@@ -60,11 +80,11 @@ export function PerformanceDashboard() {
       setGoals(goalData);
     } catch (error) {
       console.error('Failed to fetch performance data:', error);
-      toast.error('Gagal memuat data performance');
+      toast.error(t('perf.dashboard.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [activeCompany?.id]);
+  }, [activeCompany?.id, t]);
 
   useEffect(() => {
     fetchData();
@@ -76,25 +96,25 @@ export function PerformanceDashboard() {
 
   const stats = [
     {
-      label: 'Active Cycles',
+      label: t('perf.dashboard.stats.activeCycles'),
       value: activeCycles.length,
       icon: BarChart3,
       color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-400',
     },
     {
-      label: 'Pending Reviews',
+      label: t('perf.dashboard.stats.pendingReviews'),
       value: pendingReviews.length,
       icon: MessageSquare,
       color: 'text-amber-600 bg-amber-50 dark:bg-amber-950 dark:text-amber-400',
     },
     {
-      label: 'Completed Reviews',
+      label: t('perf.dashboard.stats.completedReviews'),
       value: completedReviews.length,
       icon: Star,
       color: 'text-blue-600 bg-blue-50 dark:bg-blue-950 dark:text-blue-400',
     },
     {
-      label: 'Total Goals',
+      label: t('perf.dashboard.stats.totalGoals'),
       value: goals.length,
       icon: Target,
       color: 'text-purple-600 bg-purple-50 dark:bg-purple-950 dark:text-purple-400',
@@ -108,37 +128,37 @@ export function PerformanceDashboard() {
   return (
     <div>
       <PageHeader
-        title="Performance Management"
-        description="Manage review cycles, performance reviews, and goals"
+        title={t('perf.dashboard.title')}
+        description={t('perf.dashboard.description')}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/methods')}>
-              Config Methods
+              {t('perf.dashboard.nav.configMethods')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/periods')}>
-              Config Periods
+              {t('perf.dashboard.nav.configPeriods')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/libraries')}>
-              Config Libraries
+              {t('perf.dashboard.nav.configLibraries')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/config/workflows')}>
-              Config Workflows
+              {t('perf.dashboard.nav.configWorkflows')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/planning')}>
-              Planning Workspace
+              {t('perf.dashboard.nav.planning')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/execution')}>
-              Execution Workspace
+              {t('perf.dashboard.nav.execution')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/results')}>
-              Results Workspace
+              {t('perf.dashboard.nav.results')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/performance/my-results')}>
-              My Results
+              {t('perf.dashboard.nav.myResults')}
             </Button>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
           </div>
         }
@@ -163,22 +183,22 @@ export function PerformanceDashboard() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">Loading...</div>
+        <div className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Review Cycles */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-border">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <h3 className="text-sm font-medium">Review Cycles</h3>
+              <h3 className="text-sm font-medium">{t('perf.dashboard.cycles.title')}</h3>
               <Button size="sm" variant="ghost" onClick={handleViewCycles}>
-                View All <ChevronRight size={14} className="ml-1" />
+                {t('perf.dashboard.viewAll')} <ChevronRight size={14} className="ml-1" />
               </Button>
             </div>
             <div className="divide-y divide-border">
               {cycles.length === 0 ? (
                 <div className="p-8 text-center">
                   <BarChart3 size={24} className="mx-auto mb-2 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">No review cycles yet</p>
+                  <p className="text-sm text-muted-foreground">{t('perf.dashboard.cycles.empty')}</p>
                 </div>
               ) : (
                 cycles.slice(0, 5).map((cycle) => (
@@ -193,7 +213,7 @@ export function PerformanceDashboard() {
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       <span>{cycle.type}</span>
                       <span>{formatDate(cycle.startDate)} - {formatDate(cycle.endDate)}</span>
-                      <span>{cycle._count?.reviews || 0} reviews</span>
+                      <span>{t('perf.dashboard.cycles.reviewCount', { count: cycle._count?.reviews || 0 })}</span>
                     </div>
                   </div>
                 ))
@@ -204,16 +224,16 @@ export function PerformanceDashboard() {
           {/* Recent Reviews */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-border">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <h3 className="text-sm font-medium">Recent Reviews</h3>
+              <h3 className="text-sm font-medium">{t('perf.dashboard.reviews.title')}</h3>
               <Button size="sm" variant="ghost" onClick={() => navigate('/performance/reviews')}>
-                View All <ChevronRight size={14} className="ml-1" />
+                {t('perf.dashboard.viewAll')} <ChevronRight size={14} className="ml-1" />
               </Button>
             </div>
             <div className="divide-y divide-border">
               {reviews.length === 0 ? (
                 <div className="p-8 text-center">
                   <MessageSquare size={24} className="mx-auto mb-2 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">No reviews yet</p>
+                  <p className="text-sm text-muted-foreground">{t('perf.dashboard.reviews.empty')}</p>
                 </div>
               ) : (
                 reviews.slice(0, 5).map((review) => (
@@ -224,7 +244,7 @@ export function PerformanceDashboard() {
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-sm font-medium truncate">{review.title}</p>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${REVIEW_STATUS_STYLES[review.status] || REVIEW_STATUS_STYLES.DRAFT}`}>
-                        {review.status}
+                        {REVIEW_STATUS_LABEL_KEYS[review.status] ? t(REVIEW_STATUS_LABEL_KEYS[review.status]) : review.status}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">

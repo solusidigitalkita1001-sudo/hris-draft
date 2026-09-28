@@ -1,4 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import dayjs from 'dayjs';
+import 'dayjs/locale/id';
+import 'dayjs/locale/en';
 import { appConfig } from '@/config/app';
 import {
   defaultLanguage,
@@ -48,6 +51,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
     localStorage.setItem(appConfig.languageKey, language);
     document.documentElement.lang = language;
+    // Tanggal ikut bahasa aktif: tanpa ini `dayjs().format('MMMM')` tetap
+    // memakai locale build-time walau UI sudah berbahasa Inggris.
+    dayjs.locale(language);
   }, [language]);
 
   const value = useMemo<I18nContextValue>(

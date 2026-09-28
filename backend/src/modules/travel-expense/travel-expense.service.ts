@@ -1,3 +1,4 @@
+import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { validateReceiptReference } from '@/shared/storage/receipt-reference';
 import { travelExpenseRepository } from './travel-expense.repository';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
@@ -63,6 +64,13 @@ export class TravelExpenseService {
     if (currentUser?.employeeId && roles.includes('EMPLOYEE') && !hasElevatedRole) {
       data.employeeId = currentUser.employeeId;
     }
+
+    // companyId is pinned by the tenant middleware, but the client employeeId
+    // is not checked anywhere: an elevated actor could open a trip in this
+    // company against another tenant's employee, and the trip list's employee
+    // include would then expose that person. The scoped lookup rejects a
+    // foreign employee and one outside the actor's data scope alike.
+    await assertEmployeeInScope(data.employeeId, 'business-trip');
 
     const requesterId = currentUser?.id ?? undefined;
 
@@ -245,6 +253,8 @@ export class TravelExpenseService {
     if (data.receiptFilePath) {
       validateReceiptReference(data.receiptFilePath, data.companyId, data.employeeId);
     }
+
+    await assertEmployeeInScope(data.employeeId, 'expense-claim');
 
     const requesterId = currentUser?.id ?? undefined;
 

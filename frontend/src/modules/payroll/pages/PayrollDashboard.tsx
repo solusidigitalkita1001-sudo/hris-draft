@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, Banknote, Users, CheckCircle2, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCompanyStore } from '@/stores/company.store';
+import { useI18n } from '@/i18n/provider';
 
 export function PayrollDashboard() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
   const [runs, setRuns] = useState<PayrollRun[]>([]);
@@ -40,12 +42,12 @@ export function PayrollDashboard() {
   return (
     <div>
       <PageHeader
-        title="Payroll Dashboard"
-        description="Overview of payroll activities"
+        title={t('fin.dash.title')}
+        description={t('fin.dash.description')}
         actions={
           <Button variant="outline" size="sm" onClick={fetchData}>
             <RefreshCw size={16} className="mr-2" />
-            Refresh
+            {t('common.refresh')}
           </Button>
         }
       />
@@ -61,7 +63,7 @@ export function PayrollDashboard() {
           <p className="text-2xl font-semibold">
             {latestRun ? `Rp ${Number(latestRun.totalNetPay).toLocaleString()}` : '0'}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">Latest Net Pay Total</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.latestNetPay')}</p>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
@@ -71,7 +73,7 @@ export function PayrollDashboard() {
             </div>
           </div>
           <p className="text-2xl font-semibold">{latestRun?.totalEmployees || 0}</p>
-          <p className="text-xs text-muted-foreground mt-1">Employees Paid</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.employeesPaid')}</p>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
@@ -81,7 +83,7 @@ export function PayrollDashboard() {
             </div>
           </div>
           <p className="text-2xl font-semibold">{totalApproved}</p>
-          <p className="text-xs text-muted-foreground mt-1">Payroll Runs Approved</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.runsApproved')}</p>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
@@ -91,7 +93,7 @@ export function PayrollDashboard() {
             </div>
           </div>
           <p className="text-2xl font-semibold">{totalDisbursed}</p>
-          <p className="text-xs text-muted-foreground mt-1">Disbursed</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.disbursed')}</p>
         </div>
       </div>
 
@@ -101,50 +103,50 @@ export function PayrollDashboard() {
           onClick={() => navigate('/payroll/salary-components')}
           className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-border hover:border-primary/50 transition-colors text-left"
         >
-          <h3 className="font-medium text-sm">Salary Components</h3>
-          <p className="text-xs text-muted-foreground mt-1">Manage allowances and deductions</p>
+          <h3 className="font-medium text-sm">{t('fin.dash.salaryComponents')}</h3>
+          <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.salaryComponentsDesc')}</p>
         </button>
         <button
           onClick={() => navigate('/payroll/periods')}
           className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-border hover:border-primary/50 transition-colors text-left"
         >
-          <h3 className="font-medium text-sm">Payroll Periods</h3>
-          <p className="text-xs text-muted-foreground mt-1">Manage payroll schedule</p>
+          <h3 className="font-medium text-sm">{t('fin.dash.periods')}</h3>
+          <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.periodsDesc')}</p>
         </button>
         <button
           onClick={() => navigate('/payroll/runs')}
           className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-border hover:border-primary/50 transition-colors text-left"
         >
-          <h3 className="font-medium text-sm">Payroll Runs</h3>
-          <p className="text-xs text-muted-foreground mt-1">Process, approve, and disburse</p>
+          <h3 className="font-medium text-sm">{t('fin.dash.runs')}</h3>
+          <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.runsDesc')}</p>
         </button>
       </div>
 
       {/* Recent Payroll Runs */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-border">
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-medium">Recent Payroll Runs</h3>
+          <h3 className="text-sm font-medium">{t('fin.dash.recentRuns')}</h3>
         </div>
         <div className="table-container">
           <table className="w-full">
             <thead className="table-header">
               <tr>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Run</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Period</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Employees</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Total Net</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.run')}</th>
+                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.period')}</th>
+                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.employees')}</th>
+                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.dash.totalNet')}</th>
+                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{t('fin.common.status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-12 text-sm text-muted-foreground">Loading...</td>
+                  <td colSpan={5} className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</td>
                 </tr>
               ) : runs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="text-center py-12 text-sm text-muted-foreground">
-                    No payroll runs yet. Start by creating a payroll period.
+                    {t('fin.dash.emptyRuns')}
                   </td>
                 </tr>
               ) : (

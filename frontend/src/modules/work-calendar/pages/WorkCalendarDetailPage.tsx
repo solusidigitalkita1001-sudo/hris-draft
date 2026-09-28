@@ -9,14 +9,18 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { popup } from '@/stores/popup.store';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey, TranslationParams } from '@/i18n/translations';
 import {
   ChevronLeft, ChevronRight, RefreshCw, ArrowLeft, CalendarDays,
   Sparkles, Save, Copy, Upload, LayoutGrid, TableProperties,
 } from 'lucide-react';
 
+type Translate = (key: TranslationKey, params?: TranslationParams) => string;
+
 // ─── Day type config ────────────────────────────────────
 interface DayTypeConfig {
-  label: string;
+  labelKey: TranslationKey;
   short: string;
   color: string;
   bg: string;
@@ -26,22 +30,25 @@ interface DayTypeConfig {
 }
 
 const DAY_TYPE_CONFIG: Record<DayType, DayTypeConfig> = {
-  WD: { label: 'Working Day', short: 'W', color: 'bg-emerald-500', bg: 'bg-emerald-50', darkBg: 'dark:bg-emerald-950/30', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
-  WS: { label: 'Working Sat/Shift', short: 'S', color: 'bg-blue-500', bg: 'bg-blue-50', darkBg: 'dark:bg-blue-950/30', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
-  WE: { label: 'Weekend', short: 'W', color: 'bg-gray-300', bg: 'bg-gray-50', darkBg: 'dark:bg-gray-800/50', text: 'text-gray-400 dark:text-gray-500', dot: 'bg-gray-300' },
-  NH: { label: 'National Holiday', short: 'H', color: 'bg-red-500', bg: 'bg-red-50', darkBg: 'dark:bg-red-950/30', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500' },
-  JL: { label: 'Joint Leave', short: 'L', color: 'bg-purple-500', bg: 'bg-purple-50', darkBg: 'dark:bg-purple-950/30', text: 'text-purple-700 dark:text-purple-400', dot: 'bg-purple-500' },
-  CH: { label: 'Company Holiday', short: 'C', color: 'bg-orange-500', bg: 'bg-orange-50', darkBg: 'dark:bg-orange-950/30', text: 'text-orange-700 dark:text-orange-400', dot: 'bg-orange-500' },
-  RH: { label: 'Religious Holiday', short: 'R', color: 'bg-pink-500', bg: 'bg-pink-50', darkBg: 'dark:bg-pink-950/30', text: 'text-pink-700 dark:text-pink-400', dot: 'bg-pink-500' },
-  OT: { label: 'Overtime', short: 'O', color: 'bg-amber-500', bg: 'bg-amber-50', darkBg: 'dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
+  WD: { labelKey: 'adm.dayType.wd', short: 'W', color: 'bg-emerald-500', bg: 'bg-emerald-50', darkBg: 'dark:bg-emerald-950/30', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  WS: { labelKey: 'adm.dayType.ws', short: 'S', color: 'bg-blue-500', bg: 'bg-blue-50', darkBg: 'dark:bg-blue-950/30', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
+  WE: { labelKey: 'adm.dayType.we', short: 'W', color: 'bg-gray-300', bg: 'bg-gray-50', darkBg: 'dark:bg-gray-800/50', text: 'text-gray-400 dark:text-gray-500', dot: 'bg-gray-300' },
+  NH: { labelKey: 'adm.dayType.nh', short: 'H', color: 'bg-red-500', bg: 'bg-red-50', darkBg: 'dark:bg-red-950/30', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500' },
+  JL: { labelKey: 'adm.dayType.jl', short: 'L', color: 'bg-purple-500', bg: 'bg-purple-50', darkBg: 'dark:bg-purple-950/30', text: 'text-purple-700 dark:text-purple-400', dot: 'bg-purple-500' },
+  CH: { labelKey: 'adm.dayType.ch', short: 'C', color: 'bg-orange-500', bg: 'bg-orange-50', darkBg: 'dark:bg-orange-950/30', text: 'text-orange-700 dark:text-orange-400', dot: 'bg-orange-500' },
+  RH: { labelKey: 'adm.dayType.rh', short: 'R', color: 'bg-pink-500', bg: 'bg-pink-50', darkBg: 'dark:bg-pink-950/30', text: 'text-pink-700 dark:text-pink-400', dot: 'bg-pink-500' },
+  OT: { labelKey: 'adm.dayType.ot', short: 'O', color: 'bg-amber-500', bg: 'bg-amber-50', darkBg: 'dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
 };
 
 const DAY_TYPES: DayType[] = ['WD', 'WS', 'WE', 'NH', 'JL', 'CH', 'RH', 'OT'];
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_NAME_KEYS: TranslationKey[] = [
+  'adm.dayShort.sun', 'adm.dayShort.mon', 'adm.dayShort.tue', 'adm.dayShort.wed',
+  'adm.dayShort.thu', 'adm.dayShort.fri', 'adm.dayShort.sat',
+];
 const WORK_DAY_KEYS_BY_INDEX: WorkDayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+const MONTH_NAME_KEYS: TranslationKey[] = [
+  'adm.month.1', 'adm.month.2', 'adm.month.3', 'adm.month.4', 'adm.month.5', 'adm.month.6',
+  'adm.month.7', 'adm.month.8', 'adm.month.9', 'adm.month.10', 'adm.month.11', 'adm.month.12',
 ];
 
 type CsvCalendarRow = {
@@ -144,7 +151,7 @@ function normalizeCsvTime(value: string) {
   return /^\d{2}:\d{2}$/.test(trimmed) ? trimmed : null;
 }
 
-function parseCalendarCsv(text: string) {
+function parseCalendarCsv(text: string, t: Translate) {
   const rows = text
     .replace(/^\uFEFF/, '')
     .split(/\r?\n/)
@@ -152,7 +159,7 @@ function parseCalendarCsv(text: string) {
     .filter(Boolean);
 
   if (rows.length < 2) {
-    throw new Error('CSV minimal harus memiliki header dan 1 baris data.');
+    throw new Error(t('adm.calDetail.csv.needHeaderAndRow'));
   }
 
   const headers = parseCsvLine(rows[0]);
@@ -165,7 +172,7 @@ function parseCalendarCsv(text: string) {
   const isMandatoryIndex = resolveCsvIndex(headers, CSV_HEADER_ALIASES.isMandatory);
 
   if (dateIndex === -1 || dayTypeIndex === -1) {
-    throw new Error('Header CSV wajib memiliki kolom `date` dan `dayType`.');
+    throw new Error(t('adm.calDetail.csv.needDateAndDayType'));
   }
 
   const parsedRows: CsvCalendarRow[] = rows.slice(1).map((line, index) => {
@@ -179,15 +186,15 @@ function parseCalendarCsv(text: string) {
     const isMandatory = isMandatoryIndex >= 0 ? normalizeCsvBoolean(values[isMandatoryIndex] || '') : undefined;
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      throw new Error(`Format tanggal tidak valid pada baris ${index + 2}. Gunakan YYYY-MM-DD.`);
+      throw new Error(t('adm.calDetail.csv.invalidDate', { row: index + 2 }));
     }
 
     if (!dayType) {
-      throw new Error(`dayType tidak valid pada baris ${index + 2}. Gunakan WD, WS, WE, NH, JL, CH, RH, atau OT.`);
+      throw new Error(t('adm.calDetail.csv.invalidDayType', { row: index + 2 }));
     }
 
     if (workStart === null || workEnd === null) {
-      throw new Error(`Format jam tidak valid pada baris ${index + 2}. Gunakan HH:mm.`);
+      throw new Error(t('adm.calDetail.csv.invalidTime', { row: index + 2 }));
     }
 
     return {
@@ -202,7 +209,7 @@ function parseCalendarCsv(text: string) {
   });
 
   if (parsedRows.length === 0) {
-    throw new Error('Tidak ada data yang bisa diimport dari file CSV.');
+    throw new Error(t('adm.calDetail.csv.noImportableRows'));
   }
 
   return parsedRows;
@@ -214,6 +221,7 @@ function CopyDialog({ open, onClose, onCopy, calendar }: {
   onCopy: (targetYear: number, name?: string) => Promise<void>;
   calendar: WorkCalendar;
 }) {
+  const { t } = useI18n();
   const [targetYear, setTargetYear] = useState(calendar.year + 1);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -233,23 +241,23 @@ function CopyDialog({ open, onClose, onCopy, calendar }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-border">
-          <h2 className="text-base font-semibold">Copy Calendar</h2>
+          <h2 className="text-base font-semibold">{t('adm.calendar.copy.title')}</h2>
         </div>
         <div className="p-5 space-y-4">
           <p className="text-sm text-muted-foreground">
-            Copy <strong>{calendar.name}</strong> ({calendar.year}) to:
+            {t('adm.calendar.copy.promptPrefix')} <strong>{calendar.name}</strong> ({calendar.year}) {t('adm.calendar.copy.promptSuffix')}
           </p>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Target Year *</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">{t('adm.calendar.copy.targetYear')}</label>
             <Input type="number" value={targetYear} onChange={(e) => setTargetYear(Number(e.target.value))} min={2000} max={2100} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">New Name (optional)</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={`Copy ${targetYear}`} />
+            <label className="block text-xs font-medium text-muted-foreground mb-1">{t('adm.calendar.copy.newName')}</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('adm.calendar.copy.namePlaceholder', { year: targetYear })} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-            <Button size="sm" onClick={handleCopy} disabled={saving}>{saving ? 'Copying...' : 'Copy'}</Button>
+            <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button size="sm" onClick={handleCopy} disabled={saving}>{saving ? t('adm.calendar.copy.copying') : t('adm.calendar.copy.copy')}</Button>
           </div>
         </div>
       </div>
@@ -259,6 +267,7 @@ function CopyDialog({ open, onClose, onCopy, calendar }: {
 
 // ─── Main Component ─────────────────────────────────────
 export function WorkCalendarDetailPage() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -305,11 +314,11 @@ export function WorkCalendarDetailPage() {
       setHasEdits(false);
     } catch (error) {
       console.error('Failed to load calendar:', error);
-      toast.error('Failed to load calendar data');
+      toast.error(t('adm.calDetail.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [id, currentYear, currentMonth]);
+  }, [id, currentYear, currentMonth, t]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -438,13 +447,13 @@ export function WorkCalendarDetailPage() {
       workEnd: editingEnds[date] !== undefined ? (editingEnds[date] || null) : undefined,
     }));
     if (changedDays.length === 0) {
-      toast('No changes to save');
+      toast(t('adm.calDetail.noChanges'));
       return;
     }
     setSaving(true);
     try {
       await workCalendarService.bulkUpdateDays(id, changedDays);
-      toast.success(`${changedDays.length} day(s) updated`);
+      toast.success(t('adm.calDetail.daysUpdated', { count: changedDays.length }));
       setEditingDays({});
       setEditingNames({});
       setEditingStarts({});
@@ -452,7 +461,7 @@ export function WorkCalendarDetailPage() {
       setHasEdits(false);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to save changes'));
+      toast.error(apiErrorMessage(err, t('adm.calDetail.saveFailed')));
     } finally {
       setSaving(false);
     }
@@ -462,20 +471,20 @@ export function WorkCalendarDetailPage() {
   const handleGenerateDefaults = async () => {
     if (!id) return;
     const confirmed = await popup.confirm({
-      title: 'Generate Default Days',
-      description: 'This will reset all days for this month to the calendar defaults. Continue?',
-      confirmText: 'Generate',
-      cancelText: 'Cancel',
+      title: t('adm.calDetail.generateConfirmTitle'),
+      description: t('adm.calDetail.generateConfirmDesc'),
+      confirmText: t('adm.calDetail.generate'),
+      cancelText: t('common.cancel'),
       intent: 'destructive',
     });
     if (!confirmed) return;
     setSaving(true);
     try {
       await workCalendarService.generateDefaultDays(id);
-      toast.success('Default days generated');
+      toast.success(t('adm.calDetail.generated'));
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to generate defaults'));
+      toast.error(apiErrorMessage(err, t('adm.calDetail.generateFailed')));
     } finally {
       setSaving(false);
     }
@@ -486,20 +495,20 @@ export function WorkCalendarDetailPage() {
     if (!id) return;
     try {
       const newCal = await workCalendarService.copyCalendar(id, targetYear, name);
-      toast.success(`Calendar copied to ${targetYear}`);
+      toast.success(t('adm.calendar.copiedTo', { year: targetYear }));
       navigate(`/work-calendar/${newCal.id}?year=${targetYear}&month=1`);
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to copy calendar'));
+      toast.error(apiErrorMessage(err, t('adm.calendar.copyFailed')));
       throw err;
     }
   };
 
   const handleCsvUploadClick = async () => {
     const confirmed = await popup.confirm({
-      title: 'Import Kalender Dari CSV',
-      description: 'Pastikan file CSV memiliki kolom date dan dayType. Kolom opsional: name, notes, workStart, workEnd, isMandatory.',
-      confirmText: 'Pilih File',
-      cancelText: 'Batal',
+      title: t('adm.calDetail.csvConfirmTitle'),
+      description: t('adm.calDetail.csvConfirmDesc'),
+      confirmText: t('adm.calDetail.csvChooseFile'),
+      cancelText: t('common.cancel'),
     });
 
     if (!confirmed) return;
@@ -515,10 +524,10 @@ export function WorkCalendarDetailPage() {
     setImportingCsv(true);
     try {
       const csvText = await file.text();
-      const parsedRows = parseCalendarCsv(csvText);
+      const parsedRows = parseCalendarCsv(csvText, t);
 
       await workCalendarService.bulkUpdateDays(id, parsedRows);
-      toast.success(`${parsedRows.length} hari berhasil diimport dari CSV`);
+      toast.success(t('adm.calDetail.csvImported', { count: parsedRows.length }));
       setEditingDays({});
       setEditingNames({});
       setEditingStarts({});
@@ -526,7 +535,7 @@ export function WorkCalendarDetailPage() {
       setHasEdits(false);
       await fetchData();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Gagal import CSV'));
+      toast.error(apiErrorMessage(error, t('adm.calDetail.csvImportFailed')));
     } finally {
       setImportingCsv(false);
     }
@@ -564,29 +573,29 @@ export function WorkCalendarDetailPage() {
   return (
     <div>
       <PageHeader
-        title={calendar ? `${calendar.name} — ${currentYear}` : 'Work Calendar'}
-        description={calendar ? `View and manage working days` : 'Loading...'}
+        title={calendar ? `${calendar.name} — ${currentYear}` : t('adm.calendar.title')}
+        description={calendar ? t('adm.calDetail.description') : t('common.loading')}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate('/work-calendar')}>
-              <ArrowLeft size={16} className="mr-2" /> Back
+              <ArrowLeft size={16} className="mr-2" /> {t('adm.common.back')}
             </Button>
             <Button variant="outline" size="sm" onClick={handleGenerateDefaults} disabled={saving || loading}>
-              <Sparkles size={16} className="mr-2" /> Generate
+              <Sparkles size={16} className="mr-2" /> {t('adm.calDetail.generate')}
             </Button>
             {calendar && (
               <Button variant="outline" size="sm" onClick={() => setShowCopy(true)}>
-                <Copy size={16} className="mr-2" /> Copy
+                <Copy size={16} className="mr-2" /> {t('adm.calendar.copy.copy')}
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={handleCsvUploadClick} disabled={loading || importingCsv || saving}>
-              <Upload size={16} className="mr-2" /> {importingCsv ? 'Importing...' : 'Import CSV'}
+              <Upload size={16} className="mr-2" /> {importingCsv ? t('adm.calDetail.importing') : t('adm.calDetail.importCsv')}
             </Button>
             <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+              <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={handleSave} disabled={!hasEdits || saving}>
-              <Save size={16} className="mr-2" /> {saving ? 'Saving...' : 'Save Changes'}
+              <Save size={16} className="mr-2" /> {saving ? t('adm.common.saving') : t('adm.calDetail.saveChanges')}
             </Button>
           </div>
         }
@@ -594,15 +603,15 @@ export function WorkCalendarDetailPage() {
 
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="text-sm text-muted-foreground">Loading calendar...</div>
+          <div className="text-sm text-muted-foreground">{t('adm.calDetail.loading')}</div>
         </div>
       )}
 
       {!loading && !calendar && (
         <div className="flex flex-col items-center py-20 gap-3">
           <CalendarDays size={48} className="text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Calendar not found</p>
-          <Button size="sm" onClick={() => navigate('/work-calendar')}>Back to Calendars</Button>
+          <p className="text-sm text-muted-foreground">{t('adm.calDetail.notFound')}</p>
+          <Button size="sm" onClick={() => navigate('/work-calendar')}>{t('adm.calDetail.backToCalendars')}</Button>
         </div>
       )}
 
@@ -619,7 +628,7 @@ export function WorkCalendarDetailPage() {
                 <button onClick={goToday} className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
                   isCurrentMonth ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-foreground border-border hover:border-primary/50'
                 }`}>
-                  {MONTH_NAMES[currentMonth - 1]} {currentYear}
+                  {t(MONTH_NAME_KEYS[currentMonth - 1])} {currentYear}
                 </button>
                 <Button variant="outline" size="sm" onClick={nextMonth}>
                   <ChevronRight size={16} />
@@ -637,7 +646,7 @@ export function WorkCalendarDetailPage() {
                   }`}
                 >
                   <TableProperties size={14} />
-                  Table
+                  {t('adm.calDetail.viewTable')}
                 </button>
                 <button
                   type="button"
@@ -649,7 +658,7 @@ export function WorkCalendarDetailPage() {
                   }`}
                 >
                   <LayoutGrid size={14} />
-                  Calendar
+                  {t('adm.calDetail.viewCalendar')}
                 </button>
               </div>
             </div>
@@ -669,7 +678,7 @@ export function WorkCalendarDetailPage() {
           <div className="flex flex-wrap gap-2 mb-5">
             {Object.entries(summary).map(([dt, count]) => (
               <div key={dt} className={`px-2.5 py-1 rounded-lg text-xs font-medium ${DAY_TYPE_CONFIG[dt as DayType].bg} ${DAY_TYPE_CONFIG[dt as DayType].text}`}>
-                {DAY_TYPE_CONFIG[dt as DayType].label}: {count}
+                {t(DAY_TYPE_CONFIG[dt as DayType].labelKey)}: {count}
               </div>
             ))}
           </div>
@@ -680,12 +689,12 @@ export function WorkCalendarDetailPage() {
                 <table className="w-full min-w-[980px]">
                   <thead className="border-b border-border bg-muted/40">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Tanggal</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Hari</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Tipe</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Jam Masuk</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Jam Pulang</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Nama / Keterangan</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('adm.calDetail.th.date')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('adm.calDetail.th.day')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('adm.calDetail.th.type')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('adm.calDetail.th.workStart')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('adm.calDetail.th.workEnd')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('adm.calDetail.th.name')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -705,12 +714,12 @@ export function WorkCalendarDetailPage() {
                             <div className="font-medium text-foreground">{dayjs(cell.date).format('DD MMM YYYY')}</div>
                             <div className="text-xs text-muted-foreground">{cell.iso}</div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-muted-foreground">{DAY_NAMES[cell.dayOfWeek]}</td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">{t(DAY_NAME_KEYS[cell.dayOfWeek])}</td>
                           <td className="px-4 py-3">
                             <Select2
                               value={dayType}
                               onValueChange={(value) => changeDayType(cell.iso, value as DayType, cell.calDay)}
-                              options={DAY_TYPES.map((dt) => ({ value: dt, label: DAY_TYPE_CONFIG[dt].label }))}
+                              options={DAY_TYPES.map((dt) => ({ value: dt, label: t(DAY_TYPE_CONFIG[dt].labelKey) }))}
                               className={`h-9 min-w-[10rem] border-transparent ${cfg.bg} ${cfg.text}`}
                               contentClassName="min-w-[10rem]"
                             />
@@ -744,7 +753,7 @@ export function WorkCalendarDetailPage() {
                               <Input
                                 value={dayName}
                                 onChange={(e) => changeDayName(cell.iso, e.target.value)}
-                                placeholder="Isi nama hari/libur"
+                                placeholder={t('adm.calDetail.dayNamePlaceholder')}
                                 className="h-9"
                               />
                             ) : (
@@ -761,11 +770,11 @@ export function WorkCalendarDetailPage() {
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-border overflow-hidden">
               <div className="grid grid-cols-7 border-b border-border">
-                {DAY_NAMES.map((name, i) => (
+                {DAY_NAME_KEYS.map((nameKey, i) => (
                   <div key={i} className={`px-3 py-2.5 text-xs font-medium text-muted-foreground text-center uppercase tracking-wider ${
                     i === 0 || i === 6 ? 'text-red-400' : ''
                   }`}>
-                    {name}
+                    {t(nameKey)}
                   </div>
                 ))}
               </div>
@@ -809,7 +818,7 @@ export function WorkCalendarDetailPage() {
                             <Select2
                               value={dayType}
                               onValueChange={(value) => changeDayType(cell.iso, value as DayType, cell.calDay)}
-                              options={DAY_TYPES.map((dt) => ({ value: dt, label: DAY_TYPE_CONFIG[dt].label }))}
+                              options={DAY_TYPES.map((dt) => ({ value: dt, label: t(DAY_TYPE_CONFIG[dt].labelKey) }))}
                               className={`h-7 w-full border-transparent px-1 py-0 text-[10px] font-medium ${cfg.bg} ${cfg.text}`}
                               contentClassName="min-w-[8rem]"
                             />
@@ -835,7 +844,7 @@ export function WorkCalendarDetailPage() {
                               <input
                                 value={dayName}
                                 onChange={(e) => changeDayName(cell.iso, e.target.value)}
-                                placeholder="Holiday name..."
+                                placeholder={t('adm.calDetail.holidayNamePlaceholder')}
                                 className="w-full text-[10px] mt-0.5 px-1 py-0.5 rounded border border-transparent bg-transparent text-muted-foreground placeholder:text-muted-foreground/30 focus:border-primary outline-none"
                               />
                             )}

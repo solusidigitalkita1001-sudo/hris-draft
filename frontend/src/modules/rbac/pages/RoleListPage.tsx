@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { useCompanyStore } from '@/stores/company.store';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
 import {
   Shield, Plus, RefreshCw, Pencil, Trash2, Search,
   Users, CheckCircle, XCircle, Globe,
@@ -36,6 +37,8 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
   open: boolean; onClose: () => void; onConfirm: () => void;
   title: string; message: string;
 }) {
+  const { t } = useI18n();
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -45,8 +48,8 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }: {
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">Delete</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button size="sm" onClick={onConfirm} className="bg-red-600 hover:bg-red-700">{t('common.delete')}</Button>
         </div>
       </div>
     </div>
@@ -59,6 +62,7 @@ function RoleForm({ initial, onSave, onClose }: {
   onSave: (data: Partial<Role>) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [scope, setScope] = useState(initial?.scope || 'COMPANY');
@@ -70,8 +74,8 @@ function RoleForm({ initial, onSave, onClose }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return toast.error('Role name is required');
-    if (!companyId) return toast.error('Company belum aktif');
+    if (!name.trim()) return toast.error(t('adm.roles.form.nameRequired'));
+    if (!companyId) return toast.error(t('adm.common.noActiveCompany'));
 
     const payload: Record<string, unknown> = {
       name: name.trim(),
@@ -96,52 +100,52 @@ function RoleForm({ initial, onSave, onClose }: {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Role Name *</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. HR Manager" required />
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.roles.form.name')}</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('adm.roles.form.namePlaceholder')} required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Code</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.roles.form.code')}</label>
           <Input
             value={initial?.code || ''}
-            placeholder="Akan dibuat otomatis oleh sistem"
+            placeholder={t('adm.common.autoCode')}
             disabled
           />
-          <p className="mt-1 text-[11px] text-muted-foreground">Code role digenerate sistem dan tidak bisa diedit manual.</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{t('adm.roles.form.codeHint')}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Scope</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.roles.form.scope')}</label>
           <Select2
             value={scope}
             onValueChange={(value) => setScope(value as 'GLOBAL' | 'GROUP' | 'COMPANY')}
-            options={[{ value: 'COMPANY', label: 'Company' }]}
+            options={[{ value: 'COMPANY', label: t('adm.roles.form.scopeCompany') }]}
             className="h-9"
             disabled
           />
-          <p className="mt-1 text-[11px] text-muted-foreground">Custom role dari halaman ini hanya boleh scope `COMPANY`.</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{t('adm.roles.form.scopeHint')}</p>
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Priority</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.roles.form.priority')}</label>
           <Input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} min={0} />
         </div>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Description (optional)</label>
+        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('adm.roles.form.description')}</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. Manages HR operations and employee data"
+          placeholder={t('adm.roles.form.descriptionPlaceholder')}
           rows={2}
           className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground resize-none"
         />
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="submit" size="sm" disabled={saving}>{saving ? t('adm.common.saving') : t('common.save')}</Button>
       </div>
     </form>
   );
@@ -153,6 +157,7 @@ function PermissionManager({ role, open, onClose }: {
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
   const [rolePermissions, setRolePermissions] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -170,10 +175,11 @@ function PermissionManager({ role, open, onClose }: {
       setAllPermissions(allPerms);
       setRolePermissions(new Set(rolePerms.map((p) => p.id)));
     } catch {
-      toast.error('Failed to load permissions');
+      toast.error(t('adm.roles.perm.loadFailed'));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t hanya untuk pesan error; fetch mengikuti role & filter
   }, [role, moduleFilter]);
 
   useEffect(() => { if (open) fetchPermissions(); }, [open, fetchPermissions]);
@@ -192,10 +198,10 @@ function PermissionManager({ role, open, onClose }: {
     setSaving(true);
     try {
       await rbacService.assignPermissions(role.id, Array.from(rolePermissions));
-      toast.success('Permissions updated');
+      toast.success(t('adm.roles.perm.updated'));
       onClose();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to update permissions'));
+      toast.error(apiErrorMessage(err, t('adm.roles.perm.updateFailed')));
     } finally {
       setSaving(false);
     }
@@ -220,8 +226,8 @@ function PermissionManager({ role, open, onClose }: {
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
-            <h2 className="text-base font-semibold">Permissions — {role.name}</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Toggle permissions to assign or revoke</p>
+            <h2 className="text-base font-semibold">{t('adm.roles.perm.title', { name: role.name })}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{t('adm.roles.perm.subtitle')}</p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -233,7 +239,7 @@ function PermissionManager({ role, open, onClose }: {
             value={moduleFilter}
             onValueChange={setModuleFilter}
             options={[
-              { value: '', label: 'All Modules' },
+              { value: '', label: t('adm.roles.perm.allModules') },
               ...modules.map((m) => ({ value: m, label: m })),
             ]}
             className="w-full max-w-xs h-9"
@@ -243,12 +249,12 @@ function PermissionManager({ role, open, onClose }: {
         <div className="flex-1 overflow-y-auto p-5">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-sm text-muted-foreground">Loading permissions...</div>
+              <div className="text-sm text-muted-foreground">{t('adm.roles.perm.loading')}</div>
             </div>
           ) : modules.length === 0 ? (
             <div className="flex flex-col items-center py-12">
               <Lock size={36} className="text-muted-foreground/40 mb-2" />
-              <p className="text-sm text-muted-foreground">No permissions found</p>
+              <p className="text-sm text-muted-foreground">{t('adm.roles.perm.empty')}</p>
             </div>
           ) : (
             <div className="space-y-5">
@@ -285,10 +291,10 @@ function PermissionManager({ role, open, onClose }: {
         </div>
 
         <div className="flex justify-between items-center px-5 py-3 border-t border-border">
-          <span className="text-xs text-muted-foreground">{rolePermissions.size} of {allPermissions.length} selected</span>
+          <span className="text-xs text-muted-foreground">{t('adm.roles.perm.selectedOf', { selected: rolePermissions.size, total: allPermissions.length })}</span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Permissions'}</Button>
+            <Button variant="outline" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? t('adm.common.saving') : t('adm.roles.perm.save')}</Button>
           </div>
         </div>
       </div>
@@ -298,6 +304,7 @@ function PermissionManager({ role, open, onClose }: {
 
 // ─── Main Page ──────────────────────────────────────────
 export function RoleListPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
@@ -315,10 +322,11 @@ export function RoleListPage() {
       const data = await rbacService.findAll(companyId);
       setRoles(data);
     } catch {
-      toast.error('Failed to load roles');
+      toast.error(t('adm.roles.loadFailed'));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t hanya untuk pesan error; fetch mengikuti company aktif
   }, [companyId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -326,11 +334,11 @@ export function RoleListPage() {
   const handleCreate = async (data: Partial<Role>) => {
     try {
       await rbacService.create(data);
-      toast.success('Role created');
+      toast.success(t('adm.roles.created'));
       setShowCreate(false);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to create role'));
+      toast.error(apiErrorMessage(err, t('adm.roles.createFailed')));
       throw err;
     }
   };
@@ -339,11 +347,11 @@ export function RoleListPage() {
     if (!editingRole) return;
     try {
       await rbacService.update(editingRole.id, data);
-      toast.success('Role updated');
+      toast.success(t('adm.roles.updated'));
       setEditingRole(null);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to update role'));
+      toast.error(apiErrorMessage(err, t('adm.roles.updateFailed')));
       throw err;
     }
   };
@@ -352,11 +360,11 @@ export function RoleListPage() {
     if (!deletingRole) return;
     try {
       await rbacService.delete(deletingRole.id);
-      toast.success('Role deleted');
+      toast.success(t('adm.roles.deleted'));
       setDeletingRole(null);
       fetchData();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to delete role'));
+      toast.error(apiErrorMessage(err, t('adm.roles.deleteFailed')));
     }
   };
 
@@ -375,15 +383,15 @@ export function RoleListPage() {
   return (
     <div>
       <PageHeader
-        title="Role Management"
-        description="Create and manage roles with granular permissions"
+        title={t('adm.roles.title')}
+        description={t('adm.roles.description')}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={fetchData}>
-              <RefreshCw size={16} className="mr-2" /> Refresh
+              <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
             </Button>
             <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={16} className="mr-2" /> New Role
+              <Plus size={16} className="mr-2" /> {t('adm.roles.newRole')}
             </Button>
           </div>
         }
@@ -392,7 +400,7 @@ export function RoleListPage() {
       <div className="relative max-w-xs mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search roles..."
+          placeholder={t('adm.roles.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 h-9"
@@ -400,19 +408,19 @@ export function RoleListPage() {
       </div>
 
       <div className="mb-4 rounded-xl border border-border bg-card p-4 text-sm">
-        <p className="font-medium">Ketentuan RBAC</p>
+        <p className="font-medium">{t('adm.roles.rbacRules')}</p>
         <div className="mt-2 grid gap-1 text-muted-foreground">
-          <p>System role: hanya bisa dilihat, tidak bisa edit, delete, atau update permissions.</p>
-          <p>Custom role: bisa update `name`, `code`, `description`, `priority`, dan permissions.</p>
-          <p>Scope binding (`scope`, `companyId`, `groupId`) tidak boleh diubah setelah role dibuat.</p>
-          <p>Custom role dari halaman ini dibuat sebagai role `COMPANY` pada company aktif.</p>
+          <p>{t('adm.roles.rule1')}</p>
+          <p>{t('adm.roles.rule2')}</p>
+          <p>{t('adm.roles.rule3')}</p>
+          <p>{t('adm.roles.rule4')}</p>
         </div>
       </div>
 
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="text-sm text-muted-foreground">Loading roles...</div>
+          <div className="text-sm text-muted-foreground">{t('adm.roles.loading')}</div>
         </div>
       )}
 
@@ -421,11 +429,11 @@ export function RoleListPage() {
         <div className="flex flex-col items-center py-20 gap-3">
           <Shield size={48} className="text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
-            {search ? 'No roles match your search' : 'No roles defined yet'}
+            {search ? t('adm.roles.emptySearch') : t('adm.roles.emptyNone')}
           </p>
           {!search && (
             <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={16} className="mr-2" /> Create Role
+              <Plus size={16} className="mr-2" /> {t('adm.roles.createRole')}
             </Button>
           )}
         </div>
@@ -452,7 +460,7 @@ export function RoleListPage() {
                     <h3 className="text-sm font-semibold flex items-center gap-1.5">
                       {role.name}
                       {role.isSystem && (
-                        <span className="text-[10px] bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-medium">System</span>
+                        <span className="text-[10px] bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-medium">{t('adm.roles.systemBadge')}</span>
                       )}
                     </h3>
                     <p className="text-xs text-muted-foreground font-mono">{role.code}</p>
@@ -467,7 +475,7 @@ export function RoleListPage() {
                 </span>
                 <span className="flex items-center gap-1">
                   <Users size={14} />
-                  {role._count?.userRoles ?? 0} users
+                  {t('adm.roles.usersCount', { count: role._count?.userRoles ?? 0 })}
                 </span>
               </div>
 
@@ -478,7 +486,7 @@ export function RoleListPage() {
               <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
                 <span className="flex items-center gap-1">
                   <Lock size={12} />
-                  {role._count?.rolePermissions ?? 0} permissions
+                  {t('adm.roles.permissionsCount', { count: role._count?.rolePermissions ?? 0 })}
                 </span>
                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
                   role.status === 'ACTIVE'
@@ -486,7 +494,7 @@ export function RoleListPage() {
                     : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
                 }`}>
                   {role.status === 'ACTIVE' ? <CheckCircle size={10} /> : <XCircle size={10} />}
-                  {role.status}
+                  {role.status === 'ACTIVE' ? t('adm.status.active') : role.status === 'INACTIVE' ? t('adm.status.inactive') : role.status}
                 </span>
               </div>
 
@@ -497,12 +505,12 @@ export function RoleListPage() {
                   className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={role.isSystem}
                 >
-                  <Lock size={13} /> Permissions
+                  <Lock size={13} /> {t('adm.roles.permissionsButton')}
                 </button>
                 <button
                   onClick={() => setEditingRole(role)}
                   className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title="Edit"
+                  title={t('common.edit')}
                   disabled={role.isSystem}
                 >
                   <Pencil size={15} />
@@ -510,7 +518,7 @@ export function RoleListPage() {
                 <button
                   onClick={() => setDeletingRole(role)}
                   className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors ml-auto"
-                  title="Delete"
+                  title={t('common.delete')}
                   disabled={role.isSystem}
                 >
                   <Trash2 size={15} />
@@ -522,11 +530,11 @@ export function RoleListPage() {
       )}
 
       {/* Modals */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Role">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('adm.roles.modal.createTitle')}>
         <RoleForm onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
 
-      <Modal open={!!editingRole} onClose={() => setEditingRole(null)} title="Edit Role">
+      <Modal open={!!editingRole} onClose={() => setEditingRole(null)} title={t('adm.roles.modal.editTitle')}>
         {editingRole && (
           <RoleForm initial={editingRole} onSave={handleUpdate} onClose={() => setEditingRole(null)} />
         )}
@@ -536,8 +544,8 @@ export function RoleListPage() {
         open={!!deletingRole}
         onClose={() => setDeletingRole(null)}
         onConfirm={handleDelete}
-        title="Delete Role"
-        message={`Are you sure you want to delete "${deletingRole?.name}"? This action cannot be undone.`}
+        title={t('adm.roles.modal.deleteTitle')}
+        message={t('adm.roles.modal.deleteMessage', { name: deletingRole?.name ?? '' })}
       />
 
       <PermissionManager

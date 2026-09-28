@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { dailyActivityService } from './daily-activity.service';
 import { getRequestContext } from '@/shared/context/RequestContext';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
+import { Result } from '@/shared/core/Result';
 import type {
   CreateDailyActivityDTO,
   UpdateDailyActivityDTO,
@@ -22,7 +23,7 @@ export class DailyActivityController {
       const companyId = getRequestContext()?.user?.companyId;
       if (!companyId) throw new ForbiddenError('Active company context is required');
       const result = await dailyActivityService.findAll(companyId, req.query);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -33,11 +34,11 @@ export class DailyActivityController {
       const ctx = getRequestContext()?.user as UserContextLite | undefined;
       // A platform account (e.g. SUPER_ADMIN) has no employee profile, so its
       // "my activities" set is legitimately empty rather than a 400 error.
-      if (!ctx?.employeeId) return res.json({ success: true, data: [] });
+      if (!ctx?.employeeId) return res.json(Result.success([]));
       const start = req.query.startDate ? new Date(req.query.startDate) : undefined;
       const end = req.query.endDate ? new Date(req.query.endDate) : undefined;
       const result = await dailyActivityService.findMyActivities(ctx.employeeId, start, end);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -47,7 +48,7 @@ export class DailyActivityController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await dailyActivityService.findById(id);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -56,7 +57,7 @@ export class DailyActivityController {
   async createRequest(req: Request<any, any, CreateDailyActivityDTO>, res: Response, next: NextFunction) {
     try {
       const result = await dailyActivityService.createRequest(req.body);
-      res.status(201).json({ success: true, data: result });
+      res.status(201).json(Result.created(result));
     } catch (e) {
       next(e);
     }
@@ -66,7 +67,7 @@ export class DailyActivityController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await dailyActivityService.updateRequest(id, req.body);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -76,7 +77,7 @@ export class DailyActivityController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await dailyActivityService.completeRequest(id, req.body);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }
@@ -86,7 +87,7 @@ export class DailyActivityController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const result = await dailyActivityService.deleteRequest(id);
-      res.json({ success: true, data: result });
+      res.json(Result.success(result));
     } catch (e) {
       next(e);
     }

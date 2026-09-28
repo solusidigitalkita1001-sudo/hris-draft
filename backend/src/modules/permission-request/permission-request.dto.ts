@@ -6,6 +6,10 @@ export const createPermissionSchema = z.object({
   endDate: z.string(),
   duration: z.number().positive(),
   reason: z.string().min(1).max(1000),
+  // Kebijakan bisnis: izin SELALU wajib lampiran. Dibiarkan optional di schema
+  // agar jalur create bisa melempar BadRequestError dengan pesan Indonesia
+  // yang jelas (bukan error validasi zod generik).
+  attachment: z.string().min(1).max(500).optional(),
 });
 
 export const updatePermissionSchema = z.object({

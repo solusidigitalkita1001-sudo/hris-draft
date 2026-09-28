@@ -7,6 +7,10 @@ export const appConfig = {
   companyKey: 'hrms_active_company',
   languageKey: 'hrms_language',
   themeKey: 'hrms_theme',
+  lastActivityKey: 'hrms_last_activity',
+  /** Auto-logout setelah idle (menit). Peringatan tampil 60 detik sebelum. */
+  idleTimeoutMinutes: Number(import.meta.env.VITE_IDLE_TIMEOUT_MINUTES ?? 15),
+  idleWarningSeconds: 60,
   pagination: {
     defaultPageSize: 20,
     pageSizeOptions: [10, 20, 50, 100],

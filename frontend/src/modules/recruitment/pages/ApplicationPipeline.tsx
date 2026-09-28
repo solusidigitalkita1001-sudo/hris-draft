@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import { recruitmentService, type JobPosting, type JobApplication } from '@/services/recruitment.service';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -7,17 +9,18 @@ import { RefreshCw } from 'lucide-react';
 import { formatDate, getInitials } from '@/utils/format';
 import toast from 'react-hot-toast';
 
-const STAGES = [
-  { key: 'NEW', label: 'New', color: 'border-blue-400 bg-blue-50/50 dark:bg-blue-950/30' },
-  { key: 'SCREENING', label: 'Screening', color: 'border-purple-400 bg-purple-50/50 dark:bg-purple-950/30' },
-  { key: 'INTERVIEW', label: 'Interview', color: 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30' },
-  { key: 'OFFER', label: 'Offer', color: 'border-rose-400 bg-rose-50/50 dark:bg-rose-950/30' },
-  { key: 'HIRED', label: 'Hired', color: 'border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/30' },
+const STAGES: Array<{ key: string; labelKey: TranslationKey; color: string }> = [
+  { key: 'NEW', labelKey: 'wf.rec.pipeline.stage.new', color: 'border-blue-400 bg-blue-50/50 dark:bg-blue-950/30' },
+  { key: 'SCREENING', labelKey: 'wf.rec.pipeline.stage.screening', color: 'border-purple-400 bg-purple-50/50 dark:bg-purple-950/30' },
+  { key: 'INTERVIEW', labelKey: 'wf.rec.pipeline.stage.interview', color: 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30' },
+  { key: 'OFFER', labelKey: 'wf.rec.pipeline.stage.offer', color: 'border-rose-400 bg-rose-50/50 dark:bg-rose-950/30' },
+  { key: 'HIRED', labelKey: 'wf.rec.pipeline.stage.hired', color: 'border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/30' },
 ];
 
 const REJECTED_STAGES = ['REJECTED', 'WITHDRAWN'];
 
 export function ApplicationPipeline() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const [postings, setPostings] = useState<JobPosting[]>([]);
   const [applications, setApplications] = useState<JobApplication[]>([]);
@@ -36,9 +39,9 @@ export function ApplicationPipeline() {
       setPostings(data.filter((p) => p.status === 'PUBLISHED' || p.status === 'ON_HOLD'));
     } catch (error) {
       console.error('Failed to fetch postings:', error);
-      toast.error('Gagal memuat lowongan recruitment');
+      toast.error(t('wf.rec.pipeline.postingsLoadFailed'));
     }
-  }, [activeCompany?.id]);
+  }, [activeCompany?.id, t]);
 
   const fetchApplications = useCallback(async () => {
     const companyId = activeCompany?.id || '';
@@ -54,11 +57,11 @@ export function ApplicationPipeline() {
       setApplications(data);
     } catch (error) {
       console.error('Failed to fetch applications:', error);
-      toast.error('Gagal memuat application pipeline');
+      toast.error(t('wf.rec.pipeline.applicationsLoadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [activeCompany?.id, selectedPosting]);
+  }, [activeCompany?.id, selectedPosting, t]);
 
   useEffect(() => {
     fetchPostings();
@@ -86,12 +89,12 @@ export function ApplicationPipeline() {
   return (
     <div>
       <PageHeader
-        title="Application Pipeline"
-        description="Track candidates through the hiring process"
+        title={t('wf.rec.pipeline.title')}
+        description={t('wf.rec.pipeline.description')}
         actions={
           <Button variant="outline" size="sm" onClick={fetchApplications}>
             <RefreshCw size={16} className="mr-2" />
-            Refresh
+            {t('common.refresh')}
           </Button>
         }
       />
@@ -106,7 +109,7 @@ export function ApplicationPipeline() {
               : 'bg-background text-muted-foreground border-border hover:border-primary/50'
           }`}
         >
-          All Postings
+          {t('wf.rec.pipeline.allPostings')}
         </button>
         {postings.map((p) => (
           <button
@@ -124,7 +127,7 @@ export function ApplicationPipeline() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">Loading...</div>
+        <div className="text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4" style={{ scrollbarWidth: 'thin' }}>
           {/* Active Stages */}
@@ -136,7 +139,7 @@ export function ApplicationPipeline() {
                 className={`flex-shrink-0 w-72 rounded-xl border-t-2 ${stage.color} border-border bg-white dark:bg-gray-800`}
               >
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                  <h3 className="text-sm font-medium">{stage.label}</h3>
+                  <h3 className="text-sm font-medium">{t(stage.labelKey)}</h3>
                   <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                     {apps.length}
                   </span>
@@ -145,7 +148,7 @@ export function ApplicationPipeline() {
                 <div className="p-3 space-y-2 min-h-[200px]">
                   {apps.length === 0 ? (
                     <div className="text-center py-8">
-                      <p className="text-xs text-muted-foreground">No candidates</p>
+                      <p className="text-xs text-muted-foreground">{t('wf.rec.pipeline.emptyStage')}</p>
                     </div>
                   ) : (
                     apps.map((app) => (
@@ -165,7 +168,7 @@ export function ApplicationPipeline() {
                             <p className="text-sm font-medium truncate">
                               {app.candidate
                                 ? `${app.candidate.firstName} ${app.candidate.lastName}`
-                                : 'Unknown'}
+                                : t('wf.common.unknown')}
                             </p>
                             {app.candidate?.email && (
                               <p className="text-xs text-muted-foreground truncate">
@@ -197,7 +200,7 @@ export function ApplicationPipeline() {
                                   }}
                                   className="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200"
                                 >
-                                  Screen
+                                  {t('wf.rec.pipeline.actions.screen')}
                                 </button>
                               )}
                               {stage.key === 'SCREENING' && (
@@ -208,7 +211,7 @@ export function ApplicationPipeline() {
                                   }}
                                   className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 hover:bg-amber-200"
                                 >
-                                  Interview
+                                  {t('wf.rec.pipeline.actions.interview')}
                                 </button>
                               )}
                               {stage.key === 'INTERVIEW' && (
@@ -219,7 +222,7 @@ export function ApplicationPipeline() {
                                   }}
                                   className="text-xs px-2 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300 hover:bg-rose-200"
                                 >
-                                  Offer
+                                  {t('wf.rec.pipeline.actions.offer')}
                                 </button>
                               )}
                               {stage.key === 'OFFER' && (
@@ -231,7 +234,7 @@ export function ApplicationPipeline() {
                                     }}
                                     className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 hover:bg-emerald-200"
                                   >
-                                    Hire
+                                    {t('wf.rec.pipeline.actions.hire')}
                                   </button>
                                   <button
                                     onClick={(e) => {
@@ -240,7 +243,7 @@ export function ApplicationPipeline() {
                                     }}
                                     className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 hover:bg-red-200"
                                   >
-                                    Reject
+                                    {t('wf.rec.pipeline.actions.reject')}
                                   </button>
                                 </div>
                               )}
@@ -250,7 +253,7 @@ export function ApplicationPipeline() {
                                   handleStageClick(app.id, 'REJECTED');
                                 }}
                                 className="text-xs px-2 py-0.5 rounded bg-red-50 text-red-500 dark:bg-red-950 dark:text-red-400 hover:bg-red-100"
-                                title="Reject"
+                                title={t('wf.rec.pipeline.actions.reject')}
                               >
                                 ✕
                               </button>
@@ -268,7 +271,7 @@ export function ApplicationPipeline() {
           {/* Rejected Column */}
           <div className="flex-shrink-0 w-72 rounded-xl border-t-2 border-red-400 border-border bg-red-50/50 dark:bg-red-950/30 bg-white dark:bg-gray-800">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <h3 className="text-sm font-medium text-red-600 dark:text-red-400">Rejected</h3>
+              <h3 className="text-sm font-medium text-red-600 dark:text-red-400">{t('wf.rec.pipeline.rejected')}</h3>
               <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                 {rejectedApps.length}
               </span>
@@ -276,7 +279,7 @@ export function ApplicationPipeline() {
             <div className="p-3 space-y-2 min-h-[200px]">
               {rejectedApps.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-xs text-muted-foreground">No rejected candidates</p>
+                  <p className="text-xs text-muted-foreground">{t('wf.rec.pipeline.emptyRejected')}</p>
                 </div>
               ) : (
                 rejectedApps.map((app) => (
@@ -296,7 +299,7 @@ export function ApplicationPipeline() {
                         <p className="text-sm font-medium truncate">
                           {app.candidate
                             ? `${app.candidate.firstName} ${app.candidate.lastName}`
-                            : 'Unknown'}
+                            : t('wf.common.unknown')}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {app.status} • {formatDate(app.appliedAt)}

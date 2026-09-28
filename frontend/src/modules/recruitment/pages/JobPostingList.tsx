@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useI18n } from '@/i18n/provider';
 import { recruitmentService, type JobPosting } from '@/services/recruitment.service';
 import { useCompanyStore } from '@/stores/company.store';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -29,6 +30,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function JobPostingList() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { activeCompany } = useCompanyStore();
   const [postings, setPostings] = useState<JobPosting[]>([]);
@@ -65,20 +67,20 @@ export function JobPostingList() {
   return (
     <div>
       <PageHeader
-        title="Job Postings"
-        description="Manage job vacancies and track applicants"
+        title={t('wf.rec.postings.title')}
+        description={t('wf.rec.postings.description')}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw size={16} className="mr-2" />
-              Refresh
+              {t('common.refresh')}
             </Button>
             <Button
               size="sm"
               onClick={() => navigate('/recruitment/postings/new')}
             >
               <Plus size={16} className="mr-2" />
-              New Posting
+              {t('wf.rec.postings.new')}
             </Button>
           </>
         }
@@ -91,7 +93,7 @@ export function JobPostingList() {
             className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            placeholder="Search postings..."
+            placeholder={t('wf.rec.postings.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -109,7 +111,7 @@ export function JobPostingList() {
                     : 'bg-background text-muted-foreground border-border hover:border-primary/50'
                 }`}
               >
-                {s || 'All'}
+                {s || t('wf.common.all')}
               </button>
             )
           )}
@@ -119,17 +121,17 @@ export function JobPostingList() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
           <div className="col-span-full text-center py-12 text-sm text-muted-foreground">
-            Loading...
+            {t('common.loading')}
           </div>
         ) : filtered.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <div className="flex flex-col items-center gap-2">
               <Briefcase size={32} className="text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
-                No job postings found
+                {t('wf.rec.postings.empty')}
               </p>
               <p className="text-xs text-muted-foreground">
-                Create a new job posting to start recruiting
+                {t('wf.rec.postings.emptyHint')}
               </p>
             </div>
           </div>
@@ -163,14 +165,14 @@ export function JobPostingList() {
                 </span>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-600 dark:bg-gray-900 dark:text-gray-400">
                   <Users size={12} />
-                  {posting.vacancies} vacancy
+                  {t('wf.rec.postings.vacancyCount', { count: posting.vacancies })}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Eye size={14} />
-                  <span>{posting._count?.applications || 0} applications</span>
+                  <span>{t('wf.rec.postings.applicationCount', { count: posting._count?.applications || 0 })}</span>
                 </div>
                 {posting.department && (
                   <span>{posting.department.name}</span>
@@ -179,10 +181,10 @@ export function JobPostingList() {
 
               {posting.minSalary && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  Salary: {formatCurrency(Number(posting.minSalary))} -{' '}
-                  {posting.maxSalary
-                    ? formatCurrency(Number(posting.maxSalary))
-                    : '-'}
+                  {t('wf.rec.postings.salaryRange', {
+                    min: formatCurrency(Number(posting.minSalary)),
+                    max: posting.maxSalary ? formatCurrency(Number(posting.maxSalary)) : '-',
+                  })}
                 </p>
               )}
             </div>

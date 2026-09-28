@@ -32,6 +32,8 @@ import {
 } from '@/services/workflow.service';
 import { workflowEngineService, type WorkflowActionType } from '@/services/workflow-engine.service';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 
 // my-approvals items are approval tasks: top-level task fields plus a nested workflow instance
 type PendingApproval = {
@@ -78,6 +80,12 @@ const ROLE_OPTIONS = [
 
 const OPERATORS: WorkflowOperator[] = ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'IN', 'CONTAINS'];
 
+const ACTION_LABEL: Record<WorkflowActionType, TranslationKey> = {
+  APPROVE: 'ops.workflow.admin.approvals.approve',
+  REJECT: 'ops.workflow.admin.approvals.reject',
+  ESCALATE: 'ops.workflow.admin.approvals.escalate',
+};
+
 function Modal({
   open,
   onClose,
@@ -116,7 +124,7 @@ function ConfirmDialog({
   message,
   onClose,
   onConfirm,
-  confirmText = 'Hapus',
+  confirmText,
   confirmVariant = 'danger',
 }: {
   open: boolean;
@@ -127,6 +135,7 @@ function ConfirmDialog({
   confirmText?: string;
   confirmVariant?: 'danger' | 'primary' | 'default';
 }) {
+  const { t } = useI18n();
   if (!open) return null;
   const confirmClass =
     confirmVariant === 'danger'
@@ -146,10 +155,10 @@ function ConfirmDialog({
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
           <Button variant="outline" size="sm" onClick={onClose}>
-            Batal
+            {t('common.cancel')}
           </Button>
           <Button size="sm" className={confirmClass} onClick={onConfirm}>
-            {confirmText}
+            {confirmText ?? t('common.delete')}
           </Button>
         </div>
       </div>
@@ -172,6 +181,7 @@ function CommentPrompt({
   submitText: string;
   intent?: 'default' | 'destructive' | 'success';
 }) {
+  const { t } = useI18n();
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -213,22 +223,22 @@ function CommentPrompt({
         </div>
         <div className="p-5">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Komentar (opsional)
+            {t('ops.workflow.admin.commentPrompt.commentOptional')}
           </label>
           <textarea
             rows={3}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Tambahkan komentar..."
+            placeholder={t('ops.workflow.admin.commentPrompt.placeholder')}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
           />
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
           <Button variant="outline" size="sm" onClick={onClose} disabled={submitting}>
-            Batal
+            {t('common.cancel')}
           </Button>
           <Button size="sm" className={btnClass} onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Memproses...' : submitText}
+            {submitting ? t('ops.workflow.admin.commentPrompt.processing') : submitText}
           </Button>
         </div>
       </div>
@@ -282,6 +292,7 @@ function TemplateForm({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(initial?.name || '');
   const [approvalType, setApprovalType] = useState(initial?.approvalType || '');
   const [resource, setResource] = useState(initial?.resource || '');
@@ -350,15 +361,15 @@ function TemplateForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyId) {
-      toast.error('companyId tidak tersedia');
+      toast.error(t('ops.workflow.admin.form.errors.noCompanyId'));
       return;
     }
     if (!name.trim() || !approvalType.trim()) {
-      toast.error('Nama dan Approval Type wajib diisi');
+      toast.error(t('ops.workflow.admin.form.errors.nameTypeRequired'));
       return;
     }
     if (stages.length === 0) {
-      toast.error('Minimal 1 stage diperlukan');
+      toast.error(t('ops.workflow.admin.form.errors.minOneStage'));
       return;
     }
     setSaving(true);
@@ -382,15 +393,15 @@ function TemplateForm({
       };
       if (initial?.id) {
         await workflowService.updateTemplate(initial.id, payload);
-        toast.success('Template workflow diperbarui');
+        toast.success(t('ops.workflow.admin.form.toast.updated'));
       } else {
         await workflowService.createTemplate(payload);
-        toast.success('Template workflow dibuat');
+        toast.success(t('ops.workflow.admin.form.toast.created'));
       }
       await onSaved();
       onClose();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal menyimpan template'));
+      toast.error(apiErrorMessage(err, t('ops.workflow.admin.form.toast.saveFailed')));
     } finally {
       setSaving(false);
     }
@@ -400,18 +411,18 @@ function TemplateForm({
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Nama Template *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.admin.form.nameLabel')}</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Approval Type *</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.admin.form.approvalTypeLabel')}</label>
           <Select2
             value={approvalType}
             onValueChange={setApprovalType}
             options={APPROVAL_TYPES.map((v) => ({ value: v, label: v })).concat([
-              { value: '__custom__', label: 'Other (custom)' },
+              { value: '__custom__', label: t('ops.workflow.admin.form.approvalTypeOther') },
             ])}
-            placeholder="Pilih approval type"
+            placeholder={t('ops.workflow.admin.form.approvalTypePlaceholder')}
           />
           {approvalType && !APPROVAL_TYPES.includes(approvalType) && (
             <div className="mt-2">
@@ -419,7 +430,7 @@ function TemplateForm({
                 value={approvalType}
                 onChange={(e) => setApprovalType(e.target.value.toUpperCase())}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                placeholder="Ketik custom approval type"
+                placeholder={t('ops.workflow.admin.form.customApprovalTypePlaceholder')}
               />
             </div>
           )}
@@ -428,12 +439,12 @@ function TemplateForm({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Resource</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.admin.fields.resource')}</label>
           <Select2
             value={resource || ''}
             onValueChange={setResource}
             options={RESOURCES.map((v) => ({ value: v, label: v }))}
-            placeholder="Pilih resource"
+            placeholder={t('ops.workflow.admin.form.resourcePlaceholder')}
           />
         </div>
         <div className="flex items-end">
@@ -444,13 +455,13 @@ function TemplateForm({
               onChange={(e) => setIsActive(e.target.checked)}
               className="h-4 w-4 rounded border-border"
             />
-            Template aktif
+            {t('ops.workflow.admin.form.templateActive')}
           </label>
         </div>
       </div>
 
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Deskripsi</label>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.admin.form.descriptionLabel')}</label>
         <textarea
           rows={3}
           value={description}
@@ -461,9 +472,9 @@ function TemplateForm({
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Approval Stages</h3>
+          <h3 className="text-sm font-semibold">{t('ops.workflow.admin.form.stagesHeading')}</h3>
           <Button type="button" size="sm" variant="outline" onClick={addStage}>
-            <Plus size={14} className="mr-1.5" /> Tambah Stage
+            <Plus size={14} className="mr-1.5" /> {t('ops.workflow.admin.form.addStage')}
           </Button>
         </div>
 
@@ -471,7 +482,7 @@ function TemplateForm({
           <div key={`${sIdx}-${stage.level}`} className="rounded-xl border border-border p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-sm font-semibold">
-                Stage {sIdx + 1} &middot; L{stage.level}
+                {t('ops.workflow.admin.form.stageHeading', { num: sIdx + 1, level: stage.level })}
               </h4>
               <div className="flex items-center gap-2">
                 <Button
@@ -498,7 +509,7 @@ function TemplateForm({
                     onClick={() => removeStage(sIdx)}
                     className="text-sm text-red-600 hover:underline"
                   >
-                    Hapus Stage
+                    {t('ops.workflow.admin.form.removeStage')}
                   </button>
                 )}
               </div>
@@ -506,7 +517,7 @@ function TemplateForm({
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Nama Stage *</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.admin.form.stageNameLabel')}</label>
                 <Input
                   value={stage.name}
                   onChange={(e) => updateStage(sIdx, 'name', e.target.value)}
@@ -514,14 +525,14 @@ function TemplateForm({
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Approver Type *</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.admin.form.approverTypeLabel')}</label>
                 <Select2
                   value={stage.approverType}
                   onValueChange={(v) => updateStage(sIdx, 'approverType', v as WorkflowApproverType)}
                   options={[
-                    { value: 'ROLE', label: 'Role' },
-                    { value: 'USER', label: 'User' },
-                    { value: 'AUTO', label: 'Auto' },
+                    { value: 'ROLE', label: t('ops.workflow.admin.form.approverType.role') },
+                    { value: 'USER', label: t('ops.workflow.admin.form.approverType.user') },
+                    { value: 'AUTO', label: t('ops.workflow.admin.form.approverType.auto') },
                   ]}
                 />
               </div>
@@ -530,24 +541,24 @@ function TemplateForm({
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Approver Role Code
+                  {t('ops.workflow.admin.form.approverRoleCode')}
                 </label>
                 <Select2
                   value={stage.approverRoleCode || ''}
                   onValueChange={(v) => updateStage(sIdx, 'approverRoleCode', v)}
                   options={ROLE_OPTIONS.map((v) => ({ value: v, label: v }))}
-                  placeholder="Pilih role"
+                  placeholder={t('ops.workflow.admin.form.rolePlaceholder')}
                   disabled={stage.approverType === 'AUTO' || stage.approverType === 'USER'}
                 />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Approver User ID
+                  {t('ops.workflow.admin.form.approverUserId')}
                 </label>
                 <Input
                   value={stage.approverId || ''}
                   onChange={(e) => updateStage(sIdx, 'approverId', e.target.value)}
-                  placeholder="UUID karyawan"
+                  placeholder={t('ops.workflow.admin.form.employeeUuidPlaceholder')}
                   disabled={stage.approverType === 'AUTO' || stage.approverType === 'ROLE'}
                 />
               </div>
@@ -556,24 +567,24 @@ function TemplateForm({
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Backup Role Code
+                  {t('ops.workflow.admin.form.backupRoleCode')}
                 </label>
                 <Select2
                   value={stage.backupApproverRoleCode || ''}
                   onValueChange={(v) => updateStage(sIdx, 'backupApproverRoleCode', v)}
                   options={ROLE_OPTIONS.map((v) => ({ value: v, label: v }))}
-                  placeholder="Pilih backup role"
+                  placeholder={t('ops.workflow.admin.form.backupRolePlaceholder')}
                   disabled={stage.approverType === 'AUTO'}
                 />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Backup User ID
+                  {t('ops.workflow.admin.form.backupUserId')}
                 </label>
                 <Input
                   value={stage.backupApproverId || ''}
                   onChange={(e) => updateStage(sIdx, 'backupApproverId', e.target.value)}
-                  placeholder="UUID karyawan backup"
+                  placeholder={t('ops.workflow.admin.form.backupEmployeeUuidPlaceholder')}
                   disabled={stage.approverType === 'AUTO'}
                 />
               </div>
@@ -581,7 +592,7 @@ function TemplateForm({
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">SLA Hours *</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('ops.workflow.admin.form.slaHoursLabel')}</label>
                 <Input
                   type="number"
                   min={1}
@@ -597,21 +608,21 @@ function TemplateForm({
                     onChange={(e) => updateStage(sIdx, 'allowEscalation', e.target.checked)}
                     className="h-4 w-4 rounded border-border"
                   />
-                  Izinkan Eskalasi
+                  {t('ops.workflow.admin.form.allowEscalation')}
                 </label>
               </div>
             </div>
 
             <div className="mt-5 rounded-lg bg-muted/50 p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h5 className="text-sm font-semibold">Condition Rules</h5>
+                <h5 className="text-sm font-semibold">{t('ops.workflow.admin.form.conditionRules')}</h5>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={() => addRule(sIdx)}
                 >
-                  <Plus size={14} className="mr-1.5" /> Tambah Rule
+                  <Plus size={14} className="mr-1.5" /> {t('ops.workflow.admin.form.addRule')}
                 </Button>
               </div>
               <div className="space-y-3">
@@ -623,7 +634,7 @@ function TemplateForm({
                     <Input
                       value={rule.field}
                       onChange={(e) => updateRule(sIdx, rIdx, 'field', e.target.value)}
-                      placeholder="field (mis. totalDays, amount)"
+                      placeholder={t('ops.workflow.admin.form.ruleFieldPlaceholder')}
                     />
                     <Select2
                       value={rule.operator}
@@ -633,16 +644,16 @@ function TemplateForm({
                     <Input
                       value={rule.value}
                       onChange={(e) => updateRule(sIdx, rIdx, 'value', e.target.value)}
-                      placeholder="value"
+                      placeholder={t('ops.workflow.admin.form.ruleValuePlaceholder')}
                     />
                     <Button type="button" variant="outline" onClick={() => removeRule(sIdx, rIdx)}>
-                      Hapus
+                      {t('common.delete')}
                     </Button>
                   </div>
                 ))}
                 {!stage.conditionRules?.length && (
                   <p className="text-sm text-muted-foreground">
-                    Stage ini selalu aktif jika tidak ada condition rule.
+                    {t('ops.workflow.admin.form.noRulesHint')}
                   </p>
                 )}
               </div>
@@ -653,10 +664,10 @@ function TemplateForm({
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onClose}>
-          Batal
+          {t('common.cancel')}
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? 'Menyimpan...' : 'Simpan Template'}
+          {saving ? t('ops.workflow.admin.form.saving') : t('ops.workflow.admin.form.saveTemplate')}
         </Button>
       </div>
     </form>
@@ -684,6 +695,7 @@ function getReferenceLink(referenceType: string | undefined, referenceId: string
 }
 
 export function WorkflowAdminPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const companyId = useCompanyStore((state) => state.activeCompanyId) ?? '';
 
@@ -724,11 +736,11 @@ export function WorkflowAdminPage() {
       const data = await workflowService.listTemplates(companyId, filters);
       setTemplates(data);
     } catch {
-      toast.error('Gagal memuat workflow templates');
+      toast.error(t('ops.workflow.admin.toast.loadTemplatesFailed'));
     } finally {
       setTemplatesLoading(false);
     }
-  }, [companyId, filterApprovalType, filterResource, filterIsActive]);
+  }, [companyId, filterApprovalType, filterResource, filterIsActive, t]);
 
   const loadApprovals = useCallback(async () => {
     if (!companyId) return;
@@ -737,11 +749,11 @@ export function WorkflowAdminPage() {
       const data = await workflowService.getMyApprovals(companyId);
       setApprovals(data);
     } catch {
-      toast.error('Gagal memuat approvals');
+      toast.error(t('ops.workflow.admin.toast.loadApprovalsFailed'));
     } finally {
       setApprovalsLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, t]);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([loadTemplates(), loadApprovals()]);
@@ -779,10 +791,10 @@ export function WorkflowAdminPage() {
         })),
       };
       await workflowService.createTemplate(payload);
-      toast.success('Template berhasil diduplikasi');
+      toast.success(t('ops.workflow.admin.toast.duplicated'));
       await loadTemplates();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal menduplikasi template'));
+      toast.error(apiErrorMessage(err, t('ops.workflow.admin.toast.duplicateFailed')));
     }
   };
 
@@ -790,11 +802,11 @@ export function WorkflowAdminPage() {
     if (!deletingTemplate) return;
     try {
       await workflowService.deleteTemplate(deletingTemplate.id);
-      toast.success('Template dihapus');
+      toast.success(t('ops.workflow.admin.toast.deleted'));
       setDeletingTemplate(null);
       await loadTemplates();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal menghapus template'));
+      toast.error(apiErrorMessage(err, t('ops.workflow.admin.toast.deleteFailed')));
     }
   };
 
@@ -841,14 +853,23 @@ export function WorkflowAdminPage() {
       });
       const icon = bulkAction === 'APPROVE' ? '✅' : '❌';
       toast.success(
-        `${icon} Bulk ${bulkAction.toLowerCase()}: ${result.successful}/${result.total} berhasil${
-          result.failed > 0 ? `, ${result.failed} gagal` : ''
-        }`
+        t(
+          result.failed > 0
+            ? 'ops.workflow.admin.toast.bulkResultWithFailed'
+            : 'ops.workflow.admin.toast.bulkResult',
+          {
+            icon,
+            action: bulkAction.toLowerCase(),
+            successful: result.successful,
+            total: result.total,
+            failed: result.failed,
+          }
+        )
       );
       setSelectedIds([]);
       await loadApprovals();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Bulk action gagal'));
+      toast.error(apiErrorMessage(err, t('ops.workflow.admin.toast.bulkFailed')));
     } finally {
       setBulkAction(null);
     }
@@ -862,10 +883,14 @@ export function WorkflowAdminPage() {
         individualAction.action,
         comment
       );
-      toast.success(`Aksi ${individualAction.action.toLowerCase()} berhasil`);
+      toast.success(
+        t('ops.workflow.admin.toast.actionSuccess', {
+          action: individualAction.action.toLowerCase(),
+        })
+      );
       await loadApprovals();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Gagal memproses aksi'));
+      toast.error(apiErrorMessage(err, t('ops.workflow.admin.toast.actionFailed')));
     } finally {
       setIndividualAction(null);
     }
@@ -881,19 +906,19 @@ export function WorkflowAdminPage() {
   return (
     <div>
       <PageHeader
-        title="Admin Workflow Engine"
-        description="Kelola approval templates (A.4) dan batch approval MyApprovals (A.5)"
+        title={t('ops.workflow.admin.title')}
+        description={t('ops.workflow.admin.description')}
         actions={
           <Button variant="outline" size="sm" onClick={refreshAll}>
-            <RefreshCw size={16} className="mr-2" /> Refresh
+            <RefreshCw size={16} className="mr-2" /> {t('common.refresh')}
           </Button>
         }
       />
 
       <div className="mb-6 flex gap-1 border-b border-border">
         {[
-          { key: 'templates', label: 'Approval Templates', icon: <GitBranch size={16} /> },
-          { key: 'approvals', label: 'My Approvals', icon: <CheckCircle2 size={16} /> },
+          { key: 'templates', label: t('ops.workflow.admin.tabs.templates'), icon: <GitBranch size={16} /> },
+          { key: 'approvals', label: t('ops.workflow.admin.tabs.approvals'), icon: <CheckCircle2 size={16} /> },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -919,37 +944,37 @@ export function WorkflowAdminPage() {
               <div className="flex flex-wrap gap-3">
                 <div className="w-[180px]">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Approval Type
+                    {t('ops.workflow.admin.fields.approvalType')}
                   </label>
                   <Select2
                     value={filterApprovalType}
                     onValueChange={setFilterApprovalType}
                     options={APPROVAL_TYPES.map((v) => ({ value: v, label: v }))}
-                    placeholder="Semua type"
+                    placeholder={t('ops.workflow.admin.filters.allTypes')}
                   />
                 </div>
                 <div className="w-[180px]">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Resource
+                    {t('ops.workflow.admin.fields.resource')}
                   </label>
                   <Select2
                     value={filterResource}
                     onValueChange={setFilterResource}
                     options={RESOURCES.map((v) => ({ value: v, label: v }))}
-                    placeholder="Semua resource"
+                    placeholder={t('ops.workflow.admin.filters.allResources')}
                   />
                 </div>
                 <div className="w-[160px]">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Is Active
+                    {t('ops.workflow.admin.fields.isActive')}
                   </label>
                   <Select2
                     value={filterIsActive}
                     onValueChange={(v) => setFilterIsActive(v as '' | 'true' | 'false')}
                     options={[
-                      { value: '', label: 'Semua' },
-                      { value: 'true', label: 'Aktif' },
-                      { value: 'false', label: 'Nonaktif' },
+                      { value: '', label: t('ops.workflow.admin.filters.all') },
+                      { value: 'true', label: t('common.active') },
+                      { value: 'false', label: t('common.inactive') },
                     ]}
                   />
                 </div>
@@ -963,7 +988,7 @@ export function WorkflowAdminPage() {
                   }}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
-                  <Plus size={16} className="mr-2" /> New Template
+                  <Plus size={16} className="mr-2" /> {t('ops.workflow.admin.templates.new')}
                 </Button>
               </div>
             </div>
@@ -972,23 +997,23 @@ export function WorkflowAdminPage() {
           {/* Templates table-like list */}
           {templatesLoading ? (
             <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              Memuat templates...
+              {t('ops.workflow.admin.templates.loading')}
             </div>
           ) : templates.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              Belum ada workflow template.
+              {t('ops.workflow.admin.templates.empty')}
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border bg-card">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium">Name</th>
-                    <th className="px-4 py-3 text-left font-medium">Approval Type</th>
-                    <th className="px-4 py-3 text-left font-medium">Resource</th>
-                    <th className="px-4 py-3 text-left font-medium">Stages</th>
-                    <th className="px-4 py-3 text-left font-medium">Is Active</th>
-                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.templates.table.name')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.fields.approvalType')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.fields.resource')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.templates.table.stages')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.fields.isActive')}</th>
+                    <th className="px-4 py-3 text-right font-medium">{t('ops.workflow.admin.templates.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1010,12 +1035,12 @@ export function WorkflowAdminPage() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
-                          {tpl.stages.length} stages
+                          {t('ops.workflow.admin.templates.stagesCount', { count: tpl.stages.length })}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge
-                          label={tpl.isActive ? 'Active' : 'Inactive'}
+                          label={t(tpl.isActive ? 'common.active' : 'common.inactive')}
                           tone={tpl.isActive ? 'success' : 'neutral'}
                         />
                       </td>
@@ -1030,7 +1055,7 @@ export function WorkflowAdminPage() {
                             }}
                           >
                             <Settings2 size={13} className="mr-1" />
-                            Edit
+                            {t('common.edit')}
                           </Button>
                           <Button
                             size="sm"
@@ -1038,7 +1063,7 @@ export function WorkflowAdminPage() {
                             onClick={() => handleDuplicate(tpl)}
                           >
                             <Copy size={13} className="mr-1" />
-                            Duplicate
+                            {t('ops.workflow.admin.templates.duplicate')}
                           </Button>
                           <Button
                             size="sm"
@@ -1047,7 +1072,7 @@ export function WorkflowAdminPage() {
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
                             <Trash2 size={13} className="mr-1" />
-                            Delete
+                            {t('common.delete')}
                           </Button>
                         </div>
                       </td>
@@ -1069,18 +1094,18 @@ export function WorkflowAdminPage() {
               <div className="flex flex-wrap gap-3">
                 <div className="w-[180px]">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Approval Type
+                    {t('ops.workflow.admin.fields.approvalType')}
                   </label>
                   <Select2
                     value={filterApprovalType2}
                     onValueChange={setFilterApprovalType2}
                     options={APPROVAL_TYPES.map((v) => ({ value: v, label: v }))}
-                    placeholder="Semua type"
+                    placeholder={t('ops.workflow.admin.filters.allTypes')}
                   />
                 </div>
                 <div className="w-[160px]">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Status
+                    {t('ops.workflow.admin.fields.status')}
                   </label>
                   <Select2
                     value={filterStatus}
@@ -1088,7 +1113,7 @@ export function WorkflowAdminPage() {
                     options={[
                       { value: 'PENDING', label: 'PENDING' },
                       { value: 'ESCALATED', label: 'ESCALATED' },
-                      { value: '', label: 'Semua' },
+                      { value: '', label: t('ops.workflow.admin.filters.all') },
                     ]}
                   />
                 </div>
@@ -1096,7 +1121,7 @@ export function WorkflowAdminPage() {
               <div className="flex flex-wrap items-center gap-2">
                 {selectedIds.length > 0 && (
                   <span className="text-xs text-muted-foreground">
-                    {selectedIds.length} dipilih
+                    {t('ops.workflow.admin.approvals.selectedCount', { count: selectedIds.length })}
                   </span>
                 )}
                 <Button
@@ -1106,7 +1131,7 @@ export function WorkflowAdminPage() {
                   className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
                 >
                   <CheckCircle2 size={15} className="mr-1.5" />
-                  Bulk Approve
+                  {t('ops.workflow.admin.approvals.bulkApprove')}
                 </Button>
                 <Button
                   size="sm"
@@ -1116,7 +1141,7 @@ export function WorkflowAdminPage() {
                   className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50"
                 >
                   <XCircle size={15} className="mr-1.5" />
-                  Bulk Reject
+                  {t('ops.workflow.admin.approvals.bulkReject')}
                 </Button>
                 <Button
                   size="sm"
@@ -1124,7 +1149,7 @@ export function WorkflowAdminPage() {
                   onClick={() => setSelectedIds([])}
                   disabled={selectedIds.length === 0}
                 >
-                  Clear Selection
+                  {t('ops.workflow.admin.approvals.clearSelection')}
                 </Button>
               </div>
             </div>
@@ -1132,11 +1157,11 @@ export function WorkflowAdminPage() {
 
           {approvalsLoading ? (
             <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              Memuat approvals...
+              {t('ops.workflow.admin.approvals.loading')}
             </div>
           ) : filteredApprovals.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              Tidak ada approval yang menunggu aksi Anda.
+              {t('ops.workflow.admin.approvals.empty')}
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -1151,12 +1176,12 @@ export function WorkflowAdminPage() {
                         className="h-4 w-4 rounded border-border"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left font-medium">Request Type</th>
-                    <th className="px-4 py-3 text-left font-medium">Submitted By</th>
-                    <th className="px-4 py-3 text-left font-medium">Date Submitted</th>
-                    <th className="px-4 py-3 text-left font-medium">Current Level</th>
-                    <th className="px-4 py-3 text-left font-medium">Reference</th>
-                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.approvals.table.requestType')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.approvals.table.submittedBy')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.approvals.table.dateSubmitted')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.approvals.table.currentLevel')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{t('ops.workflow.admin.approvals.table.reference')}</th>
+                    <th className="px-4 py-3 text-right font-medium">{t('ops.workflow.admin.templates.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1199,7 +1224,7 @@ export function WorkflowAdminPage() {
                         <td className="px-4 py-3">
                           <div className="font-medium">{approval.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            Level {approval.level}
+                            {t('ops.workflow.admin.approvals.level', { level: approval.level ?? '' })}
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -1232,7 +1257,7 @@ export function WorkflowAdminPage() {
                               className="bg-emerald-600 hover:bg-emerald-700 text-white"
                             >
                               <CheckCircle2 size={13} className="mr-1" />
-                              Approve
+                              {t('ops.workflow.admin.approvals.approve')}
                             </Button>
                             <Button
                               size="sm"
@@ -1244,7 +1269,7 @@ export function WorkflowAdminPage() {
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <XCircle size={13} className="mr-1" />
-                              Reject
+                              {t('ops.workflow.admin.approvals.reject')}
                             </Button>
                             <Button
                               size="sm"
@@ -1255,7 +1280,7 @@ export function WorkflowAdminPage() {
                               }
                             >
                               <ArrowUpCircle size={13} className="mr-1" />
-                              Escalate
+                              {t('ops.workflow.admin.approvals.escalate')}
                             </Button>
                           </div>
                         </td>
@@ -1276,7 +1301,7 @@ export function WorkflowAdminPage() {
           setShowTemplateModal(false);
           setSelectedTemplate(null);
         }}
-        title={selectedTemplate ? 'Edit Workflow Template' : 'Buat Workflow Template'}
+        title={t(selectedTemplate ? 'ops.workflow.admin.modal.editTemplate' : 'ops.workflow.admin.modal.createTemplate')}
       >
         <TemplateForm
           initial={selectedTemplate}
@@ -1291,16 +1316,25 @@ export function WorkflowAdminPage() {
 
       <ConfirmDialog
         open={!!deletingTemplate}
-        title="Hapus Template"
-        message={`Template "${deletingTemplate?.name || ''}" akan dihapus permanen. Lanjutkan?`}
+        title={t('ops.workflow.admin.confirmDelete.title')}
+        message={t('ops.workflow.admin.confirmDelete.message', { name: deletingTemplate?.name || '' })}
         onClose={() => setDeletingTemplate(null)}
         onConfirm={handleDeleteTemplate}
       />
 
       <CommentPrompt
         open={bulkAction !== null}
-        title={`Bulk ${bulkAction === 'APPROVE' ? 'Approve' : 'Reject'} (${selectedIds.length} items)`}
-        submitText={bulkAction === 'APPROVE' ? 'Bulk Approve' : 'Bulk Reject'}
+        title={t(
+          bulkAction === 'APPROVE'
+            ? 'ops.workflow.admin.commentPrompt.bulkApproveTitle'
+            : 'ops.workflow.admin.commentPrompt.bulkRejectTitle',
+          { count: selectedIds.length }
+        )}
+        submitText={t(
+          bulkAction === 'APPROVE'
+            ? 'ops.workflow.admin.approvals.bulkApprove'
+            : 'ops.workflow.admin.approvals.bulkReject'
+        )}
         intent={bulkAction === 'APPROVE' ? 'success' : 'destructive'}
         onClose={() => setBulkAction(null)}
         onSubmit={handleBulkSubmit}
@@ -1308,8 +1342,14 @@ export function WorkflowAdminPage() {
 
       <CommentPrompt
         open={individualAction !== null}
-        title={`${individualAction?.action === 'APPROVE' ? 'Approve' : individualAction?.action === 'REJECT' ? 'Reject' : 'Escalate'} Request`}
-        submitText={individualAction?.action || ''}
+        title={t(
+          individualAction?.action === 'APPROVE'
+            ? 'ops.workflow.admin.commentPrompt.approveTitle'
+            : individualAction?.action === 'REJECT'
+              ? 'ops.workflow.admin.commentPrompt.rejectTitle'
+              : 'ops.workflow.admin.commentPrompt.escalateTitle'
+        )}
+        submitText={individualAction ? t(ACTION_LABEL[individualAction.action]) : ''}
         intent={
           individualAction?.action === 'APPROVE'
             ? 'success'

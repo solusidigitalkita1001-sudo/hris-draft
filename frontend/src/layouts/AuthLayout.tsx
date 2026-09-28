@@ -3,6 +3,10 @@ import { useAuthStore } from '@/stores/auth.store';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { useI18n } from '@/i18n/provider';
 
+/**
+ * Layout auth sesuai handoff: grid 4:8 — form di kiri, foto full-bleed +
+ * scrim di kanan (hilang di mobile). Switch ID/EN mengambang kanan atas.
+ */
 export function AuthLayout() {
   const { isAuthenticated } = useAuthStore();
   const { t } = useI18n();
@@ -12,44 +16,40 @@ export function AuthLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Left side - branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-primary relative items-center justify-center">
-        <div className="max-w-md text-primary-foreground">
-          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center mb-6">
-            <span className="text-xl font-bold">H</span>
-          </div>
-          <h1 className="text-3xl font-bold mb-3">HRMS Enterprise</h1>
-          <p className="text-primary-foreground/80 text-lg leading-relaxed">
-            {t('auth.layout.description')}
-          </p>
-          <div className="mt-8 space-y-4">
-            {[
-              t('auth.layout.feature.multiCompany'),
-              t('auth.layout.feature.employeeLifecycle'),
-              t('auth.layout.feature.analytics'),
-              t('auth.layout.feature.security'),
-            ].map((feature, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <span className="text-sm text-primary-foreground/80">{feature}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Right side - form */}
-      <div className="relative flex-1 flex items-center justify-center p-8">
-        <div className="absolute right-6 top-6">
-          <LanguageSwitcher compact />
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-3">
+      {/* Kiri — form */}
+      <div className="relative flex min-h-screen items-center justify-center p-6 lg:col-span-1 lg:min-h-0 lg:p-10">
+        <div className="absolute right-5 top-5 lg:hidden">
+          <LanguageSwitcher />
         </div>
         <div className="w-full max-w-sm">
           <Outlet />
+        </div>
+      </div>
+
+      {/* Kanan — foto kantor + scrim */}
+      <div className="relative hidden overflow-hidden lg:col-span-2 lg:block">
+        <img
+          src="/login-cover.jpg"
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(160deg, rgba(10,17,28,.72) 0%, rgba(10,17,28,.35) 45%, rgba(10,17,28,.55) 100%)',
+          }}
+        />
+        <h2 className="absolute left-8 top-8 max-w-md text-balance text-[23px] font-semibold leading-snug tracking-tight text-white">
+          {t('auth.cover.headline')}
+        </h2>
+        <div className="absolute right-8 top-8 flex items-center gap-3">
+          <span className="flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-md">
+            <span className="anim-pulse-dot h-2 w-2 rounded-full bg-[#4ADE80]" aria-hidden="true" />
+            {t('auth.cover.serverActive')}
+          </span>
+          <LanguageSwitcher className="border-white/20 bg-white/15 backdrop-blur-md" />
         </div>
       </div>
     </div>

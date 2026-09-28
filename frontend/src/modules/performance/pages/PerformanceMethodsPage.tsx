@@ -20,6 +20,34 @@ import { formatDate } from '@/utils/format';
 import { Layers3, Plus, RefreshCw, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
+
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: 'perf.status.draft',
+  PUBLISHED: 'perf.status.published',
+  ACTIVE: 'perf.status.active',
+  ARCHIVED: 'perf.status.archived',
+};
+
+const COMPONENT_TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  KPI: 'perf.componentType.kpi',
+  GOAL: 'perf.componentType.goal',
+  COMPETENCY: 'perf.componentType.competency',
+  BEHAVIOR: 'perf.componentType.behavior',
+  CUSTOM: 'perf.componentType.custom',
+};
+
+const AGGREGATION_LABEL_KEYS: Record<string, TranslationKey> = {
+  WEIGHTED_AVERAGE: 'perf.aggregation.weightedAverage',
+  SUM: 'perf.aggregation.sum',
+  AVERAGE: 'perf.aggregation.average',
+};
+
+const WEIGHT_MODE_LABEL_KEYS: Record<string, TranslationKey> = {
+  STRICT_100: 'perf.weightMode.strict100',
+  FLEXIBLE: 'perf.weightMode.flexible',
+};
 
 const VERSION_STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400',
@@ -38,6 +66,7 @@ function safeNumber(value: string) {
 }
 
 export function PerformanceMethodsPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const companyId = activeCompany?.id || '';
 
@@ -95,42 +124,57 @@ export function PerformanceMethodsPage() {
     () =>
       (methodDetail?.versions ?? []).map((version) => ({
         value: version.id,
-        label: `v${version.versionNumber} • ${version.status}`,
+        label: `v${version.versionNumber} • ${STATUS_LABEL_KEYS[version.status] ? t(STATUS_LABEL_KEYS[version.status]) : version.status}`,
       })),
-    [methodDetail?.versions]
+    [methodDetail?.versions, t]
   );
 
   const gradeRuleOptions = useMemo(
     () => [
-      { value: '', label: 'Tanpa grade rule' },
+      { value: '', label: t('perf.methods.noGradeRule') },
       ...gradeRules.map((gradeRule) => ({
         value: gradeRule.id,
         label: `${gradeRule.name} • ${gradeRule.code}`,
       })),
     ],
-    [gradeRules]
+    [gradeRules, t]
   );
 
   const reviewWorkflowOptions = useMemo(
     () => [
-      { value: '', label: 'Tanpa review workflow' },
+      { value: '', label: t('perf.methods.noReviewWorkflow') },
       ...reviewWorkflows.map((workflow) => ({
         value: workflow.id,
-        label: `${workflow.name} • ${workflow.stages.length} stages`,
+        label: `${workflow.name} • ${t('perf.methods.stageCount', { count: workflow.stages.length })}`,
       })),
     ],
-    [reviewWorkflows]
+    [reviewWorkflows, t]
   );
 
   const approvalWorkflowOptions = useMemo(
     () => [
-      { value: '', label: 'Tanpa approval workflow' },
+      { value: '', label: t('perf.methods.noApprovalWorkflow') },
       ...approvalWorkflows.map((workflow) => ({
         value: workflow.id,
-        label: `${workflow.name} • ${workflow.stages.length} stages`,
+        label: `${workflow.name} • ${t('perf.methods.stageCount', { count: workflow.stages.length })}`,
       })),
     ],
-    [approvalWorkflows]
+    [approvalWorkflows, t]
+  );
+
+  const componentTypeOptions = useMemo(
+    () => COMPONENT_TYPE_OPTIONS.map((value) => ({ value, label: t(COMPONENT_TYPE_LABEL_KEYS[value]) })),
+    [t]
+  );
+
+  const aggregationOptions = useMemo(
+    () => AGGREGATION_OPTIONS.map((value) => ({ value, label: t(AGGREGATION_LABEL_KEYS[value]) })),
+    [t]
+  );
+
+  const weightModeOptions = useMemo(
+    () => WEIGHT_MODE_OPTIONS.map((value) => ({ value, label: t(WEIGHT_MODE_LABEL_KEYS[value]) })),
+    [t]
   );
 
   const loadMethods = useCallback(async () => {
@@ -154,11 +198,11 @@ export function PerformanceMethodsPage() {
       setSelectedMethodId(nextMethodId);
     } catch (error) {
       console.error(error);
-      toast.error('Gagal memuat performance methods');
+      toast.error(t('perf.methods.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [companyId, selectedMethodId]);
+  }, [companyId, selectedMethodId, t]);
 
   const loadMethodDetail = useCallback(async (methodId: string) => {
     if (!methodId) {
@@ -177,11 +221,11 @@ export function PerformanceMethodsPage() {
       setSelectedVersionId(nextVersionId);
     } catch (error) {
       console.error(error);
-      toast.error('Gagal memuat detail performance method');
+      toast.error(t('perf.methods.loadDetailFailed'));
     } finally {
       setDetailLoading(false);
     }
-  }, [selectedVersionId]);
+  }, [selectedVersionId, t]);
 
   useEffect(() => {
     void loadMethods();
@@ -207,12 +251,12 @@ export function PerformanceMethodsPage() {
         setApprovalWorkflows(approvalWorkflowData);
       } catch (error) {
         console.error(error);
-        toast.error('Gagal memuat governance config');
+        toast.error(t('perf.methods.loadGovernanceFailed'));
       }
     };
 
     void loadGovernanceLibraries();
-  }, [companyId]);
+  }, [companyId, t]);
 
   useEffect(() => {
     void loadMethodDetail(selectedMethodId);
@@ -220,12 +264,12 @@ export function PerformanceMethodsPage() {
 
   const handleCreateMethod = useCallback(async () => {
     if (!companyId) {
-      toast.error('Company belum aktif');
+      toast.error(t('perf.cycles.noCompany'));
       return;
     }
 
     if (!methodForm.name.trim()) {
-      toast.error('Nama method wajib diisi');
+      toast.error(t('perf.methods.nameRequired'));
       return;
     }
 
@@ -237,21 +281,21 @@ export function PerformanceMethodsPage() {
         description: methodForm.description.trim() || undefined,
       };
       const created = await performanceService.createMethod(payload);
-      toast.success('Performance method berhasil dibuat');
+      toast.success(t('perf.methods.methodCreated'));
       setMethodForm({ name: '', code: '', description: '' });
       await loadMethods();
       setSelectedMethodId(created.id);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal membuat performance method'));
+      toast.error(apiErrorMessage(error, t('perf.methods.methodCreateFailed')));
     } finally {
       setSavingMethod(false);
     }
-  }, [companyId, loadMethods, methodForm]);
+  }, [companyId, loadMethods, methodForm, t]);
 
   const handleCreateVersion = useCallback(async () => {
     if (!selectedMethodId) {
-      toast.error('Pilih method dulu');
+      toast.error(t('perf.methods.selectMethodFirst'));
       return;
     }
 
@@ -264,7 +308,7 @@ export function PerformanceMethodsPage() {
         minimumScore: safeNumber(versionForm.minimumScore),
         maximumScore: safeNumber(versionForm.maximumScore),
       });
-      toast.success('Version method berhasil dibuat');
+      toast.success(t('perf.methods.versionCreated'));
       setVersionForm({
         summary: '',
         weightMode: 'STRICT_100',
@@ -277,11 +321,11 @@ export function PerformanceMethodsPage() {
       setSelectedVersionId(created.id);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal membuat version method'));
+      toast.error(apiErrorMessage(error, t('perf.methods.versionCreateFailed')));
     } finally {
       setSavingVersion(false);
     }
-  }, [loadMethodDetail, loadMethods, selectedMethodId, versionForm]);
+  }, [loadMethodDetail, loadMethods, selectedMethodId, t, versionForm]);
 
   const handleLoadVersionReadiness = useCallback(async (versionId: string) => {
     setReadinessLoadingId(versionId);
@@ -290,20 +334,20 @@ export function PerformanceMethodsPage() {
       setVersionReadiness(data);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal memuat readiness version'));
+      toast.error(apiErrorMessage(error, t('perf.methods.readinessLoadFailed')));
     } finally {
       setReadinessLoadingId('');
     }
-  }, []);
+  }, [t]);
 
   const handleCreateComponent = useCallback(async () => {
     if (!selectedVersionId) {
-      toast.error('Pilih version dulu');
+      toast.error(t('perf.methods.selectVersionFirst'));
       return;
     }
 
     if (!componentForm.name.trim() || !componentForm.weight) {
-      toast.error('Nama dan weight component wajib diisi');
+      toast.error(t('perf.methods.componentValidation'));
       return;
     }
 
@@ -317,7 +361,7 @@ export function PerformanceMethodsPage() {
         description: componentForm.description.trim() || undefined,
         isRequired: componentForm.isRequired,
       });
-      toast.success('Component berhasil ditambahkan');
+      toast.success(t('perf.methods.componentCreated'));
       setComponentForm({
         name: '',
         code: '',
@@ -330,30 +374,30 @@ export function PerformanceMethodsPage() {
       await loadMethodDetail(selectedMethodId);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal menambah component'));
+      toast.error(apiErrorMessage(error, t('perf.methods.componentCreateFailed')));
     } finally {
       setSavingComponent(false);
     }
-  }, [componentForm, loadMethodDetail, selectedMethodId, selectedVersionId]);
+  }, [componentForm, loadMethodDetail, selectedMethodId, selectedVersionId, t]);
 
   const handlePublishVersion = useCallback(async (version: PerformanceMethodVersion) => {
     setPublishingVersionId(version.id);
     try {
       await performanceService.publishMethodVersion(version.id);
-      toast.success(`Version v${version.versionNumber} berhasil dipublish`);
+      toast.success(t('perf.methods.versionPublished', { version: version.versionNumber }));
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal publish version'));
+      toast.error(apiErrorMessage(error, t('perf.methods.versionPublishFailed')));
     } finally {
       setPublishingVersionId('');
     }
-  }, [loadMethodDetail, loadMethods, selectedMethodId]);
+  }, [loadMethodDetail, loadMethods, selectedMethodId, t]);
 
   const handleAssignGradeRule = useCallback(async (gradeRuleId: string) => {
     if (!selectedVersion) {
-      toast.error('Pilih version dulu');
+      toast.error(t('perf.methods.selectVersionFirst'));
       return;
     }
 
@@ -362,20 +406,20 @@ export function PerformanceMethodsPage() {
       await performanceService.updateMethodVersion(selectedVersion.id, {
         gradeRuleId: gradeRuleId || undefined,
       });
-      toast.success('Grade rule berhasil di-assign ke version');
+      toast.success(t('perf.methods.gradeRuleAssigned'));
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal assign grade rule'));
+      toast.error(apiErrorMessage(error, t('perf.methods.gradeRuleAssignFailed')));
     } finally {
       setSavingGradeRuleId('');
     }
-  }, [loadMethodDetail, loadMethods, selectedMethodId, selectedVersion]);
+  }, [loadMethodDetail, loadMethods, selectedMethodId, selectedVersion, t]);
 
   const handleAssignReviewWorkflow = useCallback(async (reviewWorkflowTemplateId: string) => {
     if (!selectedVersion) {
-      toast.error('Pilih version dulu');
+      toast.error(t('perf.methods.selectVersionFirst'));
       return;
     }
 
@@ -384,20 +428,20 @@ export function PerformanceMethodsPage() {
       await performanceService.updateMethodVersion(selectedVersion.id, {
         reviewWorkflowTemplateId: reviewWorkflowTemplateId || undefined,
       });
-      toast.success('Review workflow berhasil di-assign ke version');
+      toast.success(t('perf.methods.reviewWorkflowAssigned'));
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal assign review workflow'));
+      toast.error(apiErrorMessage(error, t('perf.methods.reviewWorkflowAssignFailed')));
     } finally {
       setSavingReviewWorkflowId('');
     }
-  }, [loadMethodDetail, loadMethods, selectedMethodId, selectedVersion]);
+  }, [loadMethodDetail, loadMethods, selectedMethodId, selectedVersion, t]);
 
   const handleAssignApprovalWorkflow = useCallback(async (approvalWorkflowTemplateId: string) => {
     if (!selectedVersion) {
-      toast.error('Pilih version dulu');
+      toast.error(t('perf.methods.selectVersionFirst'));
       return;
     }
 
@@ -406,16 +450,16 @@ export function PerformanceMethodsPage() {
       await performanceService.updateMethodVersion(selectedVersion.id, {
         approvalWorkflowTemplateId: approvalWorkflowTemplateId || undefined,
       });
-      toast.success('Approval workflow berhasil di-assign ke version');
+      toast.success(t('perf.methods.approvalWorkflowAssigned'));
       await loadMethods();
       await loadMethodDetail(selectedMethodId);
     } catch (error) {
       console.error(error);
-      toast.error(apiErrorMessage(error, 'Gagal assign approval workflow'));
+      toast.error(apiErrorMessage(error, t('perf.methods.approvalWorkflowAssignFailed')));
     } finally {
       setSavingApprovalWorkflowId('');
     }
-  }, [loadMethodDetail, loadMethods, selectedMethodId, selectedVersion]);
+  }, [loadMethodDetail, loadMethods, selectedMethodId, selectedVersion, t]);
 
   const versionTotalWeight = (selectedVersion?.components ?? []).reduce(
     (sum, component) => sum + Number(component.weight),
@@ -434,27 +478,27 @@ export function PerformanceMethodsPage() {
   return (
     <div>
       <PageHeader
-        title="Performance Config Methods"
-        description="Kelola method, version, dan component untuk fondasi engine Performance Management."
+        title={t('perf.methods.title')}
+        description={t('perf.methods.description')}
         actions={(
           <Button size="sm" variant="outline" onClick={loadMethods}>
             <RefreshCw size={16} className="mr-2" />
-            Refresh
+            {t('common.refresh')}
           </Button>
         )}
       />
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Total Methods</p>
+          <p className="text-xs text-muted-foreground">{t('perf.methods.stats.totalMethods')}</p>
           <p className="mt-2 text-2xl font-semibold">{methods.length}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Total Versions</p>
+          <p className="text-xs text-muted-foreground">{t('perf.methods.stats.totalVersions')}</p>
           <p className="mt-2 text-2xl font-semibold">{methods.reduce((sum, method) => sum + (method._count?.versions || 0), 0)}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Published Versions</p>
+          <p className="text-xs text-muted-foreground">{t('perf.methods.stats.publishedVersions')}</p>
           <p className="mt-2 text-2xl font-semibold">
             {methods.reduce((sum, method) => sum + (method.versions?.filter((version) => version.status === 'PUBLISHED').length || 0), 0)}
           </p>
@@ -466,48 +510,48 @@ export function PerformanceMethodsPage() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex items-center gap-2">
               <Plus size={16} />
-              <h2 className="text-sm font-semibold">New Method</h2>
+              <h2 className="text-sm font-semibold">{t('perf.methods.newMethod')}</h2>
             </div>
 
             <div className="space-y-3">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Method Name</label>
+                <label className="text-sm font-medium">{t('perf.methods.methodName')}</label>
                 <Input
                   value={methodForm.name}
                   onChange={(e) => setMethodForm((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="Balanced Scorecard Annual"
+                  placeholder={t('perf.methods.methodNamePlaceholder')}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Code</label>
+                <label className="text-sm font-medium">{t('perf.methods.code')}</label>
                 <Input
                   value=""
-                  placeholder="Akan dibuat otomatis oleh sistem"
+                  placeholder={t('perf.methods.autoCodePlaceholder')}
                   disabled
                 />
-                <p className="text-xs text-muted-foreground">Code method digenerate otomatis saat create.</p>
+                <p className="text-xs text-muted-foreground">{t('perf.methods.methodCodeHint')}</p>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
+                <label className="text-sm font-medium">{t('perf.methods.descriptionLabel')}</label>
                 <textarea
                   value={methodForm.description}
                   onChange={(e) => setMethodForm((prev) => ({ ...prev, description: e.target.value }))}
                   className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                  placeholder="Scope method, scoring model, dan governance ringkas."
+                  placeholder={t('perf.methods.methodDescriptionPlaceholder')}
                 />
               </div>
               <Button size="sm" className="w-full" onClick={handleCreateMethod} disabled={savingMethod}>
-                {savingMethod ? 'Menyimpan...' : 'Buat Method'}
+                {savingMethod ? t('perf.common.saving') : t('perf.methods.createMethod')}
               </Button>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h2 className="mb-4 text-sm font-semibold">Method List</h2>
+            <h2 className="mb-4 text-sm font-semibold">{t('perf.methods.methodListTitle')}</h2>
             {loading ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">Loading...</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">{t('common.loading')}</div>
             ) : methods.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">Belum ada method.</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">{t('perf.methods.emptyMethods')}</div>
             ) : (
               <div className="space-y-3">
                 {methods.map((method) => (
@@ -527,12 +571,12 @@ export function PerformanceMethodsPage() {
                         <p className="text-xs text-muted-foreground">{method.code}</p>
                       </div>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        {method.status}
+                        {STATUS_LABEL_KEYS[method.status] ? t(STATUS_LABEL_KEYS[method.status]) : method.status}
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                      <span>{method._count?.versions || 0} versions</span>
-                      <span>{method._count?.periods || 0} periods</span>
+                      <span>{t('perf.methods.versionCount', { count: method._count?.versions || 0 })}</span>
+                      <span>{t('perf.methods.periodCount', { count: method._count?.periods || 0 })}</span>
                     </div>
                   </button>
                 ))}
@@ -545,29 +589,29 @@ export function PerformanceMethodsPage() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-sm font-semibold">Method Detail</h2>
-                <p className="text-xs text-muted-foreground">Pilih method untuk kelola version dan component.</p>
+                <h2 className="text-sm font-semibold">{t('perf.methods.detailTitle')}</h2>
+                <p className="text-xs text-muted-foreground">{t('perf.methods.detailHint')}</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select2
                   value={selectedMethodId}
                   onValueChange={setSelectedMethodId}
                   options={methodOptions}
-                  placeholder="Pilih method"
+                  placeholder={t('perf.methods.selectMethod')}
                 />
                 <Select2
                   value={selectedVersionId}
                   onValueChange={setSelectedVersionId}
                   options={versionOptions}
-                  placeholder="Pilih version"
+                  placeholder={t('perf.methods.selectVersion')}
                 />
               </div>
             </div>
 
             {detailLoading ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">Loading detail...</div>
+              <div className="py-10 text-center text-sm text-muted-foreground">{t('perf.common.loadingDetail')}</div>
             ) : !methodDetail ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">Pilih method untuk melihat detail.</div>
+              <div className="py-10 text-center text-sm text-muted-foreground">{t('perf.methods.selectMethodForDetail')}</div>
             ) : (
               <div className="mt-5 space-y-6">
                 <div className="rounded-xl border border-border bg-background p-4">
@@ -577,11 +621,11 @@ export function PerformanceMethodsPage() {
                       <p className="text-xs text-muted-foreground">{methodDetail.code}</p>
                     </div>
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                      {methodDetail.status}
+                      {STATUS_LABEL_KEYS[methodDetail.status] ? t(STATUS_LABEL_KEYS[methodDetail.status]) : methodDetail.status}
                     </span>
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">
-                    {methodDetail.description || 'Belum ada deskripsi method.'}
+                    {methodDetail.description || t('perf.methods.noMethodDescription')}
                   </p>
                 </div>
 
@@ -589,39 +633,39 @@ export function PerformanceMethodsPage() {
                   <div className="rounded-xl border border-border bg-background p-4">
                     <div className="mb-4 flex items-center gap-2">
                       <Sparkles size={16} />
-                      <h3 className="text-sm font-semibold">New Version</h3>
+                      <h3 className="text-sm font-semibold">{t('perf.methods.newVersion')}</h3>
                     </div>
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Summary</label>
+                        <label className="text-sm font-medium">{t('perf.methods.summaryLabel')}</label>
                         <textarea
                           value={versionForm.summary}
                           onChange={(e) => setVersionForm((prev) => ({ ...prev, summary: e.target.value }))}
                           className="min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                          placeholder="Rangkuman perubahan version, formula, dan scope component."
+                          placeholder={t('perf.methods.summaryPlaceholder')}
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Weight Mode</label>
+                        <label className="text-sm font-medium">{t('perf.methods.weightModeLabel')}</label>
                         <Select2
                           value={versionForm.weightMode}
                           onValueChange={(value) => setVersionForm((prev) => ({ ...prev, weightMode: value as typeof prev.weightMode }))}
-                          options={WEIGHT_MODE_OPTIONS.map((value) => ({ value, label: value }))}
-                          placeholder="Pilih weight mode"
+                          options={weightModeOptions}
+                          placeholder={t('perf.methods.weightModePlaceholder')}
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Score Aggregation</label>
+                        <label className="text-sm font-medium">{t('perf.methods.aggregationLabel')}</label>
                         <Select2
                           value={versionForm.scoreAggregation}
                           onValueChange={(value) => setVersionForm((prev) => ({ ...prev, scoreAggregation: value as typeof prev.scoreAggregation }))}
-                          options={AGGREGATION_OPTIONS.map((value) => ({ value, label: value }))}
-                          placeholder="Pilih agregasi"
+                          options={aggregationOptions}
+                          placeholder={t('perf.methods.aggregationPlaceholder')}
                         />
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Minimum Score</label>
+                          <label className="text-sm font-medium">{t('perf.methods.minimumScore')}</label>
                           <Input
                             type="number"
                             value={versionForm.minimumScore}
@@ -630,7 +674,7 @@ export function PerformanceMethodsPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Maximum Score</label>
+                          <label className="text-sm font-medium">{t('perf.methods.maximumScore')}</label>
                           <Input
                             type="number"
                             value={versionForm.maximumScore}
@@ -640,7 +684,7 @@ export function PerformanceMethodsPage() {
                         </div>
                       </div>
                       <Button size="sm" className="w-full" onClick={handleCreateVersion} disabled={savingVersion}>
-                        {savingVersion ? 'Menyimpan...' : 'Tambah Version'}
+                        {savingVersion ? t('perf.common.saving') : t('perf.methods.addVersion')}
                       </Button>
                     </div>
                   </div>
@@ -648,11 +692,11 @@ export function PerformanceMethodsPage() {
                   <div className="rounded-xl border border-border bg-background p-4">
                     <div className="mb-4 flex items-center gap-2">
                       <Layers3 size={16} />
-                      <h3 className="text-sm font-semibold">Version List</h3>
+                      <h3 className="text-sm font-semibold">{t('perf.methods.versionListTitle')}</h3>
                     </div>
                     <div className="space-y-3">
                       {(methodDetail.versions ?? []).length === 0 ? (
-                        <div className="py-8 text-center text-sm text-muted-foreground">Belum ada version.</div>
+                        <div className="py-8 text-center text-sm text-muted-foreground">{t('perf.methods.emptyVersions')}</div>
                       ) : (
                         (methodDetail.versions ?? []).map((version) => (
                           <div
@@ -667,31 +711,35 @@ export function PerformanceMethodsPage() {
                                 className="min-w-0 text-left"
                                 onClick={() => setSelectedVersionId(version.id)}
                               >
-                                <p className="text-sm font-semibold">Version {version.versionNumber}</p>
-                                <p className="text-xs text-muted-foreground">{version.weightMode} • {version.scoreAggregation}</p>
+                                <p className="text-sm font-semibold">{t('perf.methods.versionLabel', { number: version.versionNumber })}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {WEIGHT_MODE_LABEL_KEYS[version.weightMode] ? t(WEIGHT_MODE_LABEL_KEYS[version.weightMode]) : version.weightMode}
+                                  {' • '}
+                                  {AGGREGATION_LABEL_KEYS[version.scoreAggregation] ? t(AGGREGATION_LABEL_KEYS[version.scoreAggregation]) : version.scoreAggregation}
+                                </p>
                               </button>
                               <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${VERSION_STATUS_STYLES[version.status] || VERSION_STATUS_STYLES.DRAFT}`}>
-                                {version.status}
+                                {STATUS_LABEL_KEYS[version.status] ? t(STATUS_LABEL_KEYS[version.status]) : version.status}
                               </span>
                             </div>
                             <p className="mt-2 text-xs text-muted-foreground">
-                              {version.summary || 'Belum ada summary version.'}
+                              {version.summary || t('perf.methods.noVersionSummary')}
                             </p>
                             <p className="mt-2 text-[11px] text-muted-foreground">
-                              Grade rule: {version.gradeRule?.code || 'Belum di-assign'}
+                              {t('perf.methods.gradeRuleInline', { value: version.gradeRule?.code || t('perf.methods.notAssigned') })}
                             </p>
                             <p className="mt-1 text-[11px] text-muted-foreground">
-                              Review workflow: {version.reviewWorkflowTemplate?.name || 'Belum di-assign'}
+                              {t('perf.methods.reviewWorkflowInline', { value: version.reviewWorkflowTemplate?.name || t('perf.methods.notAssigned') })}
                             </p>
                             <p className="mt-1 text-[11px] text-muted-foreground">
-                              Approval workflow: {version.approvalWorkflowTemplate?.name || 'Belum di-assign'}
+                              {t('perf.methods.approvalWorkflowInline', { value: version.approvalWorkflowTemplate?.name || t('perf.methods.notAssigned') })}
                             </p>
                             <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
                               <span>
-                                {version._count?.components || version.components?.length || 0} components
+                                {t('perf.methods.componentCount', { count: version._count?.components || version.components?.length || 0 })}
                               </span>
                               {version.status === 'PUBLISHED' ? (
-                                <span>Published {version.publishedAt ? formatDate(version.publishedAt) : '-'}</span>
+                                <span>{t('perf.methods.publishedOn', { value: version.publishedAt ? formatDate(version.publishedAt) : '-' })}</span>
                               ) : (
                                 <Button
                                   size="sm"
@@ -699,7 +747,7 @@ export function PerformanceMethodsPage() {
                                   onClick={() => handlePublishVersion(version)}
                                   disabled={publishingVersionId === version.id}
                                 >
-                                  {publishingVersionId === version.id ? 'Publishing...' : 'Publish'}
+                                  {publishingVersionId === version.id ? t('perf.methods.publishing') : t('perf.methods.publish')}
                                 </Button>
                               )}
                             </div>
@@ -713,8 +761,8 @@ export function PerformanceMethodsPage() {
                 <div className="rounded-xl border border-border bg-background p-4">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">Version Governance</h3>
-                      <p className="text-xs text-muted-foreground">Assign grade rule, workflow, dan cek readiness version terpilih.</p>
+                      <h3 className="text-sm font-semibold">{t('perf.methods.governanceTitle')}</h3>
+                      <p className="text-xs text-muted-foreground">{t('perf.methods.governanceHint')}</p>
                     </div>
                     {selectedVersion && (
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${VERSION_STATUS_STYLES[selectedVersion.status] || VERSION_STATUS_STYLES.DRAFT}`}>
@@ -724,38 +772,43 @@ export function PerformanceMethodsPage() {
                   </div>
 
                   {!selectedVersion ? (
-                    <div className="py-8 text-center text-sm text-muted-foreground">Pilih version untuk atur governance.</div>
+                    <div className="py-8 text-center text-sm text-muted-foreground">{t('perf.methods.selectVersionForGovernance')}</div>
                   ) : (
                     <div className="grid gap-4 lg:grid-cols-2">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Grade Rule</label>
+                        <label className="text-sm font-medium">{t('perf.methods.gradeRuleLabel')}</label>
                         <Select2
                           value={selectedVersion.gradeRuleId || ''}
                           onValueChange={(value) => {
                             void handleAssignGradeRule(value);
                           }}
                           options={gradeRuleOptions}
-                          placeholder="Pilih grade rule"
+                          placeholder={t('perf.methods.selectGradeRule')}
                         />
                         <p className="text-xs text-muted-foreground">
                           {savingGradeRuleId === selectedVersion.id
-                            ? 'Menyimpan assignment grade rule...'
+                            ? t('perf.methods.savingGradeRule')
                             : selectedVersion.gradeRule
-                              ? `Terpasang: ${selectedVersion.gradeRule.name}`
-                              : 'Version ini belum punya grade rule.'}
+                              ? t('perf.methods.attached', { value: selectedVersion.gradeRule.name })
+                              : t('perf.methods.noGradeRuleYet')}
                         </p>
                       </div>
                       <div className="rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
                         {selectedVersion.status === 'DRAFT'
-                          ? 'Version draft masih bisa diubah. Lengkapi grade rule, review workflow, dan approval workflow sebelum publish.'
-                          : 'Version non-draft sudah dibekukan. Governance template hanya bisa diganti lewat version draft baru.'}
+                          ? t('perf.methods.draftHint')
+                          : t('perf.methods.nonDraftHint')}
                       </div>
                       <div className={`rounded-xl border px-4 py-3 text-sm ${versionReadiness?.isReady ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20' : 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20'}`}>
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="font-medium">Version Readiness</p>
+                            <p className="font-medium">{t('perf.methods.readinessTitle')}</p>
                             <p className="text-xs text-muted-foreground">
-                              Weight mode {selectedVersion.weightMode} • total weight {versionTotalWeight.toFixed(2)}%
+                              {t('perf.methods.readinessSummary', {
+                                mode: WEIGHT_MODE_LABEL_KEYS[selectedVersion.weightMode]
+                                  ? t(WEIGHT_MODE_LABEL_KEYS[selectedVersion.weightMode])
+                                  : selectedVersion.weightMode,
+                                total: versionTotalWeight.toFixed(2),
+                              })}
                             </p>
                           </div>
                           <Button
@@ -764,13 +817,13 @@ export function PerformanceMethodsPage() {
                             onClick={() => void handleLoadVersionReadiness(selectedVersion.id)}
                             disabled={readinessLoadingId === selectedVersion.id}
                           >
-                            {readinessLoadingId === selectedVersion.id ? 'Checking...' : 'Check Readiness'}
+                            {readinessLoadingId === selectedVersion.id ? t('perf.methods.checking') : t('perf.methods.checkReadiness')}
                           </Button>
                         </div>
                         {versionReadiness ? (
                           versionReadiness.isReady ? (
                             <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-400">
-                              Version siap dipublish. Governance dan weight rule sudah memenuhi syarat dasar.
+                              {t('perf.methods.readyMessage')}
                             </p>
                           ) : (
                             <ul className="mt-3 space-y-1 text-xs text-amber-700 dark:text-amber-300">
@@ -780,43 +833,43 @@ export function PerformanceMethodsPage() {
                             </ul>
                           )
                         ) : (
-                          <p className="mt-3 text-xs text-muted-foreground">Readiness version belum dimuat.</p>
+                          <p className="mt-3 text-xs text-muted-foreground">{t('perf.methods.readinessNotLoaded')}</p>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Review Workflow</label>
+                        <label className="text-sm font-medium">{t('perf.methods.reviewWorkflowLabel')}</label>
                         <Select2
                           value={selectedVersion.reviewWorkflowTemplateId || ''}
                           onValueChange={(value) => {
                             void handleAssignReviewWorkflow(value);
                           }}
                           options={reviewWorkflowOptions}
-                          placeholder="Pilih review workflow"
+                          placeholder={t('perf.methods.selectReviewWorkflow')}
                         />
                         <p className="text-xs text-muted-foreground">
                           {savingReviewWorkflowId === selectedVersion.id
-                            ? 'Menyimpan assignment review workflow...'
+                            ? t('perf.methods.savingReviewWorkflow')
                             : selectedVersion.reviewWorkflowTemplate
-                              ? `Terpasang: ${selectedVersion.reviewWorkflowTemplate.name}`
-                              : 'Version ini belum punya review workflow.'}
+                              ? t('perf.methods.attached', { value: selectedVersion.reviewWorkflowTemplate.name })
+                              : t('perf.methods.noReviewWorkflowYet')}
                         </p>
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Approval Workflow</label>
+                        <label className="text-sm font-medium">{t('perf.methods.approvalWorkflowLabel')}</label>
                         <Select2
                           value={selectedVersion.approvalWorkflowTemplateId || ''}
                           onValueChange={(value) => {
                             void handleAssignApprovalWorkflow(value);
                           }}
                           options={approvalWorkflowOptions}
-                          placeholder="Pilih approval workflow"
+                          placeholder={t('perf.methods.selectApprovalWorkflow')}
                         />
                         <p className="text-xs text-muted-foreground">
                           {savingApprovalWorkflowId === selectedVersion.id
-                            ? 'Menyimpan assignment approval workflow...'
+                            ? t('perf.methods.savingApprovalWorkflow')
                             : selectedVersion.approvalWorkflowTemplate
-                              ? `Terpasang: ${selectedVersion.approvalWorkflowTemplate.name}`
-                              : 'Version ini belum punya approval workflow.'}
+                              ? t('perf.methods.attached', { value: selectedVersion.approvalWorkflowTemplate.name })
+                              : t('perf.methods.noApprovalWorkflowYet')}
                         </p>
                       </div>
                     </div>
@@ -826,9 +879,16 @@ export function PerformanceMethodsPage() {
                 <div className="rounded-xl border border-border bg-background p-4">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">Selected Version Components</h3>
+                      <h3 className="text-sm font-semibold">{t('perf.methods.componentsTitle')}</h3>
                       <p className="text-xs text-muted-foreground">
-                        Total weight saat ini: {versionTotalWeight.toFixed(2)}% • mode {selectedVersion?.weightMode || '-'}
+                        {t('perf.methods.componentsHint', {
+                          total: versionTotalWeight.toFixed(2),
+                          mode: selectedVersion?.weightMode
+                            ? (WEIGHT_MODE_LABEL_KEYS[selectedVersion.weightMode]
+                              ? t(WEIGHT_MODE_LABEL_KEYS[selectedVersion.weightMode])
+                              : selectedVersion.weightMode)
+                            : '-',
+                        })}
                       </p>
                     </div>
                     {selectedVersion && (
@@ -839,40 +899,40 @@ export function PerformanceMethodsPage() {
                   </div>
 
                   {!selectedVersion ? (
-                    <div className="py-8 text-center text-sm text-muted-foreground">Pilih version untuk kelola component.</div>
+                    <div className="py-8 text-center text-sm text-muted-foreground">{t('perf.methods.selectVersionForComponent')}</div>
                   ) : (
                     <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
                       <div className="space-y-3">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Component Name</label>
+                          <label className="text-sm font-medium">{t('perf.methods.componentName')}</label>
                           <Input
                             value={componentForm.name}
                             onChange={(e) => setComponentForm((prev) => ({ ...prev, name: e.target.value }))}
-                            placeholder="Goal Achievement"
+                            placeholder={t('perf.methods.componentNamePlaceholder')}
                             disabled={selectedVersion.status !== 'DRAFT'}
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Code</label>
+                          <label className="text-sm font-medium">{t('perf.methods.code')}</label>
                           <Input
                             value=""
-                            placeholder="Akan dibuat otomatis oleh sistem"
+                            placeholder={t('perf.methods.autoCodePlaceholder')}
                             disabled
                           />
-                          <p className="text-xs text-muted-foreground">Code component digenerate otomatis saat create.</p>
+                          <p className="text-xs text-muted-foreground">{t('perf.methods.componentCodeHint')}</p>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Type</label>
+                          <label className="text-sm font-medium">{t('perf.methods.typeLabel')}</label>
                           <Select2
                             value={componentForm.type}
                             onValueChange={(value) => setComponentForm((prev) => ({ ...prev, type: value as typeof prev.type }))}
-                            options={COMPONENT_TYPE_OPTIONS.map((value) => ({ value, label: value }))}
-                            placeholder="Pilih type"
+                            options={componentTypeOptions}
+                            placeholder={t('perf.methods.selectType')}
                           />
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div className="space-y-2">
-                            <label className="text-sm font-medium">Weight</label>
+                            <label className="text-sm font-medium">{t('perf.methods.weightLabel')}</label>
                             <Input
                               type="number"
                               value={componentForm.weight}
@@ -882,7 +942,7 @@ export function PerformanceMethodsPage() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-sm font-medium">Sort Order</label>
+                            <label className="text-sm font-medium">{t('perf.methods.sortOrderLabel')}</label>
                             <Input
                               type="number"
                               value={componentForm.sortOrder}
@@ -893,12 +953,12 @@ export function PerformanceMethodsPage() {
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Description</label>
+                          <label className="text-sm font-medium">{t('perf.methods.descriptionLabel')}</label>
                           <textarea
                             value={componentForm.description}
                             onChange={(e) => setComponentForm((prev) => ({ ...prev, description: e.target.value }))}
                             className="min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                            placeholder="Tujuan component dan rule penilaian."
+                            placeholder={t('perf.methods.componentDescriptionPlaceholder')}
                             disabled={selectedVersion.status !== 'DRAFT'}
                           />
                         </div>
@@ -909,7 +969,7 @@ export function PerformanceMethodsPage() {
                             onChange={(e) => setComponentForm((prev) => ({ ...prev, isRequired: e.target.checked }))}
                             disabled={selectedVersion.status !== 'DRAFT'}
                           />
-                          Required component
+                          {t('perf.methods.requiredComponent')}
                         </label>
                         <Button
                           size="sm"
@@ -917,14 +977,14 @@ export function PerformanceMethodsPage() {
                           onClick={handleCreateComponent}
                           disabled={savingComponent || selectedVersion.status !== 'DRAFT'}
                         >
-                          {savingComponent ? 'Menyimpan...' : 'Tambah Component'}
+                          {savingComponent ? t('perf.common.saving') : t('perf.methods.addComponent')}
                         </Button>
                       </div>
 
                       <div className="space-y-3">
                         {(selectedVersion.components ?? []).length === 0 ? (
                           <div className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-                            Belum ada component di version ini.
+                            {t('perf.methods.emptyComponents')}
                           </div>
                         ) : (
                           (selectedVersion.components as PerformanceComponent[]).map((component) => (
@@ -932,18 +992,20 @@ export function PerformanceMethodsPage() {
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <p className="text-sm font-semibold">{component.name}</p>
-                                  <p className="text-xs text-muted-foreground">{component.code} • {component.type}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {component.code} • {COMPONENT_TYPE_LABEL_KEYS[component.type] ? t(COMPONENT_TYPE_LABEL_KEYS[component.type]) : component.type}
+                                  </p>
                                 </div>
                                 <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                                   {Number(component.weight).toFixed(2)}%
                                 </span>
                               </div>
                               <p className="mt-2 text-sm text-muted-foreground">
-                                {component.description || 'Belum ada deskripsi component.'}
+                                {component.description || t('perf.methods.noComponentDescription')}
                               </p>
                               <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                                <span>Sort order {component.sortOrder}</span>
-                                <span>{component.isRequired ? 'Required' : 'Optional'}</span>
+                                <span>{t('perf.methods.sortOrderValue', { value: component.sortOrder })}</span>
+                                <span>{component.isRequired ? t('perf.methods.required') : t('perf.methods.optional')}</span>
                               </div>
                             </div>
                           ))
