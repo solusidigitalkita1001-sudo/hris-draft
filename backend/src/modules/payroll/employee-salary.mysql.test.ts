@@ -141,15 +141,13 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     const rejected = results.find(result => result.status === 'rejected');
     const reason = rejected?.status === 'rejected' ? rejected.reason : undefined;
-    // Report what the loser actually got: a bare `statusCode` assertion said
-    // only "undefined" when the race surfaced as a driver error, which cost a
-    // CI round trip to identify.
-    expect({
-      statusCode: reason?.statusCode,
-      name: reason?.name,
-      code: reason?.code,
-      message: String(reason?.message ?? '').slice(0, 200),
-    }).toMatchObject({ statusCode: 409 });
+    // Thrown rather than asserted: `toBe` and `toMatchObject` both print only
+    // the compared value, so a race that surfaced as a driver error reported
+    // "received undefined" and nothing about which error it was.
+    if (reason?.statusCode !== 409) {
+      throw new Error(`concurrent create loser: constructor=${reason?.constructor?.name} name=${reason?.name} `
+        + `code=${reason?.code} statusCode=${reason?.statusCode} message=${String(reason?.message ?? '').slice(0, 300)}`);
+    }
     expect(await mockDatabase.employeeSalary.count({ where: { companyId: f.companyId } })).toBe(1);
     expect(await mockDatabase.employeeSalary.count({ where: { companyId: f.companyId, isActive: true } })).toBe(1);
   });
