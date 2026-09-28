@@ -95,6 +95,16 @@ Running them surfaced two real defects and three stale fixtures.
 - The attendance summary gained `overtimeWorkday`, `overtimeHoliday` and
   `unpaidLeave`; two `toEqual` expectations still described the older shape.
 
+**Found by CI, not locally**
+
+The first CI run of the new job failed where four local runs had passed: under
+real contention the losing side of two concurrent salary allocations was
+rejected with the raw driver error instead of a conflict, so the HTTP boundary
+answered 500 where the suite expects 409. Serializable isolation and a company
+row lock do not remove the race — MySQL still reports a write conflict, a
+deadlock or a lock-wait timeout. Those three are now retried twice and then
+translated to a retryable 409; every other failure keeps its own meaning.
+
 A separate flake is also fixed: the payment-routes HTTP test answered a 500
 while an unread request body was still in flight, which let Node reset the
 socket under load (`ECONNRESET`, roughly one full run in three). It sends no
