@@ -170,7 +170,7 @@ export function TopNavigation() {
             {isDark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
 
-          <LanguageSwitcher className="hidden sm:inline-flex" />
+          <LanguageSwitcher />
 
           <button
             className="relative rounded-[13px] border border-border bg-card p-2 shadow-card transition-colors hover:bg-secondary"

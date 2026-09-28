@@ -12,8 +12,8 @@ Anda **tidak** melihat: Rekrutmen (wewenang HR Manager/Group Admin), Aset, Metod
 
 ## Mulai
 
-1. Masuk di http://localhost:5173; tema/bahasa lewat topbar; pilih perusahaan aktif dari chip di kiri topbar bila akses Anda mencakup beberapa perusahaan.
-2. Dashboard persona admin: statistik perusahaan, approval menunggu, kartu **Administrasi** (Pengguna, Role & Izin, Audit Log, Workflow, Laporan, Pengaturan), analitik headcount/turnover, kehadiran 90 hari, aktivitas terbaru.
+1. Masuk di http://localhost:5173; tema/bahasa lewat topbar (sakelar ID | EN kini mengganti seluruh halaman, termasuk format tanggal); pilih perusahaan aktif dari chip di kiri topbar bila akses Anda mencakup beberapa perusahaan. Akun demo rudi@tech.com hanya tercakup di **PT Teknologi Maju**, jadi chipnya berisi satu pilihan — perusahaan kedua (**PT Digital Nusantara**, kode DIGI) dalam grup yang sama hanya terlihat oleh role berskala grup (Group Admin/Super Admin).
+2. Dashboard persona admin: statistik perusahaan, kartu **Approval Menunggu** (judul dokumen + nama pengaju + satu baris ringkas per pengajuan), kartu **Administrasi** (Pengguna, Role & Izin, Audit Log, Workflow, Laporan, Pengaturan), analitik headcount/turnover, kehadiran 90 hari, aktivitas terbaru.
 3. Sesi berakhir otomatis setelah 15 menit idle (peringatan 60 detik); server menolak sesi idle >30 menit.
 
 ## Mengelola pengguna & role
@@ -47,7 +47,8 @@ Anda **tidak** melihat: Rekrutmen (wewenang HR Manager/Group Admin), Aset, Metod
 
 ## Persetujuan & monitoring
 
-- **Workflow** (inbox My Approvals; Approve/Reject/Escalate, komentar opsional) dan **Administrasi → Workflow Templates** (kelola template + bulk approval).
+- **Workflow** (inbox My Approvals; Approve/Reject/Escalate, komentar opsional). Setiap kartu inbox memuat **ringkasan dokumen**: judul ("Pengajuan Cuti", "Pengajuan Pinjaman", …), **nama pengaju + NIK**, baris fakta sesuai jenis dokumen (cuti: jenis/periode/durasi/alasan · pinjaman: jumlah/tenor · lembur: tanggal/durasi · trip: tujuan/periode/biaya · dst.), tahap + level, tanggal diajukan, dan nama template. Dokumen yang tak terbaca tampil sebagai *"Rincian dokumen tidak tersedia — buka modul terkait untuk memeriksa."*
+- **Administrasi → Workflow Templates** (kelola template + bulk approval + kolom Reference yang bisa diklik ke dokumen). Tabel di sini **belum memakai ringkasan** — masih menampilkan ID pengguna dan referensi mentah, jadi bacalah isi pengajuan dari inbox Workflow.
 - **Approval Tarik Gaji (EWA):** Approve/Reject pengajuan, **Mark Paid** dengan nominal + nomor bukti transfer, lihat detail lengkap.
 - **Monitoring Aktivitas:** aktivitas harian lapangan seluruh karyawan + validasi geofence; lihat detail atau hapus.
 - **Cuti / Pinjaman / Perjalanan & Klaim:** persetujuan langsung dari dokumen, sama seperti panduan HR Manager.
@@ -61,7 +62,7 @@ Anda **tidak** melihat: Rekrutmen (wewenang HR Manager/Group Admin), Aset, Metod
 
 ## Fitur pribadi Anda
 
-Akun admin yang tertaut data karyawan tetap punya semua fitur self-service (absen, cuti, slip gaji ber-PIN, dst.) — lihat [employee.md](employee.md).
+Akun admin yang tertaut data karyawan tetap punya semua fitur self-service (absen, cuti dengan **validasi saldo saat submit**, slip gaji ber-PIN, dst.) — lihat [employee.md](employee.md).
 
 ## Tips
 
@@ -77,3 +78,6 @@ Akun admin yang tertaut data karyawan tetap punya semua fitur self-service (abse
 - Tidak ada reset kata sandi pengguna dari halaman Pengguna (field kata sandi nonaktif saat edit); tidak ada reset PIN slip gaji oleh admin.
 - Pembatalan (void) payroll run tidak tersedia di UI.
 - Rekrutmen dan Aset tidak tampil untuk role ini dengan izin bawaan.
+- **Tidak ada UI untuk menetapkan/menyesuaikan saldo cuti** karyawan atau menjalankan akrual tahunan, padahal alokasi saldo kini prasyarat pengajuan cuti (endpointnya ada di server, halamannya belum).
+- **Saldo cuti baru dipotong saat approval** — pengajuan Pending belum menahan saldo, jadi beberapa pengajuan (rentang tanggal berbeda) bisa lolos submit meski totalnya melebihi sisa; yang disetujui terakhir ditolak server.
+- **Delegasi approval belum ada UI-nya** — tidak ada cara mengalihkan inbox approval ke orang lain dari aplikasi.

@@ -12,9 +12,10 @@ Yang **tidak** tampil: **Organisasi → Metode Absensi** (matriks metode per kar
 
 ## Mulai
 
-1. Masuk di http://localhost:5173; tema/bahasa lewat topbar.
+1. Masuk di http://localhost:5173; tema/bahasa lewat topbar (sakelar ID | EN kini mengganti seluruh halaman, termasuk format tanggal).
 2. **Berpindah perusahaan:** klik chip perusahaan di kiri topbar → pilih perusahaan dalam grup. Semua halaman dimuat ulang mengikuti perusahaan aktif — biasakan memeriksa chip ini sebelum mengubah data.
-3. Dashboard persona admin: statistik perusahaan aktif, approval menunggu, kartu Administrasi, analitik headcount/turnover.
+   - Pada data demo grup **PT Holding Utama** berisi **dua** perusahaan, jadi switcher benar-benar bisa dicoba: **PT Teknologi Maju** (TECH — semua akun demo, 3 cabang, payroll, cuti, pinjaman) dan **PT Digital Nusantara** (DIGI — 1 cabang DIGI-HQ, departemen Product & Sales, hierarki Direktur → Manager → Staff, 8 karyawan aktif). PT Digital Nusantara tidak punya akun login sendiri; masuklah sebagai Group Admin/Super Admin lalu ganti perusahaan aktif.
+3. Dashboard persona admin: statistik perusahaan aktif, kartu **Approval Menunggu** (judul dokumen + nama pengaju + satu baris ringkas), kartu Administrasi, analitik headcount/turnover.
 4. Sesi berakhir otomatis setelah 15 menit idle (peringatan 60 detik).
 
 ## Kelola grup & perusahaan
@@ -45,7 +46,9 @@ Rincian langkahnya sama dengan panduan [company-admin.md](company-admin.md).
 
 ## Operasional dan persetujuan
 
-Seluruh alur pada panduan HR Manager dan Company Admin berlaku: karyawan (CRUD, import/export CSV, transaksi karier, **enrollment wajah**), kehadiran (monitoring, input manual, lembur), cuti (H-7 + lampiran), kalender kerja & formula shift, offboarding + exit clearance, dokumen, workflow (inbox, template, **bulk approval**), EWA (approve + **Mark Paid**), monitoring aktivitas harian, rekrutmen (lowongan → pipeline → interview), kinerja, LMS, benefit, laporan 6 tab + Export CSV, audit log + export.
+Seluruh alur pada panduan HR Manager dan Company Admin berlaku: karyawan (CRUD, import/export CSV, transaksi karier, **enrollment wajah**), kehadiran (monitoring, input manual, lembur), cuti (**validasi saldo saat submit** + H-7 + lampiran), kalender kerja & formula shift, offboarding + exit clearance, dokumen, workflow (inbox, template, **bulk approval**), EWA (approve + **Mark Paid**), monitoring aktivitas harian, rekrutmen (lowongan → pipeline → interview), kinerja, LMS, benefit, laporan 6 tab + Export CSV, audit log + export.
+
+Inbox **Workflow → My Approvals** menampilkan **ringkasan dokumen** per kartu: judul, nama pengaju + NIK, baris fakta per jenis dokumen, tahap + level, tanggal diajukan, dan nama template. Ringkasan ini **per perusahaan aktif** — ganti chip perusahaan untuk memproses antrean perusahaan lain dalam grup.
 
 ## Tips
 
@@ -59,5 +62,7 @@ Seluruh alur pada panduan HR Manager dan Company Admin berlaku: karyawan (CRUD, 
 - **Metode Absensi per karyawan** (matriks Fingerprint/Face/GPS) hanya bisa diubah Super Admin.
 - Menu **Aset** tidak tampil karena izin modul aset belum terdefinisi di sistem.
 - Halaman **Pengaturan** masih placeholder (Save tidak menyimpan).
-- Tidak ada UI: konfirmasi kehadiran periode payroll, void payroll run, reset kata sandi pengguna, reset PIN slip gaji, delegasi approval.
+- Tidak ada UI: konfirmasi kehadiran periode payroll, void payroll run, reset kata sandi pengguna, reset/unlock PIN slip gaji, **delegasi approval**, dan **penetapan/penyesuaian saldo cuti + akrual tahunan** (endpoint saldo cuti ada di server, halamannya belum).
+- **Saldo cuti baru dipotong saat approval** — pengajuan Pending belum menahan saldo, jadi beberapa pengajuan (rentang tanggal berbeda) bisa lolos submit meski totalnya melebihi sisa; yang disetujui terakhir ditolak server.
+- Tabel bulk approval (Administrasi → Workflow Templates) belum memakai ringkasan dokumen — masih ID pengguna dan referensi mentah.
 - Impersonasi pengguna tidak tersedia untuk Group Admin.

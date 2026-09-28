@@ -6,13 +6,14 @@ Untuk karyawan biasa: absensi harian, pengajuan cuti/izin, slip gaji, pinjaman, 
 
 ## Menu yang Anda lihat
 
-Dashboard · Self Service · Slip Gaji Saya · Pinjaman · Tarik Gaji Awal · Aktivitas Harian · Perjalanan & Klaim · Kehadiran — ditambah ikon lonceng **Notifikasi** dan menu **Profil** di topbar. Di layar ponsel tersedia bottom-nav: Dashboard, Self, Pinjaman, Notifikasi, Profil.
+Dashboard · Self Service · Slip Gaji Saya · Pinjaman · Tarik Gaji Awal · Aktivitas Harian · Perjalanan & Klaim · Kehadiran — ditambah ikon lonceng **Notifikasi** dan menu **Profil** di topbar. Di layar ponsel tersedia bottom-nav: Dashboard, Self, Pinjaman, Notifikasi, Profil (label bottom-nav ini masih berbahasa Indonesia walau aplikasi disetel ke EN).
 
 ## Mulai
 
 1. Buka http://localhost:5173 dan masuk dengan email + kata sandi. Centang "Ingat saya" bila perlu; tautan "Lupa kata sandi?" tersedia.
-2. Ganti tema (ikon matahari/bulan) dan bahasa (sakelar ID | EN) dari topbar.
+2. Ganti tema (ikon matahari/bulan) dan bahasa (sakelar ID | EN) dari topbar. Sakelar bahasa mengganti seluruh menu dan halaman, termasuk format tanggal (nama bulan/hari ikut bahasa aktif). Di layar ponsel sakelar ID | EN disembunyikan dari topbar — pilih bahasa dari halaman login.
 3. Dashboard Anda menampilkan: status absen hari ini, pengajuan cuti/izin terakhir, saldo cuti, kartu tim, dan riwayat kehadiran bulan berjalan. Tombol **Clock in** di kanan atas menuju halaman Kehadiran.
+   - Kartu **Tim Saya** kini terisi: ada badge **Atasan** dengan nama atasan langsung beserta posisinya, dan sakelar **Daftar / Bagan** untuk melihat struktur tim. Pada data demo, Maya (Marketing Staff) melapor ke Bambang Supriyadi (Marketing Manager).
 4. Diamkan aplikasi 15 menit dan sesi berakhir otomatis (ada peringatan 60 detik lebih dulu).
 
 ## Absensi harian (check-in / check-out)
@@ -27,14 +28,32 @@ Dashboard · Self Service · Slip Gaji Saya · Pinjaman · Tarik Gaji Awal · Ak
 
 **Tips:** pastikan wajah Anda sudah didaftarkan oleh HR (dari halaman detail karyawan) sebelum memakai Face Recognition; jika belum, verifikasi wajah akan ditolak server.
 
-## Cuti (aturan H-7)
+## Cuti (saldo + aturan H-7)
 
 1. Menu **Self Service** → tab **Cuti** → **Ajukan Cuti**.
-2. Pilih **Jenis Cuti** — saldo jenis terpilih langsung ditampilkan ("X hari tersisa").
-3. Isi **Tanggal Mulai**, **Tanggal Selesai**, dan **Alasan**.
-4. **Lampiran:** pengajuan yang dibuat **kurang dari H-7** sebelum tanggal mulai **wajib** melampirkan dokumen pendukung (JPG/PNG/GIF/PDF, maks 5MB). Diajukan H-7 atau lebih awal, lampiran opsional — kecuali jenis cutinya sendiri mewajibkan lampiran. Form menampilkan peringatan merah bila lampiran wajib.
-5. Klik **Ajukan Cuti**. Saldo terpotong otomatis setelah disetujui.
-6. Pengajuan berstatus **Pending** bisa dibatalkan lewat tombol **Batalkan**.
+2. Pilih **Jenis Cuti**. Dropdown menampilkan **sisa saldo tiap jenis** langsung di pilihannya, mis. `Annual Leave — sisa 9 hari`.
+   - Jenis yang belum punya alokasi saldo ditandai `— belum ada saldo` dan **tidak bisa dipilih**. Hubungi HR agar saldonya ditetapkan, atau pilih jenis lain.
+   - Di bawah dropdown tampil rincian saldo jenis terpilih: `Saldo <jenis> tahun <tahun>: X hari tersisa (terpakai Y dari Z)`. Saldo dibebankan ke **tahun tanggal mulai cuti**, jadi mengubah Tanggal Mulai ke tahun berikutnya berarti saldo tahun itu yang dipakai.
+   - Panel **Saldo Cuti Saya** di bagian bawah form merangkum sisa/total semua jenis.
+3. Isi **Tanggal Mulai**, **Tanggal Selesai**, dan **Alasan**. Di bawah kolom tanggal muncul **perkiraan durasi hari kerja** (Sen–Jum, belum memperhitungkan hari libur) dengan catatan bahwa **jumlah final dihitung server** lewat kalender kerja dan hari libur nasional Anda.
+4. **Lampiran:** pengajuan yang dibuat **kurang dari H-7** sebelum tanggal mulai **wajib** melampirkan dokumen pendukung (JPG/PNG/GIF/PDF, maks 5MB). Diajukan H-7 atau lebih awal, lampiran opsional — kecuali jenis cutinya sendiri mewajibkan lampiran (pada data demo: Maternity Leave dan Marriage Leave). Form menampilkan peringatan merah bila lampiran wajib.
+5. Klik **Ajukan Cuti**. **Pengajuan yang melebihi sisa saldo ditolak saat submit** — bukan lagi nanti di meja atasan — dengan pesan yang menyebut sisa saldo vs jumlah hari yang diajukan, mis. *"Saldo cuti Annual Leave tahun 2026 tidak cukup: sisa 2 hari, sedangkan pengajuan ini memakai 3 hari kerja."* Perpendek rentang tanggal atau pilih jenis lain.
+6. Saldo baru **terpotong setelah pengajuan disetujui**, bukan saat dikirim.
+7. Pengajuan berstatus **Pending** bisa dibatalkan lewat tombol **Batalkan**. Rentang tanggal yang tumpang tindih dengan pengajuan Pending/Approved lain akan ditolak.
+
+**Setiap jenis cuti punya kuota sendiri** — bukan hanya cuti tahunan. Kuota bawaan pada data demo (dialokasikan ke semua karyawan):
+
+| Jenis cuti | Kuota per tahun | Lampiran wajib |
+|---|---|---|
+| Annual Leave | 12 hari | tidak |
+| Sick Leave | 14 hari | tidak |
+| Maternity Leave | 90 hari | ya |
+| Paternity Leave | 3 hari | tidak |
+| Marriage Leave | 3 hari | ya |
+| Bereavement Leave | 3 hari | tidak |
+| Unpaid Leave | 30 hari | tidak |
+
+Angka di atas juga menjadi batas maksimal **per pengajuan** untuk jenis tersebut.
 
 ## Izin (lampiran selalu wajib)
 
@@ -52,12 +71,13 @@ Dashboard · Self Service · Slip Gaji Saya · Pinjaman · Tarik Gaji Awal · Ak
 
 ## Slip gaji (PIN 6 digit)
 
-1. **Atur PIN sekali saja:** dari **Profil → Pengaturan → PIN Slip Gaji → Atur PIN**, atau dari kartu "PIN slip gaji belum diatur" di halaman **Slip Gaji Saya**. Verifikasi dengan kata sandi akun, lalu masukkan PIN 6 digit dua kali. Hindari angka mudah ditebak.
-2. Menu **Slip Gaji Saya**: nominal seluruh slip tampil sebagai `Rp ••••••••`. Klik **Buka** dan masukkan PIN — nominal hanya dikirim server setelah PIN terverifikasi.
-3. Sesi buka berlaku **15 menit**; setelah itu halaman terkunci lagi dan PIN diminta ulang. Menutup/merefresh halaman juga mengunci kembali.
-4. Setelah terbuka, klik **Lihat detail** untuk rincian pendapatan/potongan dan **Unduh PDF**.
-5. Ubah PIN kapan saja lewat tombol **Ubah PIN** (butuh kata sandi akun).
-6. Salah PIN berkali-kali akan memblokir sementara ("Terlalu banyak percobaan...").
+1. **Atur PIN sekali saja:** dari **Profil → Pengaturan → PIN Slip Gaji → Atur PIN**, atau dari kartu "PIN slip gaji belum diatur" di halaman **Slip Gaji Saya**. Verifikasi dengan kata sandi akun, lalu masukkan PIN 6 digit dua kali (kolom PIN berupa 6 kotak dot, dengan tautan **Hapus** untuk mengosongkannya). Hindari angka mudah ditebak — PIN disimpan terenkripsi di server dan tidak pernah ditampilkan kembali.
+2. Menu **Slip Gaji Saya**: nominal seluruh slip tampil sebagai `Rp ••••••••` dengan badge **Terkunci**. Klik **Buka** → dialog "Masukkan PIN Slip Gaji" → **Buka nominal**. Nominal hanya dikirim server setelah PIN terverifikasi. (Bila PIN belum diatur, tombol **Buka** mengarahkan ke dialog Atur PIN lebih dulu.)
+3. Satu kali buka membuka **seluruh periode sekaligus**: take-home pay setiap slip langsung tampil di daftar. Banner hijau di atas daftar menyebutkan **sampai jam berapa** nominal terbuka.
+4. Sesi buka berlaku **15 menit** dari saat PIN diverifikasi; setelah itu halaman terkunci otomatis dengan pesan "Sesi buka slip gaji berakhir. Masukkan PIN kembali." Menutup atau me-refresh halaman juga langsung mengunci kembali — token buka hanya hidup di memori browser, tidak disimpan.
+5. Setelah terbuka, klik **Lihat detail** pada satu periode: muncul kartu take-home pay, rincian **Pendapatan** dan **Potongan** beserta totalnya, dan tombol **Unduh PDF** di bagian bawah dialog.
+6. Ubah PIN kapan saja lewat tombol **Ubah PIN** di kanan atas halaman (butuh kata sandi akun). Tombol ini baru muncul setelah PIN pernah diatur.
+7. **Salah PIN 5 kali → terkunci 15 menit.** Pesannya menyebutkan sisa waktunya ("Terlalu banyak percobaan PIN salah. Coba lagi dalam N menit."); bila Anda membuka halaman saat masih terkunci, kolom PIN langsung dinonaktifkan dan tanggal/jam berakhirnya lockout ditampilkan. PIN yang benar mereset hitungan percobaan.
 
 ## Pinjaman karyawan
 
@@ -96,7 +116,9 @@ Ikon lonceng di topbar (badge jumlah belum dibaca) → halaman Notifikasi: filte
 ## Batasan saat ini
 
 - **Tidak ada form pengajuan lembur** — lembur diinput oleh HR/atasan; Anda hanya melihat riwayatnya.
-- **Tidak ada fitur "lupa PIN" slip gaji.** PIN hanya bisa diubah sendiri dengan verifikasi kata sandi akun; tidak ada reset PIN oleh admin.
+- **Saldo cuti baru dipotong saat pengajuan disetujui.** Pengajuan yang masih Pending belum "menahan" saldo, jadi dua pengajuan pada rentang tanggal berbeda bisa sama-sama lolos submit walau totalnya melebihi sisa saldo — yang terakhir disetujui akan ditolak approver dengan pesan saldo tidak cukup. (Rentang tanggal yang tumpang tindih tetap dicegah sejak submit.)
+- Perkiraan durasi pada form cuti hanya menghitung Sen–Jum dan **belum memperhitungkan hari libur nasional**; jumlah hari final ditentukan server, jadi angka yang tersimpan bisa lebih kecil dari perkiraan.
+- **Tidak ada fitur "lupa PIN" slip gaji.** PIN hanya bisa diubah sendiri dengan verifikasi kata sandi akun; tidak ada reset PIN atau pembatalan lockout oleh admin — bila terkunci, tunggu 15 menit.
 - Pengajuan perjalanan dinas / klaim biaya **tidak bisa dibatalkan** setelah dikirim.
 - Pilihan lokasi site di Aktivitas Harian masih terbatas (belum memuat daftar cabang lengkap), dan bukti foto hanya bisa berupa URL — belum ada upload file.
 - Aktivitas harian tidak memiliki status persetujuan; admin hanya memonitor dan dapat menghapus.

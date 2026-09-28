@@ -12,8 +12,9 @@ Anda **tidak** melihat: Payroll, Benefit, Rekrutmen, Kinerja, LMS, Laporan, Aset
 
 ## Mulai
 
-1. Masuk di http://localhost:5173; atur tema/bahasa dari topbar; pilih perusahaan aktif bila punya akses lebih dari satu.
-2. Dashboard persona HR menampilkan statistik tenaga kerja (total karyawan, departemen, hadir hari ini, sedang cuti), kartu approval menunggu, analitik headcount & turnover, kehadiran 90 hari, aktivitas terbaru, dan aksi cepat **Kelola HR** (Karyawan, Kehadiran, Cuti, Payroll — tombol Payroll akan ditolak karena role Anda tidak punya aksesnya).
+1. Masuk di http://localhost:5173; atur tema/bahasa dari topbar (sakelar ID | EN kini mengganti seluruh halaman, termasuk format tanggal); pilih perusahaan aktif bila punya akses lebih dari satu — akun demo rina@tech.com hanya tercakup di PT Teknologi Maju.
+2. Dashboard persona HR menampilkan statistik tenaga kerja (total karyawan, departemen, hadir hari ini, sedang cuti), kartu **Approval Menunggu**, analitik headcount & turnover, kehadiran 90 hari, aktivitas terbaru, dan aksi cepat **Kelola HR** (Karyawan, Kehadiran, Cuti, Payroll — tombol Payroll akan ditolak karena role Anda tidak punya aksesnya).
+   - Kartu **Approval Menunggu** menampilkan judul dokumen + nama pengaju + satu baris ringkas per pengajuan, bukan ID mentah.
 3. Sesi berakhir otomatis setelah 15 menit idle (peringatan 60 detik).
 
 ## Mengelola data karyawan
@@ -42,6 +43,10 @@ Anda **tidak** melihat: Payroll, Benefit, Rekrutmen, Kinerja, LMS, Laporan, Aset
 
 - Menu **Cuti** menampilkan seluruh pengajuan cuti perusahaan (filter status, cari nama, kartu ringkas Pending/Approved). Klik baris untuk detail: periode, alasan, **lampiran** ("View Document"), dan timeline workflow persetujuan.
 - Peran Anda di sini adalah **memantau**; keputusan approve/reject dijalankan approver pada workflow (atasan/HR Manager). Tombol Approve/Reject yang tampil akan divalidasi server sesuai kewenangan.
+- **Saldo cuti kini menjadi prasyarat pengajuan.** Sejak validasi dipindah ke saat submit, karyawan tidak bisa memilih jenis cuti yang belum punya alokasi saldo (dropdown menandainya "belum ada saldo" dan menonaktifkannya), dan pengajuan yang melebihi sisa saldo ditolak seketika. Bila karyawan melapor "jenis cuti saya tidak bisa dipilih", penyebabnya hampir selalu alokasi saldo yang belum ada untuk jenis + tahun tersebut.
+- Pada data demo **semua** jenis cuti punya kuota: Annual 12, Sick 14, Maternity 90, Paternity 3, Marriage 3, Bereavement 3, Unpaid 30 hari per tahun (angka yang sama juga menjadi batas maksimal per pengajuan). Maternity dan Marriage mewajibkan lampiran.
+- Saldo dibebankan ke **tahun tanggal mulai cuti**, dan baru dipotong setelah pengajuan disetujui.
+- Tombol **Ajukan Cuti** di halaman ini mengajukan **untuk diri Anda sendiri** — belum ada pengajuan atas nama karyawan lain.
 
 ## Dokumen dan organisasi
 
@@ -52,7 +57,7 @@ Anda **tidak** melihat: Payroll, Benefit, Rekrutmen, Kinerja, LMS, Laporan, Aset
 
 ## Fitur pribadi Anda
 
-Sama dengan panduan karyawan: absensi sendiri, cuti (H-7), izin (lampiran wajib), slip gaji ber-PIN, pinjaman, EWA, perjalanan dinas, profil 5 tab. Lihat [employee.md](employee.md).
+Sama dengan panduan karyawan: absensi sendiri, cuti (**validasi saldo saat submit** + aturan H-7), izin (lampiran wajib), slip gaji ber-PIN, pinjaman, EWA, perjalanan dinas, profil 5 tab. Lihat [employee.md](employee.md).
 
 ## Tips
 
@@ -64,6 +69,8 @@ Sama dengan panduan karyawan: absensi sendiri, cuti (H-7), izin (lampiran wajib)
 
 - Role ini **tidak dapat mengakses payroll, laporan, rekrutmen, kinerja, LMS, dan benefit** — semuanya di HR Manager/admin.
 - Persetujuan cuti/kehadiran/EWA bukan wewenang HR Staff; server menolak aksi approve meski tombolnya terlihat di beberapa halaman.
+- **Tidak ada UI untuk menetapkan/menyesuaikan saldo cuti** maupun menjalankan akrual tahunan. Karena alokasi saldo kini prasyarat pengajuan, karyawan baru tanpa alokasi tidak bisa mengajukan cuti — eskalasikan ke tim yang dapat menjalankannya di luar aplikasi.
+- **Saldo cuti baru dipotong saat approval**, bukan saat pengajuan dibuat — beberapa pengajuan Pending dari karyawan yang sama (rentang tanggal berbeda) bisa sama-sama lolos submit walau totalnya melebihi sisa saldo.
 - Form tambah/edit karyawan belum menampilkan pesan kesalahan bila penyimpanan gagal — bila halaman tidak berpindah setelah Simpan, periksa kembali isian wajib.
 - Form resign memakai input ID karyawan manual (belum berupa pilihan nama).
 - Tidak ada edit/hapus catatan kehadiran dan tidak ada export di halaman Kehadiran.

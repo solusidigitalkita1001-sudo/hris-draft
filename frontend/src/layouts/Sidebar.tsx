@@ -475,13 +475,17 @@ function MobileBottomNav({ visiblePaths }: { visiblePaths: Set<string> }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuthStore();
+  const { t } = useI18n();
 
-  const items = [
-    { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
-    { path: '/self-service', label: 'Self', icon: <UserCheck size={19} /> },
-    { path: '/employee-loans', label: 'Pinjaman', icon: <Banknote size={19} /> },
-    { path: '/notifications', label: 'Notifikasi', icon: <Bell size={19} /> },
-  ].filter((item) => item.path === '/notifications' || visiblePaths.has(item.path));
+  const bottomNavItems: Array<{ path: string; labelKey: TranslationKey; icon: React.ReactNode }> = [
+    { path: '/dashboard', labelKey: 'sidebar.dashboard', icon: <LayoutDashboard size={19} /> },
+    { path: '/self-service', labelKey: 'sidebar.selfService', icon: <UserCheck size={19} /> },
+    { path: '/employee-loans', labelKey: 'sidebar.loan', icon: <Banknote size={19} /> },
+    { path: '/notifications', labelKey: 'sidebar.notifications', icon: <Bell size={19} /> },
+  ];
+  const items = bottomNavItems.filter(
+    (item) => item.path === '/notifications' || visiblePaths.has(item.path)
+  );
 
   return (
     <nav
@@ -500,7 +504,7 @@ function MobileBottomNav({ visiblePaths }: { visiblePaths: Set<string> }) {
             )}
           >
             {item.icon}
-            {item.label}
+            {t(item.labelKey)}
           </button>
         );
       })}
@@ -519,7 +523,7 @@ function MobileBottomNav({ visiblePaths }: { visiblePaths: Set<string> }) {
         >
           {user?.name ? getInitials(user.name) : 'U'}
         </span>
-        Profil
+        {t('topnav.profile')}
       </button>
     </nav>
   );

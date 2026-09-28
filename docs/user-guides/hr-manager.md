@@ -12,15 +12,17 @@ Anda **tidak** melihat: Aset, Metode Absensi (khusus Super Admin), dan item Admi
 
 ## Mulai
 
-1. Masuk di http://localhost:5173; tema/bahasa lewat topbar; pilih perusahaan aktif bila lebih dari satu.
-2. Dashboard persona HR: statistik tenaga kerja, approval menunggu, aksi cepat **Kelola HR** (Karyawan, Kehadiran, Cuti, Payroll), analitik headcount & turnover, kehadiran 90 hari, aktivitas terbaru.
+1. Masuk di http://localhost:5173; tema/bahasa lewat topbar (sakelar ID | EN kini mengganti seluruh halaman, termasuk format tanggal); pilih perusahaan aktif bila lebih dari satu — akun demo dewi@tech.com hanya tercakup di PT Teknologi Maju.
+2. Dashboard persona HR: statistik tenaga kerja, kartu **Approval Menunggu**, aksi cepat **Kelola HR** (Karyawan, Kehadiran, Cuti, Payroll), analitik headcount & turnover, kehadiran 90 hari, aktivitas terbaru.
+   - Kartu **Approval Menunggu** menampilkan 2 pengajuan teratas dengan **judul dokumen + nama pengaju + satu baris ringkas** (periode/nominal/durasi) dan chip lama menunggu, bukan lagi ID mentah.
 3. Sesi berakhir otomatis setelah 15 menit idle (peringatan 60 detik).
 
 ## Persetujuan (inbox workflow)
 
-1. Menu **Workflow** → tab **My Approvals**: Approve / Reject / Escalate per item, komentar opsional.
-2. Alternatif massal: **Administrasi → Workflow Templates** → tab **My Approvals**: centang beberapa pengajuan → **Bulk Approve / Bulk Reject**; klik kolom Reference untuk melompat ke dokumen (cuti, pinjaman, trip, klaim, tukar shift, lembur).
+1. Menu **Workflow** → tab **My Approvals**: setiap kartu memuat **ringkasan dokumen** — judul ("Pengajuan Cuti", "Pengajuan Pinjaman", …), **nama pengaju + NIK**, dan baris fakta sesuai jenisnya (cuti: jenis/periode/durasi/alasan · pinjaman: jumlah/tenor · lembur: tanggal/durasi/jam · trip: tujuan/periode/estimasi biaya · klaim: kategori/nominal/tanggal · tukar shift: tanggal/rekan · izin: jenis/periode/durasi), plus **tahap + level**, **tanggal diajukan**, dan **nama template**. Dokumen yang tidak bisa dibaca tampil sebagai *"Rincian dokumen tidak tersedia — buka modul terkait untuk memeriksa."* Aksi: Approve / Reject / Escalate per item, komentar opsional.
+2. Alternatif massal: **Administrasi → Workflow Templates** → tab **My Approvals**: centang beberapa pengajuan → **Bulk Approve / Bulk Reject**; klik kolom Reference untuk melompat ke dokumen (cuti, pinjaman, trip, klaim, tukar shift, lembur). **Tabel ini belum menampilkan ringkasan dokumen** — kolom **Submitted By** masih berupa ID pengguna mentah dan Reference berupa tipe + potongan ID. Untuk membaca isi pengajuan, pakai inbox **Workflow → My Approvals**; pakai halaman ini saat Anda hanya perlu memproses antrean secara massal atau melompat ke dokumennya.
 3. Persetujuan juga tersedia langsung di dokumen: daftar/detail **Cuti** (lihat lampiran lewat "View Document"), detail **Pinjaman** (kartu Alur Persetujuan), halaman **Perjalanan & Klaim** (approve trip/klaim, catat Cash Advance, proses Reimburse Transfer/Payroll).
+4. **Persetujuan cuti bisa gagal karena saldo.** Server memeriksa ulang saldo tepat sebelum memotongnya dan menolak dengan pesan khusus approver: *"Saldo <jenis> tidak cukup: sisa N hari, diajukan M hari."* atau *"Karyawan belum punya saldo <jenis> untuk tahun <tahun>. Minta HR menetapkan saldo sebelum menyetujui."* Alokasi saldo harus diperbaiki lebih dulu — **belum ada halaman untuk mengatur saldo cuti di UI** (lihat "Batasan saat ini"), jadi untuk saat ini perbaikannya dilakukan di luar aplikasi.
 
 ## Mengonfigurasi workflow persetujuan
 
@@ -64,17 +66,30 @@ Sama seperti HR Staff namun dengan kewenangan penuh: data karyawan (tambah/edit/
 
 ## Fitur pribadi Anda
 
-Sama dengan panduan karyawan (absensi, cuti H-7, izin, slip gaji ber-PIN, pinjaman, EWA, profil 5 tab). Lihat [employee.md](employee.md).
+Sama dengan panduan karyawan (absensi, cuti dengan **validasi saldo saat submit** + aturan H-7, izin, slip gaji ber-PIN, pinjaman, EWA, profil 5 tab). Lihat [employee.md](employee.md).
+
+## Saldo cuti karyawan (prasyarat pengajuan)
+
+Sejak saldo divalidasi saat pengajuan dibuat, **alokasi saldo menjadi prasyarat**: jenis cuti tanpa baris saldo untuk tahun berjalan tidak bisa dipilih karyawan sama sekali (dropdown menandainya "belum ada saldo" dan menonaktifkannya).
+
+- Data demo mengalokasikan **semua** jenis cuti ke setiap karyawan: Annual 12, Sick 14, Maternity 90, Paternity 3, Marriage 3, Bereavement 3, Unpaid 30 hari per tahun. Angka yang sama juga menjadi batas maksimal per pengajuan.
+- Saldo dibebankan ke **tahun tanggal mulai cuti**. Menjelang akhir tahun, pastikan alokasi tahun berikutnya sudah dibuat, atau pengajuan yang melewati tahun baru akan ditolak "belum ada alokasi".
+- Karyawan baru perlu alokasi saldo sejak awal; tanpa itu mereka tidak bisa mengajukan cuti apa pun.
+- **Penetapan/penyesuaian saldo belum tersedia di UI.** API-nya sudah ada di server (set saldo per karyawan dan akrual tahunan), tetapi belum ada halaman yang memanggilnya — lihat "Batasan saat ini". Saldo yang Anda lihat berasal dari data seed/akrual yang dijalankan di luar aplikasi.
 
 ## Tips
 
-- Gunakan bulk approval di Administrasi → Workflow Templates saat antrean menumpuk; hasil per item dilaporkan (berhasil/gagal).
+- Gunakan bulk approval di Administrasi → Workflow Templates saat antrean menumpuk; hasil per item dilaporkan (berhasil/gagal) — bacalah isi pengajuannya lebih dulu dari inbox **Workflow → My Approvals**, karena tabel bulk tidak menampilkan ringkasan dokumen.
 - Ubah template workflow hanya di luar jam sibuk — instance yang sedang berjalan mengikuti template saat dibuat.
 - Sebelum periode payroll dihitung admin, pastikan kehadiran dan cuti bulan berjalan sudah beres — hasil absensi memengaruhi slip.
 
 ## Batasan saat ini
 
 - **Delegasi approval belum ada UI-nya** (fitur server sudah ada, tampilannya belum).
+- **Saldo cuti baru dipotong saat approval.** Pengajuan Pending belum menahan saldo, jadi beberapa pengajuan dari karyawan yang sama (pada rentang tanggal berbeda) bisa lolos submit meski totalnya melebihi sisa; yang disetujui terakhir akan ditolak server. Rentang yang tumpang tindih tetap dicegah sejak submit.
+- Tabel bulk approval (Administrasi → Workflow Templates) **belum memakai ringkasan dokumen** — masih menampilkan ID pengguna dan referensi mentah.
+- **Tidak ada UI untuk menetapkan/menyesuaikan saldo cuti** karyawan maupun menjalankan akrual tahunan (endpointnya ada di server, halamannya belum). Padahal alokasi saldo kini menjadi prasyarat pengajuan — karyawan tanpa alokasi tidak bisa mengajukan cuti jenis itu.
+- Tombol **Ajukan Cuti** di halaman Cuti selalu mengajukan **untuk diri Anda sendiri**; belum ada pengajuan cuti atas nama karyawan lain dari UI.
 - Payroll untuk role ini **read-only** (tidak bisa membuat, menyetujui, atau mencairkan run).
 - **Mark Paid EWA** butuh hak pencairan yang tidak dimiliki HR Manager.
 - Benefit: tidak ada aksi mendaftarkan karyawan ke plan dari UI — hanya melihat peserta.

@@ -16,8 +16,9 @@ Pengaturan Menu Access/Data Scope tidak pernah membatasi Super Admin — Anda se
 ## Mulai
 
 1. Masuk di http://localhost:5173 dengan admin@hrms.com / Admin123!.
-2. Topbar: chip perusahaan aktif (Anda dapat berpindah ke perusahaan mana pun), toggle tema, sakelar bahasa ID | EN, lonceng notifikasi, menu profil (Profile, Settings, Sign out).
-3. Dashboard persona admin: statistik perusahaan aktif, approval menunggu, kartu Administrasi, analitik headcount & turnover.
+2. Topbar: chip perusahaan aktif (Anda dapat berpindah ke perusahaan mana pun), toggle tema, sakelar bahasa ID | EN (kini mengganti seluruh halaman, termasuk format tanggal), lonceng notifikasi, menu profil (Profile, Settings, Sign out).
+   - Data demo sudah berisi **dua perusahaan** dalam grup PT Holding Utama, jadi switcher benar-benar bisa diuji: **PT Teknologi Maju** (TECH) dan **PT Digital Nusantara** (DIGI — 1 cabang DIGI-HQ, departemen Product & Sales, hierarki Direktur → Manager → Staff, 8 karyawan aktif, tanpa akun login sendiri). Akun Anda tidak dibatasi cakupan perusahaan, sehingga keduanya tampil di chip.
+3. Dashboard persona admin: statistik perusahaan aktif, kartu **Approval Menunggu** (judul dokumen + nama pengaju + satu baris ringkas per pengajuan), kartu Administrasi, analitik headcount & turnover.
 4. Keamanan sesi berlaku juga untuk Anda: idle 15 menit → dialog "Masih di sana?" 60 detik → logout; server menolak sesi idle >30 menit.
 
 ## Penyiapan awal sistem (urutan yang disarankan)
@@ -29,6 +30,8 @@ Pengaturan Menu Access/Data Scope tidak pernah membatasi Super Admin — Anda se
 5. **Pengguna & role:** Administrasi → Pengguna (buat akun, tautkan karyawan, atur role) dan Role (role custom + permission per modul), lalu rapikan **Menu Access** dan **Data Scope** per role.
 6. **Workflow Templates:** definisikan alur persetujuan per jenis pengajuan (cuti, pinjaman, trip, klaim, tukar shift, lembur) — stage berjenjang, role approver + cadangan, SLA, eskalasi, condition rules.
 7. **Payroll:** komponen gaji + formula terjadwal, periode, lalu run.
+
+> **Catatan penyiapan cuti:** pengajuan cuti kini divalidasi terhadap saldo **saat dikirim**, jadi setiap karyawan butuh baris saldo per jenis cuti per tahun sebelum bisa mengajukan apa pun. Pembuatan/penyesuaian saldo **belum ada halamannya di UI** — pada lingkungan demo saldo berasal dari seed (Annual 12, Sick 14, Maternity 90, Paternity 3, Marriage 3, Bereavement 3, Unpaid 30 hari per tahun untuk semua karyawan).
 
 ## Matriks Metode Absensi (khusus Anda)
 
@@ -46,7 +49,7 @@ Pengaturan Menu Access/Data Scope tidak pernah membatasi Super Admin — Anda se
 - **Audit Log:** filter aksi/entity/IP/tanggal, detail nilai lama vs baru, **Export CSV**.
 - **Approval Tarik Gaji (EWA):** Approve/Reject, **Mark Paid** dengan bukti transfer, detail lengkap.
 - **Monitoring Aktivitas:** aktivitas lapangan semua karyawan + validasi geofence; detail dan hapus.
-- **Workflow Templates:** kelola template + tab My Approvals dengan **bulk approve/reject**.
+- **Workflow Templates:** kelola template + tab My Approvals dengan **bulk approve/reject** dan kolom Reference yang bisa diklik ke dokumen. Tabel ini belum memakai ringkasan dokumen — untuk membaca isi pengajuan, pakai inbox **Workflow → My Approvals**, yang kini menampilkan judul dokumen, **nama pengaju + NIK**, baris fakta per jenis dokumen, tahap + level, tanggal diajukan, dan nama template (dokumen tak terbaca tampil sebagai *"Rincian dokumen tidak tersedia — buka modul terkait untuk memeriksa."*).
 
 ## Payroll ujung-ke-ujung
 
@@ -58,7 +61,7 @@ Menu **Aset**: daftar aset perusahaan (status AVAILABLE/ASSIGNED/MAINTENANCE/DIS
 
 ## Modul lain
 
-Seluruh modul operasional (kehadiran, cuti H-7, offboarding + exit clearance, dokumen, rekrutmen, kinerja, LMS, benefit, laporan 6 tab + Export CSV, perjalanan & klaim, pinjaman, EWA) tersedia penuh — alur detailnya ada di panduan role terkait. Anda juga bisa menyetujui langkah workflow mana pun (bypass role approver), termasuk dari halaman detail cuti/pinjaman.
+Seluruh modul operasional (kehadiran, cuti dengan **validasi saldo saat submit** + aturan H-7, offboarding + exit clearance, dokumen, rekrutmen, kinerja, LMS, benefit, laporan 6 tab + Export CSV, perjalanan & klaim, pinjaman, EWA) tersedia penuh — alur detailnya ada di panduan role terkait. Anda juga bisa menyetujui langkah workflow mana pun (bypass role approver), termasuk dari halaman detail cuti/pinjaman.
 
 ## Tips
 
@@ -70,6 +73,8 @@ Seluruh modul operasional (kehadiran, cuti H-7, offboarding + exit clearance, do
 
 - **Aset:** hanya bisa menambah dan melihat — belum ada UI assign/return/edit/hapus aset.
 - **Pengaturan** (Administrasi → Pengaturan) masih placeholder; tombol Save belum menyimpan.
-- Tidak ada UI untuk: konfirmasi kehadiran periode payroll (prasyarat pembuatan run), void payroll run, reset kata sandi pengguna, **reset/unlock PIN slip gaji karyawan**, dan **delegasi approval**.
+- Tidak ada UI untuk: konfirmasi kehadiran periode payroll (prasyarat pembuatan run), void payroll run, reset kata sandi pengguna, **reset/unlock PIN slip gaji karyawan** (lockout 5 kali salah = 15 menit hanya bisa ditunggu), **delegasi approval**, dan **penetapan/penyesuaian saldo cuti + akrual tahunan**.
+- **Saldo cuti kini prasyarat pengajuan** tetapi belum ada halaman untuk mengaturnya: endpoint set-saldo dan akrual tahunan sudah ada di server, halamannya belum. Karyawan tanpa alokasi tidak bisa mengajukan jenis cuti itu sama sekali.
+- **Saldo cuti baru dipotong saat approval** — pengajuan Pending belum menahan saldo, jadi beberapa pengajuan (rentang tanggal berbeda) bisa lolos submit meski totalnya melebihi sisa; yang disetujui terakhir ditolak server.
 - Enrollment wajah memakai satu foto tanpa liveness; liveness challenge hanya terjadi saat check-in.
 - Benefit belum punya aksi mendaftarkan karyawan ke plan dari UI.
