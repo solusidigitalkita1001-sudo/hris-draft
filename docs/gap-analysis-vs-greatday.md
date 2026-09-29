@@ -512,6 +512,12 @@ butuh model data dulu, jadi tempatnya di daftar berikut.
   ada rekonsiliasi Desember. Untuk GAP-25, `TrainingEnrollment.score` sudah ada
   di schema namun tidak dipakai kode manapun.
 
+### Keputusan yang menunggu
+
+Sepuluh gap yang tersisa sudah dirinci menjadi pilihan konkret di
+`docs/open-hr-decisions.md` — apa yang diputuskan, opsinya, rekomendasi, dan
+ukuran implementasinya. Tidak ada yang tertahan pekerjaan teknis.
+
 ### Catatan metode
 
 Angka-angka di atas datang dari membaca kode, bukan dari ringkasan lama. Empat
