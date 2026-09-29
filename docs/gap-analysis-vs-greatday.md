@@ -537,3 +537,49 @@ istilah di laporan sebelumnya.
 
 Referensi GreatDay HR tetap dari materi publik sebagai tolok ukur fitur, bukan
 hasil membongkar produknya.
+
+---
+
+## Perbandingan ulang — 29 September 2026, sore
+
+**Skor tidak berubah: 19 tertutup, 3 sebagian, 8 terbuka.** Tidak ada fitur baru
+sejak pemeriksaan pagi; yang berubah adalah kekuatan bukti di belakang beberapa
+verdict. Itu perbedaan yang layak dicatat terpisah, supaya "tertutup" tidak
+diam-diam berarti "ada kodenya, belum ada yang mengujinya".
+
+### Verdict yang kini punya bukti eksekusi, bukan hanya kode
+
+| Gap | Sebelumnya | Sekarang |
+|---|---|---|
+| GAP-01, GAP-05 koreksi absensi & hari kerja cuti | dibaca dari kode | `leave-journey.mysql` menguji pengajuan → approval → potongan saldo → pembatalan di MySQL sungguhan, termasuk potongan yang mendarat tepat sekali saat dua approval berlomba dan penolakan approval di periode payroll tertutup |
+| GAP-28 notifikasi keputusan | baru saja dibangun | `decision-notification.mysql` membuktikan satu baris ke requester, approver tidak menerima apa pun, dan workflow dua tingkat tidak menulis apa pun sampai keputusannya final |
+| GAP-29 modul report | endpoint ada | `reports.mysql` mengikat angkanya dan batas tenant-nya: filter departemen tidak bisa dipakai menembus perusahaan lain, dan laporan cuti hanya menghitung yang APPROVED |
+| Sesi & self-service (lintas gap) | tidak ada uji browser | suite Playwright: token tidak terbaca JavaScript, token basi diganti transparan, akun nonaktif dilempar ke login, plus alur ajukan/batalkan cuti |
+
+### Delapan yang terbuka, diperiksa ulang dari schema
+
+Metodenya sengaja dibalik setelah pelajaran pagi ini (mencari kata "carry-over"
+melewatkan job bernama `leave:yearly-accrual`): kali ini berangkat dari nama
+model, nama field, dan daftar job — bukan dari istilah di laporan lama.
+
+Hasilnya kedelapan tetap terbuka, dan satu temuan baru:
+
+- **GAP-22 penamaan yang menyesatkan.** Komentar schema menyebut `JobPosting`
+  sebagai "Job posting / requisition", tetapi modelnya tidak punya jumlah
+  headcount, anggaran, maupun approval — hanya `status` DRAFT/…. Jadi bukan
+  requisition yang setengah jadi; requisition-nya tidak ada, dan komentarnya
+  membuatnya tampak ada. Siapa pun yang membaca schema untuk memutuskan
+  prioritas bisa tertipu di titik ini.
+- GAP-08 cuti bersama: `LeaveType` tidak punya penanda kolektif, tidak ada model
+  terkait. GAP-09 encashment: tidak ada apa pun.
+- GAP-13 email slip gaji: `MailService` ada dan dipakai — tetapi **hanya** untuk
+  password reset. Tidak ada jalur payslip ke email.
+- GAP-16 rekonsiliasi PPh21, GAP-17 gross-up, GAP-25 evaluasi training (field
+  `TrainingEnrollment.score` tetap menganggur), GAP-26 hierarki goal (tidak ada
+  `parentGoalId`), GAP-27 urutan e-signature (tidak ada field urutan/tenggat):
+  tidak berubah.
+
+### Yang menunggu keputusan
+
+Kesepuluh item beserta opsi, rekomendasi, dan ukuran implementasinya ada di
+`docs/open-hr-decisions.md`. Tidak ada satu pun yang tertahan pekerjaan teknis.
