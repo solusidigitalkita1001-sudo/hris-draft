@@ -55,6 +55,7 @@ synthetic companies in `afterAll`.
 | `employee-salary.mysql` | `PAYROLL_SALARY_DB_URL` | salary allocation mutations |
 | `employee-salary-read.mysql` | `PAYROLL_SALARY_DB_URL` | salary read access per scope |
 | `payroll-run-access.mysql` | `PAYROLL_ACCESS_DB_URL` | run/payslip access per data scope, maker-checker, tenant intersection |
+| `decision-notification.mysql` | `RUN_DB_INTEGRATION=1` | notifikasi keputusan approval: satu baris, ke requester, hanya saat keputusan final |
 
 ## In CI
 
@@ -64,6 +65,21 @@ every push and pull request, against a MySQL service database named
 satisfied. It applies the migration chain first, then runs the same selector
 used above with `--runInBand`. A failure blocks the merge — these suites drifted
 precisely because nothing ran them.
+
+## Notifikasi keputusan (29 September 2026)
+
+Builder notifikasinya punya unit test, tapi unit test tidak bisa menjawab
+pertanyaan yang baru muncul setelah keputusan commit: apakah barisnya benar-benar
+mendarat, mendarat ke **requester** dan bukan ke approver, apakah jumlahnya tepat
+satu, dan apakah ia ikut transaksi keputusan sehingga approval yang rollback
+tidak meninggalkan notifikasi yang mengaku sebaliknya.
+
+`decision-notification.mysql` menguji tiga hal terhadap database sungguhan:
+approval menulis satu baris untuk requester dengan `resource`/`action`/
+`referenceId` yang benar sementara approver tidak menerima apa pun (ia baru saja
+memutuskan, ia sudah tahu), penolakan membawa catatan approver, dan workflow dua
+tingkat **tidak** menulis apa pun setelah level pertama — requester baru diberi
+tahu ketika keputusannya final.
 
 ## What this pass found
 
