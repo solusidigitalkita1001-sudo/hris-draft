@@ -237,7 +237,7 @@ export class WorkCalendarService {
    * alone rather than silently overwritten, and a date inside a closed payroll
    * period is refused because it would rewrite pay that is already settled.
    */
-  async assignEmployeeShift(employeeId: string, input: AssignEmployeeShiftDTO, actorId: string) {
+  async assignEmployeeShift(employeeId: string, input: AssignEmployeeShiftDTO) {
     const companyId = getCurrentCompanyId();
     if (!companyId) throw new BadRequestError('Tidak ada konteks perusahaan aktif');
     await assertEmployeeInScope(employeeId, 'work-calendar');
@@ -296,7 +296,9 @@ export class WorkCalendarService {
       return rows;
     });
 
-    logger.info('Employee shift assigned', { employeeId, actorId, days: assigned.length });
+    logger.info('Employee shift assigned', {
+      employeeId, actorId: getRequestContext()?.user?.id ?? null, days: assigned.length,
+    });
     return { employeeId, days: assigned.length, dates: dates.map(toDateKey) };
   }
 

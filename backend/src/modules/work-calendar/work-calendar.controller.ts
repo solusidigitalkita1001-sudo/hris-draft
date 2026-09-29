@@ -315,7 +315,7 @@ export class WorkCalendarController {
   async assignEmployeeShift(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       res.status(201).json(Result.created(await workCalendarService.assignEmployeeShift(
-        req.params.employeeId as string, req.body, req.user!.id,
+        req.params.employeeId as string, req.body,
       )));
     } catch (error) { next(error); }
   }

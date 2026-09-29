@@ -57,7 +57,7 @@ describe('assignEmployeeShift', () => {
   });
 
   it('writes one HR_ASSIGNMENT row per day, which payroll accepts on its own terms', async () => {
-    const result = await workCalendarService.assignEmployeeShift(EMPLOYEE, workday as never, 'actor');
+    const result = await workCalendarService.assignEmployeeShift(EMPLOYEE, workday as never);
 
     expect(result).toEqual({ employeeId: EMPLOYEE, days: 3, dates: ['2026-10-01', '2026-10-02', '2026-10-03'] });
     expect(overrideUpsert).toHaveBeenCalledTimes(3);
@@ -69,7 +69,7 @@ describe('assignEmployeeShift', () => {
 
   it('marks an assigned day off as a non-working day', async () => {
     await workCalendarService.assignEmployeeShift(
-      EMPLOYEE, { startDate: '2026-10-01', endDate: '2026-10-01', isWorkingDay: false } as never, 'actor',
+      EMPLOYEE, { startDate: '2026-10-01', endDate: '2026-10-01', isWorkingDay: false } as never,
     );
     expect(overrideUpsert.mock.calls[0][0].create.overrideSchedule)
       .toMatchObject({ dayType: 'WE', isWorkingDay: false, workStart: null, workEnd: null });
@@ -77,7 +77,7 @@ describe('assignEmployeeShift', () => {
 
   it('flags a shift that crosses midnight', async () => {
     await workCalendarService.assignEmployeeShift(
-      EMPLOYEE, { startDate: '2026-10-01', endDate: '2026-10-01', isWorkingDay: true, workStart: '22:00', workEnd: '06:00' } as never, 'actor',
+      EMPLOYEE, { startDate: '2026-10-01', endDate: '2026-10-01', isWorkingDay: true, workStart: '22:00', workEnd: '06:00' } as never,
     );
     expect(overrideUpsert.mock.calls[0][0].create.overrideSchedule.crossesMidnight).toBe(true);
   });
@@ -85,13 +85,13 @@ describe('assignEmployeeShift', () => {
   it('refuses to overwrite an approved shift swap', async () => {
     overrideFindMany.mockResolvedValue([{ date: new Date('2026-10-02T00:00:00.000Z'), source: 'SHIFT_SWAP' }]);
 
-    await expect(workCalendarService.assignEmployeeShift(EMPLOYEE, workday as never, 'actor'))
+    await expect(workCalendarService.assignEmployeeShift(EMPLOYEE, workday as never))
       .rejects.toMatchObject({ statusCode: 409 });
     expect(overrideUpsert).not.toHaveBeenCalled();
   });
 
   it('checks the employee scope and the payroll period before writing', async () => {
-    await workCalendarService.assignEmployeeShift(EMPLOYEE, workday as never, 'actor');
+    await workCalendarService.assignEmployeeShift(EMPLOYEE, workday as never);
 
     expect(assertEmployeeInScope).toHaveBeenCalledWith(EMPLOYEE, 'work-calendar');
     // Rewriting the schedule inside a settled period would change paid time.
@@ -102,7 +102,7 @@ describe('assignEmployeeShift', () => {
 
   it('bounds the range so one call cannot rewrite a year', async () => {
     await expect(workCalendarService.assignEmployeeShift(
-      EMPLOYEE, { ...workday, endDate: '2027-10-01' } as never, 'actor',
+      EMPLOYEE, { ...workday, endDate: '2027-10-01' } as never,
     )).rejects.toThrow(BadRequestError);
     expect(overrideUpsert).not.toHaveBeenCalled();
   });
