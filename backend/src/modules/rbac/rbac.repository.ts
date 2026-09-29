@@ -1,6 +1,7 @@
 import prisma from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
 import { CreateRoleDTO, UpdateRoleDTO } from './rbac.dto';
+import { revokeSessionsForRole } from '@/shared/security/session-revocation';
 
 export class RoleRepository {
   async findAll(companyId?: string, groupId?: string) {
@@ -83,6 +84,10 @@ export class PermissionRepository {
         permissionId,
       })),
     });
+
+    // Everyone holding this role carries its old permission set in their access
+    // token, so the edit only reached them when that token expired.
+    await revokeSessionsForRole(roleId, 'role-permissions-changed');
   }
 
   async getRolePermissions(roleId: string) {

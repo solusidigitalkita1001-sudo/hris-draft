@@ -1,5 +1,6 @@
 import prisma from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
+import { revokeSessionsForUser } from '@/shared/security/session-revocation';
 
 export class UserRepository {
   async findAll(
@@ -176,8 +177,11 @@ export class UserRepository {
     });
   }
 
+  // Company scope lives in the access token, so a grant or revocation only
+  // reached the holder once that token expired. Retiring their session makes
+  // the change effective on their next request.
   async createCompanyAccess(data: Prisma.UserCompanyAccessUncheckedCreateInput) {
-    return prisma.userCompanyAccess.create({
+    const created = await prisma.userCompanyAccess.create({
       data,
       include: {
         company: {
@@ -188,10 +192,12 @@ export class UserRepository {
         },
       },
     });
+    await revokeSessionsForUser(created.userId, 'company-access-granted');
+    return created;
   }
 
   async updateCompanyAccess(id: string, data: Prisma.UserCompanyAccessUncheckedUpdateInput) {
-    return prisma.userCompanyAccess.update({
+    const updated = await prisma.userCompanyAccess.update({
       where: { id },
       data,
       include: {
@@ -203,10 +209,14 @@ export class UserRepository {
         },
       },
     });
+    await revokeSessionsForUser(updated.userId, 'company-access-updated');
+    return updated;
   }
 
   async deleteCompanyAccess(id: string) {
-    return prisma.userCompanyAccess.delete({ where: { id } });
+    const deleted = await prisma.userCompanyAccess.delete({ where: { id } });
+    await revokeSessionsForUser(deleted.userId, 'company-access-revoked');
+    return deleted;
   }
 }
 
