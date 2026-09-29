@@ -55,6 +55,7 @@ synthetic companies in `afterAll`.
 | `employee-salary.mysql` | `PAYROLL_SALARY_DB_URL` | salary allocation mutations |
 | `employee-salary-read.mysql` | `PAYROLL_SALARY_DB_URL` | salary read access per scope |
 | `payroll-run-access.mysql` | `PAYROLL_ACCESS_DB_URL` | run/payslip access per data scope, maker-checker, tenant intersection |
+| `reports.mysql` | `RUN_DB_INTEGRATION=1` | agregat headcount/attendance/leave/turnover: angkanya benar dan tidak menghitung baris tenant lain |
 
 ## In CI
 
@@ -64,6 +65,28 @@ every push and pull request, against a MySQL service database named
 satisfied. It applies the migration chain first, then runs the same selector
 used above with `--runInBand`. A failure blocks the merge — these suites drifted
 precisely because nothing ran them.
+
+## Modul report (29 September 2026)
+
+Modul `reports` sebelumnya **tidak punya satu pun test**, padahal query-nya
+agregat lintas tabel dan kesalahan di situ tidak berbunyi: satu angka muncul di
+layar manajemen dan dipercaya. Dua risiko yang paling relevan tidak bisa
+direproduksi dengan mock — apakah agregat menghitung baris tenant lain, dan
+apakah aritmetikanya cocok dengan baris yang benar-benar ada.
+
+`reports.mysql` membangun dua perusahaan dengan isi yang sengaja dibuat
+kembar-bentuk, lalu memeriksa tujuh hal: headcount hanya menghitung perusahaan
+aktif dan dikelompokkan seperti yang tampil di layar, filter departemen tidak
+bisa dipakai menembus tenant lain (meminta departemen milik tenant lain
+menghasilkan nol, bukan barisnya), hitungan kehadiran beserta `lateRate`
+turunannya, rentang tanggal di luar jendela dikecualikan, laporan cuti hanya
+menghitung yang APPROVED (pengajuan PENDING sengaja ada di fixture dan harus
+absen), turnover beserta rekap bulanan, dan dua tenant mendapat angkanya
+masing-masing dari query yang sama.
+
+Satu koreksi kecil pada ekspektasi awal saya: field-nya bernama `totalActive`,
+bukan `activeCount`, dan `turnover` juga mengembalikan `turnoverRate` serta
+`monthly` — test-nya kini mengikat semuanya, bukan hanya yang saya kira ada.
 
 ## What this pass found
 
