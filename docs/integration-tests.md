@@ -55,6 +55,7 @@ synthetic companies in `afterAll`.
 | `employee-salary.mysql` | `PAYROLL_SALARY_DB_URL` | salary allocation mutations |
 | `employee-salary-read.mysql` | `PAYROLL_SALARY_DB_URL` | salary read access per scope |
 | `payroll-run-access.mysql` | `PAYROLL_ACCESS_DB_URL` | run/payslip access per data scope, maker-checker, tenant intersection |
+| `leave-journey.mysql` | `RUN_DB_INTEGRATION=1` | pengajuan → approval → potongan saldo → pembatalan, termasuk lock baris saldo dan gerbang periode payroll |
 | `decision-notification.mysql` | `RUN_DB_INTEGRATION=1` | notifikasi keputusan approval: satu baris, ke requester, hanya saat keputusan final |
 
 ## In CI
@@ -66,6 +67,31 @@ satisfied. It applies the migration chain first, then runs the same selector
 used above with `--runInBand`. A failure blocks the merge — these suites drifted
 precisely because nothing ran them.
 
+## Journey cuti (29 September 2026)
+
+Sembilan suite pertama semuanya payroll atau EWA; alur cuti belum pernah diuji
+terhadap database sungguhan padahal di situ ada saldo yang dipotong. Suite
+`leave-journey.mysql` menutup itu dengan enam kasus: perhitungan hari kerja yang
+melewati akhir pekan dan hari libur nasional, penolakan pengajuan tanpa baris
+saldo (di titik pengajuan, bukan di meja approver), penolakan pengajuan yang
+melebihi saldo, potongan yang mendarat **tepat sekali** saat dua approval
+berlomba, pengembalian saldo saat pengajuan yang sudah disetujui dibatalkan, dan
+penolakan approval untuk tanggal di periode payroll yang sudah ditutup.
+
+Suite ini digerbangi `RUN_DB_INTEGRATION=1` dan memakai `DATABASE_URL` — sama
+seperti suite advisory-lock — sehingga ia memakai Prisma client aplikasi beserta
+tenant middleware-nya, dan ikut berjalan di job CI tanpa variabel baru.
+
+Dua jebakan yang ditemukan saat menulisnya, keduanya layak diingat:
+
+- Pengajuan cuti **selalu** membuka workflow instance dan menghapus kembali
+  request bila instance gagal dibuat, jadi company sintetis wajib punya template
+  `LEAVE_REQUEST` dengan approver yang bisa di-resolve. Tanpa itu setiap
+  pengajuan gagal dengan pesan yang terdengar seperti bug lain.
+- Promise Prisma bersifat **lazy**. `runInSystemContext('x', () => prisma.y.create(...))`
+  mengembalikan thenable yang belum dieksekusi, sehingga query-nya berjalan
+  setelah scope AsyncLocalStorage ditutup dan ditolak tenant middleware karena
+  tanpa konteks perusahaan. Callback-nya harus `async` dan menunggu di dalam.
 ## Notifikasi keputusan (29 September 2026)
 
 Builder notifikasinya punya unit test, tapi unit test tidak bisa menjawab
