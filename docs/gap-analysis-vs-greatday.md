@@ -425,3 +425,83 @@ Fase 5: Hardening & polish
 ---
 
 *Dokumen ini adalah hasil analisis statis dan perbandingan fitur publik. Disarankan validasi ulang setiap item dengan stakeholder bisnis sebelum implementasi — tidak semua gap relevan untuk semua segmen klien.*
+
+---
+
+## Re-verifikasi 29 September 2026 — 30 gap ditelusuri ulang ke kode
+
+Setiap gap di atas diperiksa lagi terhadap source saat ini, bukan diingat dari
+laporan sebelumnya. Kolom bukti menunjuk file yang membuat verdict-nya bisa
+diperiksa sendiri.
+
+| Gap | Verdict | Bukti / catatan |
+|---|---|---|
+| GAP-01 koreksi absensi | ✅ tertutup | `attendance-correction.{routes,service}.ts`; snapshot nilai sebelum koreksi, wajib alasan, template workflow `ATTENDANCE_CORRECTION`, dan ditolak bila periode payroll sudah CLOSED |
+| GAP-02 review absensi sebelum payroll | ✅ tertutup | `payroll.service.ts` menolak run dengan "Attendance harus dikonfirmasi sebelum payroll dihitung"; gerbangnya `confirmAttendanceReview` → `PayrollPeriod.attendanceReviewedAt` |
+| GAP-03 default policy level company | ✅ tertutup | `attendance-context.service.ts:188` — policy branch, lalu fallback ke baris `branchId: null` milik company |
+| GAP-04 shift per karyawan | 🟠 sebagian | `EmployeeShiftOverride` dibaca saat resolusi jadwal dan **ditulis** lewat upsert, tapi hanya sebagai akibat shift-swap yang disetujui (`work-calendar.repository.ts:1325`). Belum ada endpoint HR untuk menetapkan shift langsung ke karyawan pada rentang tanggal |
+| GAP-05 cuti pakai hari kerja | ✅ tertutup | `leave.repository.countLeaveDays` — hari kerja dikurangi `NationalHoliday`, dipakai saat submit dan validasi `maxDays` |
+| GAP-06 carry-over & expiry | 🟠 sebagian | Matematikanya ada dan dipakai (`shared/leave/accrual.ts` → `calculateOpeningBalance` di `leave.service.ts:525`), tapi tidak ada job tahunan yang memindahkan/menghanguskan saldo; `expiredAt` masih bergantung data yang sudah ada |
+| GAP-07 self-approval | ✅ tertutup | Dicegah di level engine (subject-level + separation of duties), bukan per modul |
+| GAP-08 cuti bersama | 🔴 terbuka | Tidak ada model/endpoint; `NationalHoliday` tidak memotong saldo |
+| GAP-09 leave encashment | 🔴 terbuka | Tidak ada model maupun alur |
+| GAP-10 lembur & absensi ke payslip | ✅ tertutup | Payslip menyimpan `workDays/presentDays/leaveDays/absentDays` dan lembur terpisah workday vs holiday (`overtimeWorkdayHours`/`overtimeHolidayHours`) |
+| GAP-11 potongan telat/absen | ✅ tertutup | `late_deduction_*` + `absence_deduction_daily_basic_percent` per company, komponen potongan dibuat otomatis saat run |
+| GAP-12 file transfer bank | ✅ tertutup | `payroll-payment.service.exportBatch` → `generateBankCsv` per `bankCode`, batch jadi `EXPORTED`, dan aksinya masuk audit `MANUAL_BANK_FILE_EXPORTED` |
+| GAP-13 distribusi payslip otomatis | 🔴 terbuka | Tidak ada trigger email saat payslip terbit. Yang ada: self-service terlindungi PIN/reauth — karyawan tetap harus menarik sendiri |
+| GAP-14 correction run / susulan | 🟠 sebagian | Run salah bisa di-VOID sehingga periode bisa dihitung ulang penuh, tapi tidak ada run tambahan untuk karyawan yang terlewat saja |
+| GAP-15 maker-checker payroll | ✅ tertutup | `payroll:disburse` permission tersendiri, approver ≠ pembuat, dan transisi status terjaga |
+| GAP-16 rekonsiliasi PPh21 tahunan | 🔴 terbuka | Perhitungan bulanan sesuai regulasi; tidak ada penyesuaian Desember |
+| GAP-17 gross-up | 🔴 terbuka | Tidak ada |
+| GAP-18 mutasi karyawan | ✅ tertutup | `EmployeeCareerTransaction` + template `CAREER_MOVEMENT`; future-dated diterapkan scheduler, snapshot asal diambil dalam advisory lock |
+| GAP-19 monitoring kontrak PKWT | 🔴 terbuka | `contractEndDate` ada, tidak ada reminder atau alur perpanjangan |
+| GAP-20 monitoring probasi | 🔴 terbuka | `probationEndDate` ada, tidak ada review atau reminder |
+| GAP-21 revisi gaji formal | 🟠 sebagian | Transaksi karier bisa membawa `toBaseSalary` dengan effective date dan lewat approval, lalu membuat `EmployeeSalary` baru; belum ada alur proposal revisi gaji tersendiri |
+| GAP-22 MPP / headcount requisition | 🔴 terbuka | Tidak ada model; `JobPosting` masih bisa dibuat tanpa requisition |
+| GAP-23 konsistensi workflow engine | ✅ tertutup | Sembilan domain lewat engine (leave, loan, business-trip, expense-claim, shift-swap, overtime, career-movement, permission-request, attendance-correction), semuanya template-gated dengan fallback direct-approve |
+| GAP-24 company settings dipakai | ✅ tertutup | Workweek, potongan telat/absen, cuti unpaid, benefit deduction, batas cicilan pinjaman, dan retensi semuanya dibaca dari `CompanySetting` |
+| GAP-25 evaluasi pasca-training | 🔴 terbuka | Hanya `TrainingAttendance` |
+| GAP-26 cascade goal | 🔴 terbuka (premis berubah) | Klaim lama menyebut `parentGoalId` sudah ada di model `Goal` — sekarang **tidak ada** field itu di schema, jadi hierarki goal perlu dimodelkan dulu sebelum bicara cascade |
+| GAP-27 urutan e-signature | 🔴 terbuka | `DocumentSignature` tanpa urutan/deadline per signer |
+| GAP-28 pemetaan event → notifikasi | 🟠 sebagian | Yang menulis notifikasi: SLA sweep workflow, modul performance, rate-limit face match, serta login/ganti password di worker. Leave approved/rejected, payslip published, lembur disetujui, kontrak/probasi hampir habis **tidak** menghasilkan notifikasi (`worker.ts:20` hanya menangani dua event) |
+| GAP-29 modul report | ✅ tertutup | Enam endpoint (`summary`, `headcount`, `attendance`, `leave`, `payroll`, `turnover`) dengan repository dan agregat nyata; report payroll ikut ter-audit |
+| GAP-30 portal self-service | ✅ tertutup | `SelfServicePage.tsx` ~1.380 baris: cuti, izin, lembur, koreksi absensi, jadwal/shift, saldo, profil, dan slip gaji terlindungi PIN |
+
+**Skor:** 16 tertutup, 5 sebagian, 9 terbuka — dari kondisi awal dokumen ini
+yang mencatat 3 blocker, 16 major, 11 minor.
+
+### Yang tersisa, dipisah menurut siapa yang memutuskan
+
+**Bisa langsung dikerjakan (tidak butuh keputusan produk):**
+
+- GAP-28 pemetaan event → notifikasi. Ini yang paling terasa: HR dan karyawan
+  tidak diberi tahu apa pun saat cuti disetujui atau slip terbit, padahal
+  infrastruktur notifikasi, inbox, dan push sudah jalan. Pekerjaannya
+  memetakan event domain yang sudah dipublikasikan ke notifikasi.
+- GAP-06 job tahunan carry-over/expiry. Matematikanya sudah ada dan teruji;
+  yang kurang satu scheduler seperti pola `career-transaction.scheduler.ts`.
+- GAP-19 dan GAP-20 reminder kontrak & probasi. Datanya ada, polanya sama
+  dengan sweep yang sudah berjalan tiap jam.
+- GAP-04 endpoint penetapan shift per karyawan. Modelnya sudah ditulis dan
+  dibaca oleh resolver jadwal; tinggal jalur HR-nya.
+
+**Butuh keputusan kamu dulu:**
+
+- GAP-08 cuti bersama dan GAP-09 encashment — keduanya memotong atau menukar
+  saldo cuti, jadi kebijakannya harus ditetapkan sebelum dikodekan.
+- GAP-13 distribusi payslip lewat email — mengirim slip gaji ke luar sistem
+  adalah keputusan privasi, bukan teknis. Kontras dengan desain sekarang yang
+  justru memperketat akses slip dengan PIN.
+- GAP-14 payroll susulan, GAP-16 rekonsiliasi PPh21 tahunan, GAP-17 gross-up,
+  GAP-21 alur proposal revisi gaji, GAP-22 MPP, GAP-25 evaluasi training,
+  GAP-26 hierarki & cascade goal, GAP-27 urutan e-signature — semuanya alur
+  bisnis baru yang bentuknya bergantung kebijakan HR kamu.
+
+### Catatan metode
+
+Angka-angka di atas datang dari membaca kode, bukan dari ringkasan lama. Dua
+klaim lama terbukti tidak akurat saat diperiksa: `parentGoalId` (GAP-26) tidak
+ada di schema, dan `EmployeeShiftOverride` (GAP-04) ternyata sudah ditulis oleh
+alur shift-swap — jadi keduanya bukan sekadar "model ada, service belum".
+Referensi GreatDay HR tetap dari materi publik sebagai tolok ukur fitur, bukan
+hasil membongkar produknya.
