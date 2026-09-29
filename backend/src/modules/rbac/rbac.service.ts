@@ -1,5 +1,6 @@
 import { roleRepository, permissionRepository } from './rbac.repository';
 import { eventBus } from '@/shared/events/EventBus';
+import { revokeSessionsForUser } from '@/shared/security/session-revocation';
 import { DomainEvents } from '@/shared/events/events';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 import {
@@ -331,6 +332,11 @@ export class RoleService {
         scopeType: dto.scopeType as any,
       })),
     });
+
+    // The target's access token still carries the roles they just lost, and
+    // permissions are read from that token; retire it so the next request
+    // refreshes into the authority they now have.
+    await revokeSessionsForUser(userId, 'user-roles-assigned');
 
     await eventBus.publish({
       name: DomainEvents.ROLE_ASSIGNED,
