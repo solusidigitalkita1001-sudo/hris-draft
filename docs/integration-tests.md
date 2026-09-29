@@ -57,6 +57,7 @@ synthetic companies in `afterAll`.
 | `payroll-run-access.mysql` | `PAYROLL_ACCESS_DB_URL` | run/payslip access per data scope, maker-checker, tenant intersection |
 | `leave-journey.mysql` | `RUN_DB_INTEGRATION=1` | pengajuan → approval → potongan saldo → pembatalan, termasuk lock baris saldo dan gerbang periode payroll |
 | `reports.mysql` | `RUN_DB_INTEGRATION=1` | agregat headcount/attendance/leave/turnover: angkanya benar dan tidak menghitung baris tenant lain |
+| `decision-notification.mysql` | `RUN_DB_INTEGRATION=1` | notifikasi keputusan approval: satu baris, ke requester, hanya saat keputusan final |
 
 ## In CI
 
@@ -113,6 +114,20 @@ masing-masing dari query yang sama.
 Satu koreksi kecil pada ekspektasi awal saya: field-nya bernama `totalActive`,
 bukan `activeCount`, dan `turnover` juga mengembalikan `turnoverRate` serta
 `monthly` — test-nya kini mengikat semuanya, bukan hanya yang saya kira ada.
+## Notifikasi keputusan (29 September 2026)
+
+Builder notifikasinya punya unit test, tapi unit test tidak bisa menjawab
+pertanyaan yang baru muncul setelah keputusan commit: apakah barisnya benar-benar
+mendarat, mendarat ke **requester** dan bukan ke approver, apakah jumlahnya tepat
+satu, dan apakah ia ikut transaksi keputusan sehingga approval yang rollback
+tidak meninggalkan notifikasi yang mengaku sebaliknya.
+
+`decision-notification.mysql` menguji tiga hal terhadap database sungguhan:
+approval menulis satu baris untuk requester dengan `resource`/`action`/
+`referenceId` yang benar sementara approver tidak menerima apa pun (ia baru saja
+memutuskan, ia sudah tahu), penolakan membawa catatan approver, dan workflow dua
+tingkat **tidak** menulis apa pun setelah level pertama — requester baru diberi
+tahu ketika keputusannya final.
 
 ## What this pass found
 
