@@ -318,6 +318,23 @@ function evaluateGpsAttendance(options: {
   };
 }
 
+/** Recorded on a punch whose method nothing verified. */
+export const FINGERPRINT_NOT_ATTESTED = 'method:FINGERPRINT_NOT_DEVICE_ATTESTED';
+
+/**
+ * FINGERPRINT is a policy and capture value, but nothing attests it: there is no
+ * device integration, no device credential and no punch import, so the method is
+ * whatever the caller claims. Face recognition is matched server-side and GPS is
+ * geofenced with mock-location detection, so without this marker a reviewer
+ * reading a fingerprint punch would assume a verification that never happened.
+ *
+ * The punch is still accepted — a fingerprint-only branch has no other way to
+ * clock in until devices are integrated — but the record says what it is.
+ */
+export function methodAttestationWarnings(method: AttendanceCaptureMethod | string | null | undefined): string[] {
+  return method === AttendanceCaptureMethod.FINGERPRINT ? [FINGERPRINT_NOT_ATTESTED] : [];
+}
+
 export class AttendanceService {
   private buildPolicySnapshot(
     context: Awaited<ReturnType<typeof attendanceContextService.resolve>>,
@@ -677,6 +694,7 @@ export class AttendanceService {
       ...(gpsEvaluation.exceptionType ? [gpsEvaluation.exceptionType] : []),
       ...gpsCompliance.warnings,
       ...(livenessAssess && livenessAssess.verdict !== LivenessVerdict.PASS ? [`liveness:${livenessAssess.verdict}`] : []),
+      ...methodAttestationWarnings(data.method),
     ];
 
     const snapshot = this.buildPolicySnapshot(context, allowedMethods, mergedWarnings) as unknown as Record<string, unknown>;
