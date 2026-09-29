@@ -9,16 +9,9 @@ export const LEAVE_YEARLY_ACCRUAL_JOB = 'leave:yearly-accrual';
  * Jalankan carry-over & accrual tahunan untuk semua karyawan aktif.
  * Dipanggil oleh worker saat job `leave:yearly-accrual` diproses.
  */
-export async function runYearlyLeaveAccrual(year: number): Promise<{ processed: number; failed: number }> {
+export async function runYearlyLeaveAccrual(year: number): Promise<{ processed: number; failed: number; expired: number }> {
   logger.info('Leave yearly accrual started', { year });
   const prevYear = year - 1;
-
-  // Expire saldo tahun lalu (carry-over sudah dihitung saat create balance tahun ini)
-  const expiredCount = await prisma.leaveBalance.updateMany({
-    where: { year: prevYear, remainingDays: { gt: 0 }, expiredAt: null },
-    data: { expiredAt: new Date(), remainingDays: 0 },
-  });
-  logger.info('Previous year leave balances expired', { year: prevYear, count: expiredCount.count });
 
   // Ambil semua karyawan aktif beserta company mereka
   const employees = await prisma.employee.findMany({
@@ -54,8 +47,21 @@ export async function runYearlyLeaveAccrual(year: number): Promise<{ processed: 
     }
   }
 
+  // Expire saldo tahun lalu SETELAH accrual, bukan sebelumnya.
+  //
+  // Carry-over membaca `remainingDays` tahun lalu lewat `findAccrualInputs`.
+  // Ketika expire berjalan lebih dulu, field itu sudah di-nol-kan sehingga
+  // `previousRemaining` selalu 0 dan carry-over tidak pernah membawa apa pun —
+  // fitur yang justru menjadi alasan job ini ada. Urutan ini yang membuatnya
+  // benar-benar berpindah.
+  const expiredCount = await prisma.leaveBalance.updateMany({
+    where: { year: prevYear, remainingDays: { gt: 0 }, expiredAt: null },
+    data: { expiredAt: new Date(), remainingDays: 0 },
+  });
+  logger.info('Previous year leave balances expired', { year: prevYear, count: expiredCount.count });
+
   logger.info('Leave yearly accrual finished', { year, processed, failed });
-  return { processed, failed };
+  return { processed, failed, expired: expiredCount.count };
 }
 
 /**
