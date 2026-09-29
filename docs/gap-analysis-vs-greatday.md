@@ -583,3 +583,101 @@ Hasilnya kedelapan tetap terbuka, dan satu temuan baru:
 
 Kesepuluh item beserta opsi, rekomendasi, dan ukuran implementasinya ada di
 `docs/open-hr-decisions.md`. Tidak ada satu pun yang tertahan pekerjaan teknis.
+
+---
+
+## Gap baru di luar daftar 30 — 29 September 2026
+
+Pemeriksaan sebelumnya memverifikasi ulang 30 gap yang sudah tercatat.
+Pertanyaan berikutnya berbeda: **apakah ada area fitur GreatDay yang belum pernah
+masuk daftar sama sekali?** Enam area diperiksa dari schema, enum, dan daftar
+endpoint. Hasilnya lima gap baru, dan satu di antaranya bukan sekadar fitur yang
+belum ada.
+
+### 🔴 GAP-31 — Metode absensi FINGERPRINT dipercaya dari klien
+
+Ini yang paling perlu perhatian, karena bentuknya bukan "fitur belum ada"
+melainkan asimetri kepercayaan yang menyesatkan.
+
+`AttendancePolicyMethod` dan `AttendanceCaptureMethod` keduanya punya nilai
+`FINGERPRINT`, dan DTO check-in menerima `method: 'FINGERPRINT'` apa adanya
+(`attendance.dto.ts`). Tidak ada integrasi perangkat, tidak ada kredensial
+mesin, tidak ada endpoint impor punch. Artinya satu-satunya cara punch
+"fingerprint" masuk adalah **klien menyatakannya sendiri** lewat API biasa.
+
+Bandingkan dengan dua metode lain pada kebijakan yang sama:
+
+| Metode | Yang memverifikasi |
+|---|---|
+| `FACE_RECOGNITION` | server: decode gambar, deteksi satu wajah, ekstrak descriptor, cocokkan di server; vector/verdict dari klien ditolak |
+| `MOBILE_GPS` | server: geofence per cabang + deteksi mock location (`CONFIRMED_FAKE` ditolak) |
+| `FINGERPRINT` | **tidak ada** — nilai enum yang dikirim klien |
+
+Konsekuensinya praktis: cabang yang menyetel kebijakan fingerprint-only karena
+menganggapnya paling ketat justru mendapat jalur paling lemah — dan seed demo
+ikut menarasikan "Head office menggunakan fingerprint only untuk seluruh
+karyawan onsite", sehingga kondisi ini tampak seperti fitur yang berjalan.
+
+Dua jalan keluar sesungguhnya, keduanya keputusan:
+1. integrasi perangkat sungguhan (mesin mem-posting punch dengan kredensial
+   perangkat, atau impor berkala dari mesin), atau
+2. hapus `FINGERPRINT` dari kebijakan dan DTO sampai ada integrasinya, supaya
+   tidak ada yang mengandalkan jaminan yang tidak ada.
+
+**Kenapa keduanya keputusan, bukan perbaikan teknis:** pada data yang berjalan,
+Head Office Jakarta memakai kebijakan fingerprint-only dengan **24 karyawan**.
+Menolak metode itu dari aplikasi akan membuat ke-24 orang tersebut tidak bisa
+absen sama sekali — memperbaiki kejujuran data dengan mematikan hal yang mereka
+pakai setiap hari. Jalan pintas "tolak saja" karena itu sengaja tidak diambil.
+
+**Yang sudah dikerjakan sementara menunggu keputusan:** punch tetap diterima,
+tetapi catatannya kini menyatakan apa adanya. Setiap absensi bermetode
+`FINGERPRINT` menyimpan penanda `method:FINGERPRINT_NOT_DEVICE_ATTESTED` di
+`policy_snapshot.warnings`, sehingga peninjau tidak lagi menyimpulkan ada
+perangkat yang mengonfirmasi. Diverifikasi ujung-ke-ujung terhadap stack
+berjalan: check-in fingerprint menjawab 201 dan baris tersimpan memuat penanda
+itu bersama peringatan lain yang sudah ada.
+
+### 🟠 GAP-32 — Tidak ada bukti potong PPh21 tahunan (1721-A1)
+
+Perhitungan PPh21 bulanan sudah sesuai regulasi dan slip gaji tersedia sebagai
+PDF, tetapi tidak ada bukti potong tahunan (1721-A1) yang wajib diterima
+karyawan. Tidak ada model, endpoint, maupun template untuk itu.
+
+### 🟠 GAP-33 — Tidak ada ekspor pelaporan BPJS / e-Bupot
+
+Tabel referensi BPJS dipakai untuk menghitung iuran, tetapi tidak ada ekspor
+laporan bulanan BPJS maupun berkas e-Bupot/SPT. Yang ada hanya ekspor berkas
+transfer bank (GAP-12).
+
+### 🟡 GAP-34 — Payroll mono-mata-uang secara desain
+
+`payroll.dto.ts` mengunci `currency: z.literal('IDR')`, dan jalur formula
+menolak alokasi non-IDR secara eksplisit. Ini pilihan yang sah untuk payroll
+lokal dan lebih baik daripada mendukungnya setengah jalan — tetapi perusahaan
+dengan karyawan ekspatriat atau kontrak mata uang asing tidak bisa dilayani, dan
+itu belum pernah dicatat sebagai batasan.
+
+### 🟡 GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek
+
+`DailyActivity` mencatat aktivitas harian dengan bukti GPS dan foto, tetapi tidak
+ada timesheet per proyek/klien dengan jam billable dan approval — yang dipakai
+perusahaan jasa untuk menagih. Tidak ada model proyek sama sekali.
+
+### 🟡 GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank
+
+GAP-12 ditutup dengan ekspor CSV per bank yang bisa diunggah ke internet
+banking. Pencairan langsung lewat API bank/payment gateway (beserta rekonsiliasi
+status transaksi otomatis) belum ada. Ledger pembayaran dan status transaksinya
+sudah siap menampung itu bila kelak diputuskan.
+
+### Yang diperiksa dan ternyata sudah ada
+
+Supaya daftar ini tidak terbaca lebih kosong dari kenyataannya: succession
+planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
+fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
+jadi tidak dihitung sebagai gap baru.
+
+**Total setelah pemeriksaan ini: 36 gap tercatat** — 19 tertutup, 3 sebagian,
+14 terbuka (8 lama + 6 baru). Yang paling mendesak dari yang baru adalah GAP-31,
+karena satu-satunya yang menjanjikan keamanan yang tidak dimilikinya.
