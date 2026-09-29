@@ -618,11 +618,25 @@ menganggapnya paling ketat justru mendapat jalur paling lemah — dan seed demo
 ikut menarasikan "Head office menggunakan fingerprint only untuk seluruh
 karyawan onsite", sehingga kondisi ini tampak seperti fitur yang berjalan.
 
-Dua jalan keluar, keduanya keputusan:
+Dua jalan keluar sesungguhnya, keduanya keputusan:
 1. integrasi perangkat sungguhan (mesin mem-posting punch dengan kredensial
    perangkat, atau impor berkala dari mesin), atau
 2. hapus `FINGERPRINT` dari kebijakan dan DTO sampai ada integrasinya, supaya
    tidak ada yang mengandalkan jaminan yang tidak ada.
+
+**Kenapa keduanya keputusan, bukan perbaikan teknis:** pada data yang berjalan,
+Head Office Jakarta memakai kebijakan fingerprint-only dengan **24 karyawan**.
+Menolak metode itu dari aplikasi akan membuat ke-24 orang tersebut tidak bisa
+absen sama sekali — memperbaiki kejujuran data dengan mematikan hal yang mereka
+pakai setiap hari. Jalan pintas "tolak saja" karena itu sengaja tidak diambil.
+
+**Yang sudah dikerjakan sementara menunggu keputusan:** punch tetap diterima,
+tetapi catatannya kini menyatakan apa adanya. Setiap absensi bermetode
+`FINGERPRINT` menyimpan penanda `method:FINGERPRINT_NOT_DEVICE_ATTESTED` di
+`policy_snapshot.warnings`, sehingga peninjau tidak lagi menyimpulkan ada
+perangkat yang mengonfirmasi. Diverifikasi ujung-ke-ujung terhadap stack
+berjalan: check-in fingerprint menjawab 201 dan baris tersimpan memuat penanda
+itu bersama peringatan lain yang sudah ada.
 
 ### 🟠 GAP-32 — Tidak ada bukti potong PPh21 tahunan (1721-A1)
 
