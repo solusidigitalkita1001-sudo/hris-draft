@@ -61,3 +61,42 @@ Nothing can recover those values; they have to be re-created:
 - Push tokens: no action needed. Delivery marks an undecryptable token
   inactive and the app registers a fresh one on next launch.
 - Payroll unlock sessions: none needed. They are short-lived by design.
+
+## Status produksi — 29 September 2026
+
+**Deploy production sedang tertahan di langkah ini.** `main` berisi seluruh
+pekerjaan sampai `3b5a0b3`, tetapi server masih menjalankan commit `4390019`
+(sebelum PR #6) karena setiap deploy berhenti dengan:
+
+```
+[FATAL] Invalid environment configuration:
+  - ENCRYPTION_KEY: placeholder/dev value is not allowed in production
+```
+
+Auto-rollback bekerja setiap kali, jadi production tetap sehat — hanya tidak
+mendapat kode baru. Lima kali deploy gagal dengan sebab yang sama (run 36447545390,
+36471907328, 36472003912, 36586544275, 36587188692, 36588002485).
+
+Yang membuka blokirnya, dijalankan sekali di server sebagai satu blok:
+
+```bash
+cd /root/projects/dev/hris-draft/backend
+cp -p .env ".env.bak.$(date +%F-%H%M%S)"
+OLD=$(grep '^ENCRYPTION_KEY=' .env | cut -d= -f2-)
+NEW=$(openssl rand -base64 48 | tr -d '\n')
+if grep -q '^ENCRYPTION_KEY_PREVIOUS=' .env; then
+  sed -i "s|^ENCRYPTION_KEY_PREVIOUS=.*|ENCRYPTION_KEY_PREVIOUS=${OLD}|" .env
+else
+  printf 'ENCRYPTION_KEY_PREVIOUS=%s\n' "${OLD}" >> .env
+fi
+sed -i "s|^ENCRYPTION_KEY=.*|ENCRYPTION_KEY=${NEW}|" .env
+grep -E '^ENCRYPTION_KEY(_PREVIOUS)?=' .env | sed 's/=.\{0,6\}.*/=<set>/'
+```
+
+Kunci baru dibuat di server sehingga tidak pernah melewati chat atau repo,
+`.env` lama dicadangkan, dan blok ini aman diulang. Setelah itu jalankan
+`gh workflow run "🚀 Deploy HRIS"` lalu verifikasi sesuai langkah 4 di atas.
+
+Jangan melonggarkan guard placeholder agar deploy hijau: guard itulah yang
+menahan kunci contoh dari repo dipakai mengenkripsi TOTP dan push token
+produksi.
