@@ -60,10 +60,20 @@ export function resolvePayrollWorkingDates(employee: ScheduleEmployee, dates: Da
     let working: boolean;
     if (override) {
       const request = override.shiftSwapRequest, payload = override.overrideSchedule;
-      if (override.source !== 'SHIFT_SWAP' || !request || request.companyId !== employee.companyId || request.status !== 'APPROVED'
-        || request.deletedAt || payrollDateKey(request.shiftDate) !== key
-        || ![request.requesterEmployeeId, request.targetEmployeeId].includes(employee.id)
-        || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new BadRequestError(`Invalid approved shift override for employee ${employee.id} on ${key}`);
+      }
+      // Two ways a day can be overridden. A swap must point at an APPROVED
+      // request for this employee and date; an HR assignment carries no request
+      // and needs none, since company and employee were already matched when
+      // the overrides were indexed above. Any other source is rejected.
+      if (override.source === 'SHIFT_SWAP') {
+        if (!request || request.companyId !== employee.companyId || request.status !== 'APPROVED'
+          || request.deletedAt || payrollDateKey(request.shiftDate) !== key
+          || ![request.requesterEmployeeId, request.targetEmployeeId].includes(employee.id)) {
+          throw new BadRequestError(`Invalid approved shift override for employee ${employee.id} on ${key}`);
+        }
+      } else if (override.source !== 'HR_ASSIGNMENT') {
         throw new BadRequestError(`Invalid approved shift override for employee ${employee.id} on ${key}`);
       }
       working = workingType(payload.dayType);
