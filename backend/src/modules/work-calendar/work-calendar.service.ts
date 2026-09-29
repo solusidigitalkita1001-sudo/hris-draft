@@ -1,14 +1,34 @@
 import { workCalendarRepository } from './work-calendar.repository';
-import { CreateShiftSwapRequestDTO } from './work-calendar.dto';
+import { AssignEmployeeShiftDTO, CreateShiftSwapRequestDTO, EmployeeShiftRangeQueryDTO } from './work-calendar.dto';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
-import { NotFoundError, BadRequestError } from '@/shared/exceptions/AppError';
+import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
+import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
+import { assertPayrollRangeOpen } from '@/shared/payroll/payroll-period-guard';
 import prisma from '@/shared/database/prisma';
 import { logger } from '@/shared/logger/WinstonLogger';
 import type { ResolvedWorkCalendarMonthDay } from './work-calendar.repository';
 
 type WorkflowSource = 'WORKFLOW' | 'LEGACY';
+
+/** Inclusive UTC date-only range; the caller bounds its length. */
+export function enumerateDateRange(startDate: string, endDate: string): Date[] {
+  const start = new Date(`${startDate}T00:00:00.000Z`), end = new Date(`${endDate}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) throw new BadRequestError('Tanggal tidak valid');
+  if (end < start) throw new BadRequestError('endDate tidak boleh sebelum startDate');
+  const dates: Date[] = [];
+  for (let cursor = start; cursor <= end; cursor = new Date(cursor.getTime() + 86_400_000)) dates.push(cursor);
+  return dates;
+}
+
+function toDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/** A quarter is long enough for a roster and short enough to stay reviewable. */
+const MAX_SHIFT_ASSIGNMENT_DAYS = 92;
+
 
 export function selectNextScheduledShift(
   days: ResolvedWorkCalendarMonthDay[],
@@ -205,6 +225,113 @@ export class WorkCalendarService {
 
     const finalRequest = await workCalendarRepository.findShiftSwapRequestById(requestId);
     return { shiftSwapRequest: finalRequest, workflowInstance: updatedInstance };
+  }
+
+  /**
+   * HR assigns a shift to one employee across a date range. Until now the only
+   * writer of EmployeeShiftOverride was an approved shift swap, so a roster
+   * change had to be staged as a swap between two people.
+   *
+   * The assignment is the same override row with source HR_ASSIGNMENT, which
+   * payroll accepts on its own terms; an approved swap on the same date is left
+   * alone rather than silently overwritten, and a date inside a closed payroll
+   * period is refused because it would rewrite pay that is already settled.
+   */
+  async assignEmployeeShift(employeeId: string, input: AssignEmployeeShiftDTO) {
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new BadRequestError('Tidak ada konteks perusahaan aktif');
+    await assertEmployeeInScope(employeeId, 'work-calendar');
+
+    const dates = enumerateDateRange(input.startDate, input.endDate);
+    if (dates.length > MAX_SHIFT_ASSIGNMENT_DAYS) {
+      throw new BadRequestError(`Rentang penugasan shift maksimal ${MAX_SHIFT_ASSIGNMENT_DAYS} hari`);
+    }
+    await assertPayrollRangeOpen(companyId, dates[0], dates[dates.length - 1]);
+
+    const existing = await prisma.employeeShiftOverride.findMany({
+      where: { companyId, employeeId, deletedAt: null, date: { in: dates } },
+      select: { date: true, source: true },
+    });
+    const swapped = existing.filter((row) => row.source === 'SHIFT_SWAP');
+    if (swapped.length) {
+      throw new ConflictError(
+        `Tanggal berikut sudah memakai tukar shift yang disetujui: ${swapped.map((row) => toDateKey(row.date)).join(', ')}`,
+      );
+    }
+
+    const assigned = await prisma.$transaction(async (tx) => {
+      const rows = [];
+      for (const date of dates) {
+        const original = await workCalendarRepository.findEmployeeDaySchedule(employeeId, date);
+        const overrideSchedule = {
+          calendarId: original?.calendarId ?? null,
+          dayType: input.isWorkingDay ? 'WD' : 'WE',
+          workStart: input.workStart ?? null,
+          workEnd: input.workEnd ?? null,
+          isWorkingDay: input.isWorkingDay,
+          scheduleSource: 'CALENDAR',
+          shiftFormulaId: null,
+          shiftFormulaName: null,
+          shiftFormulaCode: null,
+          crossesMidnight: Boolean(input.workStart && input.workEnd && input.workEnd < input.workStart),
+          label: input.label ?? (input.isWorkingDay ? 'Penugasan Shift' : 'Libur Ditugaskan'),
+          notes: input.notes ?? null,
+        };
+        rows.push(await tx.employeeShiftOverride.upsert({
+          where: { employeeId_date: { employeeId, date } },
+          update: {
+            companyId, source: 'HR_ASSIGNMENT', shiftSwapRequestId: null,
+            originalSchedule: (original ?? {}) as never,
+            overrideSchedule: overrideSchedule as never,
+            notes: input.notes ?? null, deletedAt: null,
+          },
+          create: {
+            companyId, employeeId, date, source: 'HR_ASSIGNMENT',
+            originalSchedule: (original ?? {}) as never,
+            overrideSchedule: overrideSchedule as never,
+            notes: input.notes ?? null,
+          },
+        }));
+      }
+      return rows;
+    });
+
+    logger.info('Employee shift assigned', {
+      employeeId, actorId: getRequestContext()?.user?.id ?? null, days: assigned.length,
+    });
+    return { employeeId, days: assigned.length, dates: dates.map(toDateKey) };
+  }
+
+  /** Only HR assignments are withdrawn; an approved swap is not HR's to undo here. */
+  async clearEmployeeShiftAssignment(employeeId: string, range: EmployeeShiftRangeQueryDTO) {
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new BadRequestError('Tidak ada konteks perusahaan aktif');
+    await assertEmployeeInScope(employeeId, 'work-calendar');
+
+    const dates = enumerateDateRange(range.startDate, range.endDate);
+    if (dates.length > MAX_SHIFT_ASSIGNMENT_DAYS) {
+      throw new BadRequestError(`Rentang penugasan shift maksimal ${MAX_SHIFT_ASSIGNMENT_DAYS} hari`);
+    }
+    await assertPayrollRangeOpen(companyId, dates[0], dates[dates.length - 1]);
+
+    const { count } = await prisma.employeeShiftOverride.updateMany({
+      where: { companyId, employeeId, source: 'HR_ASSIGNMENT', deletedAt: null, date: { in: dates } },
+      data: { deletedAt: new Date() },
+    });
+    return { employeeId, cleared: count };
+  }
+
+  async listEmployeeShiftAssignments(employeeId: string, range: EmployeeShiftRangeQueryDTO) {
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new BadRequestError('Tidak ada konteks perusahaan aktif');
+    await assertEmployeeInScope(employeeId, 'work-calendar');
+
+    const dates = enumerateDateRange(range.startDate, range.endDate);
+    return prisma.employeeShiftOverride.findMany({
+      where: { companyId, employeeId, deletedAt: null, date: { in: dates } },
+      orderBy: { date: 'asc' },
+      select: { id: true, date: true, source: true, overrideSchedule: true, notes: true, shiftSwapRequestId: true },
+    });
   }
 
   async approveShiftSwap(

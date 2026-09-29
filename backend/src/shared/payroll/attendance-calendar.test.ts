@@ -55,6 +55,28 @@ describe('payroll calendar and leave date arithmetic', () => {
     { shiftSwapRequest: null }, { source: 'UNKNOWN' }, { overrideSchedule: { dayType: 'WD', isWorkingDay: false } },
     { overrideSchedule: { dayType: 'UNKNOWN', isWorkingDay: true } },
   ])('rejects invalid override metadata %j', changes => expect(() => resolve({ overrides: [swap(changes)] })).toThrow());
+  it('accepts an HR assignment, which stands without a swap request', () => {
+    // HR rostering writes the same row with no request attached; requiring one
+    // would make every assigned day fail the payroll run.
+    const assignment = swap({ source: 'HR_ASSIGNMENT', shiftSwapRequest: null });
+    expect(resolve({ overrides: [assignment] })).toContain('2026-10-03');
+    const dayOff = swap({ source: 'HR_ASSIGNMENT', shiftSwapRequest: null, overrideSchedule: { dayType: 'WE', isWorkingDay: false } });
+    expect(resolve({ overrides: [dayOff] })).not.toContain('2026-10-03');
+  });
+  it('still rejects an HR assignment whose working-day flag contradicts its day type', () => {
+    expect(() => resolve({ overrides: [swap({
+      source: 'HR_ASSIGNMENT', shiftSwapRequest: null, overrideSchedule: { dayType: 'WD', isWorkingDay: false },
+    })] })).toThrow();
+  });
+  it.each([
+    ['another company', { companyId: 'B' }],
+    ['another employee', { employeeId: 'other' }],
+  ])('ignores an HR assignment belonging to %s rather than applying it', (_label, changes) => {
+    // Foreign rows are dropped when the overrides are indexed, so they never
+    // reach the per-day check — same as an approved swap from another tenant.
+    expect(resolve({ overrides: [swap({ source: 'HR_ASSIGNMENT', shiftSwapRequest: null, ...changes })] }))
+      .not.toContain('2026-10-03');
+  });
   it('counts each scheduled date once despite overlapping leave, presence on leave, duplicate attendance, or attendance on a rest day', () => {
     const result = countPayrollAttendance(new Set(resolve()), [
       { date: new Date('2026-10-01'), status: 'PRESENT' }, { date: new Date('2026-10-01'), status: 'LATE' },

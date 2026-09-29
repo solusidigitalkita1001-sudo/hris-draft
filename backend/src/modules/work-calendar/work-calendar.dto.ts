@@ -147,3 +147,40 @@ export type ReviewShiftSwapRequestDTO = z.infer<typeof reviewShiftSwapRequestSch
 export type WorkCalendarIdParamsDTO = z.infer<typeof workCalendarIdParamsSchema>;
 export type CountWorkingDaysQueryDTO = z.infer<typeof countWorkingDaysQuerySchema>;
 export type NextShiftQueryDTO = z.infer<typeof nextShiftQuerySchema>;
+
+/**
+ * HR assigns a shift to one employee over a date range. Times are optional
+ * because a non-working assignment (a granted day off) has none.
+ */
+export const assignEmployeeShiftSchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate harus format YYYY-MM-DD'),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate harus format YYYY-MM-DD'),
+  isWorkingDay: z.boolean(),
+  workStart: z.string().regex(/^\d{2}:\d{2}$/, 'workStart harus format HH:mm').optional(),
+  workEnd: z.string().regex(/^\d{2}:\d{2}$/, 'workEnd harus format HH:mm').optional(),
+  label: z.string().trim().min(1).max(60).optional(),
+  notes: z.string().trim().max(500).optional(),
+}).superRefine((value, ctx) => {
+  if (value.endDate < value.startDate) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['endDate'], message: 'endDate tidak boleh sebelum startDate' });
+  }
+  if (value.isWorkingDay && (!value.workStart || !value.workEnd)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['workStart'], message: 'Hari kerja wajib menyertakan workStart dan workEnd' });
+  }
+  if (!value.isWorkingDay && (value.workStart || value.workEnd)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['workStart'], message: 'Hari libur tidak boleh menyertakan jam kerja' });
+  }
+});
+
+export const employeeShiftRangeQuerySchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate harus format YYYY-MM-DD'),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate harus format YYYY-MM-DD'),
+});
+
+export const employeeShiftParamsSchema = z.object({
+  employeeId: z.string().uuid(),
+});
+
+export type AssignEmployeeShiftDTO = z.infer<typeof assignEmployeeShiftSchema>;
+export type EmployeeShiftRangeQueryDTO = z.infer<typeof employeeShiftRangeQuerySchema>;
+export type EmployeeShiftParamsDTO = z.infer<typeof employeeShiftParamsSchema>;

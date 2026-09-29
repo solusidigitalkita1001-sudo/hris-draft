@@ -311,6 +311,31 @@ export class WorkCalendarController {
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
+
+  async assignEmployeeShift(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.status(201).json(Result.created(await workCalendarService.assignEmployeeShift(
+        req.params.employeeId as string, req.body,
+      )));
+    } catch (error) { next(error); }
+  }
+
+  async clearEmployeeShiftAssignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.deleted(
+        `${(await workCalendarService.clearEmployeeShiftAssignment(req.params.employeeId as string, req.query as never)).cleared} penugasan shift dibatalkan`,
+      ));
+    } catch (error) { next(error); }
+  }
+
+  async listEmployeeShiftAssignments(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await workCalendarService.listEmployeeShiftAssignments(
+        req.params.employeeId as string, req.query as never,
+      )));
+    } catch (error) { next(error); }
+  }
 }
+
 
 export const workCalendarController = new WorkCalendarController();

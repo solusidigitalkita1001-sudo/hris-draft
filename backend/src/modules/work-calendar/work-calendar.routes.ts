@@ -1,15 +1,26 @@
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
+import { auditLog } from '@/shared/middleware/AuditLog';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { workCalendarController } from './work-calendar.controller';
 import {
-  createCalendarSchema, updateCalendarSchema, bulkUpdateDaysSchema,
-  createHolidaySchema, updateHolidaySchema, copyCalendarSchema,
-  createShiftFormulaSchema, updateShiftFormulaSchema,
-  createShiftSwapRequestSchema, reviewShiftSwapRequestSchema,
-  workCalendarIdParamsSchema, countWorkingDaysQuerySchema,
+  createCalendarSchema,
+  updateCalendarSchema,
+  bulkUpdateDaysSchema,
+  createHolidaySchema,
+  updateHolidaySchema,
+  copyCalendarSchema,
+  createShiftFormulaSchema,
+  updateShiftFormulaSchema,
+  createShiftSwapRequestSchema,
+  reviewShiftSwapRequestSchema,
+  workCalendarIdParamsSchema,
+  countWorkingDaysQuerySchema,
   nextShiftQuerySchema,
+  assignEmployeeShiftSchema,
+  employeeShiftRangeQuerySchema,
+  employeeShiftParamsSchema,
 } from './work-calendar.dto';
 import { validateRequest } from '@/shared/middleware/RequestValidator';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
@@ -68,6 +79,33 @@ router.get('/shift-swaps/:requestId/workflow', authorize({ resource: 'work-calen
 router.patch('/shift-swaps/:requestId/workflow-action', authorize({ resource: 'work-calendar', action: 'update' }), validate(workflowActionSchema), workCalendarController.applyShiftSwapWorkflowAction.bind(workCalendarController));
 
 // Employee & Team Calendar
+// HR roster assignment for one employee. Reads sit behind work-calendar:read;
+// writing someone's schedule is an update, and both go through the employee
+// data scope in the service.
+router.post(
+  '/employees/:employeeId/shift-assignments',
+  authorize({ resource: 'work-calendar', action: 'update' }),
+  auditLog({ action: 'ASSIGN_SHIFT', entity: 'EmployeeShiftOverride' }),
+  validate(employeeShiftParamsSchema, 'params'),
+  validate(assignEmployeeShiftSchema),
+  workCalendarController.assignEmployeeShift.bind(workCalendarController),
+);
+router.get(
+  '/employees/:employeeId/shift-assignments',
+  authorize({ resource: 'work-calendar', action: 'read' }),
+  validate(employeeShiftParamsSchema, 'params'),
+  validate(employeeShiftRangeQuerySchema, 'query'),
+  workCalendarController.listEmployeeShiftAssignments.bind(workCalendarController),
+);
+router.delete(
+  '/employees/:employeeId/shift-assignments',
+  authorize({ resource: 'work-calendar', action: 'update' }),
+  auditLog({ action: 'CLEAR_SHIFT_ASSIGNMENT', entity: 'EmployeeShiftOverride' }),
+  validate(employeeShiftParamsSchema, 'params'),
+  validate(employeeShiftRangeQuerySchema, 'query'),
+  workCalendarController.clearEmployeeShiftAssignment.bind(workCalendarController),
+);
+
 router.get('/employee/:employeeId', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.getEmployeeCalendar.bind(workCalendarController));
 router.get('/team/:managerId', authorize({ resource: 'work-calendar', action: 'read' }), workCalendarController.getTeamCalendar.bind(workCalendarController));
 
