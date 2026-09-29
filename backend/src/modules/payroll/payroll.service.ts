@@ -349,6 +349,44 @@ export class PayrollService {
     return this.findPayrollRunById(id);
   }
 
+  /**
+   * One notification per employee whose payslip the run just published. The
+   * notification carries no figures: the amounts stay behind the self-service
+   * PIN/reauth gate, so this only says the slip is ready.
+   */
+  private async notifyPayslipsAvailable(runId: string, companyId: string, periodName: string | null) {
+    const payslips = await prisma.payslip.findMany({
+      where: { payrollRunId: runId, companyId },
+      select: { id: true, employeeId: true },
+    });
+    if (!payslips.length) return;
+
+    const users = await prisma.user.findMany({
+      where: { employeeId: { in: payslips.map((payslip) => payslip.employeeId) }, deletedAt: null, status: 'ACTIVE' },
+      select: { id: true, employeeId: true },
+    });
+    const userByEmployee = new Map(users.map((user) => [user.employeeId, user.id]));
+
+    const rows = payslips.flatMap((payslip) => {
+      const userId = userByEmployee.get(payslip.employeeId);
+      // An employee without an active account has nowhere to be notified.
+      if (!userId) return [];
+      return [{
+        companyId,
+        userId,
+        title: 'Slip gaji tersedia',
+        message: periodName
+          ? `Slip gaji periode ${periodName} sudah dapat dibuka di Self Service.`
+          : 'Slip gaji terbaru sudah dapat dibuka di Self Service.',
+        type: 'INFO' as const,
+        resource: 'payslip',
+        action: 'PAYSLIP_PUBLISHED',
+        referenceId: payslip.id,
+      }];
+    });
+    if (rows.length) await prisma.notification.createMany({ data: rows });
+  }
+
   async approvePayrollRun(id: string, userId: string) {
     const { companyId, actor } = await companyPayrollAccess(undefined, userId);
     const run = await this.findPayrollRunById(id);
@@ -359,6 +397,11 @@ export class PayrollService {
     if (!run.createdBy) throw new ConflictError('Payroll creator is unknown; legacy payroll requires review before approval');
     if (run.createdBy === actor.id) throw new ConflictError('Payroll creator cannot approve their own run');
     const approved = await payrollRepository.approvePayrollRun(id, actor.id, companyId);
+
+    // Approval is what makes a payslip visible in self-service, and until now
+    // nobody was told. Employees had to keep checking the app to find out that
+    // they had been paid.
+    await this.notifyPayslipsAvailable(id, companyId, run.period?.name ?? null);
 
     await eventBus.publish({
       name: DomainEvents.PAYROLL_RUN_APPROVED,
