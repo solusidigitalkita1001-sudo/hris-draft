@@ -2,6 +2,7 @@ import { prisma } from '@/shared/database/prisma';
 import type { Prisma } from '@prisma/client';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
+import { buildDecisionNotification } from '@/shared/workflow/decision-notification';
 import {
   buildApprovalSummary,
   isSummarizableReferenceType,
@@ -900,7 +901,7 @@ export class WorkflowEngineRepository {
         });
       }
 
-      return tx.workflowInstance.findUnique({
+      const decided = await tx.workflowInstance.findUnique({
         where: { id: instanceId },
         include: {
           template: { select: { id: true, name: true, approvalType: true } },
@@ -908,6 +909,25 @@ export class WorkflowEngineRepository {
           logs: { orderBy: { createdAt: 'desc' } },
         },
       });
+
+      // Tell the requester the moment their request is finally decided. Every
+      // approval domain passes through here, so this covers all of them and
+      // commits with the decision rather than after it.
+      if (decided && (decided.status === 'APPROVED' || decided.status === 'REJECTED')) {
+        const notification = buildDecisionNotification({
+          companyId: decided.companyId,
+          requesterId: decided.requesterId,
+          actorId: userId,
+          approvalType: decided.approvalType,
+          referenceType: decided.referenceType,
+          referenceId: decided.referenceId,
+          status: decided.status,
+          comment: action.comment,
+        });
+        if (notification) await tx.notification.create({ data: notification });
+      }
+
+      return decided;
     });
   }
 
