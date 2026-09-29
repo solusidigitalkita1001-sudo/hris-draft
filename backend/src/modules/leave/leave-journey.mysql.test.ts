@@ -85,6 +85,16 @@ const submit = (f: Fixture, startDate: string, endDate: string) => asHr(f, () =>
 } as never));
 
 /**
+ * Submission either returns a request or throws, so the id is asserted once
+ * here rather than with a non-null assertion at every call site.
+ */
+async function submitId(f: Fixture, startDate: string, endDate: string): Promise<string> {
+  const request = await submit(f, startDate, endDate);
+  expect(request?.id).toBeTruthy();
+  return String(request?.id);
+}
+
+/**
  * Every system-context call awaits inside the callback on purpose. A Prisma
  * promise is lazy: returning it from a non-async arrow hands an unexecuted
  * thenable back to the caller, which then runs the query *after*
@@ -149,11 +159,11 @@ describeWithMysql('leave journey (isolated real MySQL)', () => {
 
   it('deducts the balance exactly once when two approvals race', async () => {
     const f = await fixture({ totalDays: 10 });
-    const request = await submit(f, `${YEAR}-04-07`, `${YEAR}-04-09`); // Mon..Wed = 3 days
+    const requestId = await submitId(f, `${YEAR}-04-07`, `${YEAR}-04-09`); // Mon..Wed = 3 days
 
     const results = await Promise.allSettled([
-      asHr(f, () => leaveService.finalizeApprovalEffects(request!.id)),
-      asHr(f, () => leaveService.finalizeApprovalEffects(request!.id)),
+      asHr(f, () => leaveService.finalizeApprovalEffects(requestId)),
+      asHr(f, () => leaveService.finalizeApprovalEffects(requestId)),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(2);
 
@@ -162,24 +172,24 @@ describeWithMysql('leave journey (isolated real MySQL)', () => {
     // employee three days of leave.
     await expect(balance(f)).resolves.toEqual({ usedDays: 3, remainingDays: 7 });
     const stored = await runInSystemContext('leave-journey-read', async () =>
-      prisma.leaveRequest.findUniqueOrThrow({ where: { id: request!.id }, select: { status: true } }));
+      prisma.leaveRequest.findUniqueOrThrow({ where: { id: requestId }, select: { status: true } }));
     expect(stored.status).toBe('APPROVED');
   });
 
   it('returns the days to the balance when an approved request is cancelled', async () => {
     const f = await fixture({ totalDays: 10 });
-    const request = await submit(f, `${YEAR}-05-05`, `${YEAR}-05-07`); // Mon..Wed = 3 days
-    await asHr(f, () => leaveService.finalizeApprovalEffects(request!.id));
+    const requestId = await submitId(f, `${YEAR}-05-05`, `${YEAR}-05-07`); // Mon..Wed = 3 days
+    await asHr(f, () => leaveService.finalizeApprovalEffects(requestId));
     await expect(balance(f)).resolves.toEqual({ usedDays: 3, remainingDays: 7 });
 
-    await asHr(f, () => leaveService.cancelLeave(request!.id, f.userId, null));
+    await asHr(f, () => leaveService.cancelLeave(requestId, f.userId, null));
 
     await expect(balance(f)).resolves.toEqual({ usedDays: 0, remainingDays: 10 });
   });
 
   it('refuses to approve leave that falls inside a closed payroll period', async () => {
     const f = await fixture({ totalDays: 10 });
-    const request = await submit(f, `${YEAR}-06-02`, `${YEAR}-06-04`);
+    const requestId = await submitId(f, `${YEAR}-06-02`, `${YEAR}-06-04`);
     await runInSystemContext('leave-journey-period', async () => prisma.payrollPeriod.create({
       data: {
         companyId: f.companyId, code: randomUUID(), name: 'Closed June', status: 'CLOSED',
@@ -189,7 +199,7 @@ describeWithMysql('leave journey (isolated real MySQL)', () => {
     }));
 
     // Approving now would change LEAVE_DAYS after payroll already consumed them.
-    await expect(asHr(f, () => leaveService.finalizeApprovalEffects(request!.id)))
+    await expect(asHr(f, () => leaveService.finalizeApprovalEffects(requestId)))
       .rejects.toMatchObject({ statusCode: 409 });
     await expect(balance(f)).resolves.toEqual({ usedDays: 0, remainingDays: 10 });
 
