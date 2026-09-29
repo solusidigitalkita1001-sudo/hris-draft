@@ -44,3 +44,28 @@ tetap tercatat sebagai verifikasi manual di bagian 2 dan 3 di atas.
 Belum ada step CI untuk ini — menjalankannya di CI berarti menyalakan MySQL,
 Redis, RabbitMQ, backend, dan frontend dalam satu job, lalu menyentuh
 `.github/workflows/ci.yml` yang protected. Perlu izin eksplisit dulu.
+
+## Journey cuti di browser (29 September 2026)
+
+Suite yang sama juga menutup alur yang paling sering dipakai karyawan:
+`frontend/e2e/leave-self-service.spec.ts` — ajukan cuti, lihat statusnya di
+daftar, pengajuan kedua pada tanggal sama ditolak, lalu dibatalkan.
+
+Tiga hal yang ditemukan saat menulisnya, dan semuanya mengubah bentuk test-nya:
+
+- **Saldo cuti dialokasikan per tahun, dan UI menolak mengirim untuk tahun tanpa
+  alokasi.** Tanggal "jauh di masa depan" karena itu tidak menguji apa pun:
+  requestnya tidak pernah terkirim. Yang menenangkan, penolakannya tidak senyap —
+  dialog menyebut tahunnya dan mengarahkan ke HR. Perilaku itu kini ikut dikunci
+  sebagai kasus tersendiri.
+- **Aturan overlap itu nyata**, jadi test tidak boleh mengasumsikan database
+  bersih: seed dan run sebelumnya sama-sama memegang pengajuan. Test berjalan
+  menyusuri beberapa kandidat Senin sampai satu diterima, ketimbang gagal karena
+  aturan yang justru bekerja.
+- **Membereskan data lewat `fetch` mentah merusak test-nya sendiri.** Mutasi di
+  luar aplikasi memutar token CSRF, sehingga pengajuan berikutnya dijawab 403
+  sampai klien mem-bootstrap ulang — test melaporkan gangguan buatannya sendiri.
+  Pembatalan kini lewat UI, memakai alur CSRF aplikasi.
+
+Data demo tidak dirusak: setiap pengajuan yang dibuat test dibatalkan lagi, dan
+baris seed tetap utuh.

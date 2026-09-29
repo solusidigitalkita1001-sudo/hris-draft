@@ -1,19 +1,10 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { login } from './helpers';
 
 /**
- * Credentials come from the seeded demo data; the suite only reads and logs in,
+ * Credentials come from the seeded demo data; this suite only reads and logs in,
  * and never mutates employee or payroll records.
  */
-const EMAIL = process.env.E2E_EMPLOYEE_EMAIL ?? 'maya@tech.com';
-const PASSWORD = process.env.E2E_EMPLOYEE_PASSWORD ?? 'Employee123!';
-
-async function login(page: Page) {
-  await page.goto('/login');
-  await page.getByRole('textbox', { name: 'Alamat email' }).fill(EMAIL);
-  await page.getByRole('textbox', { name: 'Kata sandi' }).fill(PASSWORD);
-  await page.getByRole('button', { name: 'Masuk' }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
-}
 
 test.describe('auth session in a browser', () => {
   test('signs in and lands on the dashboard', async ({ page }) => {
