@@ -124,6 +124,7 @@ model Company {
   attendanceCorrections                 AttendanceCorrection[]
   attendanceDevices                     AttendanceDevice[]
   attendanceDevicePunches               AttendanceDevicePunch[]
+  payrollArrears                        PayrollArrears[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -444,6 +445,8 @@ model PayrollPeriod {
   payrollRuns        PayrollRun[]
   /// C.4 EWA: List request tarik gaji awal yang reference periode ini
   earnedWageAccesses EarnedWageAccess[]
+  /// Rapel yang berasal dari periode ini (karyawan terlewat saat periode ditutup).
+  arrears            PayrollArrears[]
 
   @@index([companyId])
   @@index([code])
@@ -484,6 +487,7 @@ model PayrollRun {
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
   /// C.4 EWA: list employee tarik gaji awal yang di-deducted di run ini
   earnedWageAccesses     EarnedWageAccess[]
+  PayrollArrears         PayrollArrears[]
 
   @@index([periodId])
   @@index([companyId])
@@ -527,6 +531,7 @@ model Payslip {
   benefitDeductions      BenefitDeduction[]
   paymentTransactions    PayrollPaymentTransaction[]
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
+  arrears                PayrollArrears[]
 
   @@index([payrollRunId])
   @@index([employeeId])
@@ -2355,6 +2360,7 @@ model Employee {
   trainingAttendances                           TrainingAttendance[]
   attendances                                   Attendance[]
   attendanceDevicePunches                       AttendanceDevicePunch[]
+  payrollArrears                                PayrollArrears[]
   attendanceCorrections                         AttendanceCorrection[]
   overtimeRequests                              OvertimeRequest[]
   leaveBalances                                 LeaveBalance[]
@@ -5382,4 +5388,59 @@ enum AttendanceDevicePunchStatus {
   /// A rule refused it: closed payroll period, method not allowed by the
   /// branch policy, non-working day, attendance already closed.
   REJECTED
+}
+
+/// Rapel: gaji satu periode yang **sudah ditutup** dan terlewat untuk seorang
+/// karyawan, dibayarkan sebagai komponen terpisah pada run periode berikutnya.
+///
+/// Keputusan organisasi (GAP-14): periode yang sudah ditutup tidak dibuka
+/// kembali. Membuka periode tertutup mengacaukan pelaporan per periode dan
+/// rekonsiliasi bank yang sudah dikirim; rapel tetap memberi jejak yang jelas
+/// tanpa menyentuh angka periode lama.
+model PayrollArrears {
+  id             String               @id @default(uuid()) @db.VarChar(36)
+  companyId      String               @map("company_id") @db.VarChar(36)
+  employeeId     String               @map("employee_id") @db.VarChar(36)
+  /// Periode tertutup yang seharusnya dibayar.
+  sourcePeriodId String               @map("source_period_id") @db.VarChar(36)
+  /// Bruto yang seharusnya diterima pada periode itu. Pajak TIDAK dihitung di
+  /// sini: rapel dikenai pajak pada periode saat ia dibayarkan, mengikuti
+  /// praktik PPh21 di Indonesia, jadi nilai ini masuk sebagai penghasilan bruto
+  /// pada slip periode pembayaran.
+  grossAmount    Decimal              @map("gross_amount") @db.Decimal(15, 2)
+  /// Bagaimana angka itu diperoleh (gaji as-of, komponen, prorata hari aktif).
+  /// Disimpan supaya nominal bisa ditelusuri tanpa menghitung ulang.
+  basis          Json
+  status         PayrollArrearsStatus @default(PENDING)
+  notes          String?              @db.Text
+  registeredBy   String?              @map("registered_by") @db.VarChar(36)
+  /// Terisi saat rapel benar-benar masuk ke sebuah slip.
+  payslipId      String?              @map("payslip_id") @db.VarChar(36)
+  appliedRunId   String?              @map("applied_run_id") @db.VarChar(36)
+  appliedAt      DateTime?            @map("applied_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  sourcePeriod PayrollPeriod @relation(fields: [sourcePeriodId], references: [id], onDelete: Restrict)
+  payslip      Payslip?      @relation(fields: [payslipId], references: [id], onDelete: SetNull)
+  appliedRun   PayrollRun?   @relation(fields: [appliedRunId], references: [id], onDelete: SetNull)
+
+  /// Pagar utama terhadap pembayaran ganda: satu karyawan hanya boleh punya
+  /// satu baris rapel per periode sumber, apa pun statusnya.
+  @@unique([employeeId, sourcePeriodId])
+  @@index([companyId])
+  @@index([status])
+  @@index([sourcePeriodId])
+  @@map("payroll_arrears")
+}
+
+enum PayrollArrearsStatus {
+  /// Terdaftar, menunggu run berikutnya.
+  PENDING
+  /// Sudah masuk slip; tidak akan dibayar lagi.
+  APPLIED
+  /// Dibatalkan HR sebelum dibayar.
+  CANCELLED
 }

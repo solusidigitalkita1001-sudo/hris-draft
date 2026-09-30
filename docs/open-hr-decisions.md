@@ -65,15 +65,27 @@ terlampir, dilindungi kata sandi.
 **Rekomendasi:** (b). Karyawan tetap mendapat dorongan aktif tanpa nominal
 pernah meninggalkan sistem.
 
-## 5. GAP-14 — Payroll susulan (M)
+## 5. GAP-14 — Payroll susulan — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Yang perlu diputuskan:** bila seorang karyawan terlewat di satu periode,
 apakah dibayar lewat run tambahan untuk periode itu, atau sebagai komponen
 rapel di periode berikutnya?
 
-**Rekomendasi:** rapel di periode berikutnya. Run tambahan untuk periode yang
-sudah ditutup mengacaukan pelaporan per periode dan rekonsiliasi bank; rapel
-tetap memberi jejak yang jelas dan tidak membuka kembali periode tertutup.
+**Keputusan user:** rapel di periode berikutnya. Sudah dibangun dan diuji di
+MySQL sungguhan — `docs/payroll-arrears.md`.
+
+Yang perlu diketahui dari implementasinya: **tidak ada field jumlah di API**.
+Nominal diturunkan dari gaji yang berlaku pada periode itu, diprorata untuk
+karyawan yang masuk di tengah bulan, dan dibatasi tanggal terakhir bekerja bila
+resignasinya sudah disetujui — mengetik nominal uang dengan tangan adalah cara
+termudah angka salah sampai ke berkas transfer bank. Pajaknya dikenakan pada
+periode yang membayar, sesuai praktik PPh21.
+
+Satu hal yang sengaja **belum** dibuat: memperbaiki nominal yang *salah* pada
+periode tertutup. Rapel menangani karyawan yang **terlewat**; nominal salah
+adalah koreksi, dan endpoint rapel menolaknya secara eksplisit. Kalau koreksi
+nominal juga dibutuhkan, itu keputusan terpisah — dan lebih berat, karena
+menyentuh angka yang sudah dilaporkan.
 
 ## 6. GAP-16 — Rekonsiliasi PPh21 Desember (M)
 

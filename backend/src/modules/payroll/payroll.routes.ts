@@ -24,12 +24,13 @@ import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeS
 import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
+import { arrearsQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
 
 const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -146,6 +147,35 @@ router.post(
   authorize({ resource: 'payroll', action: 'read' }),
   validate(calculateJknSchema, 'body'),
   payrollController.calculateJkn.bind(payrollController)
+);
+
+// ==================== Arrears (rapel periode tertutup) ====================
+// Money for a period that can no longer be re-run, so the same guards as runs:
+// payroll company access before the audit middleware reads anything.
+router.get(
+  '/arrears',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(arrearsQuerySchema, 'query'),
+  payrollController.findAllArrears.bind(payrollController)
+);
+
+router.post(
+  '/arrears',
+  authorize({ resource: 'payroll', action: 'create' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CREATE', entity: 'PayrollArrears' }),
+  validate(registerArrearsSchema, 'body'),
+  payrollController.registerArrears.bind(payrollController)
+);
+
+router.delete(
+  '/arrears/:id',
+  authorize({ resource: 'payroll', action: 'update' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CANCEL', entity: 'PayrollArrears', model: 'payrollArrears' }),
+  validate(idParamSchema, 'params'),
+  payrollController.cancelArrears.bind(payrollController)
 );
 
 // ==================== Payroll Periods ====================

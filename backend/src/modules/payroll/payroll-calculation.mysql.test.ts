@@ -6,6 +6,7 @@ jest.mock('@/shared/database/prisma', () => ({ __esModule: true, get prisma() { 
 jest.mock('@/shared/events/EventBus', () => ({ eventBus: { publish: jest.fn() } }));
 jest.mock('@/shared/logger/WinstonLogger', () => ({ logger: { info: jest.fn(), warn: jest.fn() } }));
 import { PayrollService } from './payroll.service';
+import { payrollArrearsService } from './payroll-arrears.service';
 import { PayrollFormulaService } from './payroll-formula.service';
 import { payrollRepository } from './payroll.repository';
 import { ewaRepository } from '@/modules/ewa/ewa.repository';
@@ -33,6 +34,7 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       await mockDatabase.payrollFormulaCalculation.deleteMany({ where: { companyId } });
       await mockDatabase.payrollFormulaAudit.deleteMany({ where: { companyId } });
       await mockDatabase.payrollFormulaVersion.deleteMany({ where: { companyId } });
+      await mockDatabase.payrollArrears.deleteMany({ where: { companyId } });
       await mockDatabase.payrollLoanDeductionSnapshot.deleteMany({ where: { companyId } });
       await mockDatabase.earnedWageAccess.deleteMany({ where: { companyId } });
       await mockDatabase.payslipComponent.deleteMany({ where: { payslip: { companyId } } });
@@ -215,5 +217,57 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     await expect(run(f)).rejects.toThrow('closed period');
     await mockDatabase.payrollPeriod.update({ where: { id: f.period.id }, data: { status: 'DRAFT', attendanceReviewedAt: null } });
     await expect(run(f)).rejects.toThrow('Attendance'); await expectNoPayroll(f);
+  });
+
+  /**
+   * Arrears (GAP-14). A closed period is never reopened — its reports and bank
+   * reconciliation have gone out — so an employee it missed is paid in the next
+   * run as a component naming the period it came from. The part that matters
+   * for money: it must be paid exactly once, never again by a later run.
+   */
+  it('pays a closed period once in the next run, names it on the slip, and never pays it twice', async () => {
+    const f = await fixture();
+    const person = await employee(f);
+    const closed = await createPeriod(f.companyId, '2026-09-01');
+    await mockDatabase.payrollPeriod.update({ where: { id: closed.id }, data: { status: 'CLOSED' } });
+
+    const registered = await runInRequestContext(
+      { user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+      () => payrollArrearsService.register(f.companyId, { employeeId: person.person.id, sourcePeriodId: closed.id }),
+    );
+    expect(registered.status).toBe('PENDING');
+
+    const completed = await run(f);
+    const slip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: completed.id, employeeId: person.person.id } });
+    const arrearsComponents = await mockDatabase.payslipComponent.findMany({
+      where: { payslipId: slip.id, name: `Rapel ${closed.code}` },
+    });
+    expect(arrearsComponents).toHaveLength(1);
+    expect(arrearsComponents[0].type).toBe('ALLOWANCE');
+    expect(arrearsComponents[0].isTaxable).toBe(true);
+    expect(arrearsComponents[0].amount.toString()).toBe(registered.grossAmount.toString());
+
+    const claimed = await mockDatabase.payrollArrears.findUniqueOrThrow({ where: { id: registered.id } });
+    expect(claimed.status).toBe('APPLIED');
+    expect(claimed.payslipId).toBe(slip.id);
+    expect(claimed.appliedRunId).toBe(completed.id);
+
+    // A later run must not find it again.
+    const next = await createPeriod(f.companyId, '2026-11-01');
+    const secondRun = await run(f, next.id);
+    const secondSlip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: secondRun.id, employeeId: person.person.id } });
+    expect(await mockDatabase.payslipComponent.count({ where: { payslipId: secondSlip.id, name: { startsWith: 'Rapel ' } } })).toBe(0);
+  });
+
+  it('refuses arrears for a period that is still open, because that run can still include the employee', async () => {
+    const f = await fixture();
+    const person = await employee(f);
+    await expect(
+      runInRequestContext(
+        { user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+        () => payrollArrearsService.register(f.companyId, { employeeId: person.person.id, sourcePeriodId: f.period.id }),
+      ),
+    ).rejects.toThrow(/closed period only/i);
+    expect(await mockDatabase.payrollArrears.count({ where: { companyId: f.companyId } })).toBe(0);
   });
 });

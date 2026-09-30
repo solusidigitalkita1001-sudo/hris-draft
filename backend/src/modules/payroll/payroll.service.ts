@@ -17,6 +17,7 @@ import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
+import { payrollArrearsService } from './payroll-arrears.service';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 import { generateSystemCode } from '@/shared/utils/system-code';
@@ -519,6 +520,11 @@ export class PayrollService {
     const lateDeductionComponent = await this.ensureLateDeductionComponent(run.companyId, database);
     const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId, database);
     const ewaDeductionComponent = await this.ensureEWADeductionComponent(run.companyId, database);
+    const arrearsEarningComponent = await this.ensureArrearsEarningComponent(run.companyId, database);
+    // Arrears carried over from closed periods (GAP-14). Read once for the run
+    // so a row registered midway cannot land on two payslips.
+    const arrearsByEmployee = await payrollArrearsService.pendingByEmployee(run.companyId, database);
+    const arrearsClaims: Array<{ arrearsId: string; payslipId: string }> = [];
     // Benefit contributions (checklist §19). Opt-in per company via the
     // benefit_payroll_deduction_enabled setting: enabling it changes
     // take-home pay, so it must be a deliberate tenant decision, not a deploy.
@@ -782,6 +788,22 @@ export class PayrollService {
         });
       }
 
+      // Rapel: paid as its own earning, named after the period it came from, so
+      // the payslip says why the month is bigger than usual. Taxable, because
+      // arrears are taxed in the period they are paid.
+      const employeeArrears = arrearsByEmployee.get(salary.employeeId) ?? [];
+      for (const arrears of employeeArrears) {
+        const amount = new Prisma.Decimal(arrears.grossAmount);
+        if (amount.lessThanOrEqualTo(0)) continue;
+        extraComponents.push({
+          salaryComponentId: arrearsEarningComponent.id,
+          name: `Rapel ${arrears.sourcePeriod.code}`,
+          type: 'ALLOWANCE',
+          amount: amount.toNumber(),
+          isTaxable: true,
+        });
+      }
+
       const emp = salary.employee;
       const taxContext = {
         married: emp?.maritalStatus === 'MARRIED',
@@ -842,6 +864,10 @@ export class PayrollService {
         },
       }, database);
 
+      for (const arrears of employeeArrears) {
+        arrearsClaims.push({ arrearsId: arrears.id, payslipId: payslip.id });
+      }
+
       // Create payslip components
       if (components.length > 0) {
         await payrollRepository.createPayslipComponents(
@@ -865,6 +891,9 @@ export class PayrollService {
     // updates detect stale amounts/statuses; any failure rolls the entire run back.
     if (employeeCount === 0) throw new BadRequestError('No active employee salaries are available for this payroll');
     await ewaRepository.markPayrollDeductions(run.companyId, runId, appliedEwaDeductions, database);
+    // Same discipline as EWA: claim conditionally on PENDING so a row another
+    // run already took fails this one instead of being paid twice.
+    await payrollArrearsService.markApplied(run.companyId, runId, arrearsClaims, database);
     const totalNetPay = totalEarnings.minus(totalDeductions);
     for (const amount of [totalEarnings, totalDeductions, totalNetPay]) {
       if (!amount.isFinite() || amount.isNegative() || amount.greaterThan('9999999999999.99')) {
@@ -883,6 +912,26 @@ export class PayrollService {
     // Mark run as completed
     await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
 
+  }
+
+  private async ensureArrearsEarningComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'ARREARS_EARNING_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Rapel Periode Sebelumnya',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: true,
+      // Never prorated: the amount was already prorated for the period it came
+      // from, and prorating it again against this period would shrink it twice.
+      isProrated: false,
+      description: 'System generated: pay for a closed period the employee was missed in',
+      sortOrder: 996,
+    }, database);
   }
 
   private async ensureOvertimeEarningComponent(companyId: string, database: Prisma.TransactionClient) {

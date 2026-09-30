@@ -152,11 +152,37 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 ---
 
-### 🟠 GAP-14 — Tidak Ada Correction Run / Payroll Susulan
+### 🟢 GAP-14 — Tidak Ada Correction Run / Payroll Susulan — DITUTUP 30 Sep (rapel)
 
 **Yang seharusnya ada:** kalau ada kesalahan input atau karyawan yang terlewat di payroll run sebelumnya, HR bisa buat **correction run** atau payroll susulan untuk periode yang sama.
 
 **Kondisi saat ini:** satu `PayrollPeriod` hanya bisa punya satu `PayrollRun` aktif — tidak ada mekanisme correction atau susulan.
+
+**DITUTUP dengan rapel, bukan correction run.** Keputusan user: karyawan yang
+terlewat dibayar sebagai komponen rapel pada periode berikutnya, dan periode
+yang sudah ditutup **tidak** dibuka kembali — membukanya mengubah angka laporan
+yang sudah dikirim dan rekonsiliasi bank yang sudah beres.
+
+- `PayrollArrears` menyimpan bruto yang seharusnya diterima, beserta `basis`
+  (gaji as-of, tunjangan, jumlah hari, tanggal masuk/terakhir bekerja) supaya
+  nominalnya bisa ditelusuri tanpa dihitung ulang.
+- **Tidak ada field jumlah di API**: nominal diturunkan server dari gaji yang
+  berlaku pada periode itu, diprorata untuk karyawan yang masuk di tengah bulan
+  (penyebab tersering seseorang terlewat), dan dibatasi tanggal terakhir bekerja
+  bila resignasinya sudah disetujui.
+- Pajak dikenakan pada periode yang membayarnya — praktik PPh21 di Indonesia —
+  jadi rapel masuk sebagai penghasilan bruto di slip periode pembayaran.
+- Pagar pembayaran ganda berlapis: unique `(employeeId, sourcePeriodId)`, cek
+  payslip pada periode sumber, periode wajib `CLOSED`, dan klaim `updateMany`
+  bersyarat `PENDING` yang menggagalkan seluruh run kalau hitungannya bukan 1.
+
+Diverifikasi di MySQL sungguhan: rapel dibayar sekali, namanya menyebut periode
+asal, dan run berikutnya tidak membayarnya lagi. Detail: `docs/payroll-arrears.md`.
+
+**Yang sengaja belum dibuat:** *correction* run untuk memperbaiki nominal yang
+salah pada periode tertutup. Rapel menangani karyawan yang **terlewat**; nominal
+yang salah adalah masalah berbeda dan endpoint rapel menolaknya secara eksplisit
+("a wrong amount is a correction, not arrears").
 
 ---
 
@@ -369,7 +395,7 @@ Security gaps sudah didokumentasikan detail di `review.md`. Berikut ringkasan bl
 - [ ] **GAP-06** Implementasi leave carry-over & expiry otomatis via BullMQ scheduler (jalankan tiap awal tahun/periode)
 - [ ] **GAP-12** Bank transfer file generation — export format BCA/BNI/Mandiri setelah payroll disburse
 - [ ] **GAP-13** Payslip distribution otomatis via email saat status `PUBLISHED`
-- [ ] **GAP-14** Correction run / payroll susulan untuk periode yang sudah berjalan
+- [x] **GAP-14** Rapel untuk karyawan yang terlewat di periode tertutup (30 Sep) — correction run untuk nominal salah masih terbuka
 - [ ] **GAP-18** Employee transfer/mutation flow — model proposal + approval + effective date + auto-update data
 - [ ] **GAP-19** Contract/PKWT expiry monitoring + reminder otomatis via BullMQ scheduler
 - [ ] **GAP-20** Probation review flow — reminder ke atasan + form keputusan
@@ -776,8 +802,9 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — 21 tertutup, 3 sebagian,
-15 terbuka (8 lama + 4 dari pemeriksaan pagi + 3 dari pemeriksaan sore).
+**Total setelah pemeriksaan ini: 39 gap tercatat** — 22 tertutup, 3 sebagian,
+14 terbuka (7 lama + 4 dari pemeriksaan pagi + 3 dari pemeriksaan sore).
+GAP-14 ditutup dengan rapel pada 30 September.
 GAP-34 ditutup dengan mendokumentasikan batasannya; **GAP-31 ditutup dengan
 integrasi perangkat sungguhan**, dan bersamanya hilang satu-satunya gap yang
 menjanjikan keamanan yang tidak dimilikinya.

@@ -2,11 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { payrollService } from './payroll.service';
 import { Result } from '@/shared/core/Result';
+import { payrollArrearsService } from './payroll-arrears.service';
+import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
 import { payslipPinService } from './payslip-pin.service';
 import PDFDocument from 'pdfkit';
-import { AppError } from '@/shared/exceptions/AppError';
+import { AppError, BadRequestError } from '@/shared/exceptions/AppError';
 
 function requiresPayrollUnlock(req: AuthenticatedRequest): boolean {
   const permissions = req.user?.permissions ?? [];
@@ -475,6 +477,38 @@ export class PayrollController {
     try {
       const data = payrollService.calculateJknStandalone(req.body);
       res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Arrears (rapel) ====================
+  async registerArrears(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const row = await payrollArrearsService.register(companyId, req.body as RegisterArrearsDTO);
+      res.status(201).json(
+        Result.success(
+          { id: row.id, employeeId: row.employeeId, sourcePeriodId: row.sourcePeriodId, grossAmount: row.grossAmount, status: row.status, basis: row.basis },
+          'Rapel terdaftar dan akan dibayarkan pada run periode berikutnya',
+        ),
+      );
+    } catch (error) { next(error); }
+  }
+
+  async findAllArrears(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as ArrearsQueryDTO;
+      res.json(Result.success(await payrollArrearsService.list(companyId, query)));
+    } catch (error) { next(error); }
+  }
+
+  async cancelArrears(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await payrollArrearsService.cancel(companyId, String(req.params.id))));
     } catch (error) { next(error); }
   }
 }
