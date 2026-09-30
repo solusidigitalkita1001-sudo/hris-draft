@@ -266,11 +266,37 @@ yang salah adalah masalah berbeda dan endpoint rapel menolaknya secara eksplisit
 
 ---
 
-### 🟡 GAP-16 — PPh21 Annual Reconciliation
+### 🟢 GAP-16 — PPh21 Annual Reconciliation — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** di Desember, sistem hitung ulang total PPh21 setahun per karyawan dan sesuaikan dengan yang sudah dipotong tiap bulan. Kekurangan/kelebihan potong harus dikoreksi di payslip Desember.
 
 **Kondisi saat ini:** perhitungan PPh21 per bulan sudah sesuai regulasi, tapi tidak ada flow rekonsiliasi tahunan. Kurang umum untuk HRIS skala menengah-besar.
+
+**DITUTUP** sesuai keputusanmu: koreksi otomatis di slip Desember sebagai
+komponen terpisah.
+
+Metode bulanan mengalikan penghasilan satu bulan dua belas kali — benar untuk
+memotong sepanjang jalan, tetapi bukan kebenaran tentang tahunnya begitu
+bulan-bulannya berbeda (bonus, THR, kenaikan tengah tahun, perubahan PTKP,
+karyawan masuk Maret). Desember menghitung ulang dari angka bulanan yang sungguh
+diterima.
+
+- **Biaya jabatan dijumlahkan per bulan dengan batas bulanannya**, bukan sekali
+  terhadap bruto setahun — plafon 6 juta terhadap bruto setahun hanya benar untuk
+  orang yang penghasilannya rata sepanjang tahun.
+- **Kedua arah ditangani**: kurang potong menjadi potongan, lebih potong menjadi
+  **pengembalian**. Karyawan yang status PTKP-nya berubah biasanya justru lebih
+  potong, dan menolak mengembalikan berarti menahan uang yang bukan milik
+  perusahaan.
+- **Hanya periode yang benar-benar berakhir di Desember**, dipakukan test
+  real-DB: menyelesaikan tahun pada Oktober akan memotong koreksi setahun penuh
+  dari orang yang masih punya dua bulan untuk dibayar.
+- Tahun tanpa penghasilan kena pajak **tidak** mendapat komponen koreksi — nol
+  yang terlihat yakin lebih buruk daripada tidak melakukan apa-apa.
+- Opt-in per perusahaan (`pph21_december_reconciliation_enabled`, default mati)
+  karena mengubah take-home pay di bulan terakhir tahun.
+
+Verifikasi: 13 + 6 + 1 test. Detail: `docs/pph21-december-reconciliation.md`.
 
 ---
 
@@ -980,8 +1006,13 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — 26 tertutup, **5 sebagian**,
-8 terbuka (5 lama + 2 dari pemeriksaan pagi + 1 dari pemeriksaan sore).
+**Total setelah pemeriksaan ini: 39 gap tercatat** — **29 tertutup**, 5 sebagian,
+5 terbuka.
+
+Ditutup pada 30 September sore, semuanya dari keputusan user: GAP-09 (pencairan
+cuti sebagai setting per perusahaan), GAP-16 (rekonsiliasi PPh21 Desember), dan
+GAP-17 (gross-up — diputuskan **tidak dibangun**, karena tidak ada perusahaan
+dalam grup yang menanggung PPh21 karyawan).
 
 GAP-32 dan GAP-33 kini sebagian: angka rekap PPh21 tahunan dan iuran BPJS
 bulanan (dua sisi, dengan cap ditegakkan) sudah dirakit dan diuji. Yang tersisa
