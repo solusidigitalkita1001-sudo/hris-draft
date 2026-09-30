@@ -331,8 +331,26 @@ export const FINGERPRINT_NOT_ATTESTED = 'method:FINGERPRINT_NOT_DEVICE_ATTESTED'
  * The punch is still accepted — a fingerprint-only branch has no other way to
  * clock in until devices are integrated — but the record says what it is.
  */
-export function methodAttestationWarnings(method: AttendanceCaptureMethod | string | null | undefined): string[] {
-  return method === AttendanceCaptureMethod.FINGERPRINT ? [FINGERPRINT_NOT_ATTESTED] : [];
+export function methodAttestationWarnings(
+  method: AttendanceCaptureMethod | string | null | undefined,
+  deviceAttested = false,
+): string[] {
+  if (method !== AttendanceCaptureMethod.FINGERPRINT) return [];
+  // A punch that arrived through a registered terminal's own credential is
+  // attested by that terminal, so the marker would be a lie in the other
+  // direction. Only client-declared fingerprint carries it.
+  return deviceAttested ? [] : [FINGERPRINT_NOT_ATTESTED];
+}
+
+/**
+ * Proof that a punch came from registered hardware rather than from a client
+ * that simply named the method. Never parsed from a request body: the device
+ * middleware builds it after verifying the terminal's credential, and the
+ * create DTO strips unknown keys, so an HTTP caller cannot forge one.
+ */
+export interface DeviceAttestation {
+  deviceId: string;
+  serialNumber: string;
 }
 
 export class AttendanceService {
@@ -482,7 +500,7 @@ export class AttendanceService {
     };
   }
 
-  async create(data: CreateAttendanceDTO) {
+  async create(data: CreateAttendanceDTO & { deviceAttestation?: DeviceAttestation }) {
     // Check for duplicate attendance on same date
     const attendanceDate = new Date(data.date);
     await assertPayrollDateOpen(data.companyId, attendanceDate);
@@ -694,7 +712,7 @@ export class AttendanceService {
       ...(gpsEvaluation.exceptionType ? [gpsEvaluation.exceptionType] : []),
       ...gpsCompliance.warnings,
       ...(livenessAssess && livenessAssess.verdict !== LivenessVerdict.PASS ? [`liveness:${livenessAssess.verdict}`] : []),
-      ...methodAttestationWarnings(data.method),
+      ...methodAttestationWarnings(data.method, Boolean(data.deviceAttestation)),
     ];
 
     const snapshot = this.buildPolicySnapshot(context, allowedMethods, mergedWarnings) as unknown as Record<string, unknown>;
@@ -711,6 +729,9 @@ export class AttendanceService {
       : null;
     snapshot.liveness = livenessAssess
       ? { verdict: livenessAssess.verdict, reasons: livenessAssess.reasons }
+      : null;
+    snapshot.attendanceDevice = data.deviceAttestation
+      ? { deviceId: data.deviceAttestation.deviceId, serialNumber: data.deviceAttestation.serialNumber }
       : null;
     snapshot.gpsCompliance = {
       distance: gpsCompliance.distance,

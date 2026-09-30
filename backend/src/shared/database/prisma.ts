@@ -24,6 +24,8 @@ function buildDatabaseUrl(): string {
 }
 
 const COMPANY_SCOPED_MODELS = new Set([
+  'AttendanceDevice',
+  'AttendanceDevicePunch',
   'WorkflowTemplate',
   'WorkflowInstance',
   'WorkflowInstanceStep',

@@ -122,6 +122,8 @@ model Company {
   interviews                            Interview[]
   attendances                           Attendance[]
   attendanceCorrections                 AttendanceCorrection[]
+  attendanceDevices                     AttendanceDevice[]
+  attendanceDevicePunches               AttendanceDevicePunch[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -215,6 +217,7 @@ model Branch {
   company                Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
   employees              Employee[]
   attendances            Attendance[]
+  attendanceDevices      AttendanceDevice[]
   attendancePolicies     BranchAttendancePolicy[]
   careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromBranch")
   careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToBranch")
@@ -2198,27 +2201,27 @@ model EmployeeShiftOverride {
 
 /// Users (login accounts)
 model User {
-  id                     String     @id @default(uuid()) @db.VarChar(36)
-  email                  String     @unique @db.VarChar(255)
-  passwordHash           String     @map("password_hash") @db.VarChar(255)
-  passwordVersion        Int        @default(1) @map("password_version")
-  sessionVersion         Int        @default(1) @map("session_version")
-  employeeId             String?    @unique @map("employee_id") @db.VarChar(36)
-  status                 UserStatus @default(ACTIVE)
-  mustChangePassword     Boolean    @default(true) @map("must_change_password")
-  lastLoginAt            DateTime?  @map("last_login_at")
-  failedAttempts         Int        @default(0) @map("failed_attempts")
-  lockedUntil            DateTime?  @map("locked_until")
-  twoFactorEnabled       Boolean    @default(false) @map("two_factor_enabled")
-  twoFactorSecret        String?    @map("two_factor_secret") @db.VarChar(255)
-  twoFactorRecoveryCodes String?    @map("two_factor_recovery_codes") @db.Text
+  id                       String     @id @default(uuid()) @db.VarChar(36)
+  email                    String     @unique @db.VarChar(255)
+  passwordHash             String     @map("password_hash") @db.VarChar(255)
+  passwordVersion          Int        @default(1) @map("password_version")
+  sessionVersion           Int        @default(1) @map("session_version")
+  employeeId               String?    @unique @map("employee_id") @db.VarChar(36)
+  status                   UserStatus @default(ACTIVE)
+  mustChangePassword       Boolean    @default(true) @map("must_change_password")
+  lastLoginAt              DateTime?  @map("last_login_at")
+  failedAttempts           Int        @default(0) @map("failed_attempts")
+  lockedUntil              DateTime?  @map("locked_until")
+  twoFactorEnabled         Boolean    @default(false) @map("two_factor_enabled")
+  twoFactorSecret          String?    @map("two_factor_secret") @db.VarChar(255)
+  twoFactorRecoveryCodes   String?    @map("two_factor_recovery_codes") @db.Text
   /// PIN 6 digit untuk membuka nominal slip gaji sendiri (argon2id hash, bukan PIN asli).
-  payslipPinHash           String?   @map("payslip_pin_hash") @db.VarChar(255)
-  payslipPinFailedAttempts Int       @default(0) @map("payslip_pin_failed_attempts")
-  payslipPinLockedUntil    DateTime? @map("payslip_pin_locked_until")
-  createdAt              DateTime   @default(now()) @map("created_at")
-  updatedAt              DateTime   @updatedAt @map("updated_at")
-  deletedAt              DateTime?  @map("deleted_at")
+  payslipPinHash           String?    @map("payslip_pin_hash") @db.VarChar(255)
+  payslipPinFailedAttempts Int        @default(0) @map("payslip_pin_failed_attempts")
+  payslipPinLockedUntil    DateTime?  @map("payslip_pin_locked_until")
+  createdAt                DateTime   @default(now()) @map("created_at")
+  updatedAt                DateTime   @updatedAt @map("updated_at")
+  deletedAt                DateTime?  @map("deleted_at")
 
   employee                   Employee?                   @relation("EmployeeUser", fields: [employeeId], references: [id], onDelete: SetNull)
   userRoles                  UserRole[]
@@ -2351,6 +2354,7 @@ model Employee {
   trainingEnrollments                           TrainingEnrollment[]
   trainingAttendances                           TrainingAttendance[]
   attendances                                   Attendance[]
+  attendanceDevicePunches                       AttendanceDevicePunch[]
   attendanceCorrections                         AttendanceCorrection[]
   overtimeRequests                              OvertimeRequest[]
   leaveBalances                                 LeaveBalance[]
@@ -3206,6 +3210,7 @@ model Attendance {
   attendancePolicy BranchAttendancePolicy? @relation(fields: [attendancePolicyId], references: [id], onDelete: SetNull)
   faceLogs         AttendanceFaceLog[]
   corrections      AttendanceCorrection[]
+  devicePunches    AttendanceDevicePunch[]
 
   @@unique([employeeId, date])
   @@index([companyId])
@@ -5288,4 +5293,93 @@ model PayrollFormulaCalculation {
   @@unique([payslipId, componentId])
   @@index([companyId, runId])
   @@map("payroll_formula_calculations")
+}
+
+/// Registered clock-in hardware (fingerprint terminal, or the middleware that
+/// fronts one). A punch is only device-attested when it arrives through a row
+/// here: the device authenticates with its own credential, so FINGERPRINT stops
+/// being a value a client can simply claim.
+model AttendanceDevice {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  companyId    String    @map("company_id") @db.VarChar(36)
+  /// Optional: bind the terminal to the branch it physically stands in.
+  branchId     String?   @map("branch_id") @db.VarChar(36)
+  name         String    @db.VarChar(150)
+  /// Vendor serial as printed on the machine. Unique per company so two
+  /// terminals cannot be confused in the punch log.
+  serialNumber String    @map("serial_number") @db.VarChar(100)
+  /// SHA-256 of the shared secret. The secret itself is shown once at
+  /// registration and never stored, so a database read cannot impersonate a
+  /// terminal.
+  secretHash   String    @map("secret_hash") @db.VarChar(64)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastSeenAt   DateTime? @map("last_seen_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  company Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branch  Branch?                 @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  punches AttendanceDevicePunch[]
+
+  @@unique([companyId, serialNumber])
+  @@index([companyId])
+  @@index([branchId])
+  @@index([isActive])
+  @@map("attendance_devices")
+}
+
+/// Raw punch ledger. Every punch a terminal posts is stored verbatim before any
+/// attendance record is derived from it, including punches that matched no
+/// employee — otherwise "my punch did not show up" has no evidence to inspect.
+model AttendanceDevicePunch {
+  id              String                      @id @default(uuid()) @db.VarChar(36)
+  deviceId        String                      @map("device_id") @db.VarChar(36)
+  companyId       String                      @map("company_id") @db.VarChar(36)
+  /// Null when the code the terminal sent matched no employee in this company.
+  employeeId      String?                     @map("employee_id") @db.VarChar(36)
+  /// Employee identifier as the terminal knows it, kept even when unmatched.
+  employeeCode    String                      @map("employee_code") @db.VarChar(50)
+  /// The terminal's own id for this punch. Unique per device, which is what
+  /// makes re-sending a batch harmless.
+  externalId      String                      @map("external_id") @db.VarChar(100)
+  punchedAt       DateTime                    @map("punched_at")
+  direction       AttendancePunchDirection    @default(AUTO)
+  status          AttendanceDevicePunchStatus @default(PENDING)
+  rejectionReason String?                     @map("rejection_reason") @db.VarChar(255)
+  attendanceId    String?                     @map("attendance_id") @db.VarChar(36)
+  receivedAt      DateTime                    @default(now()) @map("received_at")
+
+  device     AttendanceDevice @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee   Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  attendance Attendance?      @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+
+  @@unique([deviceId, externalId])
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([punchedAt])
+  @@index([status])
+  @@map("attendance_device_punches")
+}
+
+enum AttendancePunchDirection {
+  /// Let the server decide from the employee's current state: first punch of
+  /// the day opens attendance, a later one closes it.
+  AUTO
+  IN
+  OUT
+}
+
+enum AttendanceDevicePunchStatus {
+  PENDING
+  /// Opened or closed an attendance record.
+  APPLIED
+  /// Already seen (same device, same external id) — stored, not reapplied.
+  DUPLICATE
+  /// No employee in this company carries the code the terminal sent.
+  UNMATCHED_EMPLOYEE
+  /// A rule refused it: closed payroll period, method not allowed by the
+  /// branch policy, non-working day, attendance already closed.
+  REJECTED
 }
