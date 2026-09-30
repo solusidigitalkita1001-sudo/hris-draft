@@ -1839,15 +1839,54 @@ export async function seedTestData(): Promise<void> {
         },
       });
 
+  // The national holidays of Indonesia for 2026.
+  //
+  // `type` is 'NH' because that is what the API accepts (createHolidaySchema:
+  // 'NH' | 'JL'). This list previously used 'H', a value the API itself cannot
+  // produce and cannot round-trip on update.
+  //
+  // `source` records where each date comes from, because the two groups do not
+  // carry the same confidence:
+  //   - statutory       : fixed by date, and also the Christian feasts, whose
+  //                       dates follow from Easter (5 April 2026) and are not a
+  //                       matter of decree.
+  //   - verify-skb      : lunar and hijri observances. These are announced each
+  //                       year by the joint ministerial decree (SKB 3 Menteri)
+  //                       and can move by a day, so they are seeded as the
+  //                       astronomical expectation and must be checked against
+  //                       the decree before anyone is paid against them.
+  // Cuti bersama ('JL') is deliberately absent: those dates exist only by
+  // decree, and guessing them would be inventing days off.
   const holidays = [
-    { id: 'nat-holiday-2601', date: new Date(2026, 0, 1), name: 'Tahun Baru 2026', type: 'H' },
-    { id: 'nat-holiday-2602', date: new Date(2026, 7, 17), name: 'Hari Kemerdekaan RI', type: 'H' },
-    { id: 'nat-holiday-2603', date: new Date(2026, 11, 25), name: 'Hari Natal', type: 'H' },
+    { id: 'nat-holiday-2601', date: new Date(2026, 0, 1), name: 'Tahun Baru Masehi', type: 'NH', source: 'statutory' },
+    { id: 'nat-holiday-2602', date: new Date(2026, 0, 16), name: 'Isra Mikraj Nabi Muhammad', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2603', date: new Date(2026, 1, 17), name: 'Tahun Baru Imlek 2577', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2604', date: new Date(2026, 2, 19), name: 'Hari Suci Nyepi (Saka 1948)', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2605', date: new Date(2026, 2, 20), name: 'Hari Raya Idulfitri 1447H', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2606', date: new Date(2026, 2, 21), name: 'Hari Raya Idulfitri 1447H (hari kedua)', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2607', date: new Date(2026, 3, 3), name: 'Wafat Isa Almasih', type: 'NH', source: 'statutory' },
+    { id: 'nat-holiday-2608', date: new Date(2026, 4, 1), name: 'Hari Buruh Internasional', type: 'NH', source: 'statutory' },
+    { id: 'nat-holiday-2609', date: new Date(2026, 4, 14), name: 'Kenaikan Isa Almasih', type: 'NH', source: 'statutory' },
+    { id: 'nat-holiday-2610', date: new Date(2026, 4, 27), name: 'Hari Raya Idul Adha 1447H', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2611', date: new Date(2026, 4, 31), name: 'Hari Raya Waisak 2570', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2612', date: new Date(2026, 5, 1), name: 'Hari Lahir Pancasila', type: 'NH', source: 'statutory' },
+    { id: 'nat-holiday-2613', date: new Date(2026, 5, 16), name: 'Tahun Baru Islam 1448H', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2614', date: new Date(2026, 7, 17), name: 'Proklamasi Kemerdekaan RI', type: 'NH', source: 'statutory' },
+    { id: 'nat-holiday-2615', date: new Date(2026, 7, 25), name: 'Maulid Nabi Muhammad', type: 'NH', source: 'verify-skb' },
+    { id: 'nat-holiday-2616', date: new Date(2026, 11, 25), name: 'Hari Raya Natal', type: 'NH', source: 'statutory' },
   ];
   for (const holiday of holidays) {
+    // Updating rather than ignoring on conflict: an existing row seeded by an
+    // earlier version carries the old 'H' type, which the API cannot accept, and
+    // re-running the seed is the only thing that will correct it.
     await prisma.nationalHoliday.upsert({
       where: { id: holiday.id },
-      update: {},
+      update: {
+        date: holiday.date,
+        name: holiday.name,
+        type: holiday.type,
+        source: holiday.source,
+      },
       create: {
         id: holiday.id,
         companyId: company.id,
@@ -1856,16 +1895,19 @@ export async function seedTestData(): Promise<void> {
         name: holiday.name,
         type: holiday.type,
         year: 2026,
-        source: 'seed',
+        source: holiday.source,
       },
     });
   }
 
-  const specialDays = [
-    { id: 'wcday-2601', date: new Date(2026, 0, 1), dayType: 'NH', name: 'Tahun Baru 2026' },
-    { id: 'wcday-2602', date: new Date(2026, 7, 17), dayType: 'NH', name: 'Hari Kemerdekaan RI' },
-    { id: 'wcday-2603', date: new Date(2026, 11, 25), dayType: 'NH', name: 'Hari Natal' },
-  ];
+  // Derived from the holiday list above rather than written out again: a
+  // hand-kept copy of three of the sixteen was how the calendars ended up
+  // showing employees a working day on Idulfitri.
+  const specialDays = holidays.map((holiday) => ({
+    date: holiday.date,
+    dayType: holiday.type,
+    name: holiday.name,
+  }));
   await prisma.workCalendarDay.deleteMany({
     where: {
       calendarId: {
