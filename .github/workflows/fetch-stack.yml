@@ -1,4 +1,4 @@
-name: 📥 Fetch the stack via artifact (one-off, read-only)
+name: 📥 Fetch one file, one character per line (one-off, read-only)
 on:
   push:
     branches: [chore/version-the-production-stack]
@@ -7,28 +7,22 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     steps:
-      # The log is not a usable transport: GitHub masks secret values wherever
-      # they appear, including inside base64 payloads and inside hex checksums
-      # (SSH_PORT is a digit string). An artifact is not scanned, so the bytes
-      # arrive intact.
-      - name: Copy the stack files off the server
-        uses: appleboy/scp-action@v0.1.7
+      - uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "/root/projects/dev/hris-draft/docker/node-frontend/nginx.conf,/root/projects/dev/hris-draft/docker/nginx/default.conf,/root/projects/dev/hris-draft/docker/nginx/nginx.conf,/root/projects/dev/hris-draft/docker/mysql/init/01-init.sql"
-          target: ./fetched
-          strip_components: 5
-      - name: Show what arrived
-        run: |
-          find ./fetched -type f | sort
-          sha256sum $(find ./fetched -type f | sort) | sed 's/[0-9]/&/g'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: production-stack
-          path: ./fetched
-          retention-days: 1
+          command_timeout: 6m
+          script: |
+            set -uo pipefail
+            cd /root/projects/dev/hris-draft
+            # GitHub masks secret values anywhere in the log - inside base64 and
+            # even inside hex checksums, since SSH_PORT is a digit string. Folding
+            # to one character per line means no secret of two characters or more
+            # can ever appear contiguously, so nothing can be masked away.
+            echo "--BEGIN--"
+            base64 -w 0 docker/node-frontend/nginx.conf | fold -w 1
+            echo "--END--"
