@@ -18,7 +18,6 @@ Desktop.ini
 .claude/
 dbg/
 **/dbg/
-docker/
 
 # Package install directories
 node_modules/
@@ -62,9 +61,11 @@ coverage/
 # TypeScript build cache
 *.tsbuildinfo
 
-# Docker Compose configuration is environment-specific
+# Compose files are environment-specific, except the production topology, which
+# is the deployed architecture and belongs under review like any other code.
 docker-compose*.yml
 docker-compose*.yaml
+!docker-compose.prod.yml
 
 # Playwright
 frontend/test-results/
