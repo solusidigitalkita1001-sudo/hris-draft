@@ -56,6 +56,66 @@ function validateKey(key: string): void {
   }
 }
 
+/**
+ * Value rules for the settings that switch behaviour on and off, or feed a
+ * calculation.
+ *
+ * The store itself is deliberately open — a key it has never heard of is still
+ * accepted, because that is what makes it usable for anything. But for a switch
+ * that governs money, a typo is a silent failure of exactly the wrong kind:
+ * store `TRUE` instead of `true` and the feature stays off, correctly by the
+ * code and inexplicably to the person who thought they had enabled it. Store
+ * `dua puluh satu` as a divisor and the encashment falls back to 21 while
+ * looking configured.
+ *
+ * So these keys are checked at the boundary. Keys outside this list keep the
+ * old permissive behaviour.
+ */
+const BOOLEAN_SETTINGS = new Set([
+  'late_deduction_enabled',
+  'benefit_payroll_deduction_enabled',
+  'unpaid_leave_deduction_enabled',
+  'payslip_email_notification_enabled',
+  'pph21_december_reconciliation_enabled',
+  'leave_encashment_enabled',
+  'leave_encashment_include_allowances',
+  'recruitment_requisition_required',
+]);
+
+const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boolean }> = {
+  leave_encashment_max_days_per_year: { min: 0, max: 365, integer: true },
+  leave_encashment_daily_divisor: { min: 1, max: 31 },
+  late_deduction_default_rate_per_minute: { min: 0, max: 1_000_000 },
+  late_deduction_daily_cap_percent: { min: 0, max: 100 },
+  absence_deduction_daily_basic_percent: { min: 0, max: 100 },
+  attendance_default_working_days_per_month: { min: 1, max: 31, integer: true },
+  fiscal_year_start_month: { min: 1, max: 12, integer: true },
+};
+
+export function validateSettingValue(key: string, value: string): void {
+  if (BOOLEAN_SETTINGS.has(key)) {
+    if (value !== 'true' && value !== 'false') {
+      throw new BadRequestError(
+        `Setting ${key} accepts only 'true' or 'false' (lowercase); received '${value}'. ` +
+        'A near-miss here would leave the feature off while looking enabled.',
+      );
+    }
+    return;
+  }
+
+  const numeric = NUMERIC_SETTINGS[key];
+  if (numeric) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) throw new BadRequestError(`Setting ${key} must be a number; received '${value}'`);
+    if (numeric.integer && !Number.isInteger(parsed)) {
+      throw new BadRequestError(`Setting ${key} must be a whole number; received '${value}'`);
+    }
+    if (parsed < numeric.min || parsed > numeric.max) {
+      throw new BadRequestError(`Setting ${key} must be between ${numeric.min} and ${numeric.max}; received '${value}'`);
+    }
+  }
+}
+
 function isSuperOrGroupAdmin(): boolean {
   const roles = getCurrentRoles();
   return roles.includes('SUPER_ADMIN') || roles.includes('GROUP_ADMIN');
@@ -102,6 +162,7 @@ export class CompanySettingsService {
    */
   async setSetting(key: string, value: string, explicitCompanyId?: string): Promise<CompanySetting> {
     validateKey(key);
+    validateSettingValue(key, value);
     const companyId = this.resolveCompanyIdWithPermission(explicitCompanyId, true);
     return prisma.companySetting.upsert({
       where: { companyId_key: { companyId, key } },
@@ -116,7 +177,10 @@ export class CompanySettingsService {
    */
   async bulkUpsertSettings(settings: BulkUpsertSettingsDTO, explicitCompanyId?: string): Promise<void> {
     const entries = Object.entries(settings);
-    for (const [key] of entries) validateKey(key);
+    for (const [key, value] of entries) {
+      validateKey(key);
+      validateSettingValue(key, value);
+    }
     const companyId = this.resolveCompanyIdWithPermission(explicitCompanyId, true);
     await prisma.$transaction(
       entries.map(([key, value]) =>
