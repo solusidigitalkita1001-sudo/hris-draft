@@ -6,6 +6,7 @@ import { Result } from '@/shared/core/Result';
 import { LoginDTO, ChangePasswordDTO, MfaCodeDTO, ForgotPasswordDTO, ResetPasswordDTO } from './auth.dto';
 import config from '@/config';
 import { clearCsrfToken, issueCsrfToken } from '@/shared/middleware/CsrfProtection';
+import { AuthError } from '@/shared/exceptions/AppError';
 
 const ACCESS_COOKIE = 'at';
 const REFRESH_COOKIE = 'rt';
@@ -152,7 +153,11 @@ export class AuthController {
       const ipAddress = req.ip;
       const userAgent = req.headers['user-agent'];
 
-      if (!refreshToken) throw new Error('No refresh token');
+      // A missing refresh cookie means the session is gone — the client's
+      // problem to solve by logging in again, not a server fault. A bare Error
+      // surfaced as 500 "Unhandled error", which both misreports the cause and
+      // puts routine session expiry in the error log.
+      if (!refreshToken) throw new AuthError('No refresh token');
       const result = await authService.refreshTokens(refreshToken, ipAddress, userAgent);
 
       if (isMobileClient(req)) {

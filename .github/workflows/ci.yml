@@ -327,9 +327,13 @@ jobs:
         run: |
           # dev, not preview: vite.config.ts proxies /api/v1 to the backend under
           # `server`, so the suite talks to one origin exactly as a developer does.
-          npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/frontend.log 2>&1 &
+          # localhost, not 127.0.0.1: CsrfProtection checks the request Origin
+          # against config.cors.origins, which defaults to http://localhost:5173.
+          # A browser on 127.0.0.1 sends a different origin and every mutation
+          # comes back 403 — which is exactly how the first CI run failed.
+          npm run dev -- --host localhost --port 5173 > /tmp/frontend.log 2>&1 &
           for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:5173 > /dev/null; then
+            if curl -fsS http://localhost:5173 > /dev/null; then
               echo "frontend up after ${i}s"; exit 0
             fi
             sleep 1
@@ -346,8 +350,6 @@ jobs:
         working-directory: frontend
         run: npm run test:e2e
         continue-on-error: true
-        env:
-          E2E_BASE_URL: http://127.0.0.1:5173
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
