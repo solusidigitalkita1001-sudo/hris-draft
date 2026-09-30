@@ -120,3 +120,32 @@ Batas fase ini:
 - Input kalender/kehadiran/cuti memakai [aturan payroll per tanggal](payroll-attendance-inputs.md), termasuk kalender organisasi, rotasi dan cuti lintas periode. Histori assignment, snapshot sumber per hari, unpaid/partial-day leave dan correction masih terbuka. Simulasi memakai input yang diberikan pengguna; keberhasilannya tidak menjamin seluruh sumber data pegawai valid saat payroll berjalan.
 - Belum ada currency selain IDR untuk formula, pembatalan publikasi, rollback otomatis, atau eksekusi pembayaran bank.
 - E2E aplikasi lengkap, lint frontend keseluruhan, quality gate CI, serta restore drill produksi masih terbuka. Hasil gabungan ada di [checklist-implementation-status.md](checklist-implementation-status.md).
+
+## Mata uang: IDR saja, dan itu disengaja
+
+Seluruh jalur payroll hanya melayani rupiah. Ini bukan kelalaian, tetapi pilihan
+yang ditegakkan di tiga titik:
+
+| Titik | Yang terjadi |
+|---|---|
+| `payroll.dto.ts` | `currency: z.literal('IDR')` — nilai lain ditolak 422 saat alokasi gaji dibuat atau diubah |
+| `payroll.service.ts` (`calculatePayroll`) | gaji dengan `currency !== 'IDR'` menghentikan perhitungan run dengan 400 |
+| `shared/payroll/employee-pay.ts` | jalur formula menolak alokasi non-IDR sebelum satu nominal pun dihitung |
+
+Alasannya: yang membuat payroll ini benar justru bagian yang terikat rupiah —
+PPh21 (PTKP, bracket progresif, metode annualized net), batas iuran BPJS, dan
+pembulatan ke rupiah penuh. Mendukung mata uang lain setengah jalan berarti
+menghitung pajak Indonesia atas angka yang bukan rupiah, dan itu salah dengan
+cara yang tidak kelihatan di slip.
+
+**Konsekuensi yang perlu diketahui sebelum menjanjikannya ke calon pengguna:**
+karyawan ekspatriat atau kontrak berdenominasi mata uang asing tidak bisa
+diproses di sini. Yang bisa dilakukan sekarang hanyalah menyimpan gaji mereka
+dalam rupiah hasil konversi manual — dengan catatan bahwa kurs yang dipakai
+tidak tercatat di sistem.
+
+Untuk benar-benar mendukungnya nanti, yang dibutuhkan bukan melonggarkan
+`z.literal` melainkan: mata uang fungsional per perusahaan, tabel kurs bertanggal
+beserta kebijakan kurs mana yang dipakai (tanggal transaksi, tengah bulan, atau
+kurs pajak), dan pemisahan tegas antara mata uang pembayaran dengan mata uang
+pelaporan pajak — karena pajak tetap harus dilaporkan dalam rupiah.
