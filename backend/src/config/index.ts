@@ -143,9 +143,20 @@ const GUARDED_SECRET_KEYS = [
   'ENCRYPTION_KEY',
 ] as const;
 
-// Placeholder shapes shipped in .env/.env.example; length checks alone let
-// them straight through to production, so reject them explicitly there.
-const PLACEHOLDER_SECRET_PATTERN = /^(dev-|your-|test-|example|change[-_]?me)/i;
+/**
+ * Placeholder shapes shipped in .env/.env.example; length checks alone let them
+ * straight through to production, so reject them explicitly there.
+ *
+ * The pattern used to be anchored at the start, which caught
+ * `dev-encryption-key-…` and missed `session-secret-development-key-2024` and
+ * `csrf-secret-development-key-2024` — both of which were found running in
+ * production. A forgeable CSRF secret is not a cosmetic problem: the
+ * double-submit token is signed with it, so anyone who knows the value can mint
+ * a token that passes and the protection is gone. So the giveaway words are now
+ * matched anywhere in the value.
+ */
+const PLACEHOLDER_SECRET_PATTERN =
+  /(^(dev-|your-|test-|example|change[-_]?me))|(development|placeholder|changeme|secret-key|insecure|sample)/i;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const result = envSchema.safeParse(source);
@@ -157,11 +168,20 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   if (result.data.NODE_ENV === 'production') {
     const offenders = GUARDED_SECRET_KEYS.filter((key) => PLACEHOLDER_SECRET_PATTERN.test(result.data[key]));
-    if (offenders.length) {
-      const details = offenders
-        .map((key) => `  - ${key}: placeholder/dev value is not allowed in production; set a strong random secret`)
-        .join('\n');
-      throw new Error(`Invalid environment configuration:\n${details}`);
+    const problems = offenders.map(
+      (key) => `  - ${key}: placeholder/dev value is not allowed in production; set a strong random secret`,
+    );
+
+    // One secret for both token types means a stolen access token is also a
+    // refresh token to anything that forgets to check the `type` claim. The
+    // claim is checked today, but a single compromised value should not be one
+    // oversight away from an unexpirable session.
+    if (result.data.JWT_ACCESS_SECRET === result.data.JWT_REFRESH_SECRET) {
+      problems.push('  - JWT_REFRESH_SECRET: must differ from JWT_ACCESS_SECRET');
+    }
+
+    if (problems.length) {
+      throw new Error(`Invalid environment configuration:\n${problems.join('\n')}`);
     }
   }
   return result.data;
