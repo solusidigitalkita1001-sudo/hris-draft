@@ -129,3 +129,16 @@ Current numbers: 375 declared backend paths, 408 frontend calls, 0 unmatched.
 What it does not check: request and response payload shapes. The generated
 OpenAPI document describes request bodies; payload assertions would need
 per-endpoint response schemas that do not exist yet.
+
+## Referensi endpoint untuk dibagikan
+
+`docs/api-reference.md` memuat daftar lengkap endpoint (path, method, permission
+yang diminta, perlu-tidaknya autentikasi, dan apakah menerima body) yang
+**dibuat otomatis** dari `GET /api/v1/meta/openapi.json`. Itu file yang aman
+dikirim ke pengembang klien, karena tidak ditulis tangan: kalau route berubah,
+dokumennya berubah saat dibuat ulang.
+
+Tiga dokumen mobile yang lebih tua (`mobile-api.md`, `mobile-api-documentation.md`,
+`mobile-api-screen-mapping.md`) masih berguna untuk konteks alur per layar, tetapi
+terakhir disentuh 8–21 September — jadi untuk daftar endpoint, rujuk
+`api-reference.md`, bukan ketiganya.
