@@ -779,11 +779,38 @@ dilapiskan.
 
 Verifikasi: 18 test. Detail: `docs/annual-tax-recap.md`.
 
-### 🟠 GAP-33 — Tidak ada ekspor pelaporan BPJS / e-Bupot
+### 🟡 GAP-33 — Tidak ada ekspor pelaporan BPJS / e-Bupot — SEBAGIAN 30 Sep (angkanya ada)
 
 Tabel referensi BPJS dipakai untuk menghitung iuran, tetapi tidak ada ekspor
 laporan bulanan BPJS maupun berkas e-Bupot/SPT. Yang ada hanya ekspor berkas
 transfer bank (GAP-12).
+
+**SEBAGIAN DITUTUP: angkanya sudah ada** — `GET /payroll/bpjs-report?periodId=`
+(JSON atau CSV).
+
+Yang penting dari implementasinya: laporan ini **bukan** sekadar menjumlahkan
+potongan di slip. Slip hanya mencatat yang dipotong dari karyawan; iuran
+perusahaan (JKK, JKM, dan bagian pemberi kerja JHT/JP/JKN) **tidak pernah
+muncul di slip**, padahal itulah sebagian besar yang harus disetor. Jadi kedua
+sisi dihitung ulang dari upah dasar dan kebijakan perusahaan yang sama dengan
+yang dipakai run — yang juga berarti sisi karyawan **rekonsiliasi** dengan slip,
+bukan menyimpang.
+
+Cap upah ditegakkan (JHT dari upah penuh, JP dari cap JP, JKN dari cap 12 juta)
+— bagian yang salah bila seseorang menghitung persentase lurus untuk karyawan
+bergaji tinggi. Respons memuat **tarif dan cap efektif** yang dipakai, supaya
+setoran bisa diturunkan ulang setahun kemudian; sebuah test menangkap versi
+pertama yang hanya menerbitkan override dan karena itu tampak tanpa tarif.
+Nomor kepesertaan atau NIK yang kosong ditandai per karyawan — iuran tanpa nomor
+tidak bisa dicocokkan ke peserta di sisi BPJS, dan lebih baik terlihat di sini
+daripada di loket.
+
+Yang belum: berkas unggah resmi. Format mutasi bulanan BPJS Kesehatan dan
+Ketenagakerjaan berbeda satu sama lain dan sudah berubah; tata letak yang
+ditebak ditolak di loket. Kirim satu contoh berkas yang tim payroll benar-benar
+unggah, dan generatornya dilapiskan di atas data ini.
+
+Verifikasi: 13 test. Detail: `docs/bpjs-report.md`.
 
 ### 🟢 GAP-34 — Payroll mono-mata-uang secara desain — DITUTUP 30 Sep (didokumentasikan)
 
@@ -930,10 +957,18 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — 26 tertutup, **4 sebagian**,
-9 terbuka (5 lama + 3 dari pemeriksaan pagi + 1 dari pemeriksaan sore).
-GAP-32 menjadi sebagian: angka rekap PPh21 tahunan sudah dirakit dan diuji,
-tinggal formulir DJP-nya yang menunggu satu contoh berkas asli.
+**Total setelah pemeriksaan ini: 39 gap tercatat** — 26 tertutup, **5 sebagian**,
+8 terbuka (5 lama + 2 dari pemeriksaan pagi + 1 dari pemeriksaan sore).
+
+GAP-32 dan GAP-33 kini sebagian: angka rekap PPh21 tahunan dan iuran BPJS
+bulanan (dua sisi, dengan cap ditegakkan) sudah dirakit dan diuji. Yang tersisa
+pada keduanya hanyalah **tata letak berkas resmi**, dan itu menunggu satu contoh
+berkas asli darimu — formatnya yang menentukan diterima atau tidak, dan
+menebaknya berarti dokumen ditolak di loket.
+
+**Delapan yang benar-benar terbuka semuanya adalah keputusan kebijakan HR** di
+`docs/open-hr-decisions.md`. Tidak ada lagi gap yang tertahan oleh pekerjaan
+teknis.
 Pada 30 September ditutup tujuh: GAP-31 (integrasi mesin absensi), GAP-34
 (batasan mata uang didokumentasikan), GAP-14 (rapel), GAP-08 (cuti bersama),
 GAP-13 (email pemberitahuan slip gaji), GAP-38 (webhook), dan GAP-37 (SSO).

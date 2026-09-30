@@ -4,6 +4,7 @@ import { payrollService } from './payroll.service';
 import { Result } from '@/shared/core/Result';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
+import { bpjsReportService, bpjsReportToCsv } from './bpjs-report.service';
 import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
@@ -541,6 +542,24 @@ export class PayrollController {
       if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
       const year = Number(req.query.year);
       res.json(Result.success(await annualTaxRecapService.buildCompanySummary(companyId, year)));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Laporan iuran BPJS bulanan ====================
+  async bpjsReport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const report = await bpjsReportService.build(companyId, String(req.query.periodId));
+
+      if (req.query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="iuran-bpjs-${report.period.code}.csv"`);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(bpjsReportToCsv(report));
+        return;
+      }
+      res.json(Result.success(report));
     } catch (error) { next(error); }
   }
 }

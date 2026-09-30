@@ -24,13 +24,13 @@ import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeS
 import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
-import { annualTaxRecapQuerySchema, arrearsQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
+import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
 
 const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bpjs-report'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -147,6 +147,18 @@ router.post(
   authorize({ resource: 'payroll', action: 'read' }),
   validate(calculateJknSchema, 'body'),
   payrollController.calculateJkn.bind(payrollController)
+);
+
+// ==================== Laporan iuran BPJS bulanan ====================
+// Includes the employer share, which payslips never show — and which is most of
+// what BPJS is owed.
+router.get(
+  '/bpjs-report',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(bpjsReportQuerySchema, 'query'),
+  auditView({ action: 'VIEW_BPJS_REPORT', entity: 'PayrollPeriod' }),
+  payrollController.bpjsReport.bind(payrollController)
 );
 
 // ==================== Rekap PPh21 tahunan (bahan 1721-A1) ====================

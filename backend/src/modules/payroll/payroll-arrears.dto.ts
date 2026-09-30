@@ -27,3 +27,12 @@ export const annualTaxRecapQuerySchema = z.object({
 });
 
 export type AnnualTaxRecapQueryDTO = z.infer<typeof annualTaxRecapQuerySchema>;
+
+export const bpjsReportQuerySchema = z.object({
+  periodId: z.string().uuid(),
+  /// csv is for the payroll team's own reconciliation — deliberately not a
+  /// BPJS upload file.
+  format: z.enum(['json', 'csv']).default('json'),
+});
+
+export type BpjsReportQueryDTO = z.infer<typeof bpjsReportQuerySchema>;
