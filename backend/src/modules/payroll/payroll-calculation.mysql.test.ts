@@ -270,4 +270,27 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     ).rejects.toThrow(/closed period only/i);
     expect(await mockDatabase.payrollArrears.count({ where: { companyId: f.companyId } })).toBe(0);
   });
+
+  /**
+   * The December reconciliation must only fire in the period that actually ends
+   * the year. Settling a year in October would deduct a full year's correction
+   * from someone with two months still to be paid.
+   */
+  it('leaves a non-December run alone even with the reconciliation setting on', async () => {
+    const f = await fixture();
+    await employee(f);
+    await mockDatabase.companySetting.create({
+      data: { companyId: f.companyId, key: 'pph21_december_reconciliation_enabled', value: 'true' },
+    });
+
+    const completed = await run(f); // the fixture period runs in October
+    const slip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: completed.id } });
+
+    expect(await mockDatabase.payslipComponent.count({
+      where: { payslipId: slip.id, name: { contains: 'Koreksi PPh21' } },
+    })).toBe(0);
+    expect(await mockDatabase.salaryComponent.count({
+      where: { companyId: f.companyId, code: 'PPH21_ANNUAL_CORRECTION_AUTO' },
+    })).toBe(0);
+  });
 });

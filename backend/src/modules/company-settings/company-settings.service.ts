@@ -23,6 +23,10 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   leave_encashment_daily_divisor: '21',
   /// Whether fixed allowances join base salary in the daily rate.
   leave_encashment_include_allowances: 'false',
+  // December PPh21 reconciliation (GAP-16). Off by default because it changes
+  // take-home pay in the last month of the year; switching it on is a tenant
+  // decision. Only the period that actually ends in December is settled.
+  pph21_december_reconciliation_enabled: 'false',
 };
 
 const WORKWEEK_DAYS_KEY = 'attendance_workweek_days';

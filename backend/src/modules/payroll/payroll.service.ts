@@ -19,6 +19,7 @@ import { NotFoundError, ConflictError, BadRequestError, ValidationError, Forbidd
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
+import { calculatePph21Correction } from '@/shared/payroll/pph21-annual';
 import { mailService } from '@/shared/mail/MailService';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
@@ -47,6 +48,16 @@ const JKK_RISK_TO_RATE: Record<JKKRiskClass, number> = {
   [JKKRiskClass.IV]: 1.27,
   [JKKRiskClass.V]: 1.74,
 };
+
+/**
+ * Deductible employee pension for the tax base: BPJS JHT + JP, the same two the
+ * monthly engine subtracts. Read from the company's own policy so the annual
+ * reconciliation uses the same numbers the monthly withholding did.
+ */
+function bpjsPensionFor(policy: { bpjs?: Parameters<typeof calculateBpjs>[1] }, monthlyWage: number): number {
+  const breakdown = calculateBpjs(monthlyWage, policy.bpjs ?? {});
+  return breakdown.employee.jht + breakdown.employee.jp;
+}
 
 export class PayrollService {
   // ==================== Salary Components ====================
@@ -575,6 +586,48 @@ export class PayrollService {
     const encashmentComponent = await this.ensureLeaveEncashmentComponent(run.companyId, database);
     const encashmentsByEmployee = await leaveEncashmentService.approvedByEmployee(run.companyId, database);
     const encashmentClaims: Array<{ encashmentId: string; payslipId: string }> = [];
+
+    // December PPh21 reconciliation (GAP-16). Opt-in per company, because it
+    // changes take-home pay in the last month of the year; and only in the
+    // period that actually ends the fiscal year, so a mid-year run cannot
+    // accidentally settle a year that is not over.
+    const reconciliationSetting = await database.companySetting.findUnique({
+      where: { companyId_key: { companyId: run.companyId, key: 'pph21_december_reconciliation_enabled' } },
+      select: { value: true },
+    });
+    const fiscalPeriodEnd = new Date(run.period.endDate);
+    const isFinalPeriodOfYear = fiscalPeriodEnd.getUTCMonth() === 11;
+    const reconcileAnnualTax = reconciliationSetting?.value === 'true' && isFinalPeriodOfYear;
+    const taxComponent = reconcileAnnualTax
+      ? await payrollRepository.findSalaryComponentByCode(run.companyId, 'PPH21', database)
+      : null;
+    const taxCorrectionComponent = reconcileAnnualTax
+      ? await this.ensureTaxCorrectionComponent(run.companyId, database)
+      : null;
+    const priorPayslips = reconcileAnnualTax
+      ? await database.payslip.findMany({
+          where: {
+            companyId: run.companyId,
+            payrollRun: {
+              status: 'APPROVED',
+              period: {
+                startDate: { gte: new Date(Date.UTC(fiscalPeriodEnd.getUTCFullYear(), 0, 1)) },
+                endDate: { lte: fiscalPeriodEnd },
+              },
+            },
+          },
+          select: {
+            employeeId: true,
+            components: { select: { salaryComponentId: true, amount: true, type: true, isTaxable: true } },
+          },
+        })
+      : [];
+    const priorByEmployee = new Map<string, typeof priorPayslips>();
+    for (const slip of priorPayslips) {
+      const list = priorByEmployee.get(slip.employeeId) ?? [];
+      list.push(slip);
+      priorByEmployee.set(slip.employeeId, list);
+    }
     // Benefit contributions (checklist §19). Opt-in per company via the
     // benefit_payroll_deduction_enabled setting: enabling it changes
     // take-home pay, so it must be a deliberate tenant decision, not a deploy.
@@ -875,11 +928,43 @@ export class PayrollService {
         hasNpwp: Boolean(emp?.taxId),
       };
 
-      const { earningsTotal, deductionsTotal, components, formulaCalculations } = calculateEmployeePay(salary, extraComponents, taxContext, {
+      const pay = calculateEmployeePay(salary, extraComponents, taxContext, {
         BASE_SALARY: salary.baseSalary.toString(), WORK_DAYS: String(workDaysInPeriod),
         PRESENT_DAYS: String(attd.present), LEAVE_DAYS: String(leaveDaysForEmployee),
         ABSENT_DAYS: String(absentDays), OVERTIME_HOURS: String(overtimeHoursForEmployee),
       }, formulaVersions, payrollPolicy);
+
+      let earningsTotal = pay.earningsTotal;
+      let deductionsTotal = pay.deductionsTotal;
+      const components = [...pay.components];
+      const formulaCalculations = pay.formulaCalculations;
+
+      if (reconcileAnnualTax && taxComponent && taxCorrectionComponent) {
+        const correction = this.annualTaxCorrection({
+          taxComponentId: taxComponent.id,
+          thisPeriod: components,
+          priorSlips: priorByEmployee.get(salary.employeeId) ?? [],
+          taxContext,
+          pension: bpjsPensionFor(payrollPolicy, Number(salary.baseSalary)),
+          policy: payrollPolicy,
+        });
+
+        if (correction && correction.delta !== 0) {
+          const isShortfall = correction.delta > 0;
+          const amount = Math.abs(correction.delta);
+          components.push({
+            salaryComponentId: taxCorrectionComponent.id,
+            name: isShortfall ? 'Koreksi PPh21 Tahunan' : 'Pengembalian PPh21 Tahunan',
+            type: isShortfall ? 'DEDUCTION' : 'ALLOWANCE',
+            amount,
+            // The correction settles tax; it is not itself taxable income.
+            isTaxable: false,
+          });
+          if (isShortfall) deductionsTotal = new Prisma.Decimal(deductionsTotal).plus(amount).toDecimalPlaces(2).toNumber();
+          else earningsTotal = new Prisma.Decimal(earningsTotal).plus(amount).toDecimalPlaces(2).toNumber();
+        }
+      }
+
       const netPay = new Prisma.Decimal(earningsTotal).minus(deductionsTotal).toDecimalPlaces(2).toNumber();
       if (netPay < 0) throw new BadRequestError('Payroll deductions exceed earnings; review the calculation before approval');
 
@@ -980,6 +1065,73 @@ export class PayrollService {
     // Mark run as completed
     await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
 
+  }
+
+  /**
+   * Work out what December owes or must refund.
+   *
+   * Returns null when the year cannot be settled honestly — no taxable months,
+   * or no tax component to read withholding from — because a confident zero
+   * would be worse than doing nothing.
+   */
+  private annualTaxCorrection(input: {
+    taxComponentId: string;
+    thisPeriod: PayComponent[];
+    priorSlips: Array<{ components: Array<{ salaryComponentId: string; amount: Prisma.Decimal; type: string; isTaxable: boolean }> }>;
+    taxContext: { married: boolean; dependents: number; hasNpwp: boolean };
+    pension: number;
+    policy: { pph21?: Record<string, unknown> };
+  }) {
+    const taxableOf = (rows: Array<{ type: string; isTaxable: boolean; amount: number | Prisma.Decimal }>) =>
+      rows
+        .filter((row) => row.type === 'ALLOWANCE' && row.isTaxable)
+        .reduce((sum, row) => sum + Number(row.amount), 0);
+    const withheldOf = (rows: Array<{ salaryComponentId: string; amount: number | Prisma.Decimal }>) =>
+      rows
+        .filter((row) => row.salaryComponentId === input.taxComponentId)
+        .reduce((sum, row) => sum + Number(row.amount), 0);
+
+    const monthlyGrosses: number[] = [];
+    let withheldToDate = 0;
+    for (const slip of input.priorSlips) {
+      monthlyGrosses.push(taxableOf(slip.components));
+      withheldToDate += withheldOf(slip.components);
+    }
+    // The month being paid is part of the year too.
+    monthlyGrosses.push(taxableOf(input.thisPeriod));
+    withheldToDate += withheldOf(input.thisPeriod);
+
+    if (monthlyGrosses.every((gross) => gross <= 0)) return null;
+
+    return calculatePph21Correction(
+      {
+        monthlyGrosses,
+        monthlyPensions: monthlyGrosses.map(() => input.pension),
+        married: input.taxContext.married,
+        dependents: input.taxContext.dependents,
+        hasNpwp: input.taxContext.hasNpwp,
+        withheldToDate,
+      },
+      input.policy.pph21 ?? {},
+    );
+  }
+
+  private async ensureTaxCorrectionComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'PPH21_ANNUAL_CORRECTION_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Koreksi PPh21 Tahunan',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false,
+      description: 'System generated: December reconciliation of annual PPh21',
+      sortOrder: 994,
+    }, database);
   }
 
   private async ensureLeaveEncashmentComponent(companyId: string, database: Prisma.TransactionClient) {

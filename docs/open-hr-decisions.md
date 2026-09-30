@@ -118,7 +118,7 @@ adalah koreksi, dan endpoint rapel menolaknya secara eksplisit. Kalau koreksi
 nominal juga dibutuhkan, itu keputusan terpisah — dan lebih berat, karena
 menyentuh angka yang sudah dilaporkan.
 
-## 6. GAP-16 — Rekonsiliasi PPh21 Desember (M)
+## 6. GAP-16 — Rekonsiliasi PPh21 Desember — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Konteks teknis:** perhitungan bulanan memakai metode annualized net (pajak
 setahun dibagi 12), sehingga selisih akhir tahun biasanya kecil — muncul saat
@@ -127,8 +127,17 @@ ada bonus, THR, perubahan PTKP, atau karyawan masuk/keluar di tengah tahun.
 **Yang perlu diputuskan:** selisih dikoreksi di slip Desember, atau dilaporkan
 saja untuk diproses manual oleh HR/pajak?
 
-**Rekomendasi:** koreksi otomatis di Desember dengan komponen terpisah yang
-terlihat jelas di slip, supaya karyawan bisa melihat asal angkanya.
+**Keputusan user:** koreksi otomatis di Desember dengan komponen terpisah. Sudah
+dibangun dan diuji — `docs/pph21-december-reconciliation.md`.
+
+Satu hal yang perlu kamu lakukan: fiturnya **mati secara default** karena
+mengubah take-home pay di bulan terakhir tahun, dan saya tidak menyalakannya
+sendiri — itu data perusahaanmu. Nyalakan lewat company setting
+`pph21_december_reconciliation_enabled` = `true`.
+
+Perlu diketahui juga: koreksi berjalan **dua arah**. Kurang potong menjadi
+potongan; lebih potong menjadi pengembalian, karena karyawan yang status
+PTKP-nya berubah di tengah tahun biasanya justru lebih potong.
 
 ## 7. GAP-17 — Metode gross-up — ✅ DIPUTUSKAN 30 Sep: tidak dibangun
 
