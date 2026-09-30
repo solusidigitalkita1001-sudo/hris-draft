@@ -820,7 +820,7 @@ Ukuran: **M**. Fondasinya justru sudah mendukung — sesi sudah memakai
 `sessionVersion` yang bisa dicabut serentak, jadi yang perlu ditambah adalah
 penyedia identitas dan pemetaan klaim ke pengguna/company access.
 
-### 🟠 GAP-38 — Tidak ada webhook untuk sistem luar
+### 🟢 GAP-38 — Tidak ada webhook untuk sistem luar — DITUTUP 30 Sep
 
 RabbitMQ dipakai untuk event **internal** antar-instance, tetapi tidak ada satu
 pun jalur keluar: tidak ada model langganan webhook, tidak ada pengiriman
@@ -828,9 +828,30 @@ bertanda tangan, tidak ada retry. Pembeli yang ingin absensi masuk ke sistem
 akuntansinya, atau karyawan baru otomatis dibuatkan akun di aplikasi lain, hari
 ini hanya bisa polling API.
 
-Ukuran: **M**. Yang dibutuhkan: langganan per company + per jenis event, tanda
-tangan HMAC pada payload, dan retry dengan backoff — infrastruktur queue-nya
-sudah ada untuk menampung itu.
+**DITUTUP.** Yang dibangun persis itu, ditambah dua hal yang tidak boleh
+dilewatkan:
+
+- **Pagar SSRF.** URL webhook adalah alamat yang diambil server atas perintah
+  tenant. Tanpa pagar, satu langganan ke `169.254.169.254` membuat HRIS membaca
+  kredensial instance cloud untuk si tenant. Ditolak: skema non-https, kredensial
+  tertanam, port tidak lazim, `localhost`/`.internal`, dan seluruh rentang privat
+  termasuk IPv4-mapped IPv6 dalam dua ejaan. Diperiksa **dua kali** — saat
+  berlangganan dan lagi saat pengiriman terhadap alamat hasil resolusi DNS,
+  karena nama yang tadinya publik bisa menunjuk loopback satu jam kemudian.
+  Redirect tidak diikuti.
+- **Dedupe.** Unique `(subscriptionId, eventId)` dan fan-out dilakukan **setelah**
+  klaim inbox di worker, bukan di penerbit event: kalau tidak, setiap retry
+  BullMQ menjadi panggilan kedua ke sistem pelanggan — yang bagi mereka bisa
+  berarti invoice ganda.
+
+Selain itu: secret ditampilkan sekali dan disimpan terenkripsi (bukan hash,
+karena HMAC butuh secret utuh), tanda tangan mencakup timestamp sehingga payload
+yang terekam tidak bisa diputar ulang selamanya, retry berbackoff sampai 6
+percobaan lalu `DEAD`, langganan yang gagal 20 kali berturut-turut mematikan
+dirinya sendiri dengan alasan tercatat, ledger pengiriman bisa diperiksa, dan
+katalog event sengaja tidak memuat event autentikasi.
+
+Verifikasi: 31 test pagar URL + 18 test layanan. Detail: `docs/webhooks.md`.
 
 ### 🟡 GAP-39 — Tidak ada custom field per perusahaan
 
@@ -851,16 +872,16 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — 24 tertutup, 3 sebagian,
-12 terbuka (5 lama + 4 dari pemeriksaan pagi + 3 dari pemeriksaan sore).
-Pada 30 September ditutup lima: GAP-31 (integrasi mesin absensi), GAP-34
-(batasan mata uang didokumentasikan), GAP-14 (rapel), GAP-08 (cuti bersama), dan
-GAP-13 (email pemberitahuan slip gaji).
+**Total setelah pemeriksaan ini: 39 gap tercatat** — 25 tertutup, 3 sebagian,
+11 terbuka (5 lama + 4 dari pemeriksaan pagi + 2 dari pemeriksaan sore).
+Pada 30 September ditutup enam: GAP-31 (integrasi mesin absensi), GAP-34
+(batasan mata uang didokumentasikan), GAP-14 (rapel), GAP-08 (cuti bersama),
+GAP-13 (email pemberitahuan slip gaji), dan GAP-38 (webhook).
 
-Dari 12 yang tersisa: **2 wajib regulasi** (GAP-32 bukti potong 1721-A1, GAP-33
-ekspor BPJS/e-Bupot — keduanya menunggu satu contoh berkas asli), **2 penentu
-penjualan** (GAP-37 SSO, GAP-38 webhook), dan **8 menunggu keputusan kebijakan**
-di `docs/open-hr-decisions.md`.
+Dari 11 yang tersisa: **2 wajib regulasi** (GAP-32 bukti potong 1721-A1, GAP-33
+ekspor BPJS/e-Bupot — keduanya menunggu satu contoh berkas asli), **1 penentu
+penjualan** (GAP-37 SSO), dan **8 menunggu keputusan kebijakan** di
+`docs/open-hr-decisions.md`.
 GAP-34 ditutup dengan mendokumentasikan batasannya; **GAP-31 ditutup dengan
 integrasi perangkat sungguhan**, dan bersamanya hilang satu-satunya gap yang
 menjanjikan keamanan yang tidak dimilikinya.

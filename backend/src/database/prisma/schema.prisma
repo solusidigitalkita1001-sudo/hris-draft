@@ -126,6 +126,8 @@ model Company {
   attendanceDevicePunches               AttendanceDevicePunch[]
   payrollArrears                        PayrollArrears[]
   collectiveLeaves                      CollectiveLeave[]
+  webhookSubscriptions                  WebhookSubscription[]
+  webhookDeliveries                     WebhookDelivery[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -5521,4 +5523,77 @@ enum CollectiveLeaveStatus {
   APPLIED
   /// Dibatalkan sebelum diwujudkan.
   CANCELLED
+}
+
+/// Langganan webhook: cara sistem luar mengetahui sesuatu terjadi di HRIS tanpa
+/// perlu polling.
+///
+/// Satu baris = satu endpoint milik satu perusahaan, berlangganan sekumpulan
+/// nama event. Secret-nya disimpan **terenkripsi** (bukan hash), karena
+/// dibutuhkan utuh untuk menandatangani setiap payload dengan HMAC.
+model WebhookSubscription {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  companyId      String    @map("company_id") @db.VarChar(36)
+  url            String    @db.VarChar(500)
+  /// Nama event yang diikuti; divalidasi terhadap katalog yang diterbitkan.
+  events         Json
+  /// Terenkripsi dengan ENCRYPTION_KEY. Ditampilkan sekali saat dibuat.
+  secretCipher   String    @map("secret_cipher") @db.Text
+  description    String?   @db.VarChar(255)
+  isActive       Boolean   @default(true) @map("is_active")
+  /// Kegagalan berturut-turut. Endpoint yang mati terus akan dimatikan sendiri
+  /// supaya sistem tidak mengetuk pintu yang jelas tidak ada selamanya.
+  failureCount   Int       @default(0) @map("failure_count")
+  disabledReason String?   @map("disabled_reason") @db.VarChar(255)
+  lastDeliveryAt DateTime? @map("last_delivery_at")
+  createdBy      String?   @map("created_by") @db.VarChar(36)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  company    Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  deliveries WebhookDelivery[]
+
+  @@index([companyId])
+  @@index([isActive])
+  @@map("webhook_subscriptions")
+}
+
+/// Satu percobaan pengiriman yang bisa diperiksa: payload apa, ke mana, jawaban
+/// apa, dan berapa kali dicoba. Tanpa baris ini, "webhook saya tidak masuk"
+/// tidak punya bukti untuk ditelusuri.
+model WebhookDelivery {
+  id             String                @id @default(uuid()) @db.VarChar(36)
+  companyId      String                @map("company_id") @db.VarChar(36)
+  subscriptionId String                @map("subscription_id") @db.VarChar(36)
+  /// Id domain event. Unik per langganan, jadi event yang dikirim ulang oleh
+  /// queue tidak menjadi dua panggilan ke sistem pelanggan.
+  eventId        String                @map("event_id") @db.VarChar(100)
+  eventName      String                @map("event_name") @db.VarChar(100)
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  responseStatus Int?                  @map("response_status")
+  lastError      String?               @map("last_error") @db.VarChar(500)
+  nextAttemptAt  DateTime?             @map("next_attempt_at")
+  sentAt         DateTime?             @map("sent_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, eventId])
+  @@index([companyId])
+  @@index([status, nextAttemptAt])
+  @@map("webhook_deliveries")
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SENT
+  /// Gagal tetapi masih akan dicoba lagi.
+  FAILED
+  /// Menyerah setelah percobaan maksimum; tidak akan dicoba lagi.
+  DEAD
 }

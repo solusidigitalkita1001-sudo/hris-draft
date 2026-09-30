@@ -9,6 +9,7 @@ export const QueueNames = {
   PERFORMANCE_AUTOMATION: 'performance-automation',
   LEAVE_AUTOMATION: 'leave-automation',
   PUSH_NOTIFICATIONS: 'push-notifications',
+  WEBHOOKS: 'webhooks',
 } as const;
 
 export class QueueManager {

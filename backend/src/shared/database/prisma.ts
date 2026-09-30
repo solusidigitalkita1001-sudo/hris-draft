@@ -29,6 +29,8 @@ const COMPANY_SCOPED_MODELS = new Set([
   'PayrollArrears',
   'CollectiveLeave',
   'CollectiveLeaveExclusion',
+  'WebhookSubscription',
+  'WebhookDelivery',
   'WorkflowTemplate',
   'WorkflowInstance',
   'WorkflowInstanceStep',
