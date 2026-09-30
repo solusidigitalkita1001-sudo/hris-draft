@@ -1,4 +1,5 @@
 import { recruitmentRepository } from './recruitment.repository';
+import { jobRequisitionService } from './job-requisition.service';
 import { CreateJobPostingDTO, CreateCandidateDTO, CreateApplicationDTO, UpdateApplicationStatusDTO, CreateInterviewDTO, CreateInterviewFeedbackDTO } from './recruitment.dto';
 import { NotFoundError, BadRequestError, ConflictError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
@@ -37,16 +38,33 @@ export class RecruitmentService {
       }
     }
 
+    // Man power planning (GAP-22). Whether a requisition is required is a
+    // per-company setting; the check also refuses an unapproved one, one from
+    // another company, and vacancies that would exceed the headcount granted —
+    // otherwise the approval is a formality any number of postings can exceed.
+    const requisition = await jobRequisitionService.resolveForPosting(
+      data.companyId,
+      data.requisitionId,
+      data.vacancies ?? 1,
+    );
+
     const code = await generateSystemCode({
       prefix: 'REC-JOB',
       label: data.title,
       exists: async (candidate) => Boolean(await recruitmentRepository.findJobPostingByCode(candidate)),
     });
 
-    return recruitmentRepository.createJobPosting({
+    const posting = await recruitmentRepository.createJobPosting({
       ...data,
       code,
     });
+
+    if (requisition?.fulfils) {
+      // Its whole headcount is now open; it should stop appearing as available.
+      await jobRequisitionService.markFulfilled(data.companyId, requisition.id);
+    }
+
+    return posting;
   }
 
   async approveJobPosting(id: string) {

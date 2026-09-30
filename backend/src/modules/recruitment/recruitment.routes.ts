@@ -3,13 +3,54 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { recruitmentController } from './recruitment.controller';
-import { createJobPostingSchema, createCandidateSchema, createApplicationSchema, updateApplicationStatusSchema, createInterviewSchema, createInterviewFeedbackSchema, createOfferSchema, respondOfferSchema } from './recruitment.dto';
+import { createJobPostingSchema, createCandidateSchema, createApplicationSchema, updateApplicationStatusSchema, createInterviewSchema, createInterviewFeedbackSchema, createOfferSchema, respondOfferSchema,
+  createJobRequisitionSchema,
+  rejectRequisitionSchema,
+  requisitionQuerySchema,
+} from './recruitment.dto';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 import { auditLog } from '@/shared/middleware/AuditLog';
 
 const router = Router();
 router.use(authenticate);
 router.use(requireCompanyAccess());
+
+// ==================== Requisition (man power planning) ====================
+// Static paths before /job-postings/:id. Approving a requisition commits
+// headcount budget, so it carries the approve permission.
+router.get(
+  '/requisitions',
+  authorize({ resource: 'recruitment', action: 'read' }),
+  validate(requisitionQuerySchema, 'query'),
+  recruitmentController.findAllRequisitions.bind(recruitmentController),
+);
+router.post(
+  '/requisitions',
+  authorize({ resource: 'recruitment', action: 'create' }),
+  validate(createJobRequisitionSchema),
+  recruitmentController.createRequisition.bind(recruitmentController),
+);
+router.patch(
+  '/requisitions/:id/submit',
+  authorize({ resource: 'recruitment', action: 'update' }),
+  recruitmentController.submitRequisition.bind(recruitmentController),
+);
+router.patch(
+  '/requisitions/:id/approve',
+  authorize({ resource: 'recruitment', action: 'approve' }),
+  recruitmentController.approveRequisition.bind(recruitmentController),
+);
+router.patch(
+  '/requisitions/:id/reject',
+  authorize({ resource: 'recruitment', action: 'approve' }),
+  validate(rejectRequisitionSchema),
+  recruitmentController.rejectRequisition.bind(recruitmentController),
+);
+router.patch(
+  '/requisitions/:id/cancel',
+  authorize({ resource: 'recruitment', action: 'update' }),
+  recruitmentController.cancelRequisition.bind(recruitmentController),
+);
 
 router.get('/job-postings', authorize({ resource: 'recruitment', action: 'read' }), recruitmentController.findAllJobPostings.bind(recruitmentController));
 router.get('/job-postings/:id', authorize({ resource: 'recruitment', action: 'read' }), recruitmentController.findJobPostingById.bind(recruitmentController));

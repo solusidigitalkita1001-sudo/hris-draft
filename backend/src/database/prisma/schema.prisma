@@ -122,6 +122,18 @@ model Company {
   interviews                            Interview[]
   attendances                           Attendance[]
   attendanceCorrections                 AttendanceCorrection[]
+  attendanceDevices                     AttendanceDevice[]
+  attendanceDevicePunches               AttendanceDevicePunch[]
+  payrollArrears                        PayrollArrears[]
+  collectiveLeaves                      CollectiveLeave[]
+  webhookSubscriptions                  WebhookSubscription[]
+  webhookDeliveries                     WebhookDelivery[]
+  ssoProviders                          SsoProvider[]
+  ssoLoginAttempts                      SsoLoginAttempt[]
+  leaveEncashments                      LeaveEncashment[]
+  employmentContracts                   EmploymentContract[]
+  trainingFeedback                      TrainingFeedback[]
+  jobRequisitions                       JobRequisition[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -212,15 +224,17 @@ model Branch {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  company                Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  employees              Employee[]
-  attendances            Attendance[]
-  attendancePolicies     BranchAttendancePolicy[]
-  careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromBranch")
-  careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToBranch")
+  company                   Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employees                 Employee[]
+  attendances               Attendance[]
+  attendanceDevices         AttendanceDevice[]
+  collectiveLeaveExclusions CollectiveLeaveExclusion[]
+  attendancePolicies        BranchAttendancePolicy[]
+  careerTransactionsFrom    EmployeeCareerTransaction[] @relation("CareerFromBranch")
+  careerTransactionsTo      EmployeeCareerTransaction[] @relation("CareerToBranch")
   /// C.5+C.6 Daily Activities + Tasks scoped per branch
-  dailyActivities        DailyActivity[]
-  taskAssignments        TaskAssignment[]
+  dailyActivities           DailyActivity[]
+  taskAssignments           TaskAssignment[]
 
   @@index([companyId])
   @@index([code])
@@ -276,6 +290,8 @@ model Department {
   jobPostings            JobPosting[]
   careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromDepartment")
   careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToDepartment")
+
+  jobRequisitions JobRequisition[]
 
   @@index([divisionId])
   @@index([companyId])
@@ -335,6 +351,8 @@ model Position {
   jobPostings            JobPosting[]
   careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromPosition")
   careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToPosition")
+
+  jobRequisitions JobRequisition[]
 
   @@index([departmentId])
   @@index([companyId])
@@ -441,6 +459,8 @@ model PayrollPeriod {
   payrollRuns        PayrollRun[]
   /// C.4 EWA: List request tarik gaji awal yang reference periode ini
   earnedWageAccesses EarnedWageAccess[]
+  /// Rapel yang berasal dari periode ini (karyawan terlewat saat periode ditutup).
+  arrears            PayrollArrears[]
 
   @@index([companyId])
   @@index([code])
@@ -481,6 +501,7 @@ model PayrollRun {
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
   /// C.4 EWA: list employee tarik gaji awal yang di-deducted di run ini
   earnedWageAccesses     EarnedWageAccess[]
+  PayrollArrears         PayrollArrears[]
 
   @@index([periodId])
   @@index([companyId])
@@ -524,6 +545,8 @@ model Payslip {
   benefitDeductions      BenefitDeduction[]
   paymentTransactions    PayrollPaymentTransaction[]
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
+  arrears                PayrollArrears[]
+  leaveEncashments       LeaveEncashment[]
 
   @@index([payrollRunId])
   @@index([employeeId])
@@ -1716,13 +1739,25 @@ model Goal {
   updatedAt   DateTime     @updatedAt @map("updated_at")
   deletedAt   DateTime?    @map("deleted_at")
 
-  employee Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  company  Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  updates  GoalUpdate[]
+  /// Goal yang menjadi induk, bila ada (GAP-26).
+  ///
+  /// Rujukan bebas, bukan cascade formal: satu goal boleh menunjuk goal lain
+  /// sebagai induk tanpa wajib menempel pada level organisasi. Cascade formal
+  /// menuntut struktur goal organisasi yang biasanya belum mapan saat sistemnya
+  /// baru dipakai, dan memaksakannya lebih dulu menghasilkan pohon goal yang
+  /// diisi asal-asalan.
+  parentGoalId String? @map("parent_goal_id") @db.VarChar(36)
+
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company    Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  updates    GoalUpdate[]
+  parentGoal Goal?        @relation("GoalHierarchy", fields: [parentGoalId], references: [id], onDelete: SetNull)
+  childGoals Goal[]       @relation("GoalHierarchy")
 
   @@index([employeeId])
   @@index([companyId])
   @@index([status])
+  @@index([parentGoalId])
   @@map("goals")
 }
 
@@ -1851,6 +1886,7 @@ model TrainingEnrollment {
   deletedAt   DateTime?        @map("deleted_at")
 
   course                                TrainingCourse                         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  feedback                              TrainingFeedback?
   employee                              Employee                               @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   company                               Company                                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   performanceDevelopmentRecommendations PerformanceDevelopmentRecommendation[]
@@ -1901,6 +1937,11 @@ model JobPosting {
   requirements     String?       @db.Text
   responsibilities String?       @db.Text
   vacancies        Int           @default(1)
+  /// Requisition yang menjadi dasar lowongan ini. Wajib atau tidaknya
+  /// ditentukan setting per perusahaan (GAP-22): perusahaan yang anggaran
+  /// headcount-nya terpusat mewajibkannya, yang tidak tidak perlu terhambat
+  /// birokrasi tambahan.
+  requisitionId    String?       @map("requisition_id") @db.VarChar(36)
   status           PostingStatus @default(DRAFT)
   postedAt         DateTime?     @map("posted_at")
   closedAt         DateTime?     @map("closed_at")
@@ -1908,6 +1949,7 @@ model JobPosting {
   updatedAt        DateTime      @updatedAt @map("updated_at")
   deletedAt        DateTime?     @map("deleted_at")
 
+  requisition  JobRequisition?  @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
   company      Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
   department   Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   position     Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
@@ -2198,27 +2240,27 @@ model EmployeeShiftOverride {
 
 /// Users (login accounts)
 model User {
-  id                     String     @id @default(uuid()) @db.VarChar(36)
-  email                  String     @unique @db.VarChar(255)
-  passwordHash           String     @map("password_hash") @db.VarChar(255)
-  passwordVersion        Int        @default(1) @map("password_version")
-  sessionVersion         Int        @default(1) @map("session_version")
-  employeeId             String?    @unique @map("employee_id") @db.VarChar(36)
-  status                 UserStatus @default(ACTIVE)
-  mustChangePassword     Boolean    @default(true) @map("must_change_password")
-  lastLoginAt            DateTime?  @map("last_login_at")
-  failedAttempts         Int        @default(0) @map("failed_attempts")
-  lockedUntil            DateTime?  @map("locked_until")
-  twoFactorEnabled       Boolean    @default(false) @map("two_factor_enabled")
-  twoFactorSecret        String?    @map("two_factor_secret") @db.VarChar(255)
-  twoFactorRecoveryCodes String?    @map("two_factor_recovery_codes") @db.Text
+  id                       String     @id @default(uuid()) @db.VarChar(36)
+  email                    String     @unique @db.VarChar(255)
+  passwordHash             String     @map("password_hash") @db.VarChar(255)
+  passwordVersion          Int        @default(1) @map("password_version")
+  sessionVersion           Int        @default(1) @map("session_version")
+  employeeId               String?    @unique @map("employee_id") @db.VarChar(36)
+  status                   UserStatus @default(ACTIVE)
+  mustChangePassword       Boolean    @default(true) @map("must_change_password")
+  lastLoginAt              DateTime?  @map("last_login_at")
+  failedAttempts           Int        @default(0) @map("failed_attempts")
+  lockedUntil              DateTime?  @map("locked_until")
+  twoFactorEnabled         Boolean    @default(false) @map("two_factor_enabled")
+  twoFactorSecret          String?    @map("two_factor_secret") @db.VarChar(255)
+  twoFactorRecoveryCodes   String?    @map("two_factor_recovery_codes") @db.Text
   /// PIN 6 digit untuk membuka nominal slip gaji sendiri (argon2id hash, bukan PIN asli).
-  payslipPinHash           String?   @map("payslip_pin_hash") @db.VarChar(255)
-  payslipPinFailedAttempts Int       @default(0) @map("payslip_pin_failed_attempts")
-  payslipPinLockedUntil    DateTime? @map("payslip_pin_locked_until")
-  createdAt              DateTime   @default(now()) @map("created_at")
-  updatedAt              DateTime   @updatedAt @map("updated_at")
-  deletedAt              DateTime?  @map("deleted_at")
+  payslipPinHash           String?    @map("payslip_pin_hash") @db.VarChar(255)
+  payslipPinFailedAttempts Int        @default(0) @map("payslip_pin_failed_attempts")
+  payslipPinLockedUntil    DateTime?  @map("payslip_pin_locked_until")
+  createdAt                DateTime   @default(now()) @map("created_at")
+  updatedAt                DateTime   @updatedAt @map("updated_at")
+  deletedAt                DateTime?  @map("deleted_at")
 
   employee                   Employee?                   @relation("EmployeeUser", fields: [employeeId], references: [id], onDelete: SetNull)
   userRoles                  UserRole[]
@@ -2234,6 +2276,7 @@ model User {
   payrollUnlockGuards        PayrollUnlockGuard[]
   uploadedDocuments          Document[]                  @relation("DocumentUploader")
   documentSignatures         DocumentSignature[]
+  documentSignerAssignments  DocumentSigner[]
   documentAccessLogs         DocumentAccessLog[]
   createdCareerTransactions  EmployeeCareerTransaction[]
   companyAccesses            UserCompanyAccess[]
@@ -2351,6 +2394,10 @@ model Employee {
   trainingEnrollments                           TrainingEnrollment[]
   trainingAttendances                           TrainingAttendance[]
   attendances                                   Attendance[]
+  attendanceDevicePunches                       AttendanceDevicePunch[]
+  payrollArrears                                PayrollArrears[]
+  leaveEncashments                              LeaveEncashment[]
+  employmentContracts                           EmploymentContract[]
   attendanceCorrections                         AttendanceCorrection[]
   overtimeRequests                              OvertimeRequest[]
   leaveBalances                                 LeaveBalance[]
@@ -2450,36 +2497,43 @@ model UserCompanyAccess {
 }
 
 model EmployeeCareerTransaction {
-  id                 String                @id @default(uuid()) @db.VarChar(36)
-  employeeId         String                @map("employee_id") @db.VarChar(36)
-  companyId          String                @map("company_id") @db.VarChar(36)
-  transactionType    CareerTransactionType @map("transaction_type")
-  effectiveDate      DateTime              @map("effective_date")
-  fromBranchId       String?               @map("from_branch_id") @db.VarChar(36)
-  toBranchId         String?               @map("to_branch_id") @db.VarChar(36)
-  fromDepartmentId   String?               @map("from_department_id") @db.VarChar(36)
-  toDepartmentId     String?               @map("to_department_id") @db.VarChar(36)
-  fromPositionId     String?               @map("from_position_id") @db.VarChar(36)
-  toPositionId       String?               @map("to_position_id") @db.VarChar(36)
-  fromEmploymentType EmploymentType?       @map("from_employment_type")
-  toEmploymentType   EmploymentType?       @map("to_employment_type")
-  referenceNumber    String?               @map("reference_number") @db.VarChar(100)
+  id                  String                @id @default(uuid()) @db.VarChar(36)
+  employeeId          String                @map("employee_id") @db.VarChar(36)
+  companyId           String                @map("company_id") @db.VarChar(36)
+  transactionType     CareerTransactionType @map("transaction_type")
+  effectiveDate       DateTime              @map("effective_date")
+  fromBranchId        String?               @map("from_branch_id") @db.VarChar(36)
+  toBranchId          String?               @map("to_branch_id") @db.VarChar(36)
+  fromDepartmentId    String?               @map("from_department_id") @db.VarChar(36)
+  toDepartmentId      String?               @map("to_department_id") @db.VarChar(36)
+  fromPositionId      String?               @map("from_position_id") @db.VarChar(36)
+  toPositionId        String?               @map("to_position_id") @db.VarChar(36)
+  fromEmploymentType  EmploymentType?       @map("from_employment_type")
+  toEmploymentType    EmploymentType?       @map("to_employment_type")
+  referenceNumber     String?               @map("reference_number") @db.VarChar(100)
   /// New base salary applied with the movement (null = compensation unchanged).
-  toBaseSalary       Decimal?              @map("to_base_salary") @db.Decimal(15, 2)
+  toBaseSalary        Decimal?              @map("to_base_salary") @db.Decimal(15, 2)
+  /// Why the pay changed, as distinct from why the person moved (GAP-21).
+  /// Required whenever toBaseSalary is set: a raise recorded without a stated
+  /// reason is the one thing nobody can reconstruct a year later, and it is
+  /// exactly what gets asked about in a pay dispute or an audit.
+  salaryJustification String?               @map("salary_justification") @db.Text
+  /// Optional pointer to the budget or approval document the raise came from.
+  budgetReference     String?               @map("budget_reference") @db.VarChar(100)
   /// Approval state (checklist §9 approval routing). PENDING movements do not
   /// touch the employee until APPROVED; auto-APPROVED when no workflow template.
-  status             String                @default("APPROVED") @db.VarChar(20)
-  approvedBy         String?               @map("approved_by") @db.VarChar(36)
-  approvedAt         DateTime?             @map("approved_at")
+  status              String                @default("APPROVED") @db.VarChar(20)
+  approvedBy          String?               @map("approved_by") @db.VarChar(36)
+  approvedAt          DateTime?             @map("approved_at")
   /// When the movement was applied to the live employee row. Future-dated
   /// transactions stay pending (null) until the scheduler applies them.
-  appliedAt          DateTime?             @map("applied_at")
-  reason             String?               @db.Text
-  notes              String?               @db.Text
-  createdBy          String?               @map("created_by") @db.VarChar(36)
-  createdAt          DateTime              @default(now()) @map("created_at")
-  updatedAt          DateTime              @updatedAt @map("updated_at")
-  deletedAt          DateTime?             @map("deleted_at")
+  appliedAt           DateTime?             @map("applied_at")
+  reason              String?               @db.Text
+  notes               String?               @db.Text
+  createdBy           String?               @map("created_by") @db.VarChar(36)
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  deletedAt           DateTime?             @map("deleted_at")
 
   employee       Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   company        Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
@@ -2962,6 +3016,7 @@ model Document {
   employee                    Employee?                    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   uploader                    User                         @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: Restrict)
   signatures                  DocumentSignature[]
+  signers                     DocumentSigner[]
   accessLogs                  DocumentAccessLog[]
   esignatureTransactions      ESignatureTransaction[]
   performanceResultAttachment PerformanceResultAttachment?
@@ -3206,6 +3261,7 @@ model Attendance {
   attendancePolicy BranchAttendancePolicy? @relation(fields: [attendancePolicyId], references: [id], onDelete: SetNull)
   faceLogs         AttendanceFaceLog[]
   corrections      AttendanceCorrection[]
+  devicePunches    AttendanceDevicePunch[]
 
   @@unique([employeeId, date])
   @@index([companyId])
@@ -3386,9 +3442,12 @@ model LeaveType {
   updatedAt          DateTime  @updatedAt @map("updated_at")
   deletedAt          DateTime? @map("deleted_at")
 
-  company  Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  requests LeaveRequest[]
-  balances LeaveBalance[]
+  company                Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  requests               LeaveRequest[]
+  balances               LeaveBalance[]
+  collectiveLeaves       CollectiveLeave[] @relation("CollectiveLeaveType")
+  collectiveUnpaidLeaves CollectiveLeave[] @relation("CollectiveLeaveUnpaidType")
+  encashments            LeaveEncashment[]
 
   @@index([companyId])
   @@index([code])
@@ -3442,6 +3501,13 @@ model LeaveRequest {
   company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
 
+  /// Terisi bila permintaan ini dibuat oleh deklarasi cuti bersama, bukan oleh
+  /// karyawan. Dipakai untuk pelaporan dan sebagai pagar agar satu deklarasi
+  /// tidak pernah memotong saldo orang yang sama dua kali.
+  collectiveLeaveId String?          @map("collective_leave_id") @db.VarChar(36)
+  collectiveLeave   CollectiveLeave? @relation(fields: [collectiveLeaveId], references: [id], onDelete: SetNull)
+
+  @@unique([collectiveLeaveId, employeeId])
   @@index([employeeId])
   @@index([companyId])
   @@index([leaveTypeId])
@@ -5288,4 +5354,590 @@ model PayrollFormulaCalculation {
   @@unique([payslipId, componentId])
   @@index([companyId, runId])
   @@map("payroll_formula_calculations")
+}
+
+/// Registered clock-in hardware (fingerprint terminal, or the middleware that
+/// fronts one). A punch is only device-attested when it arrives through a row
+/// here: the device authenticates with its own credential, so FINGERPRINT stops
+/// being a value a client can simply claim.
+model AttendanceDevice {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  companyId    String    @map("company_id") @db.VarChar(36)
+  /// Optional: bind the terminal to the branch it physically stands in.
+  branchId     String?   @map("branch_id") @db.VarChar(36)
+  name         String    @db.VarChar(150)
+  /// Vendor serial as printed on the machine. Unique per company so two
+  /// terminals cannot be confused in the punch log.
+  serialNumber String    @map("serial_number") @db.VarChar(100)
+  /// SHA-256 of the shared secret. The secret itself is shown once at
+  /// registration and never stored, so a database read cannot impersonate a
+  /// terminal.
+  secretHash   String    @map("secret_hash") @db.VarChar(64)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastSeenAt   DateTime? @map("last_seen_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  company Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branch  Branch?                 @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  punches AttendanceDevicePunch[]
+
+  @@unique([companyId, serialNumber])
+  @@index([companyId])
+  @@index([branchId])
+  @@index([isActive])
+  @@map("attendance_devices")
+}
+
+/// Raw punch ledger. Every punch a terminal posts is stored verbatim before any
+/// attendance record is derived from it, including punches that matched no
+/// employee — otherwise "my punch did not show up" has no evidence to inspect.
+model AttendanceDevicePunch {
+  id              String                      @id @default(uuid()) @db.VarChar(36)
+  deviceId        String                      @map("device_id") @db.VarChar(36)
+  companyId       String                      @map("company_id") @db.VarChar(36)
+  /// Null when the code the terminal sent matched no employee in this company.
+  employeeId      String?                     @map("employee_id") @db.VarChar(36)
+  /// Employee identifier as the terminal knows it, kept even when unmatched.
+  employeeCode    String                      @map("employee_code") @db.VarChar(50)
+  /// The terminal's own id for this punch. Unique per device, which is what
+  /// makes re-sending a batch harmless.
+  externalId      String                      @map("external_id") @db.VarChar(100)
+  punchedAt       DateTime                    @map("punched_at")
+  direction       AttendancePunchDirection    @default(AUTO)
+  status          AttendanceDevicePunchStatus @default(PENDING)
+  rejectionReason String?                     @map("rejection_reason") @db.VarChar(255)
+  attendanceId    String?                     @map("attendance_id") @db.VarChar(36)
+  receivedAt      DateTime                    @default(now()) @map("received_at")
+
+  device     AttendanceDevice @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee   Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  attendance Attendance?      @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+
+  @@unique([deviceId, externalId])
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([punchedAt])
+  @@index([status])
+  @@map("attendance_device_punches")
+}
+
+enum AttendancePunchDirection {
+  /// Let the server decide from the employee's current state: first punch of
+  /// the day opens attendance, a later one closes it.
+  AUTO
+  IN
+  OUT
+}
+
+enum AttendanceDevicePunchStatus {
+  PENDING
+  /// Opened or closed an attendance record.
+  APPLIED
+  /// Already seen (same device, same external id) — stored, not reapplied.
+  DUPLICATE
+  /// No employee in this company carries the code the terminal sent.
+  UNMATCHED_EMPLOYEE
+  /// A rule refused it: closed payroll period, method not allowed by the
+  /// branch policy, non-working day, attendance already closed.
+  REJECTED
+}
+
+/// Rapel: gaji satu periode yang **sudah ditutup** dan terlewat untuk seorang
+/// karyawan, dibayarkan sebagai komponen terpisah pada run periode berikutnya.
+///
+/// Keputusan organisasi (GAP-14): periode yang sudah ditutup tidak dibuka
+/// kembali. Membuka periode tertutup mengacaukan pelaporan per periode dan
+/// rekonsiliasi bank yang sudah dikirim; rapel tetap memberi jejak yang jelas
+/// tanpa menyentuh angka periode lama.
+model PayrollArrears {
+  id             String               @id @default(uuid()) @db.VarChar(36)
+  companyId      String               @map("company_id") @db.VarChar(36)
+  employeeId     String               @map("employee_id") @db.VarChar(36)
+  /// Periode tertutup yang seharusnya dibayar.
+  sourcePeriodId String               @map("source_period_id") @db.VarChar(36)
+  /// Bruto yang seharusnya diterima pada periode itu. Pajak TIDAK dihitung di
+  /// sini: rapel dikenai pajak pada periode saat ia dibayarkan, mengikuti
+  /// praktik PPh21 di Indonesia, jadi nilai ini masuk sebagai penghasilan bruto
+  /// pada slip periode pembayaran.
+  grossAmount    Decimal              @map("gross_amount") @db.Decimal(15, 2)
+  /// Bagaimana angka itu diperoleh (gaji as-of, komponen, prorata hari aktif).
+  /// Disimpan supaya nominal bisa ditelusuri tanpa menghitung ulang.
+  basis          Json
+  status         PayrollArrearsStatus @default(PENDING)
+  notes          String?              @db.Text
+  registeredBy   String?              @map("registered_by") @db.VarChar(36)
+  /// Terisi saat rapel benar-benar masuk ke sebuah slip.
+  payslipId      String?              @map("payslip_id") @db.VarChar(36)
+  appliedRunId   String?              @map("applied_run_id") @db.VarChar(36)
+  appliedAt      DateTime?            @map("applied_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  sourcePeriod PayrollPeriod @relation(fields: [sourcePeriodId], references: [id], onDelete: Restrict)
+  payslip      Payslip?      @relation(fields: [payslipId], references: [id], onDelete: SetNull)
+  appliedRun   PayrollRun?   @relation(fields: [appliedRunId], references: [id], onDelete: SetNull)
+
+  /// Pagar utama terhadap pembayaran ganda: satu karyawan hanya boleh punya
+  /// satu baris rapel per periode sumber, apa pun statusnya.
+  @@unique([employeeId, sourcePeriodId])
+  @@index([companyId])
+  @@index([status])
+  @@index([sourcePeriodId])
+  @@map("payroll_arrears")
+}
+
+enum PayrollArrearsStatus {
+  /// Terdaftar, menunggu run berikutnya.
+  PENDING
+  /// Sudah masuk slip; tidak akan dibayar lagi.
+  APPLIED
+  /// Dibatalkan HR sebelum dibayar.
+  CANCELLED
+}
+
+/// Cuti bersama: satu hari yang diumumkan perusahaan sebagai cuti kolektif.
+///
+/// Keputusan organisasi (GAP-08): hari itu **memotong saldo cuti tahunan**
+/// karyawan — praktik umum di Indonesia — dideklarasikan per perusahaan dengan
+/// pengecualian per cabang, dan karyawan yang saldonya tidak cukup jatuh ke
+/// **unpaid**, bukan saldo minus. Saldo minus merembet ke perhitungan payroll
+/// dan pesangon, jadi ia ditolak di sini.
+///
+/// Efeknya diwujudkan sebagai LeaveRequest berstatus APPROVED per karyawan,
+/// bukan sebagai penanda kalender: dengan begitu payroll, laporan, dan riwayat
+/// cuti karyawan membacanya lewat jalur yang sudah ada dan sudah teruji.
+model CollectiveLeave {
+  id                String                @id @default(uuid()) @db.VarChar(36)
+  companyId         String                @map("company_id") @db.VarChar(36)
+  date              DateTime              @db.Date
+  name              String                @db.VarChar(255)
+  /// Jenis cuti yang saldonya dipotong (biasanya cuti tahunan).
+  leaveTypeId       String                @map("leave_type_id") @db.VarChar(36)
+  /// Jenis cuti tidak dibayar untuk karyawan yang saldonya tidak cukup.
+  unpaidLeaveTypeId String                @map("unpaid_leave_type_id") @db.VarChar(36)
+  status            CollectiveLeaveStatus @default(DECLARED)
+  notes             String?               @db.Text
+  declaredBy        String?               @map("declared_by") @db.VarChar(36)
+  appliedAt         DateTime?             @map("applied_at")
+  appliedBy         String?               @map("applied_by") @db.VarChar(36)
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  company         Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  leaveType       LeaveType                  @relation("CollectiveLeaveType", fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  unpaidLeaveType LeaveType                  @relation("CollectiveLeaveUnpaidType", fields: [unpaidLeaveTypeId], references: [id], onDelete: Restrict)
+  exclusions      CollectiveLeaveExclusion[]
+  requests        LeaveRequest[]
+
+  /// Satu perusahaan tidak bisa mendeklarasikan dua cuti bersama pada tanggal
+  /// yang sama — pagar paling sederhana terhadap potongan saldo ganda.
+  @@unique([companyId, date])
+  @@index([companyId])
+  @@index([status])
+  @@map("collective_leaves")
+}
+
+/// Cabang yang dikecualikan dari satu deklarasi cuti bersama (mis. cabang yang
+/// tetap harus melayani pelanggan pada hari itu).
+model CollectiveLeaveExclusion {
+  id                String   @id @default(uuid()) @db.VarChar(36)
+  collectiveLeaveId String   @map("collective_leave_id") @db.VarChar(36)
+  branchId          String   @map("branch_id") @db.VarChar(36)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  collectiveLeave CollectiveLeave @relation(fields: [collectiveLeaveId], references: [id], onDelete: Cascade)
+  branch          Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([collectiveLeaveId, branchId])
+  @@index([branchId])
+  @@map("collective_leave_exclusions")
+}
+
+enum CollectiveLeaveStatus {
+  /// Sudah diumumkan, belum menyentuh saldo siapa pun.
+  DECLARED
+  /// Sudah diwujudkan menjadi cuti per karyawan; saldo sudah dipotong.
+  APPLIED
+  /// Dibatalkan sebelum diwujudkan.
+  CANCELLED
+}
+
+/// Langganan webhook: cara sistem luar mengetahui sesuatu terjadi di HRIS tanpa
+/// perlu polling.
+///
+/// Satu baris = satu endpoint milik satu perusahaan, berlangganan sekumpulan
+/// nama event. Secret-nya disimpan **terenkripsi** (bukan hash), karena
+/// dibutuhkan utuh untuk menandatangani setiap payload dengan HMAC.
+model WebhookSubscription {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  companyId      String    @map("company_id") @db.VarChar(36)
+  url            String    @db.VarChar(500)
+  /// Nama event yang diikuti; divalidasi terhadap katalog yang diterbitkan.
+  events         Json
+  /// Terenkripsi dengan ENCRYPTION_KEY. Ditampilkan sekali saat dibuat.
+  secretCipher   String    @map("secret_cipher") @db.Text
+  description    String?   @db.VarChar(255)
+  isActive       Boolean   @default(true) @map("is_active")
+  /// Kegagalan berturut-turut. Endpoint yang mati terus akan dimatikan sendiri
+  /// supaya sistem tidak mengetuk pintu yang jelas tidak ada selamanya.
+  failureCount   Int       @default(0) @map("failure_count")
+  disabledReason String?   @map("disabled_reason") @db.VarChar(255)
+  lastDeliveryAt DateTime? @map("last_delivery_at")
+  createdBy      String?   @map("created_by") @db.VarChar(36)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  company    Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  deliveries WebhookDelivery[]
+
+  @@index([companyId])
+  @@index([isActive])
+  @@map("webhook_subscriptions")
+}
+
+/// Satu percobaan pengiriman yang bisa diperiksa: payload apa, ke mana, jawaban
+/// apa, dan berapa kali dicoba. Tanpa baris ini, "webhook saya tidak masuk"
+/// tidak punya bukti untuk ditelusuri.
+model WebhookDelivery {
+  id             String                @id @default(uuid()) @db.VarChar(36)
+  companyId      String                @map("company_id") @db.VarChar(36)
+  subscriptionId String                @map("subscription_id") @db.VarChar(36)
+  /// Id domain event. Unik per langganan, jadi event yang dikirim ulang oleh
+  /// queue tidak menjadi dua panggilan ke sistem pelanggan.
+  eventId        String                @map("event_id") @db.VarChar(100)
+  eventName      String                @map("event_name") @db.VarChar(100)
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  responseStatus Int?                  @map("response_status")
+  lastError      String?               @map("last_error") @db.VarChar(500)
+  nextAttemptAt  DateTime?             @map("next_attempt_at")
+  sentAt         DateTime?             @map("sent_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, eventId])
+  @@index([companyId])
+  @@index([status, nextAttemptAt])
+  @@map("webhook_deliveries")
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SENT
+  /// Gagal tetapi masih akan dicoba lagi.
+  FAILED
+  /// Menyerah setelah percobaan maksimum; tidak akan dicoba lagi.
+  DEAD
+}
+
+/// Single sign-on per perusahaan (OIDC: Google Workspace, Microsoft Entra, atau
+/// penyedia OIDC lain).
+///
+/// Satu baris = satu penyedia identitas milik satu perusahaan. Client secret
+/// disimpan **terenkripsi**, bukan hash, karena dibutuhkan utuh saat menukar
+/// authorization code.
+model SsoProvider {
+  id                 String    @id @default(uuid()) @db.VarChar(36)
+  companyId          String    @map("company_id") @db.VarChar(36)
+  name               String    @db.VarChar(150)
+  /// Issuer OIDC, mis. https://accounts.google.com. Dipakai untuk menemukan
+  /// endpoint lewat /.well-known/openid-configuration dan untuk memvalidasi
+  /// klaim `iss` pada ID token.
+  issuer             String    @map("issuer") @db.VarChar(300)
+  clientId           String    @map("client_id") @db.VarChar(300)
+  clientSecretCipher String    @map("client_secret_cipher") @db.Text
+  /// Domain email yang boleh masuk lewat penyedia ini. Kosong = semua domain
+  /// yang dikembalikan penyedia diterima.
+  allowedDomains     Json      @map("allowed_domains")
+  isActive           Boolean   @default(true) @map("is_active")
+  /// Sengaja default false: SSO **mengautentikasi** pengguna yang sudah ada,
+  /// tidak membuat akun. Siapa yang boleh punya akun adalah keputusan HR, dan
+  /// penyedia identitas tidak berhak mengambilnya.
+  autoProvision      Boolean   @default(false) @map("auto_provision")
+  createdBy          String?   @map("created_by") @db.VarChar(36)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  company  Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  attempts SsoLoginAttempt[]
+
+  @@index([companyId])
+  @@index([isActive])
+  @@map("sso_providers")
+}
+
+/// Satu upaya login SSO yang sedang berjalan.
+///
+/// Disimpan di database, bukan di memori atau cookie, karena state/nonce/PKCE
+/// harus bisa diverifikasi oleh instance mana pun yang menerima callback — dan
+/// harus bisa dipastikan hanya dipakai **sekali**.
+model SsoLoginAttempt {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  companyId    String    @map("company_id") @db.VarChar(36)
+  providerId   String    @map("provider_id") @db.VarChar(36)
+  /// Nilai `state` yang dikirim ke penyedia; unik supaya callback bisa
+  /// dicocokkan tepat ke satu upaya.
+  state        String    @unique @db.VarChar(100)
+  nonce        String    @db.VarChar(100)
+  /// PKCE code_verifier. Menahan authorization code yang dicuri dari dipakai
+  /// pihak lain.
+  codeVerifier String    @map("code_verifier") @db.VarChar(200)
+  redirectUri  String    @map("redirect_uri") @db.VarChar(300)
+  /// Ke mana pengguna dikembalikan setelah sesi terbentuk.
+  returnTo     String?   @map("return_to") @db.VarChar(300)
+  expiresAt    DateTime  @map("expires_at")
+  /// Terisi saat callback memakainya. Upaya yang sudah terpakai tidak boleh
+  /// dipakai lagi (replay).
+  consumedAt   DateTime? @map("consumed_at")
+  ipAddress    String?   @map("ip_address") @db.VarChar(50)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  company  Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider SsoProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([expiresAt])
+  @@map("sso_login_attempts")
+}
+
+/// Pencairan sisa cuti menjadi uang (leave encashment).
+///
+/// Kebijakannya **dinamis per perusahaan** lewat CompanySetting — boleh atau
+/// tidak, batas hari setahun, dan dasar perhitungan per hari — karena tiap
+/// perusahaan berbeda dan satu nilai yang ditanam di kode akan menjadi
+/// permintaan perubahan kode setiap ada pembeli baru.
+///
+/// Uangnya mengalir lewat payroll, bukan pembayaran terpisah: baris yang sudah
+/// disetujui diambil run berikutnya sebagai komponen tersendiri, mengikuti pola
+/// yang sama dengan rapel.
+model LeaveEncashment {
+  id             String                @id @default(uuid()) @db.VarChar(36)
+  companyId      String                @map("company_id") @db.VarChar(36)
+  employeeId     String                @map("employee_id") @db.VarChar(36)
+  leaveTypeId    String                @map("leave_type_id") @db.VarChar(36)
+  /// Tahun saldo cuti yang dicairkan; batas per tahun dihitung terhadap ini.
+  year           Int
+  days           Int
+  /// Nominal bruto, diturunkan server dari gaji dan dasar perhitungan yang
+  /// berlaku. Tidak pernah diketik pemohon.
+  grossAmount    Decimal               @map("gross_amount") @db.Decimal(15, 2)
+  /// Bagaimana nominal itu diperoleh (gaji, pembagi, tunjangan ikut atau tidak).
+  basis          Json
+  status         LeaveEncashmentStatus @default(PENDING)
+  notes          String?               @db.Text
+  requestedBy    String?               @map("requested_by") @db.VarChar(36)
+  approvedBy     String?               @map("approved_by") @db.VarChar(36)
+  approvedAt     DateTime?             @map("approved_at")
+  rejectedReason String?               @map("rejected_reason") @db.VarChar(255)
+  payslipId      String?               @map("payslip_id") @db.VarChar(36)
+  appliedRunId   String?               @map("applied_run_id") @db.VarChar(36)
+  paidAt         DateTime?             @map("paid_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  payslip   Payslip?  @relation(fields: [payslipId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([status])
+  @@map("leave_encashments")
+}
+
+enum LeaveEncashmentStatus {
+  PENDING
+  /// Disetujui dan saldo cuti sudah dipotong; menunggu run berikutnya.
+  APPROVED
+  REJECTED
+  /// Sudah masuk slip gaji.
+  PAID
+  /// Dibatalkan pemohon sebelum disetujui.
+  CANCELLED
+}
+
+/// Kontrak kerja per karyawan, dengan riwayat perpanjangan utuh (GAP-19/20).
+///
+/// Dipilih sebagai tabel, bukan dua kolom tanggal di data karyawan, karena PKWT
+/// punya **batas hukum** pada total masa kerja berkontrak: tanpa riwayat,
+/// sistem tidak bisa memperingatkan saat batas itu terlampaui, dan itu risiko
+/// kepatuhan yang paling mahal. Perpanjangan kedua akan menimpa yang pertama.
+model EmploymentContract {
+  id               String                   @id @default(uuid()) @db.VarChar(36)
+  companyId        String                   @map("company_id") @db.VarChar(36)
+  employeeId       String                   @map("employee_id") @db.VarChar(36)
+  /// Nomor kontrak sebagaimana tertulis di dokumennya.
+  contractNumber   String?                  @map("contract_number") @db.VarChar(100)
+  type             EmploymentContractType
+  startDate        DateTime                 @map("start_date") @db.Date
+  /// Wajib untuk PKWT dan probasi; harus kosong untuk PKWTT yang tidak berbatas
+  /// waktu.
+  endDate          DateTime?                @map("end_date") @db.Date
+  status           EmploymentContractStatus @default(ACTIVE)
+  notes            String?                  @db.Text
+  /// Kapan pengingat terakhir dikirim, supaya sweep harian tidak mengirim
+  /// pemberitahuan yang sama berulang kali.
+  lastReminderAt   DateTime?                @map("last_reminder_at")
+  /// Offset pengingat terakhir yang sudah terkirim (30, 14, atau 7 hari).
+  lastReminderDays Int?                     @map("last_reminder_days")
+  createdBy        String?                  @map("created_by") @db.VarChar(36)
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+  deletedAt        DateTime?                @map("deleted_at")
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([endDate])
+  @@index([status])
+  @@map("employment_contracts")
+}
+
+enum EmploymentContractType {
+  /// Perjanjian Kerja Waktu Tertentu — berbatas waktu, ada batas total masa.
+  PKWT
+  /// Perjanjian Kerja Waktu Tidak Tertentu — tetap, tanpa tanggal berakhir.
+  PKWTT
+  /// Masa percobaan. Hanya sah pada PKWTT dan maksimal 3 bulan.
+  PROBATION
+}
+
+enum EmploymentContractStatus {
+  ACTIVE
+  /// Berakhir sesuai tanggalnya.
+  ENDED
+  /// Diakhiri lebih awal.
+  TERMINATED
+  /// Sudah digantikan kontrak berikutnya (perpanjangan).
+  RENEWED
+}
+
+/// Penanda tangan yang **diharapkan** untuk sebuah dokumen, beserta urutannya
+/// bila memang berurutan (GAP-27).
+///
+/// Urutan bersifat **opsional per dokumen**: dokumen yang tidak menetapkannya
+/// berjalan setara seperti sebelumnya. Kontrak dan surat peringatan memang punya
+/// urutan yang mengikat, tetapi memaksakan urutan ke semua dokumen akan
+/// memperlambat yang sederhana tanpa menambah kepastian apa pun.
+model DocumentSigner {
+  id             String               @id @default(uuid()) @db.VarChar(36)
+  documentId     String               @map("document_id") @db.VarChar(36)
+  userId         String               @map("user_id") @db.VarChar(36)
+  /// Langkah urutan. Nilai sama = satu langkah (boleh menandatangani paralel).
+  /// Seluruh dokumen memakai 1 bila urutan tidak dipakai.
+  order          Int                  @default(1)
+  /// Tenggat per penanda tangan, kalau ada.
+  dueAt          DateTime?            @map("due_at")
+  status         DocumentSignerStatus @default(PENDING)
+  signedAt       DateTime?            @map("signed_at")
+  declinedReason String?              @map("declined_reason") @db.VarChar(255)
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  /// Satu orang hanya sekali per dokumen.
+  @@unique([documentId, userId])
+  @@index([documentId, order])
+  @@index([userId, status])
+  @@map("document_signers")
+}
+
+enum DocumentSignerStatus {
+  PENDING
+  SIGNED
+  DECLINED
+}
+
+/// Reaksi peserta setelah mengikuti training (GAP-25, Kirkpatrick level 1).
+///
+/// Nilai dari trainer sudah ada sebagai `TrainingEnrollment.score` (level 2);
+/// yang hilang adalah suara pesertanya. Tanpa itu tidak ada cara mengetahui
+/// apakah trainingnya dianggap berguna — hanya apakah pesertanya lulus.
+///
+/// Rekap efektivitas per course sengaja belum dibuat: membangun rekap sebelum
+/// ada datanya hanya menghasilkan grafik kosong.
+model TrainingFeedback {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  enrollmentId    String   @unique @map("enrollment_id") @db.VarChar(36)
+  companyId       String   @map("company_id") @db.VarChar(36)
+  /// Skala 1–5. Empat pertanyaan yang benar-benar bisa ditindaklanjuti.
+  contentRating   Int      @map("content_rating")
+  trainerRating   Int      @map("trainer_rating")
+  relevanceRating Int      @map("relevance_rating")
+  facilityRating  Int?     @map("facility_rating")
+  /// Apakah ia akan merekomendasikannya ke rekan kerja.
+  wouldRecommend  Boolean  @map("would_recommend")
+  comment         String?  @db.Text
+  submittedAt     DateTime @default(now()) @map("submitted_at")
+
+  enrollment TrainingEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@map("training_feedback")
+}
+
+/// Permintaan penambahan headcount sebelum lowongan dibuka (GAP-22).
+///
+/// Wajib atau tidaknya ditentukan **setting per perusahaan**: perusahaan yang
+/// anggaran headcount-nya dikendalikan terpusat menyalakannya; yang tidak, tidak
+/// perlu menambah satu langkah untuk setiap penggantian karyawan yang keluar.
+model JobRequisition {
+  id              String               @id @default(uuid()) @db.VarChar(36)
+  companyId       String               @map("company_id") @db.VarChar(36)
+  departmentId    String?              @map("department_id") @db.VarChar(36)
+  positionId      String?              @map("position_id") @db.VarChar(36)
+  code            String               @unique @db.VarChar(50)
+  title           String               @db.VarChar(255)
+  headcount       Int                  @default(1)
+  /// Alasan kebutuhan: penggantian, pertumbuhan, proyek baru.
+  reason          String               @db.Text
+  /// Anggaran per orang per bulan, kalau dikendalikan.
+  budgetPerHire   Decimal?             @map("budget_per_hire") @db.Decimal(15, 2)
+  targetStartDate DateTime?            @map("target_start_date") @db.Date
+  status          JobRequisitionStatus @default(DRAFT)
+  requestedBy     String?              @map("requested_by") @db.VarChar(36)
+  approvedBy      String?              @map("approved_by") @db.VarChar(36)
+  approvedAt      DateTime?            @map("approved_at")
+  rejectedReason  String?              @map("rejected_reason") @db.VarChar(255)
+  notes           String?              @db.Text
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  deletedAt       DateTime?            @map("deleted_at")
+
+  company    Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  department Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position   Position?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  postings   JobPosting[]
+
+  @@index([companyId])
+  @@index([status])
+  @@map("job_requisitions")
+}
+
+enum JobRequisitionStatus {
+  DRAFT
+  SUBMITTED
+  /// Disetujui; lowongan boleh dibuka atas dasar ini.
+  APPROVED
+  REJECTED
+  /// Seluruh headcount-nya sudah dipakai lowongan.
+  FULFILLED
+  CANCELLED
 }

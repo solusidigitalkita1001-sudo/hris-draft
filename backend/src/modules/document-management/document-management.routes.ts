@@ -6,6 +6,8 @@ import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validateFileMagicBytes } from '@/shared/middleware/FileValidation';
+import { validate } from '@/shared/middleware/RequestValidator';
+import { declineDocumentSchema, setDocumentSignersSchema } from './document-management.dto';
 import { documentManagementController } from './document-management.controller';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
@@ -49,6 +51,13 @@ router.use(requireCompanyAccess());
 router.get('/:id/file', authorize({ resource: 'document', action: 'read' }),
   documentManagementController.serveSignedFile.bind(documentManagementController));
 
+// ==================== Tanda tangan (urutan opsional) ====================
+// Static path before /:id, and before the signer routes below it.
+router.get(
+  '/signatures/mine',
+  documentManagementController.myPendingSignatures.bind(documentManagementController)
+);
+
 router.get(
   '/categories',
   authorize({ resource: 'document', action: 'read' }),
@@ -85,6 +94,30 @@ router.get(
   '/:id/download',
   authorize({ resource: 'document', action: 'read' }),
   documentManagementController.downloadDocument.bind(documentManagementController)
+);
+
+
+router.get(
+  '/:id/signers',
+  authorize({ resource: 'document', action: 'read' }),
+  documentManagementController.signerStatus.bind(documentManagementController)
+);
+router.post(
+  '/:id/signers',
+  authorize({ resource: 'document', action: 'update' }),
+  validate(setDocumentSignersSchema),
+  documentManagementController.setSigners.bind(documentManagementController)
+);
+// Signing is a personal act, not an administrative one: the signer list decides
+// who may sign, so this needs no extra document permission beyond the session.
+router.post(
+  '/:id/sign',
+  documentManagementController.signDocument.bind(documentManagementController)
+);
+router.post(
+  '/:id/decline',
+  validate(declineDocumentSchema),
+  documentManagementController.declineDocument.bind(documentManagementController)
 );
 
 export default router;

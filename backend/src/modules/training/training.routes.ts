@@ -3,7 +3,10 @@ import { authenticate } from '@/shared/middleware/Authenticate';
 import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { trainingController } from './training.controller';
-import { createCategorySchema, createCourseSchema, updateCourseSchema, createSessionSchema, createEnrollmentSchema } from './training.dto';
+import { createCategorySchema, createCourseSchema, updateCourseSchema, createSessionSchema, createEnrollmentSchema,
+  recordTrainingScoreSchema,
+  submitTrainingFeedbackSchema,
+} from './training.dto';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
 
 const router = Router();
@@ -12,6 +15,28 @@ router.use(requireCompanyAccess());
 
 router.get('/categories', authorize({ resource: 'training', action: 'read' }), trainingController.findAllCategories.bind(trainingController));
 router.post('/categories', authorize({ resource: 'training', action: 'create' }), validate(createCategorySchema), trainingController.createCategory.bind(trainingController));
+
+// ==================== Evaluasi pasca-training ====================
+// Static paths before /courses/:id so "enrollments" is never read as an id.
+router.get(
+  '/enrollments/:id/evaluation',
+  authorize({ resource: 'training', action: 'read' }),
+  trainingController.findEvaluation.bind(trainingController),
+);
+// The trainer's score: recorded by HR or the trainer, never by the participant.
+router.patch(
+  '/enrollments/:id/score',
+  authorize({ resource: 'training', action: 'update' }),
+  validate(recordTrainingScoreSchema),
+  trainingController.recordScore.bind(trainingController),
+);
+// The participant's reaction: only they can file it, so no extra permission
+// beyond a session — the service checks it is their own enrollment.
+router.post(
+  '/enrollments/:id/feedback',
+  validate(submitTrainingFeedbackSchema),
+  trainingController.submitFeedback.bind(trainingController),
+);
 
 router.get('/courses', authorize({ resource: 'training', action: 'read' }), trainingController.findAllCourses.bind(trainingController));
 router.get('/courses/:id', authorize({ resource: 'training', action: 'read' }), trainingController.findCourseById.bind(trainingController));

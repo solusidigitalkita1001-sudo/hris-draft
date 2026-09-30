@@ -24,6 +24,20 @@ function buildDatabaseUrl(): string {
 }
 
 const COMPANY_SCOPED_MODELS = new Set([
+  'AttendanceDevice',
+  'AttendanceDevicePunch',
+  'PayrollArrears',
+  'CollectiveLeave',
+  'LeaveEncashment',
+  'EmploymentContract',
+  'DocumentSigner',
+  'TrainingFeedback',
+  'JobRequisition',
+  'CollectiveLeaveExclusion',
+  'WebhookSubscription',
+  'WebhookDelivery',
+  'SsoProvider',
+  'SsoLoginAttempt',
   'WorkflowTemplate',
   'WorkflowInstance',
   'WorkflowInstanceStep',

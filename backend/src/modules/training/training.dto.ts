@@ -55,3 +55,26 @@ export type UpdateCourseDTO = z.infer<typeof updateCourseSchema>;
 export type CreateSessionDTO = z.infer<typeof createSessionSchema>;
 export type CreateEnrollmentDTO = z.infer<typeof createEnrollmentSchema>;
 export type UpdateEnrollmentDTO = z.infer<typeof updateEnrollmentSchema>;
+
+/**
+ * Post-training evaluation (GAP-25). Two levels, deliberately separate: the
+ * trainer's score says whether anyone learned, the participant's reaction says
+ * whether the course was worth attending. A course can produce passes and still
+ * be a waste of a day.
+ */
+export const recordTrainingScoreSchema = z.object({
+  score: z.number().min(0).max(100),
+  notes: z.string().max(2000).optional(),
+});
+
+export const submitTrainingFeedbackSchema = z.object({
+  contentRating: z.number().int().min(1).max(5),
+  trainerRating: z.number().int().min(1).max(5),
+  relevanceRating: z.number().int().min(1).max(5),
+  facilityRating: z.number().int().min(1).max(5).optional(),
+  wouldRecommend: z.boolean(),
+  comment: z.string().max(2000).optional(),
+});
+
+export type RecordTrainingScoreDTO = z.infer<typeof recordTrainingScoreSchema>;
+export type SubmitTrainingFeedbackDTO = z.infer<typeof submitTrainingFeedbackSchema>;

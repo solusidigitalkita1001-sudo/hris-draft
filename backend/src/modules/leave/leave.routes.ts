@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import { collectiveLeaveQuerySchema, declareCollectiveLeaveSchema } from './collective-leave.dto';
+import { encashmentQuerySchema, rejectEncashmentSchema, requestEncashmentSchema } from './leave-encashment.dto';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
@@ -58,6 +60,78 @@ router.get('/types', authorize({ resource: 'leave', action: 'read' }), leaveCont
 router.post('/types', authorize({ resource: 'leave', action: 'create' }), auditLog({ action: 'CREATE', entity: 'LeaveType' }), validate(createLeaveTypeSchema), leaveController.createLeaveType.bind(leaveController));
 
 // Leave Requests
+// ==================== Pencairan sisa cuti ====================
+// Static paths before /:id. Approving moves money and deducts balance, so it
+// carries the approve permission; requesting carries create.
+router.get(
+  '/encashment/policy',
+  authorize({ resource: 'leave', action: 'read' }),
+  leaveController.encashmentPolicy.bind(leaveController),
+);
+router.get(
+  '/encashment',
+  authorize({ resource: 'leave', action: 'read' }),
+  validate(encashmentQuerySchema, 'query'),
+  leaveController.findAllEncashments.bind(leaveController),
+);
+router.post(
+  '/encashment',
+  authorize({ resource: 'leave', action: 'create' }),
+  auditLog({ action: 'REQUEST_ENCASHMENT', entity: 'LeaveEncashment' }),
+  validate(requestEncashmentSchema),
+  idempotency(),
+  leaveController.requestEncashment.bind(leaveController),
+);
+router.patch(
+  '/encashment/:id/approve',
+  authorize({ resource: 'leave', action: 'approve' }),
+  auditLog({ action: 'APPROVE_ENCASHMENT', entity: 'LeaveEncashment', model: 'leaveEncashment' }),
+  leaveController.approveEncashment.bind(leaveController),
+);
+router.patch(
+  '/encashment/:id/reject',
+  authorize({ resource: 'leave', action: 'approve' }),
+  auditLog({ action: 'REJECT_ENCASHMENT', entity: 'LeaveEncashment', model: 'leaveEncashment' }),
+  validate(rejectEncashmentSchema),
+  leaveController.rejectEncashment.bind(leaveController),
+);
+
+// ==================== Cuti bersama ====================
+// Static paths before /:id, or "collective" is read as a leave request id.
+// Declaring is harmless; applying deducts everyone's balance, so it carries the
+// stricter permission of the two.
+router.get(
+  '/collective',
+  authorize({ resource: 'leave', action: 'read' }),
+  validate(collectiveLeaveQuerySchema, 'query'),
+  leaveController.findAllCollectiveLeaves.bind(leaveController),
+);
+router.post(
+  '/collective',
+  authorize({ resource: 'leave', action: 'create' }),
+  auditLog({ action: 'DECLARE_COLLECTIVE', entity: 'CollectiveLeave' }),
+  validate(declareCollectiveLeaveSchema),
+  leaveController.declareCollectiveLeave.bind(leaveController),
+);
+router.get(
+  '/collective/:id/preview',
+  authorize({ resource: 'leave', action: 'read' }),
+  leaveController.previewCollectiveLeave.bind(leaveController),
+);
+router.post(
+  '/collective/:id/apply',
+  authorize({ resource: 'leave', action: 'approve' }),
+  auditLog({ action: 'APPLY_COLLECTIVE', entity: 'CollectiveLeave', model: 'collectiveLeave' }),
+  idempotency(),
+  leaveController.applyCollectiveLeave.bind(leaveController),
+);
+router.delete(
+  '/collective/:id',
+  authorize({ resource: 'leave', action: 'update' }),
+  auditLog({ action: 'CANCEL_COLLECTIVE', entity: 'CollectiveLeave', model: 'collectiveLeave' }),
+  leaveController.cancelCollectiveLeave.bind(leaveController),
+);
+
 router.get('/', authorize({ resource: 'leave', action: 'read' }), leaveController.findAll.bind(leaveController));
 // Static balance routes must be declared before /:id.
 router.get('/balances/employee', authorize({ resource: 'leave', action: 'read' }), leaveController.getBalances.bind(leaveController));

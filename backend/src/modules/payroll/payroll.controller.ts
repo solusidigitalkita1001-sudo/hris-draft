@@ -2,11 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { payrollService } from './payroll.service';
 import { Result } from '@/shared/core/Result';
+import { payrollArrearsService } from './payroll-arrears.service';
+import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
+import { bpjsReportService, bpjsReportToCsv } from './bpjs-report.service';
+import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
 import { payslipPinService } from './payslip-pin.service';
 import PDFDocument from 'pdfkit';
-import { AppError } from '@/shared/exceptions/AppError';
+import { AppError, BadRequestError } from '@/shared/exceptions/AppError';
 
 function requiresPayrollUnlock(req: AuthenticatedRequest): boolean {
   const permissions = req.user?.permissions ?? [];
@@ -475,6 +479,87 @@ export class PayrollController {
     try {
       const data = payrollService.calculateJknStandalone(req.body);
       res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Arrears (rapel) ====================
+  async registerArrears(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const row = await payrollArrearsService.register(companyId, req.body as RegisterArrearsDTO);
+      res.status(201).json(
+        Result.success(
+          { id: row.id, employeeId: row.employeeId, sourcePeriodId: row.sourcePeriodId, grossAmount: row.grossAmount, status: row.status, basis: row.basis },
+          'Rapel terdaftar dan akan dibayarkan pada run periode berikutnya',
+        ),
+      );
+    } catch (error) { next(error); }
+  }
+
+  async findAllArrears(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as ArrearsQueryDTO;
+      res.json(Result.success(await payrollArrearsService.list(companyId, query)));
+    } catch (error) { next(error); }
+  }
+
+  async cancelArrears(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await payrollArrearsService.cancel(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Rekap PPh21 tahunan (bahan 1721-A1) ====================
+  async annualTaxRecap(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const year = Number(req.query.year);
+      const recap = await annualTaxRecapService.build(companyId, String(req.params.employeeId), year);
+
+      if (req.query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="rekap-pph21-${recap.employee.employeeNumber}-${recap.year}.csv"`,
+        );
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(recapToCsv(recap));
+        return;
+      }
+      res.json(Result.success(recap));
+    } catch (error) { next(error); }
+  }
+
+  async annualTaxRecapSummary(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const year = Number(req.query.year);
+      res.json(Result.success(await annualTaxRecapService.buildCompanySummary(companyId, year)));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Laporan iuran BPJS bulanan ====================
+  async bpjsReport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const report = await bpjsReportService.build(companyId, String(req.query.periodId));
+
+      if (req.query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="iuran-bpjs-${report.period.code}.csv"`);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(bpjsReportToCsv(report));
+        return;
+      }
+      res.json(Result.success(report));
     } catch (error) { next(error); }
   }
 }

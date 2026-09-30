@@ -1,4 +1,7 @@
 import 'reflect-metadata';
+import { webhookService } from '@/modules/webhook/webhook.service';
+import { CONTRACT_EXPIRY_REMINDER_JOB, runContractExpiryReminders, scheduleContractExpiryReminders } from '@/modules/employee/employment-contract.scheduler';
+import { runWebhookSweep, scheduleWebhookSweep } from '@/modules/webhook/webhook.scheduler';
 import config from '@/config';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
 import { queueManager, QueueNames } from '@/infrastructure/queue/QueueManager';
@@ -102,6 +105,7 @@ async function bootstrapWorker(): Promise<void> {
   await queueManager.getQueueEvents(QueueNames.PERFORMANCE_AUTOMATION).waitUntilReady();
   await queueManager.getQueueEvents(QueueNames.LEAVE_AUTOMATION).waitUntilReady();
   await queueManager.getQueueEvents(QueueNames.PUSH_NOTIFICATIONS).waitUntilReady();
+  await queueManager.getQueueEvents(QueueNames.WEBHOOKS).waitUntilReady();
 
   queueManager.createWorker<DomainEvent>(
     QueueNames.DOMAIN_EVENTS,
@@ -120,9 +124,19 @@ async function bootstrapWorker(): Promise<void> {
       }
       await recordProcessedEvent(event, 'bullmq');
       await runInSystemContext('domain-event-notification', () => maybeCreateNotification(event));
-      return { processed: true, eventName: event.name };
+      // Webhook fan-out belongs here, after the inbox claim: fanning out from
+      // the publisher would duplicate deliveries on every BullMQ retry, and a
+      // duplicate call into a customer's system can mean a duplicate invoice.
+      const webhookDeliveries = await runInSystemContext('domain-event-webhook-fanout', () => webhookService.fanOut(event));
+      return { processed: true, eventName: event.name, webhookDeliveries };
     },
     { concurrency: 10 }
+  );
+
+  queueManager.createWorker(
+    QueueNames.WEBHOOKS,
+    async () => runWebhookSweep(),
+    { concurrency: 1 },
   );
 
   queueManager.createWorker<{ scheduleId: string }>(
@@ -150,6 +164,9 @@ async function bootstrapWorker(): Promise<void> {
       if (job.name === RETENTION_SWEEP_JOB) {
         return runInSystemContext('retention-worker', () => runRetentionSweep());
       }
+      if (job.name === CONTRACT_EXPIRY_REMINDER_JOB) {
+        return runContractExpiryReminders();
+      }
       const year = job.data.year ?? new Date().getFullYear();
       return runInSystemContext('leave-automation-worker', () => runYearlyLeaveAccrual(year));
     },
@@ -168,6 +185,8 @@ async function bootstrapWorker(): Promise<void> {
   await runInSystemContext('offboarding-scheduler-bootstrap', () => scheduleOffboardingApply());
   await runInSystemContext('retention-scheduler-bootstrap', () => scheduleRetentionSweep());
   await runInSystemContext('push-scheduler-bootstrap', () => schedulePushDeliverySweep());
+  await runInSystemContext('webhook-scheduler-bootstrap', () => scheduleWebhookSweep());
+  await runInSystemContext('contract-reminder-bootstrap', () => scheduleContractExpiryReminders());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,
@@ -182,7 +201,7 @@ async function bootstrapWorker(): Promise<void> {
   );
 
   logger.info('Worker ready', {
-    queues: [QueueNames.DOMAIN_EVENTS, QueueNames.PERFORMANCE_AUTOMATION, QueueNames.LEAVE_AUTOMATION, QueueNames.PUSH_NOTIFICATIONS],
+    queues: [QueueNames.DOMAIN_EVENTS, QueueNames.PERFORMANCE_AUTOMATION, QueueNames.LEAVE_AUTOMATION, QueueNames.WEBHOOKS, QueueNames.PUSH_NOTIFICATIONS],
     exchange: config.rabbitmq.exchange,
   });
 

@@ -1,4 +1,10 @@
 import { Router } from 'express';
+import {
+  contractQuerySchema,
+  createContractSchema,
+  expiringContractQuerySchema,
+  updateContractStatusSchema,
+} from './employment-contract.dto';
 import multer from 'multer';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
@@ -44,6 +50,36 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 router.get('/', authorize({ resource: 'employee', action: 'read' }), employeeController.findAll.bind(employeeController));
 router.get('/export', authorize({ resource: 'employee', action: 'read' }), auditView({ action: 'EXPORT_EMPLOYEES', entity: 'Employee' }), employeeController.exportCsv.bind(employeeController));
 router.get('/me/reporting-line', employeeController.getMyReportingLine.bind(employeeController));
+
+// ==================== Kontrak kerja (PKWT / probasi) ====================
+// Static paths before /:id. A contract decides whether someone is still
+// employed next month, so reads follow employee:read and writes employee:update.
+router.get(
+  '/contracts/expiring',
+  authorize({ resource: 'employee', action: 'read' }),
+  validate(expiringContractQuerySchema, 'query'),
+  employeeController.findExpiringContracts.bind(employeeController),
+);
+router.get(
+  '/contracts',
+  authorize({ resource: 'employee', action: 'read' }),
+  validate(contractQuerySchema, 'query'),
+  employeeController.findAllContracts.bind(employeeController),
+);
+router.post(
+  '/contracts',
+  authorize({ resource: 'employee', action: 'update' }),
+  auditLog({ action: 'CREATE_CONTRACT', entity: 'EmploymentContract' }),
+  validate(createContractSchema),
+  employeeController.createContract.bind(employeeController),
+);
+router.patch(
+  '/contracts/:id/status',
+  authorize({ resource: 'employee', action: 'update' }),
+  auditLog({ action: 'UPDATE_CONTRACT_STATUS', entity: 'EmploymentContract', model: 'employmentContract' }),
+  validate(updateContractStatusSchema),
+  employeeController.updateContractStatus.bind(employeeController),
+);
 router.get('/attendance-methods', requireSuperAdmin, employeeController.getAttendanceMethodMatrix.bind(employeeController));
 router.patch('/:id/attendance-methods', requireSuperAdmin, validate(updateAttendanceMethodsSchema), auditLog({ action: 'UPDATE_ATTENDANCE_METHODS', entity: 'Employee' }), employeeController.updateAttendanceMethods.bind(employeeController));
 router.get('/:id', authorize({ resource: 'employee', action: 'read' }), employeeController.findById.bind(employeeController));

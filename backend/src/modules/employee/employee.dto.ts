@@ -120,10 +120,25 @@ export const createCareerTransactionSchema = z.object({
   toEmploymentType: z.enum(['PERMANENT', 'CONTRACT', 'INTERN', 'PROBATION', 'FREELANCE', 'OUTSOURCING']).optional().nullable(),
   /** New base salary that takes effect with the movement (checklist §9 downstream: compensation). */
   toBaseSalary: z.number().positive().optional().nullable(),
+  /**
+   * Why the pay changed — required whenever a new base salary is set (GAP-21).
+   *
+   * The decision was to keep compensation inside the career path rather than
+   * build a second approval flow, because a second flow would split the career
+   * history across two places and a split salary history is exactly what gets
+   * asked about in a dispute. What the single path was missing is a stated
+   * reason for the money, separate from the reason for the movement.
+   */
+  salaryJustification: z.string().min(10).max(2000).optional(),
+  /** Optional pointer to the budget or approval document behind the raise. */
+  budgetReference: z.string().max(100).optional(),
   referenceNumber: z.string().max(100).optional(),
   reason: z.string().optional(),
   notes: z.string().optional(),
-});
+}).refine(
+  (data) => !data.toBaseSalary || Boolean(data.salaryJustification?.trim()),
+  { message: 'salaryJustification wajib diisi saat mengubah gaji', path: ['salaryJustification'] },
+);
 
 export const createEmployeeCompanyAssignmentSchema = z.object({
   companyId: z.string().uuid(),

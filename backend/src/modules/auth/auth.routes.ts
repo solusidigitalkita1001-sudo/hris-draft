@@ -1,5 +1,15 @@
 import { Router } from 'express';
 import { authController } from './auth.controller';
+import { ssoProviderController } from './sso/sso.controller';
+import {
+  registerSsoProviderSchema,
+  ssoCallbackQuerySchema,
+  ssoStartQuerySchema,
+  updateSsoProviderSchema,
+} from './sso/sso.dto';
+import { requireCompanyAccess } from '@/shared/middleware/CompanyScope';
+import { authorize } from '@/shared/middleware/Authorize';
+import { auditLog } from '@/shared/middleware/AuditLog';
 import { authenticate } from '@/shared/middleware/Authenticate';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { rateLimit } from 'express-rate-limit';
@@ -96,6 +106,59 @@ const passwordResetSubmitLimiter = rateLimit({
 
 // Public routes (no auth required)
 router.get('/csrf', generalLimiter, authController.csrfToken.bind(authController));
+
+// ==================== SSO (OIDC) ====================
+// Public by necessity: nobody is signed in yet. Rate-limited like the other
+// unauthenticated auth routes, because both endpoints cause outbound calls to
+// an identity provider.
+router.get(
+  '/sso/start',
+  authLimiter,
+  validate(ssoStartQuerySchema, 'query'),
+  authController.ssoStart.bind(authController),
+);
+router.get(
+  '/sso/callback',
+  authLimiter,
+  validate(ssoCallbackQuerySchema, 'query'),
+  authController.ssoCallback.bind(authController),
+);
+
+// Provider administration. A provider decides who can sign in as this company,
+// so it sits with the RBAC permissions rather than an HR resource.
+router.get(
+  '/sso/providers',
+  authenticate,
+  requireCompanyAccess(),
+  authorize({ resource: 'rbac', action: 'read' }),
+  ssoProviderController.list.bind(ssoProviderController),
+);
+router.post(
+  '/sso/providers',
+  authenticate,
+  requireCompanyAccess(),
+  authorize({ resource: 'rbac', action: 'create' }),
+  auditLog({ action: 'CREATE', entity: 'SsoProvider' }),
+  validate(registerSsoProviderSchema),
+  ssoProviderController.register.bind(ssoProviderController),
+);
+router.patch(
+  '/sso/providers/:id',
+  authenticate,
+  requireCompanyAccess(),
+  authorize({ resource: 'rbac', action: 'update' }),
+  auditLog({ action: 'UPDATE', entity: 'SsoProvider', model: 'ssoProvider' }),
+  validate(updateSsoProviderSchema),
+  ssoProviderController.update.bind(ssoProviderController),
+);
+router.delete(
+  '/sso/providers/:id',
+  authenticate,
+  requireCompanyAccess(),
+  authorize({ resource: 'rbac', action: 'delete' }),
+  auditLog({ action: 'DELETE', entity: 'SsoProvider', model: 'ssoProvider' }),
+  ssoProviderController.remove.bind(ssoProviderController),
+);
 router.post('/login', authLimiter, loginEmailLimiter, validate(validateLogin), authController.login.bind(authController));
 router.post('/refresh', authLimiter, validate(validateRefreshToken), authController.refresh.bind(authController));
 router.post('/forgot-password', passwordResetRequestLimiter, validate(validateForgotPassword), authController.forgotPassword.bind(authController));

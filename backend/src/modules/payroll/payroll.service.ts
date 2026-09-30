@@ -17,6 +17,10 @@ import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
+import { payrollArrearsService } from './payroll-arrears.service';
+import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
+import { calculatePph21Correction } from '@/shared/payroll/pph21-annual';
+import { mailService } from '@/shared/mail/MailService';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 import { generateSystemCode } from '@/shared/utils/system-code';
@@ -44,6 +48,16 @@ const JKK_RISK_TO_RATE: Record<JKKRiskClass, number> = {
   [JKKRiskClass.IV]: 1.27,
   [JKKRiskClass.V]: 1.74,
 };
+
+/**
+ * Deductible employee pension for the tax base: BPJS JHT + JP, the same two the
+ * monthly engine subtracts. Read from the company's own policy so the annual
+ * reconciliation uses the same numbers the monthly withholding did.
+ */
+function bpjsPensionFor(policy: { bpjs?: Parameters<typeof calculateBpjs>[1] }, monthlyWage: number): number {
+  const breakdown = calculateBpjs(monthlyWage, policy.bpjs ?? {});
+  return breakdown.employee.jht + breakdown.employee.jp;
+}
 
 export class PayrollService {
   // ==================== Salary Components ====================
@@ -385,6 +399,49 @@ export class PayrollService {
       }];
     });
     if (rows.length) await prisma.notification.createMany({ data: rows });
+
+    await this.emailPayslipsAvailable(companyId, periodName, users);
+  }
+
+  /**
+   * Email the same "it is ready" nudge, when the company has asked for it.
+   *
+   * Opt-in per company (`payslip_email_notification_enabled`), like every other
+   * setting that changes what leaves the system: sending payslip mail to an
+   * entire workforce is a tenant decision, not a deploy.
+   *
+   * Nothing here may break approval. The run is already approved and the
+   * payslips are already visible; a mail server being slow or down must not undo
+   * that, so every failure is logged and swallowed per recipient.
+   */
+  private async emailPayslipsAvailable(
+    companyId: string,
+    periodName: string | null,
+    users: Array<{ id: string; employeeId: string | null }>,
+  ) {
+    if (!users.length) return;
+
+    const setting = await prisma.companySetting.findUnique({
+      where: { companyId_key: { companyId, key: 'payslip_email_notification_enabled' } },
+      select: { value: true },
+    });
+    if (setting?.value !== 'true') return;
+
+    const recipients = await prisma.user.findMany({
+      where: { id: { in: users.map((user) => user.id) }, email: { not: '' } },
+      select: { id: true, email: true },
+    });
+
+    const results = await Promise.allSettled(
+      recipients.map((recipient) => mailService.sendPayslipAvailable(recipient.email, periodName)),
+    );
+
+    const failed = results.filter((result) => result.status === 'rejected').length;
+    const sent = results.filter((result) => result.status === 'fulfilled' && result.value).length;
+    logger.info('Payslip availability emails dispatched', { companyId, sent, failed, total: recipients.length });
+    if (failed) {
+      logger.warn('Some payslip availability emails could not be delivered', { companyId, failed });
+    }
   }
 
   async approvePayrollRun(id: string, userId: string) {
@@ -519,6 +576,58 @@ export class PayrollService {
     const lateDeductionComponent = await this.ensureLateDeductionComponent(run.companyId, database);
     const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId, database);
     const ewaDeductionComponent = await this.ensureEWADeductionComponent(run.companyId, database);
+    const arrearsEarningComponent = await this.ensureArrearsEarningComponent(run.companyId, database);
+    // Arrears carried over from closed periods (GAP-14). Read once for the run
+    // so a row registered midway cannot land on two payslips.
+    const arrearsByEmployee = await payrollArrearsService.pendingByEmployee(run.companyId, database);
+    const arrearsClaims: Array<{ arrearsId: string; payslipId: string }> = [];
+    // Approved leave encashments (GAP-09). The balance was already deducted at
+    // approval; this run only pays for it.
+    const encashmentComponent = await this.ensureLeaveEncashmentComponent(run.companyId, database);
+    const encashmentsByEmployee = await leaveEncashmentService.approvedByEmployee(run.companyId, database);
+    const encashmentClaims: Array<{ encashmentId: string; payslipId: string }> = [];
+
+    // December PPh21 reconciliation (GAP-16). Opt-in per company, because it
+    // changes take-home pay in the last month of the year; and only in the
+    // period that actually ends the fiscal year, so a mid-year run cannot
+    // accidentally settle a year that is not over.
+    const reconciliationSetting = await database.companySetting.findUnique({
+      where: { companyId_key: { companyId: run.companyId, key: 'pph21_december_reconciliation_enabled' } },
+      select: { value: true },
+    });
+    const fiscalPeriodEnd = new Date(run.period.endDate);
+    const isFinalPeriodOfYear = fiscalPeriodEnd.getUTCMonth() === 11;
+    const reconcileAnnualTax = reconciliationSetting?.value === 'true' && isFinalPeriodOfYear;
+    const taxComponent = reconcileAnnualTax
+      ? await payrollRepository.findSalaryComponentByCode(run.companyId, 'PPH21', database)
+      : null;
+    const taxCorrectionComponent = reconcileAnnualTax
+      ? await this.ensureTaxCorrectionComponent(run.companyId, database)
+      : null;
+    const priorPayslips = reconcileAnnualTax
+      ? await database.payslip.findMany({
+          where: {
+            companyId: run.companyId,
+            payrollRun: {
+              status: 'APPROVED',
+              period: {
+                startDate: { gte: new Date(Date.UTC(fiscalPeriodEnd.getUTCFullYear(), 0, 1)) },
+                endDate: { lte: fiscalPeriodEnd },
+              },
+            },
+          },
+          select: {
+            employeeId: true,
+            components: { select: { salaryComponentId: true, amount: true, type: true, isTaxable: true } },
+          },
+        })
+      : [];
+    const priorByEmployee = new Map<string, typeof priorPayslips>();
+    for (const slip of priorPayslips) {
+      const list = priorByEmployee.get(slip.employeeId) ?? [];
+      list.push(slip);
+      priorByEmployee.set(slip.employeeId, list);
+    }
     // Benefit contributions (checklist §19). Opt-in per company via the
     // benefit_payroll_deduction_enabled setting: enabling it changes
     // take-home pay, so it must be a deliberate tenant decision, not a deploy.
@@ -782,6 +891,36 @@ export class PayrollService {
         });
       }
 
+      // Rapel: paid as its own earning, named after the period it came from, so
+      // the payslip says why the month is bigger than usual. Taxable, because
+      // arrears are taxed in the period they are paid.
+      const employeeArrears = arrearsByEmployee.get(salary.employeeId) ?? [];
+      for (const arrears of employeeArrears) {
+        const amount = new Prisma.Decimal(arrears.grossAmount);
+        if (amount.lessThanOrEqualTo(0)) continue;
+        extraComponents.push({
+          salaryComponentId: arrearsEarningComponent.id,
+          name: `Rapel ${arrears.sourcePeriod.code}`,
+          type: 'ALLOWANCE',
+          amount: amount.toNumber(),
+          isTaxable: true,
+        });
+      }
+
+      const employeeEncashments = encashmentsByEmployee.get(salary.employeeId) ?? [];
+      for (const encashment of employeeEncashments) {
+        const amount = new Prisma.Decimal(encashment.grossAmount);
+        if (amount.lessThanOrEqualTo(0)) continue;
+        extraComponents.push({
+          salaryComponentId: encashmentComponent.id,
+          name: `Pencairan ${encashment.leaveType.name} (${encashment.days} hari)`,
+          type: 'ALLOWANCE',
+          amount: amount.toNumber(),
+          // Encashed leave is ordinary income in the month it is paid.
+          isTaxable: true,
+        });
+      }
+
       const emp = salary.employee;
       const taxContext = {
         married: emp?.maritalStatus === 'MARRIED',
@@ -789,11 +928,43 @@ export class PayrollService {
         hasNpwp: Boolean(emp?.taxId),
       };
 
-      const { earningsTotal, deductionsTotal, components, formulaCalculations } = calculateEmployeePay(salary, extraComponents, taxContext, {
+      const pay = calculateEmployeePay(salary, extraComponents, taxContext, {
         BASE_SALARY: salary.baseSalary.toString(), WORK_DAYS: String(workDaysInPeriod),
         PRESENT_DAYS: String(attd.present), LEAVE_DAYS: String(leaveDaysForEmployee),
         ABSENT_DAYS: String(absentDays), OVERTIME_HOURS: String(overtimeHoursForEmployee),
       }, formulaVersions, payrollPolicy);
+
+      let earningsTotal = pay.earningsTotal;
+      let deductionsTotal = pay.deductionsTotal;
+      const components = [...pay.components];
+      const formulaCalculations = pay.formulaCalculations;
+
+      if (reconcileAnnualTax && taxComponent && taxCorrectionComponent) {
+        const correction = this.annualTaxCorrection({
+          taxComponentId: taxComponent.id,
+          thisPeriod: components,
+          priorSlips: priorByEmployee.get(salary.employeeId) ?? [],
+          taxContext,
+          pension: bpjsPensionFor(payrollPolicy, Number(salary.baseSalary)),
+          policy: payrollPolicy,
+        });
+
+        if (correction && correction.delta !== 0) {
+          const isShortfall = correction.delta > 0;
+          const amount = Math.abs(correction.delta);
+          components.push({
+            salaryComponentId: taxCorrectionComponent.id,
+            name: isShortfall ? 'Koreksi PPh21 Tahunan' : 'Pengembalian PPh21 Tahunan',
+            type: isShortfall ? 'DEDUCTION' : 'ALLOWANCE',
+            amount,
+            // The correction settles tax; it is not itself taxable income.
+            isTaxable: false,
+          });
+          if (isShortfall) deductionsTotal = new Prisma.Decimal(deductionsTotal).plus(amount).toDecimalPlaces(2).toNumber();
+          else earningsTotal = new Prisma.Decimal(earningsTotal).plus(amount).toDecimalPlaces(2).toNumber();
+        }
+      }
+
       const netPay = new Prisma.Decimal(earningsTotal).minus(deductionsTotal).toDecimalPlaces(2).toNumber();
       if (netPay < 0) throw new BadRequestError('Payroll deductions exceed earnings; review the calculation before approval');
 
@@ -842,6 +1013,13 @@ export class PayrollService {
         },
       }, database);
 
+      for (const arrears of employeeArrears) {
+        arrearsClaims.push({ arrearsId: arrears.id, payslipId: payslip.id });
+      }
+      for (const encashment of employeeEncashments) {
+        encashmentClaims.push({ encashmentId: encashment.id, payslipId: payslip.id });
+      }
+
       // Create payslip components
       if (components.length > 0) {
         await payrollRepository.createPayslipComponents(
@@ -865,6 +1043,10 @@ export class PayrollService {
     // updates detect stale amounts/statuses; any failure rolls the entire run back.
     if (employeeCount === 0) throw new BadRequestError('No active employee salaries are available for this payroll');
     await ewaRepository.markPayrollDeductions(run.companyId, runId, appliedEwaDeductions, database);
+    // Same discipline as EWA: claim conditionally on PENDING so a row another
+    // run already took fails this one instead of being paid twice.
+    await payrollArrearsService.markApplied(run.companyId, runId, arrearsClaims, database);
+    await leaveEncashmentService.markPaid(run.companyId, runId, encashmentClaims, database);
     const totalNetPay = totalEarnings.minus(totalDeductions);
     for (const amount of [totalEarnings, totalDeductions, totalNetPay]) {
       if (!amount.isFinite() || amount.isNegative() || amount.greaterThan('9999999999999.99')) {
@@ -883,6 +1065,113 @@ export class PayrollService {
     // Mark run as completed
     await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
 
+  }
+
+  /**
+   * Work out what December owes or must refund.
+   *
+   * Returns null when the year cannot be settled honestly — no taxable months,
+   * or no tax component to read withholding from — because a confident zero
+   * would be worse than doing nothing.
+   */
+  private annualTaxCorrection(input: {
+    taxComponentId: string;
+    thisPeriod: PayComponent[];
+    priorSlips: Array<{ components: Array<{ salaryComponentId: string; amount: Prisma.Decimal; type: string; isTaxable: boolean }> }>;
+    taxContext: { married: boolean; dependents: number; hasNpwp: boolean };
+    pension: number;
+    policy: { pph21?: Record<string, unknown> };
+  }) {
+    const taxableOf = (rows: Array<{ type: string; isTaxable: boolean; amount: number | Prisma.Decimal }>) =>
+      rows
+        .filter((row) => row.type === 'ALLOWANCE' && row.isTaxable)
+        .reduce((sum, row) => sum + Number(row.amount), 0);
+    const withheldOf = (rows: Array<{ salaryComponentId: string; amount: number | Prisma.Decimal }>) =>
+      rows
+        .filter((row) => row.salaryComponentId === input.taxComponentId)
+        .reduce((sum, row) => sum + Number(row.amount), 0);
+
+    const monthlyGrosses: number[] = [];
+    let withheldToDate = 0;
+    for (const slip of input.priorSlips) {
+      monthlyGrosses.push(taxableOf(slip.components));
+      withheldToDate += withheldOf(slip.components);
+    }
+    // The month being paid is part of the year too.
+    monthlyGrosses.push(taxableOf(input.thisPeriod));
+    withheldToDate += withheldOf(input.thisPeriod);
+
+    if (monthlyGrosses.every((gross) => gross <= 0)) return null;
+
+    return calculatePph21Correction(
+      {
+        monthlyGrosses,
+        monthlyPensions: monthlyGrosses.map(() => input.pension),
+        married: input.taxContext.married,
+        dependents: input.taxContext.dependents,
+        hasNpwp: input.taxContext.hasNpwp,
+        withheldToDate,
+      },
+      input.policy.pph21 ?? {},
+    );
+  }
+
+  private async ensureTaxCorrectionComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'PPH21_ANNUAL_CORRECTION_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Koreksi PPh21 Tahunan',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false,
+      description: 'System generated: December reconciliation of annual PPh21',
+      sortOrder: 994,
+    }, database);
+  }
+
+  private async ensureLeaveEncashmentComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'LEAVE_ENCASHMENT_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Pencairan Sisa Cuti',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: true,
+      // The amount was computed from a daily rate at approval; prorating it
+      // against this period would shrink what was already agreed.
+      isProrated: false,
+      description: 'System generated: unused leave exchanged for money',
+      sortOrder: 995,
+    }, database);
+  }
+
+  private async ensureArrearsEarningComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'ARREARS_EARNING_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Rapel Periode Sebelumnya',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: true,
+      // Never prorated: the amount was already prorated for the period it came
+      // from, and prorating it again against this period would shrink it twice.
+      isProrated: false,
+      description: 'System generated: pay for a closed period the employee was missed in',
+      sortOrder: 996,
+    }, database);
   }
 
   private async ensureOvertimeEarningComponent(companyId: string, database: Prisma.TransactionClient) {

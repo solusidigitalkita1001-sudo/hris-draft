@@ -1,4 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
+import { ssoService } from './sso/sso.service';
+import type { SsoCallbackQueryDTO, SsoStartQueryDTO } from './sso/sso.dto';
+import { logger } from '@/shared/logger/WinstonLogger';
+import { AppError } from '@/shared/exceptions/AppError';
 import { authService } from './auth.service';
 import { passwordResetService } from './password-reset.service';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
@@ -308,6 +312,75 @@ export class AuthController {
       await authService.disableMfa(req.user!.id, dto.code);
       res.status(200).json(Result.success(null, 'MFA disabled'));
     } catch (error) {
+      next(error);
+    }
+  }
+
+  // ==================== SSO (OIDC) ====================
+  /**
+   * Send the browser to the company's identity provider.
+   *
+   * A redirect, not JSON: the browser has to end up at the provider, and an
+   * XHR cannot follow a cross-origin login. Nothing is trusted from the client
+   * beyond the company code.
+   */
+  async ssoStart(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { company, returnTo } = req.query as unknown as SsoStartQueryDTO;
+      const { authorizeUrl } = await ssoService.start(company, returnTo, req.ip);
+      res.redirect(302, authorizeUrl);
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * Finish the login and land the user back in the web app.
+   *
+   * Errors redirect rather than render JSON, because this URL is opened by the
+   * provider in the user's browser: a raw error object would be a dead end. The
+   * reason is passed as a short code, never as provider text, so nothing the
+   * provider says can be reflected into the page.
+   */
+  async ssoCallback(req: Request, res: Response, next: NextFunction) {
+    const loginUrl = new URL('/login', config.frontend.url);
+    try {
+      const query = req.query as unknown as SsoCallbackQueryDTO;
+
+      if (query.error || !query.code) {
+        logger.warn('SSO callback returned an error', { error: query.error, description: query.error_description });
+        loginUrl.searchParams.set('sso', 'failed');
+        res.redirect(302, loginUrl.toString());
+        return;
+      }
+
+      const identity = await ssoService.completeCallback(query.state, query.code, req.ip);
+      const session = await authService.loginWithVerifiedIdentity(identity.email, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        issuer: 'sso',
+      });
+
+      // Identical session semantics to a password login: the same httpOnly
+      // cookies and the same CSRF token, minted by the same helpers.
+      setAccessCookie(res, session.tokens.accessToken);
+      setRefreshCookie(res, session.tokens.refreshToken);
+      issueCsrfToken(res);
+
+      const destination = new URL(identity.returnTo ?? '/dashboard', config.frontend.url);
+      // Belt and braces: even though returnTo was validated when the attempt
+      // was stored, refuse anything that resolved to another origin.
+      if (destination.origin !== new URL(config.frontend.url).origin) {
+        res.redirect(302, new URL('/dashboard', config.frontend.url).toString());
+        return;
+      }
+      res.redirect(302, destination.toString());
+    } catch (error) {
+      // An authentication failure here is the user's problem to understand, not
+      // an API error to parse, so it lands on the login page with a reason.
+      if (error instanceof AppError && error.statusCode < 500) {
+        loginUrl.searchParams.set('sso', 'denied');
+        res.redirect(302, loginUrl.toString());
+        return;
+      }
       next(error);
     }
   }

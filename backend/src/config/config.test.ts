@@ -93,3 +93,64 @@ describe('production placeholder secret guard', () => {
     expect(() => loadEnv(prodEnv)).not.toThrow();
   });
 });
+
+/**
+ * These are the values that were actually found running in production, and the
+ * anchored pattern that preceded this let two of the three through.
+ *
+ * `csrf-secret-development-key-2024` is the one that matters most: the
+ * double-submit CSRF token is signed with that secret, so anyone who knows the
+ * value can mint a token that passes and the protection is gone. A published
+ * dev string is known by definition.
+ */
+describe('production secret guard', () => {
+  const prod = (over: NodeJS.ProcessEnv) => () => loadEnv({ ...validEnv, NODE_ENV: 'production', ...over });
+
+  it.each([
+    ['ENCRYPTION_KEY', 'dev-encryption-key-32-chars-long!!'],
+    ['SESSION_SECRET', 'session-secret-development-key-2024'],
+    ['CSRF_SECRET', 'csrf-secret-development-key-2024'],
+    ['JWT_ACCESS_SECRET', 'your-access-secret-here-please!!'],
+    ['CSRF_SECRET', 'changeme-changeme-changeme'],
+    ['SESSION_SECRET', 'placeholder-session-secret-value'],
+    ['SESSION_SECRET', 'insecure-session-secret-value'],
+    ['CSRF_SECRET', 'sample-csrf-secret-value-here'],
+  ])('refuses %s = %p in production', (key, value) => {
+    expect(prod({ [key]: value })).toThrow(new RegExp(key));
+  });
+
+  it('accepts real random secrets in production', () => {
+    expect(prod({
+      ENCRYPTION_KEY: 'Zt7Qw9VmKp2Lx4Rn8Hs5Bd3Fg6Jc1Yv0',
+      SESSION_SECRET: 'Qx4Tn8Wz2Km6Bp1Ld',
+      CSRF_SECRET: 'Rv9Lc3Hf7Jd5Ns2Mt',
+    })).not.toThrow();
+  });
+
+  it('leaves development alone, where placeholders are the point', () => {
+    expect(() => loadEnv({ ...validEnv, ENCRYPTION_KEY: 'dev-encryption-key-32-chars-long!!' })).not.toThrow();
+  });
+
+  /**
+   * One value for both token types means a stolen access token is also a
+   * refresh token to anything that forgets to check the `type` claim. The claim
+   * is checked today; this keeps a single compromised secret from being one
+   * oversight away from an unexpirable session.
+   */
+  it('refuses identical JWT access and refresh secrets in production', () => {
+    const shared = 'Zt7Qw9VmKp2Lx4Rn8Hs5';
+    expect(prod({ JWT_ACCESS_SECRET: shared, JWT_REFRESH_SECRET: shared }))
+      .toThrow(/JWT_REFRESH_SECRET: must differ/);
+  });
+
+  it('accepts distinct JWT secrets', () => {
+    expect(prod({ JWT_ACCESS_SECRET: 'Zt7Qw9VmKp2Lx4Rn8Hs5', JWT_REFRESH_SECRET: 'Bd3Fg6Jc1Yv0Qx4Tn8Wz' }))
+      .not.toThrow();
+  });
+
+  it('allows an identical pair in development, where it is a convenience', () => {
+    const shared = 'x'.repeat(20);
+    expect(() => loadEnv({ ...validEnv, JWT_ACCESS_SECRET: shared, JWT_REFRESH_SECRET: shared })).not.toThrow();
+  });
+});
+

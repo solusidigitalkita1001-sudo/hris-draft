@@ -147,6 +147,15 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'daily-activity', action: 'approve', name: 'Approve / Review Daily Activity', module: 'daily-activity', code: 'da:approve' },
     { resource: 'daily-activity', action: 'process', name: 'Process / Complete Daily Activity', module: 'daily-activity', code: 'da:process' },
     { resource: 'daily-activity', action: 'export', name: 'Export Daily Activity Report', module: 'daily-activity', code: 'da:export' },
+
+    // Announcement (Engagement Portal). Reading is open to every signed-in
+    // employee — the audience rules decide who sees what — so only the write
+    // side needs permissions. Publishing is separated from creating on purpose:
+    // an announcement goes to everybody at once and cannot be unsent.
+    { resource: 'announcement', action: 'read', name: 'Read Announcement (admin view)', module: 'announcement', code: 'announcement:read' },
+    { resource: 'announcement', action: 'create', name: 'Create Announcement Draft', module: 'announcement', code: 'announcement:create' },
+    { resource: 'announcement', action: 'update', name: 'Update / Archive Announcement', module: 'announcement', code: 'announcement:update' },
+    { resource: 'announcement', action: 'approve', name: 'Publish Announcement', module: 'announcement', code: 'announcement:approve' },
   ];
 
   for (const perm of permissions) {

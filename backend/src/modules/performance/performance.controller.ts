@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
+import { goalHierarchyService } from './goal-hierarchy.service';
+import type { SetGoalParentDTO } from './performance.dto';
 import { performanceService } from './performance.service';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
-import { ForbiddenError } from '@/shared/exceptions/AppError';
+import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 
 export class PerformanceController {
   private getAuditContext(req: AuthenticatedRequest) {
@@ -770,6 +772,34 @@ export class PerformanceController {
   async submitFeedback(req: Request, res: Response, next: NextFunction) {
     try { res.status(201).json(Result.created(await performanceService.submitFeedback(req.body))); }
     catch (error) { next(error); }
+  }
+
+  // ==================== Hierarki goal ====================
+  async setGoalParent(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const { parentGoalId } = req.body as SetGoalParentDTO;
+      res.json(Result.success(
+        await goalHierarchyService.setParent(companyId, String(req.params.id), parentGoalId),
+      ));
+    } catch (error) { next(error); }
+  }
+
+  async getGoalChain(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await goalHierarchyService.chain(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  async getGoalChildren(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await goalHierarchyService.children(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
   }
 }
 

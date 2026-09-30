@@ -94,19 +94,66 @@ Modul `work-calendar` (termasuk `NationalHoliday`) sudah ada tapi **tidak dipaka
 
 ---
 
-### 🟡 GAP-08 — Cuti Bersama (Mass Leave)
+### 🟢 GAP-08 — Cuti Bersama (Mass Leave) — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** admin bisa deklarasikan tanggal tertentu sebagai "cuti bersama" yang memotong saldo cuti semua karyawan (atau karyawan tertentu) secara massal — mirip kebijakan pemerintah libur bersama Lebaran.
 
 **Kondisi saat ini:** tidak ada model atau endpoint untuk ini. `NationalHoliday` ada tapi bukan cuti yang memotong saldo.
 
+**DITUTUP.** Keputusan user: **memotong saldo cuti tahunan**, per perusahaan
+dengan **pengecualian per cabang**, dan saldo yang tidak cukup jatuh ke
+**unpaid** — bukan saldo minus, karena angka negatif itu merembet ke payroll dan
+pesangon lalu baru terlihat saat karyawan berhenti.
+
+- Tiga langkah dipisah sengaja: **deklarasi** (belum menyentuh saldo),
+  **preview** (siapa terpotong, siapa jatuh ke unpaid, siapa dilewati), lalu
+  **apply** dengan permission yang lebih ketat (`leave:approve`). Memotong hak
+  seluruh perusahaan dalam satu klik tanpa bisa dilihat dulu bukan cara yang
+  layak.
+- Diwujudkan sebagai `LeaveRequest` APPROVED per karyawan, bukan penanda
+  kalender: payroll membacanya lewat kalender absensi yang sudah ada, karyawan
+  melihatnya di riwayat cutinya sendiri dengan alasan yang jelas, dan laporan
+  tidak butuh jalur khusus.
+- Karyawan yang sudah punya cuti atau sudah tercatat absensi pada hari itu
+  **dilewati** — harinya tidak diubah di belakang punggungnya.
+- Seluruh perusahaan dalam satu transaksi: separuh perusahaan cuti dan separuh
+  tidak akan membuat payroll bulan itu dihitung dari hari yang setengah
+  diterapkan.
+
+Diverifikasi di MySQL sungguhan (12 test). Detail: `docs/collective-leave.md`.
+Yang sengaja belum ada: membalik hari yang sudah diterapkan — mengembalikan
+saldo dan menghapus cuti yang sudah disetujui adalah keputusan tersendiri.
+
 ---
 
-### 🟡 GAP-09 — Leave Encashment
+### 🟢 GAP-09 — Leave Encashment — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** untuk perusahaan yang menerapkan kebijakan "saldo cuti bisa ditukar uang", ada alur formal pengajuan encashment → approve → otomatis jadi komponen tambahan di payslip.
 
 **Kondisi saat ini:** tidak ada model maupun flow untuk ini.
+
+**DITUTUP sebagai settingan per perusahaan**, sesuai keputusanmu: *"bikin
+settingan nya di organization biar dinamis aja"*.
+
+Dasar perhitungan per hari berbeda antar perusahaan — ada yang ÷ 21 hari kerja,
+ada ÷ 30 hari kalender, ada yang menyertakan tunjangan tetap — jadi empat
+setting (`leave_encashment_enabled`, `max_days_per_year`, `daily_divisor`,
+`include_allowances`) menggantikan satu nilai yang ditanam di kode. **Mati
+secara default**, seperti setiap setting yang menggerakkan uang.
+
+- **Nominal tidak ada di API**: diturunkan server dari gaji aktif dan kebijakan
+  yang berlaku, disimpan bersama `basis` supaya bisa ditelusuri.
+- **Saldo dipotong saat disetujui, bukan saat diajukan**; saldo dibaca ulang di
+  bawah `FOR UPDATE` di sana, karena approval cuti biasa bisa memakai hari itu
+  di antara keduanya — membayar cuti yang sudah tidak dimiliki berarti membayar
+  dua kali untuk satu hak.
+- **Maker-checker**: pemohon tidak bisa menyetujui pencairannya sendiri.
+- **Batas tahunan menghitung hari yang sudah diajukan maupun dibayar**, supaya
+  dua pengajuan yang masing-masing patuh tidak bersama melewati batas.
+- **Uangnya lewat payroll** sebagai komponen tersendiri, dengan klaim bersyarat
+  seperti rapel — run kedua tidak bisa membayar baris yang sudah dibayar.
+
+Verifikasi: 32 test. Detail: `docs/leave-encashment.md`.
 
 ---
 
@@ -144,19 +191,70 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 ---
 
-### 🟠 GAP-13 — Payslip Distribution Otomatis
+### 🟢 GAP-13 — Payslip Distribution Otomatis — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** saat payslip diterbitkan (status `PUBLISHED`), sistem otomatis kirim email ke karyawan dengan PDF payslip ter-attach atau link secure.
 
 **Kondisi saat ini:** notification module scoped benar, email infrastructure ada, tapi tidak ada trigger event saat payslip published. Karyawan harus login sendiri untuk lihat payslip.
 
+**DITUTUP.** Keputusan user: **email berisi tautan aman yang tetap meminta PIN**
+— bukan PDF terlampir.
+
+Bagian yang mudah salah dan karena itu disebut terang-terangan: "aman" berarti
+tautannya **tidak membawa kredensial apa pun**. Emailnya hanya deep link ke Self
+Service; membaca slip tetap butuh masuk dan memasukkan PIN slip gaji. Token
+sekali-klik di kotak masuk akan menjadikan akses email = akses slip gaji, yaitu
+hal yang justru ingin dicegah gerbang PIN.
+
+- **Tidak ada nominal di email**, sama seperti notifikasi in-app. Ada test yang
+  memeriksa badan pesan agar tidak memuat deretan angka sepanjang uang, kata
+  `Rp`, maupun istilah seperti "netto"/"gaji bersih".
+- **Opt-in per perusahaan** (`payslip_email_notification_enabled`), karena
+  mengirim email slip gaji ke seluruh karyawan mengubah apa yang keluar dari
+  sistem — itu keputusan tenant, bukan konsekuensi deploy.
+- **Kegagalan SMTP tidak membatalkan apa pun**: email dikirim setelah run
+  disetujui dan slip sudah terlihat, jadi kegagalan per penerima dicatat lalu
+  ditelan. Server mail yang mati tidak boleh menganulir persetujuan payroll.
+
+Verifikasi: 7 test bentuk pesan + 10 test pengiriman. Detail:
+`docs/payslip-email-notification.md`.
+
+**Pertukaran yang disengaja:** karyawan yang lupa kata sandinya tidak bisa
+langsung membuka slip dari email — ia melewati alur lupa kata sandi lebih dulu.
+
 ---
 
-### 🟠 GAP-14 — Tidak Ada Correction Run / Payroll Susulan
+### 🟢 GAP-14 — Tidak Ada Correction Run / Payroll Susulan — DITUTUP 30 Sep (rapel)
 
 **Yang seharusnya ada:** kalau ada kesalahan input atau karyawan yang terlewat di payroll run sebelumnya, HR bisa buat **correction run** atau payroll susulan untuk periode yang sama.
 
 **Kondisi saat ini:** satu `PayrollPeriod` hanya bisa punya satu `PayrollRun` aktif — tidak ada mekanisme correction atau susulan.
+
+**DITUTUP dengan rapel, bukan correction run.** Keputusan user: karyawan yang
+terlewat dibayar sebagai komponen rapel pada periode berikutnya, dan periode
+yang sudah ditutup **tidak** dibuka kembali — membukanya mengubah angka laporan
+yang sudah dikirim dan rekonsiliasi bank yang sudah beres.
+
+- `PayrollArrears` menyimpan bruto yang seharusnya diterima, beserta `basis`
+  (gaji as-of, tunjangan, jumlah hari, tanggal masuk/terakhir bekerja) supaya
+  nominalnya bisa ditelusuri tanpa dihitung ulang.
+- **Tidak ada field jumlah di API**: nominal diturunkan server dari gaji yang
+  berlaku pada periode itu, diprorata untuk karyawan yang masuk di tengah bulan
+  (penyebab tersering seseorang terlewat), dan dibatasi tanggal terakhir bekerja
+  bila resignasinya sudah disetujui.
+- Pajak dikenakan pada periode yang membayarnya — praktik PPh21 di Indonesia —
+  jadi rapel masuk sebagai penghasilan bruto di slip periode pembayaran.
+- Pagar pembayaran ganda berlapis: unique `(employeeId, sourcePeriodId)`, cek
+  payslip pada periode sumber, periode wajib `CLOSED`, dan klaim `updateMany`
+  bersyarat `PENDING` yang menggagalkan seluruh run kalau hitungannya bukan 1.
+
+Diverifikasi di MySQL sungguhan: rapel dibayar sekali, namanya menyebut periode
+asal, dan run berikutnya tidak membayarnya lagi. Detail: `docs/payroll-arrears.md`.
+
+**Yang sengaja belum dibuat:** *correction* run untuk memperbaiki nominal yang
+salah pada periode tertutup. Rapel menangani karyawan yang **terlewat**; nominal
+yang salah adalah masalah berbeda dan endpoint rapel menolaknya secara eksplisit
+("a wrong amount is a correction, not arrears").
 
 ---
 
@@ -168,11 +266,37 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 ---
 
-### 🟡 GAP-16 — PPh21 Annual Reconciliation
+### 🟢 GAP-16 — PPh21 Annual Reconciliation — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** di Desember, sistem hitung ulang total PPh21 setahun per karyawan dan sesuaikan dengan yang sudah dipotong tiap bulan. Kekurangan/kelebihan potong harus dikoreksi di payslip Desember.
 
 **Kondisi saat ini:** perhitungan PPh21 per bulan sudah sesuai regulasi, tapi tidak ada flow rekonsiliasi tahunan. Kurang umum untuk HRIS skala menengah-besar.
+
+**DITUTUP** sesuai keputusanmu: koreksi otomatis di slip Desember sebagai
+komponen terpisah.
+
+Metode bulanan mengalikan penghasilan satu bulan dua belas kali — benar untuk
+memotong sepanjang jalan, tetapi bukan kebenaran tentang tahunnya begitu
+bulan-bulannya berbeda (bonus, THR, kenaikan tengah tahun, perubahan PTKP,
+karyawan masuk Maret). Desember menghitung ulang dari angka bulanan yang sungguh
+diterima.
+
+- **Biaya jabatan dijumlahkan per bulan dengan batas bulanannya**, bukan sekali
+  terhadap bruto setahun — plafon 6 juta terhadap bruto setahun hanya benar untuk
+  orang yang penghasilannya rata sepanjang tahun.
+- **Kedua arah ditangani**: kurang potong menjadi potongan, lebih potong menjadi
+  **pengembalian**. Karyawan yang status PTKP-nya berubah biasanya justru lebih
+  potong, dan menolak mengembalikan berarti menahan uang yang bukan milik
+  perusahaan.
+- **Hanya periode yang benar-benar berakhir di Desember**, dipakukan test
+  real-DB: menyelesaikan tahun pada Oktober akan memotong koreksi setahun penuh
+  dari orang yang masih punya dua bulan untuk dibayar.
+- Tahun tanpa penghasilan kena pajak **tidak** mendapat komponen koreksi — nol
+  yang terlihat yakin lebih buruk daripada tidak melakukan apa-apa.
+- Opt-in per perusahaan (`pph21_december_reconciliation_enabled`, default mati)
+  karena mengubah take-home pay di bulan terakhir tahun.
+
+Verifikasi: 13 + 6 + 1 test. Detail: `docs/pph21-december-reconciliation.md`.
 
 ---
 
@@ -194,35 +318,110 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 ---
 
-### 🟠 GAP-19 — Contract/PKWT Renewal Monitoring
+### 🟢 GAP-19 — Contract/PKWT Renewal Monitoring — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** sistem tracking tanggal berakhir kontrak PKWT karyawan, kirim reminder otomatis ke HR X hari sebelum expired (misal 30, 14, 7 hari). HR bisa mark: perpanjang, angkat tetap, atau tidak diperpanjang.
 
 **Kondisi saat ini:** field `contractEndDate` ada di `Employee`, tapi tidak ada scheduler untuk reminder maupun alur perpanjangan kontrak.
 
+**DITUTUP** dengan `EmploymentContract` — tabel, sesuai keputusanmu, bukan dua
+kolom tanggal di data karyawan.
+
+Alasannya bukan selera desain: PKWT punya **batas hukum pada total masa kerja
+berkontrak**, dan dengan dua kolom tanggal perpanjangan kedua menimpa yang
+pertama. Begitu riwayatnya hilang, sistem tidak bisa lagi tahu batas itu sudah
+terlampaui — dan melewatinya mengubah status menjadi tetap **karena hukum**,
+kegagalan kepatuhan yang tidak kelihatan sampai ada yang mempersoalkannya.
+
+Ditolak: PKWTT dengan tanggal berakhir, PKWT/probasi tanpa tanggal berakhir,
+tanggal berakhir yang tidak setelah mulai, dan kontrak aktif yang tumpang tindih
+(dua kontrak aktif berarti dua jawaban untuk "sekarang dia berstatus apa").
+
+Diperingatkan, bukan ditolak: total PKWT melewati 5 tahun (PP 35/2021), dan
+nomor perpanjangan. Diperingatkan karena ada susunan yang sah yang tidak
+terlihat dari sini — jeda masa kerja yang sungguh terjadi, badan hukum berbeda —
+jadi HR diberi tahu apa kata aturannya lalu HR yang memutuskan.
+
+Pengingat 30/14/7 hari ke atasan langsung dan role HR/admin, **satu kali per
+offset** (offset terakhir dicatat di barisnya): pengingat yang datang tiga puluh
+kali adalah kebisingan yang dilatih untuk diabaikan.
+
+Verifikasi: 26 test. Detail: `docs/employment-contracts.md`.
+
 ---
 
-### 🟠 GAP-20 — Probation Monitoring & Review
+### 🟢 GAP-20 — Probation Monitoring & Review — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** karyawan baru punya masa probasi (3–6 bulan). Sistem tracking deadline probasi, kirim reminder ke atasan untuk lakukan review, atasan input keputusan (lulus/diperpanjang/tidak lulus).
 
 **Kondisi saat ini:** field `probationEndDate` ada di `Employee`, tapi tidak ada flow review probasi maupun reminder.
 
+**DITUTUP** bersama GAP-19: probasi adalah salah satu tipe pada
+`EmploymentContract`, jadi ia ikut mendapat pengingat 30/14/7 hari ke atasan
+langsung dan HR.
+
+Satu aturan ditegakkan keras: **probasi lebih dari 3 bulan ditolak** (UU 13/2003
+pasal 60). Di atas itu klausul percobaannya batal, dan memberhentikan orang
+dengan dasar percobaan setelahnya menjadi PHK yang tidak sah — menyimpannya
+diam-diam berarti menyimpan bom waktu.
+
+Detail: `docs/employment-contracts.md`.
+
 ---
 
-### 🟠 GAP-21 — Salary Revision Formal Flow
+### 🟢 GAP-21 — Salary Revision Formal Flow — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** alur formal kenaikan/penurunan gaji — HR ajukan revision proposal (effective date, component changes, reason) → approval → otomatis update `EmployeeSalary` di tanggal efektif dan record di career history.
 
 **Kondisi saat ini:** gaji diubah langsung edit di endpoint salary tanpa approval flow atau effective date management.
 
+**DITUTUP** sesuai keputusanmu: tetap di jalur karier, ditambah field
+justifikasi — bukan alur approval kedua.
+
+Alur kedua untuk hal yang sama akan membelah riwayat karier ke dua tempat, dan
+riwayat gaji yang terbelah justru yang paling sering ditanyakan saat sengketa
+atau audit. Yang hilang dari satu jalur itu bukan approval-nya (sudah ada),
+melainkan **alasan untuk uangnya**, terpisah dari alasan untuk perpindahannya.
+
+- `salaryJustification` **wajib** saat `toBaseSalary` diisi — kenaikan gaji tanpa
+  alasan tertulis adalah satu hal yang tidak bisa direkonstruksi setahun
+  kemudian, dan itu persis yang ditanyakan saat dipersoalkan.
+- `budgetReference` opsional, untuk menunjuk dokumen anggaran atau
+  persetujuannya.
+- Keduanya ikut ke payload approval, jadi yang menyetujui uang melihat
+  alasannya.
+
+Verifikasi: 9 test. 
+
 ---
 
-### 🟡 GAP-22 — Headcount Planning / Man Power Planning (MPP)
+### 🟢 GAP-22 — Headcount Planning / Man Power Planning (MPP) — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** sebelum buka rekrutmen, ada proses formal MPP — department head ajukan kebutuhan headcount (posisi, jumlah, timeline, justifikasi budget) → approval → baru job posting dibuat.
 
 **Kondisi saat ini:** `JobPosting` langsung dibuat tanpa MPP. Tidak ada model `HeadcountRequisition`.
+
+**DITUTUP** sebagai **setting per perusahaan**, sesuai keputusanmu:
+requisition-nya dibangun, dan `recruitment_requisition_required` (default mati)
+menentukan apakah lowongan wajib merujuk requisition yang sudah disetujui.
+
+Perusahaan yang anggaran headcount-nya terpusat mendapat kontrol yang ia bayar;
+perusahaan yang tidak punya kendali itu tidak ikut mendapat satu langkah wajib
+untuk setiap penggantian karyawan yang resign. Requisition-nya tetap ada meski
+gerbangnya mati, jadi bisa dipakai sebagai catatan niat lebih dulu.
+
+Yang dijaga saat lowongan dibuka — sebuah foreign key saja tidak cukup:
+requisition harus `APPROVED`, harus milik perusahaan aktif, dan **jumlah vacancy
+tidak boleh melewati headcount yang disetujui**. Tanpa yang terakhir,
+persetujuannya menjadi formalitas: sejumlah lowongan berapa pun bisa dibuka atas
+satu kepala yang disetujui. Requisition yang headcount-nya habis otomatis
+menjadi `FULFILLED`.
+
+Maker-checker: pengaju tidak bisa menyetujui requisition-nya sendiri — headcount
+adalah anggaran. Setiap transisi memakai update bersyarat, jadi dua penyetuju
+yang bersamaan tidak bisa dua-duanya berhasil.
+
+Verifikasi: 33 test. Detail: `docs/job-requisition.md`.
 
 ---
 
@@ -252,29 +451,102 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 ## Domain 6: Training & Performance
 
-### 🟡 GAP-25 — Training Post-Evaluation
+### 🟢 GAP-25 — Training Post-Evaluation — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** setelah training selesai, peserta bisa isi form evaluasi (reaction level — Kirkpatrick Level 1), trainer bisa input nilai (learning level). Ada rekap efektivitas training per course.
 
 **Kondisi saat ini:** `TrainingAttendance` ada (attendance tracking) tapi tidak ada model untuk evaluasi/nilai post-training.
 
+**DITUTUP** pada dua level, sesuai keputusanmu.
+
+**Level 2 — nilai trainer.** `TrainingEnrollment.score` sudah ada di schema dan
+**tidak bisa ditulis oleh endpoint mana pun**: kolom yang mencatat apakah ada
+yang dipelajari, tanpa cara mengisinya. Sekarang bisa, dan hanya untuk
+pendaftaran yang benar-benar `COMPLETED` — nilai untuk pelatihan yang tidak
+diselesaikan tidak mengukur apa pun.
+
+**Level 1 — reaksi peserta.** Ini yang sebelumnya tidak ada sama sekali. Tanpa
+itu tidak ada cara mengetahui apakah sebuah course berguna — hanya apakah
+pesertanya lulus, dan course yang buruk pun bisa menghasilkan kelulusan. Empat
+pertanyaan skala 1–5 plus "akan merekomendasikan atau tidak".
+
+Hanya peserta itu sendiri yang bisa mengisinya, dan hanya sekali: form yang bisa
+diisi orang lain atas namanya, atau diisi ulang, bukan bukti apa pun.
+
+**Sengaja belum dibuat:** rekap efektivitas per course. Membangun rekap sebelum
+ada datanya menghasilkan grafik kosong — dan grafik kosong dibaca sebagai "tidak
+ada masalah di sini".
+
+Verifikasi: 25 test. 
+
 ---
 
-### 🟡 GAP-26 — Performance Goal Cascade (Top-Down Alignment)
+### 🟢 GAP-26 — Performance Goal Cascade (Top-Down Alignment) — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** OKR/goal perusahaan/divisi bisa di-cascade ke bawah — goal atasan jadi konteks/referensi saat bawahan bikin goal mereka. Ada visualisasi alignment tree.
 
 **Kondisi saat ini:** `Goal` model ada dengan field `parentGoalId` untuk hierarchy, tapi tidak ada UI cascade atau validasi alignment parent-child.
 
+**DITUTUP** sebagai **rujukan bebas**, sesuai keputusanmu: `parentGoalId`
+opsional, bukan cascade formal.
+
+Catatan yang perlu diperjelas: `parentGoalId` **tidak pernah ada** — klaim lama
+di daftar ini bahwa field itu sudah ada salah, jadi hierarkinya harus dimodelkan
+lebih dulu.
+
+Cascade formal menuntut struktur goal organisasi yang biasanya belum mapan saat
+sistemnya baru dipakai; memaksakannya menghasilkan pohon goal yang diisi
+asal-asalan demi memenuhi bentuknya — dan itu lebih buruk daripada tidak ada
+pohon sama sekali.
+
+Yang dijaga:
+
+- **Siklus ditolak.** Tanpa itu rantai bisa ditutup menjadi lingkaran (induk A
+  adalah B, induk B adalah A) dan **setiap pembaca yang menyusur ke atas —
+  termasuk query rantai di fitur ini — menggantung selamanya.** Data yang sudah
+  berisi lingkaran pun ditolak, bukan diputar.
+- **Kedalaman dibatasi 5 level** — sudah lebih dalam daripada yang dipakai
+  sebagian besar organisasi, dan mencegah rantai yang tidak bisa dirender layar
+  mana pun.
+- **Induk dari perusahaan lain ditolak**; kalau tidak, sasaran satu tenant bisa
+  menggantung di bawah tenant lain dan pembacanya ikut melewati batas.
+- **Progress induk tidak ditimpa** oleh rata-rata anaknya. Rujukan bebas berarti
+  induk bukan didefinisikan sebagai jumlah anaknya; menimpanya berarti mengarang
+  angka. Rata-rata anak dilaporkan terpisah.
+
+Verifikasi: 15 test. 
+
 ---
 
 ## Domain 7: Document Management
 
-### 🟡 GAP-27 — E-Signature Workflow Tidak Terstruktur
+### 🟢 GAP-27 — E-Signature Workflow Tidak Terstruktur — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** dokumen yang butuh tanda tangan punya urutan signer yang jelas (misal: karyawan sign dulu → HR sign → direktur sign), dengan deadline per signer dan reminder otomatis.
 
 **Kondisi saat ini:** `DocumentSignature` model ada tapi tidak ada workflow ordering — semua signer setara tanpa urutan.
+
+**DITUTUP** dengan urutan **opsional per dokumen**, sesuai keputusanmu.
+
+Catatan cakupan yang penting: `DocumentSignature` ada di schema **tanpa satu pun
+kode yang memakainya** — tidak ada endpoint tanda tangan sama sekali. Jadi yang
+dibangun bukan hanya urutannya, melainkan alur tanda tangannya: daftar penanda
+tangan yang diharapkan, aksi tanda tangan, penolakan dengan alasan, dan daftar
+"menunggu tanda tanganku".
+
+- **Urutan opsional.** Dokumen tanpa daftar penanda tangan berperilaku seperti
+  sebelumnya. Nilai `order` yang sama = satu langkah (boleh paralel). Kontrak dan
+  surat peringatan memang punya urutan yang mengikat, tetapi memaksakannya ke
+  semua dokumen memperlambat yang sederhana tanpa menambah kepastian.
+- **Langkah sebelumnya harus selesai** sebelum langkah berikutnya bisa
+  menandatangani — itulah gunanya urutan: penanda tangan berikutnya melihat apa
+  yang disetujui sebelumnya.
+- **Daftar tidak bisa diubah** setelah ada yang menandatangani; mengacak urutan
+  di tengah jalan akan mengubah apa yang sudah disetujui orang.
+- **Tenggat per penanda tangan** dan penanda `overdue`, plus penolakan dengan
+  alasan — dokumen yang tidak dijawab lebih buruk daripada yang ditolak.
+
+Verifikasi: 23 test. 
 
 ---
 
@@ -368,8 +640,8 @@ Security gaps sudah didokumentasikan detail di `review.md`. Berikut ringkasan bl
 - [ ] **GAP-03** Default attendance policy di level company sebagai fallback BranchAttendancePolicy
 - [ ] **GAP-06** Implementasi leave carry-over & expiry otomatis via BullMQ scheduler (jalankan tiap awal tahun/periode)
 - [ ] **GAP-12** Bank transfer file generation — export format BCA/BNI/Mandiri setelah payroll disburse
-- [ ] **GAP-13** Payslip distribution otomatis via email saat status `PUBLISHED`
-- [ ] **GAP-14** Correction run / payroll susulan untuk periode yang sudah berjalan
+- [x] **GAP-13** Email pemberitahuan slip gaji: deep link tanpa kredensial, PIN tetap diminta, opt-in per perusahaan (30 Sep)
+- [x] **GAP-14** Rapel untuk karyawan yang terlewat di periode tertutup (30 Sep) — correction run untuk nominal salah masih terbuka
 - [ ] **GAP-18** Employee transfer/mutation flow — model proposal + approval + effective date + auto-update data
 - [ ] **GAP-19** Contract/PKWT expiry monitoring + reminder otomatis via BullMQ scheduler
 - [ ] **GAP-20** Probation review flow — reminder ke atasan + form keputusan
@@ -381,7 +653,7 @@ Security gaps sudah didokumentasikan detail di `review.md`. Berikut ringkasan bl
 ### Fase 4 — Enhancement & Polish
 
 - [ ] **GAP-04** Implementasi EmployeeShiftOverride — service + controller + UI management
-- [ ] **GAP-08** Cuti bersama (mass leave) — model + endpoint admin + potong saldo karyawan massal
+- [x] **GAP-08** Cuti bersama — deklarasi + preview + apply, potong saldo dengan jatuhan unpaid (30 Sep)
 - [ ] **GAP-16** PPh21 annual reconciliation — December adjustment run
 - [ ] **GAP-22** Headcount Planning / Man Power Planning sebelum JobPosting
 - [ ] **GAP-25** Training post-evaluation — form evaluasi peserta + penilaian trainer
@@ -594,7 +866,7 @@ masuk daftar sama sekali?** Enam area diperiksa dari schema, enum, dan daftar
 endpoint. Hasilnya lima gap baru, dan satu di antaranya bukan sekadar fitur yang
 belum ada.
 
-### 🔴 GAP-31 — Metode absensi FINGERPRINT dipercaya dari klien
+### 🟢 GAP-31 — Metode absensi FINGERPRINT dipercaya dari klien — DITUTUP 30 Sep
 
 Ini yang paling perlu perhatian, karena bentuknya bukan "fitur belum ada"
 melainkan asimetri kepercayaan yang menyesatkan.
@@ -624,7 +896,46 @@ Dua jalan keluar sesungguhnya, keduanya keputusan:
 2. hapus `FINGERPRINT` dari kebijakan dan DTO sampai ada integrasinya, supaya
    tidak ada yang mengandalkan jaminan yang tidak ada.
 
-**Kenapa keduanya keputusan, bukan perbaikan teknis:** pada data yang berjalan,
+**DITUTUP dengan opsi 1 (integrasi perangkat).** User memilih menyediakan
+integrasinya — *"sediain aja, soalnya buat jaga2 kalo apps ini mau gw jual"* —
+dan karena belum ada merek mesin tertentu yang dipakai, yang dibangun adalah
+jalur punch netral vendor, bukan SDK satu merek:
+
+- `AttendanceDevice` — satu baris per mesin. Kredensialnya disimpan **hanya
+  sebagai SHA-256** dan ditampilkan sekali saat registrasi, jadi dump database
+  maupun admin yang membaca tabel tidak bisa menyamar sebagai terminal.
+- `POST /api/v1/attendance-devices/punches` — yang diautentikasi adalah mesin,
+  bukan orang. Kredensial perangkat ditolak di endpoint HR dan sesi pengguna
+  ditolak di endpoint punch; kedua arah diuji.
+- `AttendanceDevicePunch` — ledger punch mentah yang ditulis **sebelum** absensi
+  diturunkan darinya, termasuk punch yang tidak cocok ke karyawan mana pun,
+  supaya "punch saya tidak muncul" punya bukti untuk diperiksa. `externalId`
+  unik per perangkat membuat pengiriman ulang backlog aman.
+- Satu punch yang ditolak tidak menggugurkan batch: mesin yang tersambung
+  kembali setelah seminggu mengirim ratusan punch, dan satu punch pada periode
+  payroll tertutup tidak boleh membuang sisanya.
+- Kebijakan cabang, keterlambatan, hari kerja, dan guard periode payroll tetap
+  diputuskan server — jalur punch memakai `attendanceService` yang sama dengan
+  jalur HR.
+- Jalur punch berjalan di system context, jadi middleware tenant bukan yang
+  memfilter; filter `companyId` eksplisit pada pencarian karyawan yang mengurung,
+  dan satu test memakukan itu: kode karyawan yang sama di perusahaan lain jatuh
+  sebagai `UNMATCHED_EMPLOYEE`.
+- Tanda `method:FINGERPRINT_NOT_DEVICE_ATTESTED` sekarang **hanya** dipasang
+  pada fingerprint yang dinyatakan klien. Punch dari terminal terdaftar membawa
+  bukti perangkatnya di `policySnapshot.attendanceDevice`.
+
+Jalur klien sengaja **tidak** dihapus: Head Office Jakarta berkebijakan
+FINGERPRINT untuk 24 karyawan dan belum tentu punya mesinnya, jadi menolak
+metode itu hari ini akan membuat 24 orang tidak bisa absen besok pagi. Yang
+berubah: sekarang ada jalur yang sungguh terverifikasi untuk dipakai begitu
+mesinnya terpasang, dan record membedakan keduanya dengan jujur.
+
+Panduan integrator: `docs/attendance-device-integration.md`. Verifikasi: 15 test
+`attendance-device.service.test.ts` (termasuk isolasi lintas perusahaan), 7 test
+`attendance-device.routes.test.ts`, 7 test attestasi.
+
+**Catatan keputusan asli (sebelum ditutup):** pada data yang berjalan,
 Head Office Jakarta memakai kebijakan fingerprint-only dengan **24 karyawan**.
 Menolak metode itu dari aplikasi akan membuat ke-24 orang tersebut tidak bisa
 absen sama sekali — memperbaiki kejujuran data dengan mematikan hal yang mereka
@@ -638,17 +949,65 @@ perangkat yang mengonfirmasi. Diverifikasi ujung-ke-ujung terhadap stack
 berjalan: check-in fingerprint menjawab 201 dan baris tersimpan memuat penanda
 itu bersama peringatan lain yang sudah ada.
 
-### 🟠 GAP-32 — Tidak ada bukti potong PPh21 tahunan (1721-A1)
+### 🟡 GAP-32 — Tidak ada bukti potong PPh21 tahunan (1721-A1) — SEBAGIAN 30 Sep (angkanya ada)
 
 Perhitungan PPh21 bulanan sudah sesuai regulasi dan slip gaji tersedia sebagai
 PDF, tetapi tidak ada bukti potong tahunan (1721-A1) yang wajib diterima
-karyawan. Tidak ada model, endpoint, maupun template untuk itu.
+karyawan.
 
-### 🟠 GAP-33 — Tidak ada ekspor pelaporan BPJS / e-Bupot
+**SEBAGIAN DITUTUP: angkanya sudah ada, formulirnya menunggu satu contoh.**
+
+Yang sudah jalan — `GET /payroll/annual-tax-recap/:employeeId?year=` (JSON atau
+CSV) dan rekap satu baris per karyawan untuk seluruh perusahaan: penghasilan
+bruto per bulan, PPh21 dipotong per bulan, BPJS bagian karyawan, total setahun,
+NPWP karyawan dan perusahaan, serta status PTKP (`K/2`, `TK/0`) dengan
+tanggungan dibatasi tiga sesuai aturan — dan pembatasan itu **dikatakan**, tidak
+disembunyikan. Hanya run yang **disetujui** yang dihitung: draft bukan uang yang
+pernah diterima siapa pun. Rekap juga menandai apa yang membuat angkanya salah
+bila dibaca final: NPWP kosong, tahun tanpa slip disetujui, tahun sebagian.
+
+Yang belum — berkas resmi format DJP. Tata letak formulir itu sudah berubah
+lebih dari sekali, dan menebaknya menghasilkan dokumen yang ditolak kantor
+pajak: kegagalan yang baru terlihat pada saat paling mahal. Detail formatlah
+yang menentukan, dan itu hanya bisa datang dari **satu contoh 1721-A1 yang
+benar-benar kamu pakai**. Bagian yang tidak bergantung format — perakitan,
+penjumlahan, pemeriksaan kewarasan — sudah dikerjakan, jadi formulirnya tinggal
+dilapiskan.
+
+Verifikasi: 18 test. Detail: `docs/annual-tax-recap.md`.
+
+### 🟡 GAP-33 — Tidak ada ekspor pelaporan BPJS / e-Bupot — SEBAGIAN 30 Sep (angkanya ada)
 
 Tabel referensi BPJS dipakai untuk menghitung iuran, tetapi tidak ada ekspor
 laporan bulanan BPJS maupun berkas e-Bupot/SPT. Yang ada hanya ekspor berkas
 transfer bank (GAP-12).
+
+**SEBAGIAN DITUTUP: angkanya sudah ada** — `GET /payroll/bpjs-report?periodId=`
+(JSON atau CSV).
+
+Yang penting dari implementasinya: laporan ini **bukan** sekadar menjumlahkan
+potongan di slip. Slip hanya mencatat yang dipotong dari karyawan; iuran
+perusahaan (JKK, JKM, dan bagian pemberi kerja JHT/JP/JKN) **tidak pernah
+muncul di slip**, padahal itulah sebagian besar yang harus disetor. Jadi kedua
+sisi dihitung ulang dari upah dasar dan kebijakan perusahaan yang sama dengan
+yang dipakai run — yang juga berarti sisi karyawan **rekonsiliasi** dengan slip,
+bukan menyimpang.
+
+Cap upah ditegakkan (JHT dari upah penuh, JP dari cap JP, JKN dari cap 12 juta)
+— bagian yang salah bila seseorang menghitung persentase lurus untuk karyawan
+bergaji tinggi. Respons memuat **tarif dan cap efektif** yang dipakai, supaya
+setoran bisa diturunkan ulang setahun kemudian; sebuah test menangkap versi
+pertama yang hanya menerbitkan override dan karena itu tampak tanpa tarif.
+Nomor kepesertaan atau NIK yang kosong ditandai per karyawan — iuran tanpa nomor
+tidak bisa dicocokkan ke peserta di sisi BPJS, dan lebih baik terlihat di sini
+daripada di loket.
+
+Yang belum: berkas unggah resmi. Format mutasi bulanan BPJS Kesehatan dan
+Ketenagakerjaan berbeda satu sama lain dan sudah berubah; tata letak yang
+ditebak ditolak di loket. Kirim satu contoh berkas yang tim payroll benar-benar
+unggah, dan generatornya dilapiskan di atas data ini.
+
+Verifikasi: 13 test. Detail: `docs/bpjs-report.md`.
 
 ### 🟢 GAP-34 — Payroll mono-mata-uang secara desain — DITUTUP 30 Sep (didokumentasikan)
 
@@ -668,18 +1027,125 @@ mata uang pembayaran dari mata uang pelaporan pajak. DTO-nya juga diberi rujukan
 ke bagian itu, supaya pembaca kode tidak menyimpulkan `z.literal('IDR')` sebagai
 kelalaian.
 
-### 🟡 GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek
+### ⚪ GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek — DIPUTUSKAN DILEWATI 30 Sep
 
 `DailyActivity` mencatat aktivitas harian dengan bukti GPS dan foto, tetapi tidak
 ada timesheet per proyek/klien dengan jam billable dan approval — yang dipakai
 perusahaan jasa untuk menagih. Tidak ada model proyek sama sekali.
 
-### 🟡 GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank
+### ⚪ GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank — DIPUTUSKAN DILEWATI 30 Sep
 
 GAP-12 ditutup dengan ekspor CSV per bank yang bisa diunggah ke internet
 banking. Pencairan langsung lewat API bank/payment gateway (beserta rekonsiliasi
 status transaksi otomatis) belum ada. Ledger pembayaran dan status transaksinya
 sudah siap menampung itu bila kelak diputuskan.
+
+### Pemeriksaan ulang 30 September (sore) — tiga gap baru
+
+Diperiksa langsung ke kode, bukan dari ingatan. Yang **sudah ada** dan sempat
+saya duga kurang: bagan organisasi (`OrganizationChartPage` di frontend),
+pengalih bahasa (`LanguageSwitcher`), serta impor/ekspor karyawan lewat CSV
+(`POST /employees/import`, `GET /employees/export`). Tiga ini tidak dihitung
+sebagai gap.
+
+Yang benar-benar belum ada, dan bobotnya naik justru karena **produk ini
+dijual** — calon pembeli berikutnya yang menentukan, bukan tenant yang sedang
+jalan:
+
+### 🟢 GAP-37 — Tidak ada SSO (SAML / OIDC / Google Workspace) — DITUTUP 30 Sep
+
+Autentikasi hanya email + kata sandi, dengan MFA dan sesi yang sudah rapi.
+Tidak ada `saml`, `oidc`, maupun `openid` di seluruh backend. Untuk perusahaan
+yang sudah memakai Google Workspace atau Microsoft Entra, "karyawan harus ingat
+satu kata sandi lagi" sering menjadi syarat yang menggagalkan pembelian —
+sekaligus alasan keamanan, karena akun tidak ikut mati saat karyawan keluar dari
+direktori pusat.
+
+**DITUTUP dengan OIDC** (Google Workspace, Microsoft Entra, atau penyedia OIDC
+lain), per perusahaan. SAML tidak dibuat: OIDC menutup pasar yang sama untuk
+pembeli modern dengan satu alur yang jauh lebih kecil; kalau kelak ada pembeli
+yang hanya punya SAML, itu pekerjaan terpisah.
+
+Dua posisi yang disengaja dan berbiaya:
+
+- **SSO mengautentikasi, tidak membuat akun** (`autoProvision` default false).
+  Penyedia identitas membuktikan *siapa* seseorang; ia tidak berhak memutuskan
+  orang itu boleh punya akun HRIS. Menyerahkannya ke direktori berarti siapa pun
+  dengan mailbox perusahaan — kontraktor, anak magang, mantan karyawan — bisa
+  masuk ke sistem yang memuat gaji seluruh karyawan.
+- **Email belum terverifikasi ditolak.** Penyedia yang membolehkan pengguna
+  mengisi email apa pun tanpa membuktikannya akan menjadi jalur pengambilalihan
+  akun: klaim `direktur@perusahaan.com`, lalu dicocokkan ke pengguna direktur.
+
+Yang diverifikasi pada ID token — masing-masing adalah pemalsuan yang berhasil
+bila dihilangkan: tanda tangan terhadap JWKS, algoritma dibatasi RS256/384/512
+(menolak `alg: none` dan HS256 yang rentan algorithm confusion), `iss`, `aud`,
+`exp`, dan `nonce` yang mengikat token ke upaya login ini. Dokumen discovery
+juga harus mengklaim issuer yang kita minta.
+
+Pagar lain: PKCE S256, `state` sekali pakai yang dikonsumsi lewat update
+bersyarat **sebelum** penukaran token, `returnTo` hanya path relatif (open
+redirect di sini akan membuat halaman phishing bisa menyelesaikan login
+sungguhan), pagar SSRF yang sama dengan webhook pada issuer, akun terkunci
+tetap terkunci, dan client secret terenkripsi yang tidak pernah dikembalikan.
+
+Sesi hasil SSO **identik** dengan hasil login kata sandi — cookie dan CSRF
+dicetak helper yang sama, supaya dua implementasi sesi tidak menyimpang.
+
+Tanpa dependensi baru: Node mengimpor JWK langsung dan `jsonwebtoken`
+memverifikasi RS256 terhadapnya.
+
+**MFA berpindah ke penyedia identitas** saat SSO dipakai — pada alur redirect
+tidak ada tempat memasukkan TOTP. Flag lokal tidak diperiksa ulang, hanya
+dicatat, supaya auditor bisa melihat login mana yang mengandalkan penyedia.
+
+Verifikasi: 25 test klien OIDC dengan kunci RSA dan token sungguhan + 26 test
+layanan. Detail: `docs/sso-oidc.md`.
+
+### 🟢 GAP-38 — Tidak ada webhook untuk sistem luar — DITUTUP 30 Sep
+
+RabbitMQ dipakai untuk event **internal** antar-instance, tetapi tidak ada satu
+pun jalur keluar: tidak ada model langganan webhook, tidak ada pengiriman
+bertanda tangan, tidak ada retry. Pembeli yang ingin absensi masuk ke sistem
+akuntansinya, atau karyawan baru otomatis dibuatkan akun di aplikasi lain, hari
+ini hanya bisa polling API.
+
+**DITUTUP.** Yang dibangun persis itu, ditambah dua hal yang tidak boleh
+dilewatkan:
+
+- **Pagar SSRF.** URL webhook adalah alamat yang diambil server atas perintah
+  tenant. Tanpa pagar, satu langganan ke `169.254.169.254` membuat HRIS membaca
+  kredensial instance cloud untuk si tenant. Ditolak: skema non-https, kredensial
+  tertanam, port tidak lazim, `localhost`/`.internal`, dan seluruh rentang privat
+  termasuk IPv4-mapped IPv6 dalam dua ejaan. Diperiksa **dua kali** — saat
+  berlangganan dan lagi saat pengiriman terhadap alamat hasil resolusi DNS,
+  karena nama yang tadinya publik bisa menunjuk loopback satu jam kemudian.
+  Redirect tidak diikuti.
+- **Dedupe.** Unique `(subscriptionId, eventId)` dan fan-out dilakukan **setelah**
+  klaim inbox di worker, bukan di penerbit event: kalau tidak, setiap retry
+  BullMQ menjadi panggilan kedua ke sistem pelanggan — yang bagi mereka bisa
+  berarti invoice ganda.
+
+Selain itu: secret ditampilkan sekali dan disimpan terenkripsi (bukan hash,
+karena HMAC butuh secret utuh), tanda tangan mencakup timestamp sehingga payload
+yang terekam tidak bisa diputar ulang selamanya, retry berbackoff sampai 6
+percobaan lalu `DEAD`, langganan yang gagal 20 kali berturut-turut mematikan
+dirinya sendiri dengan alasan tercatat, ledger pengiriman bisa diperiksa, dan
+katalog event sengaja tidak memuat event autentikasi.
+
+Verifikasi: 31 test pagar URL + 18 test layanan. Detail: `docs/webhooks.md`.
+
+### 🟡 GAP-39 — Tidak ada custom field per perusahaan
+
+Data karyawan bersifat tetap: tidak ada `customField` di schema maupun kode.
+Setiap perusahaan punya satu-dua data yang khas (nomor anggota koperasi, ukuran
+seragam, kode mesin absen lama). Tanpa custom field, permintaan sekecil itu
+menjadi permintaan perubahan schema — mahal untuk produk yang dipakai banyak
+perusahaan sekaligus.
+
+Ukuran: **M–L**. Perlu diputuskan lebih dulu: cukup di level karyawan, atau juga
+di cuti/klaim/aset? Dan apakah custom field boleh dipakai di formula payroll —
+kalau ya, biayanya naik banyak karena ikut masuk jalur perhitungan uang.
 
 ### Yang diperiksa dan ternyata sudah ada
 
@@ -688,13 +1154,136 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 36 gap tercatat** — 20 tertutup, 3 sebagian,
-13 terbuka (8 lama + 5 baru). GAP-34 ditutup dengan mendokumentasikan batasannya.
-Yang paling mendesak dari sisanya adalah GAP-31, karena satu-satunya yang
+**Total setelah pemeriksaan ini: 39 gap tercatat** — **36 tertutup**, 1 sebagian
+(GAP-32/33 digabung sebagai dua yang menunggu berkas), **2 diputuskan dilewati
+dengan sadar** (GAP-35 timesheet proyek, GAP-36 API bank), dan **0 yang tertahan
+pekerjaan teknis atau keputusan yang belum diambil**.
+
+Seluruh 17 keputusan di `docs/open-hr-decisions.md` sudah dijawab. Yang tersisa
+hanyalah **satu permintaan konkret**: kirim satu contoh berkas 1721-A1 dan satu
+contoh laporan BPJS yang tim payroll-mu benar-benar unggah, supaya generator
+berkas resminya bisa dilapiskan di atas angka yang sudah dirakit dan diuji.
+
+Yang tersisa: **GAP-32/33** (angkanya sudah dirakit dan diuji, menunggu satu
+contoh berkas resmi darimu — formatnya yang menentukan diterima atau tidak),
+**GAP-26** (hierarki goal — satu-satunya keputusan kebijakan yang belum
+ditanyakan), serta **GAP-35** (timesheet per proyek) dan **GAP-36** (API bank)
+yang disarankan dilewati sampai ada pembeli yang benar-benar memerlukannya —
+keduanya tercatat sebagai keputusan sadar, bukan kelalaian.
+
+Ditutup pada 30 September sore, semuanya dari keputusan user: GAP-09 (pencairan
+cuti sebagai setting per perusahaan), GAP-16 (rekonsiliasi PPh21 Desember), dan
+GAP-17 (gross-up — diputuskan **tidak dibangun**, karena tidak ada perusahaan
+dalam grup yang menanggung PPh21 karyawan).
+
+GAP-32 dan GAP-33 kini sebagian: angka rekap PPh21 tahunan dan iuran BPJS
+bulanan (dua sisi, dengan cap ditegakkan) sudah dirakit dan diuji. Yang tersisa
+pada keduanya hanyalah **tata letak berkas resmi**, dan itu menunggu satu contoh
+berkas asli darimu — formatnya yang menentukan diterima atau tidak, dan
+menebaknya berarti dokumen ditolak di loket.
+
+**Delapan yang benar-benar terbuka semuanya adalah keputusan kebijakan HR** di
+`docs/open-hr-decisions.md`. Tidak ada lagi gap yang tertahan oleh pekerjaan
+teknis.
+Pada 30 September ditutup tujuh: GAP-31 (integrasi mesin absensi), GAP-34
+(batasan mata uang didokumentasikan), GAP-14 (rapel), GAP-08 (cuti bersama),
+GAP-13 (email pemberitahuan slip gaji), GAP-38 (webhook), dan GAP-37 (SSO).
+
+Dari 10 yang tersisa, **tidak ada lagi yang tertahan oleh pekerjaan teknis**:
+**2 wajib regulasi** menunggu satu contoh berkas asli (GAP-32 bukti potong
+1721-A1, GAP-33 ekspor BPJS/e-Bupot — detail formatlah yang menentukan diterima
+atau tidak), dan **8 menunggu keputusan kebijakan** di
+`docs/open-hr-decisions.md`.
+GAP-34 ditutup dengan mendokumentasikan batasannya; **GAP-31 ditutup dengan
+integrasi perangkat sungguhan**, dan bersamanya hilang satu-satunya gap yang
 menjanjikan keamanan yang tidak dimilikinya.
+
+Dari 15 yang terbuka, yang paling menentukan kalau produk ini dijual adalah
+**GAP-37 (SSO)** dan **GAP-38 (webhook)** — keduanya sering jadi syarat
+pengadaan, bukan permintaan tambahan — lalu **GAP-32/33** (bukti potong 1721-A1
+dan ekspor BPJS) karena bersifat wajib secara regulasi. Sisanya bergantung
+kebijakan atau pasar yang dituju.
 
 **Ke-13 yang terbuka semuanya sudah berhenti di keputusanmu, bukan di pekerjaan
 teknis.** `docs/open-hr-decisions.md` memuat semuanya sebagai 17 keputusan
 konkret: apa yang ditanyakan, opsinya, rekomendasi saya, dan ukuran
 implementasinya. Tidak ada lagi gap terbuka yang bisa saya majukan tanpa jawaban
 darimu atau akses server.
+
+
+**Diputuskan dilewati**, bukan terlupakan. Tidak ada perusahaan dalam grup yang
+menagih klien berdasarkan jam kerja, dan `DailyActivity` sudah mencatat
+aktivitas harian dengan bukti GPS dan foto.
+
+Membangun model proyek, jam billable, dan approval-nya tanpa pengguna nyata
+adalah cara termahal untuk menebak kebutuhan: bentuknya sangat dipengaruhi cara
+sebuah perusahaan menagih, jadi menebaknya hampir pasti menghasilkan sesuatu
+yang harus dibongkar saat ada pengguna sungguhan.
+
+Kalau kelak ada pembeli yang menagih per jam, ini pekerjaan besar (>2 hari) dan
+perlu dimulai dari cara mereka menagih, bukan dari model datanya.
+
+**Diputuskan tetap di ekspor berkas**, bukan terlupakan.
+
+Unggah manual memberi **satu titik kendali manusia di depan pemindahan uang**,
+dan itu sepadan dengan ketidaknyamanannya sampai volume run membuatnya tidak
+praktis. Pencairan otomatis memindahkan uang tanpa ada orang yang menekan tombol
+di internet banking, sehingga kontrol penggantinya (dual approval, batas nominal
+per run, kunci rekening tujuan) harus disepakati lebih dulu — dan itu keputusan
+yang lebih berat daripada memilih banknya.
+
+Ledger pembayaran dan status transaksinya sudah siap menampung integrasi
+langsung bila kelak diputuskan.
+---
+
+## Pemeriksaan checklist 15-siklus (30 September, malam)
+
+Checklist "sisa gap dari 15 siklus review" diperiksa item per item terhadap
+kode, bukan terhadap catatan. Hasilnya: **sebagian sudah selesai dan
+checklist-nya yang ketinggalan.**
+
+| Item checklist | Kenyataan di kode |
+|---|---|
+| `npm audit fix` — 2 vulnerability | **Selesai.** Backend 0 vulnerability; dua HIGH di frontend (`brace-expansion`, `browserslist`) diperbaiki. Sisa dua MODERATE adalah `vitest` (dev-only, path traversal di mocker) yang butuh upgrade major — tidak dikerjakan bersamaan dengan perbaikan keamanan lain, dan tidak terjangkau dari produksi |
+| Branch protection aktif? | **TIDAK aktif** — `GET /repos/.../branches/main/protection` mengembalikan 404. Ini temuan nyata, bukan konfirmasi |
+| 5 modul belum mount `requireCompanyAccess` router-wide | **Sudah semua.** `performance`, `work-calendars`, `company-settings`, `permission-requests`, `audit-logs` — kelimanya `router.use(authenticate)` + `router.use(requireCompanyAccess())` |
+| Rate-limiting face-match live? | **Live.** `runRateLimitedFaceMatch` dipanggil di jalur check-in (`attendance.service.ts`) |
+| Browser E2E test belum ada | **Sudah ada** — 8 spec Playwright (auth session + leave self-service), jalan di CI sebagai job **blocking** |
+| OpenAPI / contract test belum ada | **Sudah ada** — `GET /meta/openapi.json` digenerate dari router yang berjalan (423 path), plus contract test frontend-backend sebagai step blocking di CI |
+| Endpoint create/update/publish Announcement | **Benar belum ada — dikerjakan sekarang** (lihat di bawah) |
+| Basic Operational (task assignment) | Model `TaskAssignment` **ada** di schema; yang belum ada endpoint/modulnya |
+| Patrol & Tracking | Model `AssetPatrolLog` **ada** di schema; yang belum ada endpoint/modulnya |
+
+### Announcement: sisi tulis (selesai 30 Sep)
+
+Sisi baca sudah lengkap — audience targeting, publish window, pin, read
+tracking — dan **tidak ada apa pun yang bisa membuat barisnya.** Portalnya
+adalah jendela ke data yang hanya bisa dihasilkan seed script.
+
+`/announcements/manage` sekarang menyediakan draft, edit, publish, arsip, daftar
+admin, dan **siapa yang sudah membaca** — pertanyaan yang sebenarnya ditanyakan
+HR.
+
+Yang ditolak, dan alasannya:
+
+- **Audience bertarget tanpa target.** `DEPARTMENT_ONLY` dengan daftar kosong
+  tidak terlihat oleh siapa pun; menerbitkannya tampak seperti berkomunikasi dan
+  tidak mencapai siapa-siapa — lebih buruk daripada error.
+- **Target dari perusahaan lain.** Daftar audience disimpan sebagai JSON opaque,
+  jadi tidak ada apa pun di hilir yang akan menangkap id departemen milik tenant
+  lain: ia hanya tidak akan pernah cocok, dan penulisnya tidak akan pernah tahu
+  kenapa pengumumannya sunyi.
+- **Daftar yang tidak sesuai audience-nya** ditolak, bukan diabaikan —
+  membuangnya diam-diam membuat penulis percaya pengumumannya lebih sempit.
+- **Jendela yang tertutup sebelum terbuka**, dan **pin yang kedaluwarsa sebelum
+  pengumumannya terlihat**.
+- **Menerbitkan yang jendelanya sudah lewat** — menghasilkan pengumuman yang
+  tidak akan pernah dilihat siapa pun.
+
+Membuat dan menerbitkan **dipisah**: `announcement:create` untuk draft,
+`announcement:approve` untuk menerbitkan. HR_STAFF boleh menyiapkan draft,
+HR_MANAGER dan COMPANY_ADMIN yang menerbitkan — sebuah pengumuman sampai ke
+semua orang sekaligus dan tidak bisa ditarik kembali. Diarsipkan, bukan dihapus:
+read receipt adalah bukti siapa sudah diberi tahu apa.
+
+Verifikasi: 38 test.

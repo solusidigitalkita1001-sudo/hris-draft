@@ -2,14 +2,18 @@ import { AttendanceCaptureMethod } from '@prisma/client';
 import { FINGERPRINT_NOT_ATTESTED, methodAttestationWarnings } from './attendance.service';
 
 /**
- * `FINGERPRINT` exists in both attendance method enums, but nothing attests it:
- * no device integration, no device credential, no punch import — the method is
- * whatever the caller claims. Face recognition is matched server-side and GPS is
- * geofenced with mock-location detection, so without this marker a reviewer
- * reading a fingerprint punch would assume a verification that never happened.
+ * `FINGERPRINT` now arrives two ways, and they carry different guarantees.
  *
- * The punch is still accepted: a fingerprint-only branch has no other way to
- * clock in until devices exist. Only the record changes.
+ * Through a registered terminal (`/attendance-devices/punches`) the punch is
+ * attested by hardware that authenticated with its own credential. Declared by
+ * a client over the ordinary check-in endpoint it is attested by nothing — the
+ * method is simply what the caller said. Face recognition is matched
+ * server-side and GPS is geofenced with mock-location detection, so without
+ * this marker a reviewer reading a client-declared fingerprint punch would
+ * assume a verification that never happened.
+ *
+ * The client-declared punch is still accepted: a fingerprint-only branch with
+ * no terminal installed has no other way to clock in. Only the record changes.
  */
 describe('attendance method attestation', () => {
   it('marks a fingerprint punch as not device-attested', () => {
@@ -22,6 +26,14 @@ describe('attendance method attestation', () => {
     AttendanceCaptureMethod.MANUAL,
   ])('leaves %s unmarked — each is verified or declared on its own terms', (method) => {
     expect(methodAttestationWarnings(method)).toEqual([]);
+  });
+
+  it('drops the marker for a punch a registered terminal attested', () => {
+    expect(methodAttestationWarnings(AttendanceCaptureMethod.FINGERPRINT, true)).toEqual([]);
+  });
+
+  it('keeps the marker when the method is merely claimed by the caller', () => {
+    expect(methodAttestationWarnings(AttendanceCaptureMethod.FINGERPRINT, false)).toEqual([FINGERPRINT_NOT_ATTESTED]);
   });
 
   it('says nothing when no method was given', () => {
