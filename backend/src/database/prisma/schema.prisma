@@ -1739,13 +1739,25 @@ model Goal {
   updatedAt   DateTime     @updatedAt @map("updated_at")
   deletedAt   DateTime?    @map("deleted_at")
 
-  employee Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  company  Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  updates  GoalUpdate[]
+  /// Goal yang menjadi induk, bila ada (GAP-26).
+  ///
+  /// Rujukan bebas, bukan cascade formal: satu goal boleh menunjuk goal lain
+  /// sebagai induk tanpa wajib menempel pada level organisasi. Cascade formal
+  /// menuntut struktur goal organisasi yang biasanya belum mapan saat sistemnya
+  /// baru dipakai, dan memaksakannya lebih dulu menghasilkan pohon goal yang
+  /// diisi asal-asalan.
+  parentGoalId String? @map("parent_goal_id") @db.VarChar(36)
+
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  company    Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  updates    GoalUpdate[]
+  parentGoal Goal?        @relation("GoalHierarchy", fields: [parentGoalId], references: [id], onDelete: SetNull)
+  childGoals Goal[]       @relation("GoalHierarchy")
 
   @@index([employeeId])
   @@index([companyId])
   @@index([status])
+  @@index([parentGoalId])
   @@map("goals")
 }
 

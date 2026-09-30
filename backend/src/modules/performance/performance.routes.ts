@@ -54,6 +54,7 @@ import {
   updatePerformanceGradeRuleSchema,
   createPerformanceWorkflowTemplateSchema,
   updatePerformanceWorkflowTemplateSchema,
+  setGoalParentSchema,
 } from './performance.dto';
 
 const router = Router();
@@ -226,6 +227,24 @@ router.patch('/reviews/:id/approve', authorize({ resource: 'performance', action
 
 router.get('/goals', authorize({ resource: 'performance', action: 'read' }), performanceController.findAllGoals.bind(performanceController));
 router.post('/goals', authorize({ resource: 'performance', action: 'create' }), validate(createGoalSchema), performanceController.createGoal.bind(performanceController));
+// ==================== Hierarki goal (rujukan bebas) ====================
+router.get(
+  '/goals/:id/chain',
+  authorize({ resource: 'performance', action: 'read' }),
+  performanceController.getGoalChain.bind(performanceController),
+);
+router.get(
+  '/goals/:id/children',
+  authorize({ resource: 'performance', action: 'read' }),
+  performanceController.getGoalChildren.bind(performanceController),
+);
+router.patch(
+  '/goals/:id/parent',
+  authorize({ resource: 'performance', action: 'update' }),
+  validate(setGoalParentSchema),
+  performanceController.setGoalParent.bind(performanceController),
+);
+
 router.patch('/goals/:id/progress', authorize({ resource: 'performance', action: 'update' }), validate(updateGoalProgressSchema), performanceController.updateGoalProgress.bind(performanceController));
 
 router.get('/feedback-requests', authorize({ resource: 'performance', action: 'read' }), performanceController.getFeedbackRequests.bind(performanceController));

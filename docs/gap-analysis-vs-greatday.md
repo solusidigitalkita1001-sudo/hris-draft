@@ -481,11 +481,40 @@ Verifikasi: 25 test.
 
 ---
 
-### 🟡 GAP-26 — Performance Goal Cascade (Top-Down Alignment)
+### 🟢 GAP-26 — Performance Goal Cascade (Top-Down Alignment) — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** OKR/goal perusahaan/divisi bisa di-cascade ke bawah — goal atasan jadi konteks/referensi saat bawahan bikin goal mereka. Ada visualisasi alignment tree.
 
 **Kondisi saat ini:** `Goal` model ada dengan field `parentGoalId` untuk hierarchy, tapi tidak ada UI cascade atau validasi alignment parent-child.
+
+**DITUTUP** sebagai **rujukan bebas**, sesuai keputusanmu: `parentGoalId`
+opsional, bukan cascade formal.
+
+Catatan yang perlu diperjelas: `parentGoalId` **tidak pernah ada** — klaim lama
+di daftar ini bahwa field itu sudah ada salah, jadi hierarkinya harus dimodelkan
+lebih dulu.
+
+Cascade formal menuntut struktur goal organisasi yang biasanya belum mapan saat
+sistemnya baru dipakai; memaksakannya menghasilkan pohon goal yang diisi
+asal-asalan demi memenuhi bentuknya — dan itu lebih buruk daripada tidak ada
+pohon sama sekali.
+
+Yang dijaga:
+
+- **Siklus ditolak.** Tanpa itu rantai bisa ditutup menjadi lingkaran (induk A
+  adalah B, induk B adalah A) dan **setiap pembaca yang menyusur ke atas —
+  termasuk query rantai di fitur ini — menggantung selamanya.** Data yang sudah
+  berisi lingkaran pun ditolak, bukan diputar.
+- **Kedalaman dibatasi 5 level** — sudah lebih dalam daripada yang dipakai
+  sebagian besar organisasi, dan mencegah rantai yang tidak bisa dirender layar
+  mana pun.
+- **Induk dari perusahaan lain ditolak**; kalau tidak, sasaran satu tenant bisa
+  menggantung di bawah tenant lain dan pembacanya ikut melewati batas.
+- **Progress induk tidak ditimpa** oleh rata-rata anaknya. Rujukan bebas berarti
+  induk bukan didefinisikan sebagai jumlah anaknya; menimpanya berarti mengarang
+  angka. Rata-rata anak dilaporkan terpisah.
+
+Verifikasi: 15 test. 
 
 ---
 
@@ -998,13 +1027,13 @@ mata uang pembayaran dari mata uang pelaporan pajak. DTO-nya juga diberi rujukan
 ke bagian itu, supaya pembaca kode tidak menyimpulkan `z.literal('IDR')` sebagai
 kelalaian.
 
-### 🟡 GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek
+### ⚪ GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek — DIPUTUSKAN DILEWATI 30 Sep
 
 `DailyActivity` mencatat aktivitas harian dengan bukti GPS dan foto, tetapi tidak
 ada timesheet per proyek/klien dengan jam billable dan approval — yang dipakai
 perusahaan jasa untuk menagih. Tidak ada model proyek sama sekali.
 
-### 🟡 GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank
+### ⚪ GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank — DIPUTUSKAN DILEWATI 30 Sep
 
 GAP-12 ditutup dengan ekspor CSV per bank yang bisa diunggah ke internet
 banking. Pencairan langsung lewat API bank/payment gateway (beserta rekonsiliasi
@@ -1125,8 +1154,15 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — **35 tertutup**, 5 sebagian,
-dan **tidak ada lagi yang tertahan pekerjaan teknis**.
+**Total setelah pemeriksaan ini: 39 gap tercatat** — **36 tertutup**, 1 sebagian
+(GAP-32/33 digabung sebagai dua yang menunggu berkas), **2 diputuskan dilewati
+dengan sadar** (GAP-35 timesheet proyek, GAP-36 API bank), dan **0 yang tertahan
+pekerjaan teknis atau keputusan yang belum diambil**.
+
+Seluruh 17 keputusan di `docs/open-hr-decisions.md` sudah dijawab. Yang tersisa
+hanyalah **satu permintaan konkret**: kirim satu contoh berkas 1721-A1 dan satu
+contoh laporan BPJS yang tim payroll-mu benar-benar unggah, supaya generator
+berkas resminya bisa dilapiskan di atas angka yang sudah dirakit dan diuji.
 
 Yang tersisa: **GAP-32/33** (angkanya sudah dirakit dan diuji, menunggu satu
 contoh berkas resmi darimu — formatnya yang menentukan diterima atau tidak),
@@ -1173,3 +1209,28 @@ teknis.** `docs/open-hr-decisions.md` memuat semuanya sebagai 17 keputusan
 konkret: apa yang ditanyakan, opsinya, rekomendasi saya, dan ukuran
 implementasinya. Tidak ada lagi gap terbuka yang bisa saya majukan tanpa jawaban
 darimu atau akses server.
+
+
+**Diputuskan dilewati**, bukan terlupakan. Tidak ada perusahaan dalam grup yang
+menagih klien berdasarkan jam kerja, dan `DailyActivity` sudah mencatat
+aktivitas harian dengan bukti GPS dan foto.
+
+Membangun model proyek, jam billable, dan approval-nya tanpa pengguna nyata
+adalah cara termahal untuk menebak kebutuhan: bentuknya sangat dipengaruhi cara
+sebuah perusahaan menagih, jadi menebaknya hampir pasti menghasilkan sesuatu
+yang harus dibongkar saat ada pengguna sungguhan.
+
+Kalau kelak ada pembeli yang menagih per jam, ini pekerjaan besar (>2 hari) dan
+perlu dimulai dari cara mereka menagih, bukan dari model datanya.
+
+**Diputuskan tetap di ekspor berkas**, bukan terlupakan.
+
+Unggah manual memberi **satu titik kendali manusia di depan pemindahan uang**,
+dan itu sepadan dengan ketidaknyamanannya sampai volume run membuatnya tidak
+praktis. Pencairan otomatis memindahkan uang tanpa ada orang yang menekan tombol
+di internet banking, sehingga kontrol penggantinya (dual approval, batas nominal
+per run, kunci rekening tujuan) harus disepakati lebih dulu — dan itu keputusan
+yang lebih berat daripada memilih banknya.
+
+Ledger pembayaran dan status transaksinya sudah siap menampung integrasi
+langsung bila kelak diputuskan.

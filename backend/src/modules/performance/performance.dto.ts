@@ -433,3 +433,14 @@ export type PerformanceRecommendationRuleDTO = z.infer<typeof performanceRecomme
 export type PerformanceWorkflowStageDTO = z.infer<typeof performanceWorkflowStageSchema>;
 export type CreatePerformanceWorkflowTemplateDTO = z.infer<typeof createPerformanceWorkflowTemplateSchema>;
 export type UpdatePerformanceWorkflowTemplateDTO = z.infer<typeof updatePerformanceWorkflowTemplateSchema>;
+
+/**
+ * Goal hierarchy (GAP-26). A free reference: `parentGoalId` may be null to
+ * detach. Formal cascade was deliberately not chosen — it assumes an
+ * organisational goal structure that is rarely settled when a system is new.
+ */
+export const setGoalParentSchema = z.object({
+  parentGoalId: z.string().uuid().nullable(),
+});
+
+export type SetGoalParentDTO = z.infer<typeof setGoalParentSchema>;

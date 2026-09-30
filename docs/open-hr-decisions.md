@@ -1,4 +1,15 @@
-# Keputusan HR yang masih terbuka
+# Keputusan HR — semuanya sudah dijawab (30 September 2026)
+
+> **Status: 17 dari 17 keputusan sudah diputuskan dan dikerjakan.** Dokumen ini
+> disimpan sebagai catatan apa yang diputuskan, oleh siapa, dan mengapa —
+> termasuk dua yang diputuskan **tidak dibangun** (GAP-17 gross-up, dan di
+> `gap-analysis-vs-greatday.md`: GAP-35 timesheet proyek, GAP-36 API bank),
+> karena keputusan untuk tidak membangun sesuatu juga perlu bisa ditelusuri.
+>
+> Satu hal yang masih dinanti bukan keputusan, melainkan berkas: satu contoh
+> 1721-A1 dan satu contoh laporan BPJS yang benar-benar diunggah tim payroll.
+
+# Riwayat keputusan (semula: yang masih terbuka)
 
 Sepuluh gap terakhir dari `docs/gap-analysis-vs-greatday.md` tidak tertahan oleh
 pekerjaan teknis — bentuknya bergantung kebijakan yang hanya kamu yang bisa
@@ -216,7 +227,7 @@ Rekap efektivitas per course sengaja belum dibuat: rekap sebelum ada datanya
 menghasilkan grafik kosong, dan grafik kosong dibaca sebagai "tidak ada
 masalah".
 
-## 11. GAP-26 — Hierarki dan cascade goal (M)
+## 11. GAP-26 — Hierarki dan cascade goal — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Konteks teknis:** model `Goal` tidak punya `parentGoalId` — klaim lama bahwa
 field itu sudah ada tidak benar. Jadi hierarki harus dimodelkan dulu.
@@ -225,9 +236,16 @@ field itu sudah ada tidak benar. Jadi hierarki harus dimodelkan dulu.
 departemen → individu, atau cukup rujukan bebas antar goal tanpa hierarki
 formal?
 
-**Rekomendasi:** rujukan bebas (`parentGoalId` opsional) dulu. Cascade formal
-menuntut struktur goal organisasi yang biasanya belum mapan saat sistemnya baru
-dipakai.
+**Keputusan user:** rujukan bebas, `parentGoalId` opsional. Sudah dibangun dan
+diuji.
+
+Yang paling penting dari implementasinya: **siklus ditolak**. Tanpa itu rantai
+bisa ditutup menjadi lingkaran dan setiap pembaca yang menyusur ke atas
+menggantung selamanya. Kedalaman dibatasi 5 level, induk dari perusahaan lain
+ditolak, dan **progress induk tidak ditimpa** rata-rata anaknya — rujukan bebas
+berarti induk bukan jumlah anaknya, dan menimpanya berarti mengarang angka.
+
+Dengan ini seluruh 17 keputusan di dokumen ini sudah dijawab.
 
 ## 12. GAP-27 — Urutan tanda tangan dokumen — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
