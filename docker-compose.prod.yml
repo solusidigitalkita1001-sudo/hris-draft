@@ -1,0 +1,130 @@
+name: hris
+
+services:
+
+  # ── Redis Cache ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: hris_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - hris_internal
+
+  # ── RabbitMQ: Domain Event Broker ──────────────
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: hris_rabbitmq
+    restart: unless-stopped
+    env_file:
+      - rabbitmq.env
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - hris_internal
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Express + TypeScript + Prisma Backend ──────
+  backend:
+    container_name: hris_backend
+    build:
+      context: .
+      dockerfile: docker/node-backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - hris_internal
+      - database
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Background Worker: BullMQ + RabbitMQ ───────
+  worker:
+    container_name: hris_worker
+    build:
+      context: .
+      dockerfile: docker/node-backend/Dockerfile
+    command: ["node", "dist/worker.js"]
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - hris_internal
+      - database
+
+  # ── Nginx → Express ────────────────────────────
+  nginx:
+    container_name: hris_nginx
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - hris_internal
+      - proxy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── React Frontend ─────────────────────────────
+  frontend:
+    container_name: hris_frontend
+    build:
+      context: .
+      dockerfile: docker/node-frontend/Dockerfile
+      args:
+        # Overridable per deployment; the default keeps this host working.
+        VITE_API_URL: ${VITE_API_URL:-http://srv540825.hstgr.cloud:8084/api/v1}
+    restart: unless-stopped
+    networks:
+      - proxy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  hris_internal:
+    name: hris_internal
+    driver: bridge
+
+  proxy:
+    name: proxy
+    external: true
+
+  database:
+    name: database
+    external: true
