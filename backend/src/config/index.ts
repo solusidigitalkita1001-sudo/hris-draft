@@ -93,6 +93,9 @@ const envSchema = z.object({
   /// Where a payslip-available email points. A deep link only — it carries no
   /// credential, so opening it still costs a login and the payslip PIN.
   PAYSLIP_SELF_SERVICE_URL: z.string().url().default('http://localhost:5173/my-payslips'),
+  /// Web app origin. Used to land a finished SSO login back in the browser app;
+  /// only paths relative to this origin are ever redirected to.
+  FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(60).default(15),
 
   // Upload
@@ -238,6 +241,9 @@ export function buildConfig(env: Env) {
     },
     payslip: {
       selfServiceUrl: env.PAYSLIP_SELF_SERVICE_URL,
+    },
+    frontend: {
+      url: env.FRONTEND_URL,
     },
     upload: {
       maxFileSize: env.UPLOAD_MAX_FILE_SIZE,

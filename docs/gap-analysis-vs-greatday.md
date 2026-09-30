@@ -807,7 +807,7 @@ Yang benar-benar belum ada, dan bobotnya naik justru karena **produk ini
 dijual** — calon pembeli berikutnya yang menentukan, bukan tenant yang sedang
 jalan:
 
-### 🟠 GAP-37 — Tidak ada SSO (SAML / OIDC / Google Workspace)
+### 🟢 GAP-37 — Tidak ada SSO (SAML / OIDC / Google Workspace) — DITUTUP 30 Sep
 
 Autentikasi hanya email + kata sandi, dengan MFA dan sesi yang sudah rapi.
 Tidak ada `saml`, `oidc`, maupun `openid` di seluruh backend. Untuk perusahaan
@@ -816,9 +816,46 @@ satu kata sandi lagi" sering menjadi syarat yang menggagalkan pembelian —
 sekaligus alasan keamanan, karena akun tidak ikut mati saat karyawan keluar dari
 direktori pusat.
 
-Ukuran: **M**. Fondasinya justru sudah mendukung — sesi sudah memakai
-`sessionVersion` yang bisa dicabut serentak, jadi yang perlu ditambah adalah
-penyedia identitas dan pemetaan klaim ke pengguna/company access.
+**DITUTUP dengan OIDC** (Google Workspace, Microsoft Entra, atau penyedia OIDC
+lain), per perusahaan. SAML tidak dibuat: OIDC menutup pasar yang sama untuk
+pembeli modern dengan satu alur yang jauh lebih kecil; kalau kelak ada pembeli
+yang hanya punya SAML, itu pekerjaan terpisah.
+
+Dua posisi yang disengaja dan berbiaya:
+
+- **SSO mengautentikasi, tidak membuat akun** (`autoProvision` default false).
+  Penyedia identitas membuktikan *siapa* seseorang; ia tidak berhak memutuskan
+  orang itu boleh punya akun HRIS. Menyerahkannya ke direktori berarti siapa pun
+  dengan mailbox perusahaan — kontraktor, anak magang, mantan karyawan — bisa
+  masuk ke sistem yang memuat gaji seluruh karyawan.
+- **Email belum terverifikasi ditolak.** Penyedia yang membolehkan pengguna
+  mengisi email apa pun tanpa membuktikannya akan menjadi jalur pengambilalihan
+  akun: klaim `direktur@perusahaan.com`, lalu dicocokkan ke pengguna direktur.
+
+Yang diverifikasi pada ID token — masing-masing adalah pemalsuan yang berhasil
+bila dihilangkan: tanda tangan terhadap JWKS, algoritma dibatasi RS256/384/512
+(menolak `alg: none` dan HS256 yang rentan algorithm confusion), `iss`, `aud`,
+`exp`, dan `nonce` yang mengikat token ke upaya login ini. Dokumen discovery
+juga harus mengklaim issuer yang kita minta.
+
+Pagar lain: PKCE S256, `state` sekali pakai yang dikonsumsi lewat update
+bersyarat **sebelum** penukaran token, `returnTo` hanya path relatif (open
+redirect di sini akan membuat halaman phishing bisa menyelesaikan login
+sungguhan), pagar SSRF yang sama dengan webhook pada issuer, akun terkunci
+tetap terkunci, dan client secret terenkripsi yang tidak pernah dikembalikan.
+
+Sesi hasil SSO **identik** dengan hasil login kata sandi — cookie dan CSRF
+dicetak helper yang sama, supaya dua implementasi sesi tidak menyimpang.
+
+Tanpa dependensi baru: Node mengimpor JWK langsung dan `jsonwebtoken`
+memverifikasi RS256 terhadapnya.
+
+**MFA berpindah ke penyedia identitas** saat SSO dipakai — pada alur redirect
+tidak ada tempat memasukkan TOTP. Flag lokal tidak diperiksa ulang, hanya
+dicatat, supaya auditor bisa melihat login mana yang mengandalkan penyedia.
+
+Verifikasi: 25 test klien OIDC dengan kunci RSA dan token sungguhan + 26 test
+layanan. Detail: `docs/sso-oidc.md`.
 
 ### 🟢 GAP-38 — Tidak ada webhook untuk sistem luar — DITUTUP 30 Sep
 
@@ -872,15 +909,16 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — 25 tertutup, 3 sebagian,
-11 terbuka (5 lama + 4 dari pemeriksaan pagi + 2 dari pemeriksaan sore).
-Pada 30 September ditutup enam: GAP-31 (integrasi mesin absensi), GAP-34
+**Total setelah pemeriksaan ini: 39 gap tercatat** — 26 tertutup, 3 sebagian,
+10 terbuka (5 lama + 4 dari pemeriksaan pagi + 1 dari pemeriksaan sore).
+Pada 30 September ditutup tujuh: GAP-31 (integrasi mesin absensi), GAP-34
 (batasan mata uang didokumentasikan), GAP-14 (rapel), GAP-08 (cuti bersama),
-GAP-13 (email pemberitahuan slip gaji), dan GAP-38 (webhook).
+GAP-13 (email pemberitahuan slip gaji), GAP-38 (webhook), dan GAP-37 (SSO).
 
-Dari 11 yang tersisa: **2 wajib regulasi** (GAP-32 bukti potong 1721-A1, GAP-33
-ekspor BPJS/e-Bupot — keduanya menunggu satu contoh berkas asli), **1 penentu
-penjualan** (GAP-37 SSO), dan **8 menunggu keputusan kebijakan** di
+Dari 10 yang tersisa, **tidak ada lagi yang tertahan oleh pekerjaan teknis**:
+**2 wajib regulasi** menunggu satu contoh berkas asli (GAP-32 bukti potong
+1721-A1, GAP-33 ekspor BPJS/e-Bupot — detail formatlah yang menentukan diterima
+atau tidak), dan **8 menunggu keputusan kebijakan** di
 `docs/open-hr-decisions.md`.
 GAP-34 ditutup dengan mendokumentasikan batasannya; **GAP-31 ditutup dengan
 integrasi perangkat sungguhan**, dan bersamanya hilang satu-satunya gap yang

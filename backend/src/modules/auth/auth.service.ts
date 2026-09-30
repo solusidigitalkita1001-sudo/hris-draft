@@ -141,6 +141,72 @@ export class AuthService {
    * Authenticate user with email and password
    * Implements rate limiting, account lockout, and token rotation
    */
+  /**
+   * Issue a session for an identity another authority has already proven — the
+   * SSO callback, after the ID token verified.
+   *
+   * Deliberately shares the tail of `login()` rather than reimplementing it:
+   * status checks, the lockout, the login log, the domain event and token
+   * generation all stay in one place, so an SSO session and a password session
+   * cannot drift apart.
+   *
+   * What it does NOT do is skip the guards that are about the account rather
+   * than the password. A suspended user stays out; a locked account stays
+   * locked, because locking is a response to attacks on that account and a
+   * second front door would undo it.
+   *
+   * MFA: when a company uses SSO, the second factor belongs to the identity
+   * provider — there is nowhere in a redirect flow to enter a TOTP code, and
+   * the provider has usually just enforced its own. A local `twoFactorEnabled`
+   * flag is therefore not re-checked here, only recorded, so an auditor can see
+   * which logins relied on the provider for it.
+   */
+  async loginWithVerifiedIdentity(
+    email: string,
+    context: { ipAddress?: string; userAgent?: string; issuer: string },
+  ): Promise<AuthResponse> {
+    const user = await authRepository.findUserByEmail(email);
+    if (!user) throw new AuthError('No HRIS account matches this identity');
+
+    this.validateUserStatus(user);
+
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      await this.logFailedAttempt(user.id, email, context.ipAddress, 'Account locked (SSO)');
+      throw new TooManyRequestsError(
+        `Account is locked. Try again after ${user.lockedUntil.toLocaleTimeString()}`
+      );
+    }
+
+    await authRepository.updateUserLoginSuccess(user.id);
+
+    const authUser = await this.buildAuthContext(user);
+    const tokens = await this.generateTokens(authUser, context.ipAddress, context.userAgent);
+
+    await authRepository.createLoginLog({
+      user: { connect: { id: user.id } },
+      email: user.email,
+      status: 'SUCCESS',
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent?.substring(0, 500),
+    });
+
+    logger.info('SSO login succeeded', {
+      userId: user.id,
+      issuer: context.issuer,
+      mfaDelegatedToProvider: Boolean(user.twoFactorEnabled),
+    });
+
+    await eventBus.publish({
+      name: DomainEvents.USER_LOGGED_IN,
+      aggregateId: user.id,
+      aggregateType: 'User',
+      data: { email: user.email, ipAddress: context.ipAddress, method: 'SSO', issuer: context.issuer },
+      metadata: { eventId: uuidv4(), occurredAt: new Date(), correlationId: context.ipAddress },
+    });
+
+    return { user: publicAuthUser(authUser), tokens };
+  }
+
   async login(dto: LoginDTO, ipAddress?: string, userAgent?: string): Promise<AuthResponse> {
     const { email, password } = dto;
 

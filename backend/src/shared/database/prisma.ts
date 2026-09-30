@@ -31,6 +31,8 @@ const COMPANY_SCOPED_MODELS = new Set([
   'CollectiveLeaveExclusion',
   'WebhookSubscription',
   'WebhookDelivery',
+  'SsoProvider',
+  'SsoLoginAttempt',
   'WorkflowTemplate',
   'WorkflowInstance',
   'WorkflowInstanceStep',

@@ -128,6 +128,8 @@ model Company {
   collectiveLeaves                      CollectiveLeave[]
   webhookSubscriptions                  WebhookSubscription[]
   webhookDeliveries                     WebhookDelivery[]
+  ssoProviders                          SsoProvider[]
+  ssoLoginAttempts                      SsoLoginAttempt[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -5596,4 +5598,75 @@ enum WebhookDeliveryStatus {
   FAILED
   /// Menyerah setelah percobaan maksimum; tidak akan dicoba lagi.
   DEAD
+}
+
+/// Single sign-on per perusahaan (OIDC: Google Workspace, Microsoft Entra, atau
+/// penyedia OIDC lain).
+///
+/// Satu baris = satu penyedia identitas milik satu perusahaan. Client secret
+/// disimpan **terenkripsi**, bukan hash, karena dibutuhkan utuh saat menukar
+/// authorization code.
+model SsoProvider {
+  id                 String    @id @default(uuid()) @db.VarChar(36)
+  companyId          String    @map("company_id") @db.VarChar(36)
+  name               String    @db.VarChar(150)
+  /// Issuer OIDC, mis. https://accounts.google.com. Dipakai untuk menemukan
+  /// endpoint lewat /.well-known/openid-configuration dan untuk memvalidasi
+  /// klaim `iss` pada ID token.
+  issuer             String    @map("issuer") @db.VarChar(300)
+  clientId           String    @map("client_id") @db.VarChar(300)
+  clientSecretCipher String    @map("client_secret_cipher") @db.Text
+  /// Domain email yang boleh masuk lewat penyedia ini. Kosong = semua domain
+  /// yang dikembalikan penyedia diterima.
+  allowedDomains     Json      @map("allowed_domains")
+  isActive           Boolean   @default(true) @map("is_active")
+  /// Sengaja default false: SSO **mengautentikasi** pengguna yang sudah ada,
+  /// tidak membuat akun. Siapa yang boleh punya akun adalah keputusan HR, dan
+  /// penyedia identitas tidak berhak mengambilnya.
+  autoProvision      Boolean   @default(false) @map("auto_provision")
+  createdBy          String?   @map("created_by") @db.VarChar(36)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  company  Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  attempts SsoLoginAttempt[]
+
+  @@index([companyId])
+  @@index([isActive])
+  @@map("sso_providers")
+}
+
+/// Satu upaya login SSO yang sedang berjalan.
+///
+/// Disimpan di database, bukan di memori atau cookie, karena state/nonce/PKCE
+/// harus bisa diverifikasi oleh instance mana pun yang menerima callback — dan
+/// harus bisa dipastikan hanya dipakai **sekali**.
+model SsoLoginAttempt {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  companyId    String    @map("company_id") @db.VarChar(36)
+  providerId   String    @map("provider_id") @db.VarChar(36)
+  /// Nilai `state` yang dikirim ke penyedia; unik supaya callback bisa
+  /// dicocokkan tepat ke satu upaya.
+  state        String    @unique @db.VarChar(100)
+  nonce        String    @db.VarChar(100)
+  /// PKCE code_verifier. Menahan authorization code yang dicuri dari dipakai
+  /// pihak lain.
+  codeVerifier String    @map("code_verifier") @db.VarChar(200)
+  redirectUri  String    @map("redirect_uri") @db.VarChar(300)
+  /// Ke mana pengguna dikembalikan setelah sesi terbentuk.
+  returnTo     String?   @map("return_to") @db.VarChar(300)
+  expiresAt    DateTime  @map("expires_at")
+  /// Terisi saat callback memakainya. Upaya yang sudah terpakai tidak boleh
+  /// dipakai lagi (replay).
+  consumedAt   DateTime? @map("consumed_at")
+  ipAddress    String?   @map("ip_address") @db.VarChar(50)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  company  Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider SsoProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([expiresAt])
+  @@map("sso_login_attempts")
 }
