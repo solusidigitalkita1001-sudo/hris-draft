@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { errorDetail } from '@/shared/logger/error-detail';
 import { webhookService } from '@/modules/webhook/webhook.service';
 import { CONTRACT_EXPIRY_REMINDER_JOB, runContractExpiryReminders, scheduleContractExpiryReminders } from '@/modules/employee/employment-contract.scheduler';
 import { runWebhookSweep, scheduleWebhookSweep } from '@/modules/webhook/webhook.scheduler';
@@ -100,12 +101,30 @@ async function bootstrapWorker(): Promise<void> {
     process.exit(1);
   }
 
-  await rabbitMQBroker.connect();
-  await queueManager.getQueueEvents(QueueNames.DOMAIN_EVENTS).waitUntilReady();
-  await queueManager.getQueueEvents(QueueNames.PERFORMANCE_AUTOMATION).waitUntilReady();
-  await queueManager.getQueueEvents(QueueNames.LEAVE_AUTOMATION).waitUntilReady();
-  await queueManager.getQueueEvents(QueueNames.PUSH_NOTIFICATIONS).waitUntilReady();
-  await queueManager.getQueueEvents(QueueNames.WEBHOOKS).waitUntilReady();
+  // Each of these is a separate way to fail, and the bootstrap catch cannot
+  // tell them apart. Naming the step means the next crash says which one.
+  try {
+    await rabbitMQBroker.connect();
+  } catch (error) {
+    logger.error('Worker could not connect to RabbitMQ', errorDetail(error));
+    throw error;
+  }
+
+  for (const queue of [
+    QueueNames.DOMAIN_EVENTS,
+    QueueNames.PERFORMANCE_AUTOMATION,
+    QueueNames.LEAVE_AUTOMATION,
+    QueueNames.PUSH_NOTIFICATIONS,
+    QueueNames.WEBHOOKS,
+  ]) {
+    try {
+      await queueManager.getQueueEvents(queue).waitUntilReady();
+    } catch (error) {
+      logger.error('Worker could not open a queue', { queue, ...errorDetail(error) });
+      throw error;
+    }
+  }
+
 
   queueManager.createWorker<DomainEvent>(
     QueueNames.DOMAIN_EVENTS,
@@ -227,11 +246,13 @@ async function bootstrapWorker(): Promise<void> {
   });
 
   process.on('unhandledRejection', (reason) => {
-    logger.error('Worker unhandled rejection', { reason });
+    logger.error('Worker unhandled rejection', errorDetail(reason));
   });
 }
 
 bootstrapWorker().catch((error) => {
-  logger.error('Failed to bootstrap worker', { error });
+  // errorDetail, not the raw error: an Error serialises to {} and this line is
+  // the only thing a crash-looping worker leaves behind.
+  logger.error('Failed to bootstrap worker', errorDetail(error));
   process.exit(1);
 });
