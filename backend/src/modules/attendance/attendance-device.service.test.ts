@@ -30,7 +30,8 @@ jest.mock('@/shared/database/prisma', () => {
         return row;
       }),
       update: jest.fn(async ({ where, data }: { where: Row; data: Row }) => {
-        const row = devices.find((candidate) => candidate.id === where.id)!;
+        const row = devices.find((candidate) => candidate.id === where.id);
+        if (!row) throw new Error(`Device ${String(where.id)} not in the fixture`);
         Object.assign(row, data);
         return row;
       }),
@@ -77,7 +78,8 @@ jest.mock('./attendance.service', () => ({
     }),
     checkOut: jest.fn(async (id: string) => {
       checkedOut.push(id);
-      const row = attendances.find((candidate) => candidate.id === id)!;
+      const row = attendances.find((candidate) => candidate.id === id);
+      if (!row) throw new Error(`Attendance ${id} not in the fixture`);
       row.checkOut = new Date();
       return row;
     }),

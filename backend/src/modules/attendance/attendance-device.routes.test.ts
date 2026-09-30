@@ -16,7 +16,7 @@ let sessionUser: { id: string; companyId: string } | null = { id: 'user-1', comp
 
 jest.mock('@/shared/middleware/Authenticate', () => ({
   authenticate: (req: Request & { user?: unknown }, _res: Response, next: NextFunction) => {
-    if (!sessionUser) return next(new (require('@/shared/exceptions/AppError').AuthError)('No authorization token provided'));
+    if (!sessionUser) return next(new AuthError('No authorization token provided'));
     req.user = sessionUser;
     next();
   },
@@ -24,10 +24,10 @@ jest.mock('@/shared/middleware/Authenticate', () => ({
 jest.mock('@/shared/middleware/CompanyScope', () => ({ requireCompanyAccess: () => (_req: Request, _res: Response, next: NextFunction) => next() }));
 jest.mock('@/shared/middleware/Authorize', () => ({ authorize: () => (_req: Request, _res: Response, next: NextFunction) => next() }));
 
+import { AuthError } from '@/shared/exceptions/AppError';
+import { errorHandler } from '@/shared/middleware/ErrorHandler';
 import attendanceDeviceRoutes from './attendance-device.routes';
 import { attendanceDeviceService } from './attendance-device.service';
-import { errorHandler } from '@/shared/middleware/ErrorHandler';
-import { AuthError } from '@/shared/exceptions/AppError';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const request = require('supertest');
