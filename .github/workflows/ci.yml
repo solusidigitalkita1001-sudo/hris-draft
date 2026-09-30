@@ -4,14 +4,18 @@ name: CI
 # Does NOT deploy — deployment stays in deploy.yml (push to main).
 # Blocking steps: filename hygiene, backend type-check + build, migration
 # apply-from-empty, frontend build. Soft steps (report only, flip to blocking
-# once the backlog is cleared): backend lint + test, frontend lint, npm audit,
-# secret scan.
+# once the backlog is cleared): npm audit, secret scan, browser E2E.
 
 on:
   pull_request:
     branches: [main]
   push:
-    branches-ignore: [main]   # main is covered by deploy.yml; avoid double runs
+    # main included deliberately. deploy.yml runs no tests, so without this the
+    # merged state of main is never verified as a whole — only the PR branch was.
+    # NOTE: this verifies main, it does not gate the deploy: deploy.yml triggers
+    # on the same push and does not wait for this workflow. Making the deploy
+    # conditional on CI means editing deploy.yml, which is out of scope here.
+    branches: ['**']
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -252,6 +256,108 @@ jobs:
         run: npm run build
       - name: Lint (blocking)
         run: npm run lint
+
+  e2e:
+    name: Browser E2E (Playwright, soft)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: hris_e2e
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    env:
+      NODE_ENV: development
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/hris_e2e
+      # Same minimums the app validates at bootstrap; throwaway values.
+      JWT_ACCESS_SECRET: e2e-jwt-access-secret-0123456789
+      JWT_REFRESH_SECRET: e2e-jwt-refresh-secret-0123456789
+      SESSION_SECRET: e2e-session-secret-0123456789ab
+      CSRF_SECRET: e2e-csrf-secret-0123456789abcd
+      ENCRYPTION_KEY: e2e-encryption-key-0123456789abcdef0123
+      # The suite drives HTTP, so cookies must not be Secure-only.
+      COOKIE_SECURE: "false"
+      # Redis/RabbitMQ/BullMQ are warn-and-continue at boot, but switching them
+      # off keeps the log readable and the run deterministic.
+      REDIS_ENABLED: "false"
+      RABBITMQ_ENABLED: "false"
+      QUEUE_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+      - name: Prisma generate + migrate + seed
+        working-directory: backend
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+          # The suite signs in as seeded users (maya@tech.com) and needs the
+          # leave-balance allocations the seed creates for the current year.
+          npm run prisma:seed
+      - name: Start backend
+        working-directory: backend
+        run: |
+          npx tsx src/index.ts > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/health > /dev/null; then
+              echo "backend up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::backend did not become healthy"; cat /tmp/backend.log; exit 1
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Start frontend dev server
+        working-directory: frontend
+        run: |
+          # dev, not preview: vite.config.ts proxies /api/v1 to the backend under
+          # `server`, so the suite talks to one origin exactly as a developer does.
+          npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/frontend.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173 > /dev/null; then
+              echo "frontend up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::frontend dev server did not start"; cat /tmp/frontend.log; exit 1
+      # Soft for now: a browser suite that shares one seeded database across
+      # runs can fail for reasons that are not regressions (a leave request left
+      # behind by a previous run collides with the overlap rule). retries stay at
+      # 0 on purpose — this suite exists to catch flaky session behaviour, so
+      # retrying would hide the very bug it is here to find.
+      - name: Playwright (soft)
+        working-directory: frontend
+        run: npm run test:e2e
+        continue-on-error: true
+        env:
+          E2E_BASE_URL: http://127.0.0.1:5173
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            /tmp/backend.log
+            /tmp/frontend.log
+          retention-days: 7
+          if-no-files-found: ignore
 
   audit:
     name: Dependency audit (soft)
