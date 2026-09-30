@@ -13,7 +13,13 @@ const prismaMock = {
   $transaction: jest.fn(),
 };
 
-jest.mock('@/shared/database/prisma', () => ({ __esModule: true, default: prismaMock }));
+// The repository imports the named export, so providing only `default` leaves
+// `prisma` undefined and every case fails on the first property access.
+jest.mock('@/shared/database/prisma', () => ({
+  __esModule: true,
+  prisma: prismaMock,
+  default: prismaMock,
+}));
 jest.mock('@/shared/logger/WinstonLogger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
