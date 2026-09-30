@@ -36,6 +36,16 @@ test.describe('auth session in a browser', () => {
   test('replaces an expired access token without sending the user back to login', async ({ page, context }) => {
     await login(page);
 
+    // Let the dashboard finish loading first. Removing `at` while its requests
+    // are still in flight makes one of them 401, the client starts a refresh,
+    // and the navigation below aborts that request mid-flight — the server has
+    // already rotated the refresh token by then, so the browser is left holding
+    // one the server will never accept again. That is a real behaviour worth
+    // knowing (see docs/auth-e2e-verification.md), but it is not what this test
+    // is about, and it made the test fail in CI while passing locally purely on
+    // timing.
+    await page.waitForLoadState('networkidle');
+
     // Drop only the access cookie: the refresh cookie survives, which is the
     // state a user is in once their access token has aged out.
     const kept = (await context.cookies()).filter((cookie) => cookie.name !== 'at');

@@ -69,3 +69,42 @@ Tiga hal yang ditemukan saat menulisnya, dan semuanya mengubah bentuk test-nya:
 
 Data demo tidak dirusak: setiap pengajuan yang dibuat test dibatalkan lagi, dan
 baris seed tetap utuh.
+
+## Temuan: refresh yang dibatalkan di tengah jalan mematikan sesi
+
+Ditemukan 30 September lewat CI, bukan lewat pembacaan kode — dan hanya muncul
+di CI karena bergantung pada waktu.
+
+Rotasi refresh token bekerja seperti ini: setiap `POST /auth/refresh` yang
+berhasil mencabut token lama dan mengirim token baru lewat `Set-Cookie`. Deteksi
+penggunaan-ulang mengandalkan itu — token lama yang dipakai lagi dianggap
+pencurian dan seluruh *family*-nya dicabut.
+
+Konsekuensi yang belum pernah dicatat: kalau browser **membatalkan** request
+refresh setelah server memprosesnya — misalnya pengguna menekan tautan atau
+tombol kembali tepat saat refresh berjalan — server sudah merotasi tokennya,
+tetapi `Set-Cookie` pada response yang dibatalkan tidak tersimpan. Browser
+tinggal memegang token lama yang kini sudah dicabut. Refresh berikutnya ditolak
+`Invalid refresh token`, dan pengguna dikembalikan ke halaman login meskipun
+tidak melakukan kesalahan apa pun.
+
+Jejaknya di CI: satu `POST /auth/refresh` berstatus `-1` (dibatalkan browser)
+disertai `auth.token.refreshed` di log server, lalu refresh berikutnya dengan
+token lama ditolak 401.
+
+**Ini keputusan, bukan perbaikan yang bisa diambil sepihak**, karena semua jalan
+keluarnya mengorbankan sesuatu:
+
+1. **Masa tenggang token lama** (misalnya token yang baru dirotasi masih
+   diterima 10 detik, mengembalikan token baru yang sama). Menghilangkan
+   logout-palsu ini, tetapi melemahkan deteksi penggunaan-ulang tepat pada
+   jendela waktu yang paling mungkin dipakai penyerang.
+2. **Klien tidak boleh membatalkan refresh**: satu refresh tunggal (single
+   flight) yang tidak ikut dibatalkan saat navigasi. Tidak melemahkan keamanan,
+   tetapi hanya mempersempit peluangnya — tab yang ditutup tetap membatalkannya.
+3. **Biarkan apa adanya**, dengan pemahaman bahwa sebagian kecil pengguna akan
+   ter-logout tanpa sebab yang terlihat.
+
+Seberapa sering ini terjadi pada pengguna nyata belum diukur. Yang pasti: ia
+terjadi, dan penyebabnya bukan bug yang bisa dihilangkan tanpa memilih salah
+satu dari tiga di atas.
