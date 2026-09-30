@@ -126,11 +126,34 @@ saldo dan menghapus cuti yang sudah disetujui adalah keputusan tersendiri.
 
 ---
 
-### 🟡 GAP-09 — Leave Encashment
+### 🟢 GAP-09 — Leave Encashment — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** untuk perusahaan yang menerapkan kebijakan "saldo cuti bisa ditukar uang", ada alur formal pengajuan encashment → approve → otomatis jadi komponen tambahan di payslip.
 
 **Kondisi saat ini:** tidak ada model maupun flow untuk ini.
+
+**DITUTUP sebagai settingan per perusahaan**, sesuai keputusanmu: *"bikin
+settingan nya di organization biar dinamis aja"*.
+
+Dasar perhitungan per hari berbeda antar perusahaan — ada yang ÷ 21 hari kerja,
+ada ÷ 30 hari kalender, ada yang menyertakan tunjangan tetap — jadi empat
+setting (`leave_encashment_enabled`, `max_days_per_year`, `daily_divisor`,
+`include_allowances`) menggantikan satu nilai yang ditanam di kode. **Mati
+secara default**, seperti setiap setting yang menggerakkan uang.
+
+- **Nominal tidak ada di API**: diturunkan server dari gaji aktif dan kebijakan
+  yang berlaku, disimpan bersama `basis` supaya bisa ditelusuri.
+- **Saldo dipotong saat disetujui, bukan saat diajukan**; saldo dibaca ulang di
+  bawah `FOR UPDATE` di sana, karena approval cuti biasa bisa memakai hari itu
+  di antara keduanya — membayar cuti yang sudah tidak dimiliki berarti membayar
+  dua kali untuk satu hak.
+- **Maker-checker**: pemohon tidak bisa menyetujui pencairannya sendiri.
+- **Batas tahunan menghitung hari yang sudah diajukan maupun dibayar**, supaya
+  dua pengajuan yang masing-masing patuh tidak bersama melewati batas.
+- **Uangnya lewat payroll** sebagai komponen tersendiri, dengan klaim bersyarat
+  seperti rapel — run kedua tidak bisa membayar baris yang sudah dibayar.
+
+Verifikasi: 32 test. Detail: `docs/leave-encashment.md`.
 
 ---
 

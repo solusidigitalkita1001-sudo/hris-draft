@@ -52,14 +52,24 @@ Yang sengaja belum ada: membalik hari yang sudah diterapkan. Mengembalikan saldo
 dan menghapus cuti yang sudah disetujui adalah keputusan tersendiri — terutama
 bila payroll periode itu sudah berjalan.
 
-## 3. GAP-09 — Leave encashment (M)
+## 3. GAP-09 — Leave encashment — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Yang perlu diputuskan:** apakah perusahaan membolehkan sisa cuti ditukar uang?
 Jika ya: batas hari per tahun, dasar perhitungan (gaji pokok ÷ 21? ÷ 30?), dan
 apakah perlu approval terpisah dari atasan atau cukup HR.
 
-**Rekomendasi:** tunda sampai kebijakan tertulis ada. Ini menyentuh uang dan
-dasar perhitungannya berbeda antar perusahaan; menebak defaultnya berisiko.
+**Keputusan user:** *"bikin settingan nya di organization biar dinamis aja"* —
+dan itu jawaban yang lebih baik daripada pilihan yang saya tawarkan. Dasar
+perhitungan memang berbeda antar perusahaan, jadi yang benar bukan memilih satu
+lalu menanamnya, melainkan menjadikannya setting.
+
+Empat setting per perusahaan: aktif/tidak (default **mati**), batas hari per
+tahun, pembagi tarif harian (21 atau 30), dan apakah tunjangan tetap ikut.
+Sudah dibangun dan diuji — `docs/leave-encashment.md`.
+
+Catatan pola: keputusan kebijakan lain yang sama-sama sah untuk perusahaan
+berbeda sebaiknya ditawarkan dengan cara yang sama — sebagai setting, dengan
+pertanyaan hanya soal defaultnya.
 
 ## 4. GAP-13 — Distribusi slip gaji lewat email — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
@@ -120,14 +130,18 @@ saja untuk diproses manual oleh HR/pajak?
 **Rekomendasi:** koreksi otomatis di Desember dengan komponen terpisah yang
 terlihat jelas di slip, supaya karyawan bisa melihat asal angkanya.
 
-## 7. GAP-17 — Metode gross-up (M)
+## 7. GAP-17 — Metode gross-up — ✅ DIPUTUSKAN 30 Sep: tidak dibangun
 
 **Yang perlu diputuskan:** apakah ada perusahaan dalam grup yang menanggung
 PPh21 karyawan? Kalau tidak ada, ini tidak perlu dibangun sama sekali.
 
-**Rekomendasi:** tanya dulu ke perusahaan-perusahaan dalam grup; bangun hanya
-jika benar dipakai, karena kalkulasi terbaliknya menambah cabang di jalur yang
-paling sensitif di sistem.
+**Keputusan user:** tidak ada perusahaan dalam grup yang menanggung PPh21
+karyawan, jadi **tidak dibangun**. Kalkulasi terbaliknya akan menambah cabang di
+jalur paling sensitif di sistem (perhitungan uang), dan cabang yang tidak dipakai
+siapa pun tetap harus dipelihara serta tetap bisa salah.
+
+Kalau kelak ada pembeli yang memakainya: bentuk yang benar adalah opsi **per
+perusahaan** (seperti pencairan cuti), bukan mode global.
 
 ## 8. GAP-21 — Alur proposal revisi gaji (M)
 

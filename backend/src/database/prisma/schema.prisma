@@ -130,6 +130,7 @@ model Company {
   webhookDeliveries                     WebhookDelivery[]
   ssoProviders                          SsoProvider[]
   ssoLoginAttempts                      SsoLoginAttempt[]
+  leaveEncashments                      LeaveEncashment[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -538,6 +539,7 @@ model Payslip {
   paymentTransactions    PayrollPaymentTransaction[]
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
   arrears                PayrollArrears[]
+  leaveEncashments       LeaveEncashment[]
 
   @@index([payrollRunId])
   @@index([employeeId])
@@ -2367,6 +2369,7 @@ model Employee {
   attendances                                   Attendance[]
   attendanceDevicePunches                       AttendanceDevicePunch[]
   payrollArrears                                PayrollArrears[]
+  leaveEncashments                              LeaveEncashment[]
   attendanceCorrections                         AttendanceCorrection[]
   overtimeRequests                              OvertimeRequest[]
   leaveBalances                                 LeaveBalance[]
@@ -3408,6 +3411,7 @@ model LeaveType {
   balances               LeaveBalance[]
   collectiveLeaves       CollectiveLeave[] @relation("CollectiveLeaveType")
   collectiveUnpaidLeaves CollectiveLeave[] @relation("CollectiveLeaveUnpaidType")
+  encashments            LeaveEncashment[]
 
   @@index([companyId])
   @@index([code])
@@ -5669,4 +5673,61 @@ model SsoLoginAttempt {
   @@index([companyId])
   @@index([expiresAt])
   @@map("sso_login_attempts")
+}
+
+/// Pencairan sisa cuti menjadi uang (leave encashment).
+///
+/// Kebijakannya **dinamis per perusahaan** lewat CompanySetting — boleh atau
+/// tidak, batas hari setahun, dan dasar perhitungan per hari — karena tiap
+/// perusahaan berbeda dan satu nilai yang ditanam di kode akan menjadi
+/// permintaan perubahan kode setiap ada pembeli baru.
+///
+/// Uangnya mengalir lewat payroll, bukan pembayaran terpisah: baris yang sudah
+/// disetujui diambil run berikutnya sebagai komponen tersendiri, mengikuti pola
+/// yang sama dengan rapel.
+model LeaveEncashment {
+  id             String                @id @default(uuid()) @db.VarChar(36)
+  companyId      String                @map("company_id") @db.VarChar(36)
+  employeeId     String                @map("employee_id") @db.VarChar(36)
+  leaveTypeId    String                @map("leave_type_id") @db.VarChar(36)
+  /// Tahun saldo cuti yang dicairkan; batas per tahun dihitung terhadap ini.
+  year           Int
+  days           Int
+  /// Nominal bruto, diturunkan server dari gaji dan dasar perhitungan yang
+  /// berlaku. Tidak pernah diketik pemohon.
+  grossAmount    Decimal               @map("gross_amount") @db.Decimal(15, 2)
+  /// Bagaimana nominal itu diperoleh (gaji, pembagi, tunjangan ikut atau tidak).
+  basis          Json
+  status         LeaveEncashmentStatus @default(PENDING)
+  notes          String?               @db.Text
+  requestedBy    String?               @map("requested_by") @db.VarChar(36)
+  approvedBy     String?               @map("approved_by") @db.VarChar(36)
+  approvedAt     DateTime?             @map("approved_at")
+  rejectedReason String?               @map("rejected_reason") @db.VarChar(255)
+  payslipId      String?               @map("payslip_id") @db.VarChar(36)
+  appliedRunId   String?               @map("applied_run_id") @db.VarChar(36)
+  paidAt         DateTime?             @map("paid_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  payslip   Payslip?  @relation(fields: [payslipId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([status])
+  @@map("leave_encashments")
+}
+
+enum LeaveEncashmentStatus {
+  PENDING
+  /// Disetujui dan saldo cuti sudah dipotong; menunggu run berikutnya.
+  APPROVED
+  REJECTED
+  /// Sudah masuk slip gaji.
+  PAID
+  /// Dibatalkan pemohon sebelum disetujui.
+  CANCELLED
 }

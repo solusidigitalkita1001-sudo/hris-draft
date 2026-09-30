@@ -13,6 +13,16 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   absence_deduction_daily_basic_percent: '100',
   attendance_default_working_days_per_month: '22',
   attendance_workweek_days: '5',
+  // Leave encashment (GAP-09). Off by default: it moves money, so switching it
+  // on is a tenant decision rather than a consequence of deploying.
+  leave_encashment_enabled: 'false',
+  /// 0 means no ceiling beyond the employee's own remaining balance.
+  leave_encashment_max_days_per_year: '0',
+  /// Daily rate = monthly wage / this. 21 follows working days, 30 calendar
+  /// days; both are in use in Indonesia, which is why it is a setting.
+  leave_encashment_daily_divisor: '21',
+  /// Whether fixed allowances join base salary in the daily rate.
+  leave_encashment_include_allowances: 'false',
 };
 
 const WORKWEEK_DAYS_KEY = 'attendance_workweek_days';

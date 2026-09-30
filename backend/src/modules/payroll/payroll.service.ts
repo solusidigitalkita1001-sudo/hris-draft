@@ -18,6 +18,7 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
+import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
 import { mailService } from '@/shared/mail/MailService';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
@@ -569,6 +570,11 @@ export class PayrollService {
     // so a row registered midway cannot land on two payslips.
     const arrearsByEmployee = await payrollArrearsService.pendingByEmployee(run.companyId, database);
     const arrearsClaims: Array<{ arrearsId: string; payslipId: string }> = [];
+    // Approved leave encashments (GAP-09). The balance was already deducted at
+    // approval; this run only pays for it.
+    const encashmentComponent = await this.ensureLeaveEncashmentComponent(run.companyId, database);
+    const encashmentsByEmployee = await leaveEncashmentService.approvedByEmployee(run.companyId, database);
+    const encashmentClaims: Array<{ encashmentId: string; payslipId: string }> = [];
     // Benefit contributions (checklist §19). Opt-in per company via the
     // benefit_payroll_deduction_enabled setting: enabling it changes
     // take-home pay, so it must be a deliberate tenant decision, not a deploy.
@@ -848,6 +854,20 @@ export class PayrollService {
         });
       }
 
+      const employeeEncashments = encashmentsByEmployee.get(salary.employeeId) ?? [];
+      for (const encashment of employeeEncashments) {
+        const amount = new Prisma.Decimal(encashment.grossAmount);
+        if (amount.lessThanOrEqualTo(0)) continue;
+        extraComponents.push({
+          salaryComponentId: encashmentComponent.id,
+          name: `Pencairan ${encashment.leaveType.name} (${encashment.days} hari)`,
+          type: 'ALLOWANCE',
+          amount: amount.toNumber(),
+          // Encashed leave is ordinary income in the month it is paid.
+          isTaxable: true,
+        });
+      }
+
       const emp = salary.employee;
       const taxContext = {
         married: emp?.maritalStatus === 'MARRIED',
@@ -911,6 +931,9 @@ export class PayrollService {
       for (const arrears of employeeArrears) {
         arrearsClaims.push({ arrearsId: arrears.id, payslipId: payslip.id });
       }
+      for (const encashment of employeeEncashments) {
+        encashmentClaims.push({ encashmentId: encashment.id, payslipId: payslip.id });
+      }
 
       // Create payslip components
       if (components.length > 0) {
@@ -938,6 +961,7 @@ export class PayrollService {
     // Same discipline as EWA: claim conditionally on PENDING so a row another
     // run already took fails this one instead of being paid twice.
     await payrollArrearsService.markApplied(run.companyId, runId, arrearsClaims, database);
+    await leaveEncashmentService.markPaid(run.companyId, runId, encashmentClaims, database);
     const totalNetPay = totalEarnings.minus(totalDeductions);
     for (const amount of [totalEarnings, totalDeductions, totalNetPay]) {
       if (!amount.isFinite() || amount.isNegative() || amount.greaterThan('9999999999999.99')) {
@@ -956,6 +980,26 @@ export class PayrollService {
     // Mark run as completed
     await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
 
+  }
+
+  private async ensureLeaveEncashmentComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'LEAVE_ENCASHMENT_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Pencairan Sisa Cuti',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: true,
+      // The amount was computed from a daily rate at approval; prorating it
+      // against this period would shrink what was already agreed.
+      isProrated: false,
+      description: 'System generated: unused leave exchanged for money',
+      sortOrder: 995,
+    }, database);
   }
 
   private async ensureArrearsEarningComponent(companyId: string, database: Prisma.TransactionClient) {

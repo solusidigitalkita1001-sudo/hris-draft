@@ -1,5 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { collectiveLeaveService } from './collective-leave.service';
+import { leaveEncashmentService } from './leave-encashment.service';
+import type { EncashmentQueryDTO, RejectEncashmentDTO, RequestEncashmentDTO } from './leave-encashment.dto';
 import type { CollectiveLeaveQueryDTO, DeclareCollectiveLeaveDTO } from './collective-leave.dto';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { leaveService } from './leave.service';
@@ -171,6 +173,49 @@ export class LeaveController {
   async cancelCollectiveLeave(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       res.json(Result.success(await collectiveLeaveService.cancel(activeCompanyId(req), String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Pencairan sisa cuti (encashment) ====================
+  /** What the company's policy currently allows, so the UI can explain itself. */
+  async encashmentPolicy(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await leaveEncashmentService.describePolicy(activeCompanyId(req))));
+    } catch (error) { next(error); }
+  }
+
+  async requestEncashment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const row = await leaveEncashmentService.request(activeCompanyId(req), req.body as RequestEncashmentDTO);
+      res.status(201).json(
+        Result.success(
+          { id: row.id, days: row.days, grossAmount: row.grossAmount, status: row.status, basis: row.basis },
+          'Pengajuan pencairan cuti dibuat. Saldo cuti baru dipotong saat disetujui.',
+        ),
+      );
+    } catch (error) { next(error); }
+  }
+
+  async findAllEncashments(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const query = req.query as unknown as EncashmentQueryDTO;
+      res.json(Result.success(await leaveEncashmentService.list(activeCompanyId(req), query)));
+    } catch (error) { next(error); }
+  }
+
+  async approveEncashment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(
+        await leaveEncashmentService.approve(activeCompanyId(req), String(req.params.id)),
+        'Disetujui. Saldo cuti dipotong sekarang; nominalnya dibayar pada run payroll berikutnya.',
+      ));
+    } catch (error) { next(error); }
+  }
+
+  async rejectEncashment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { reason } = req.body as RejectEncashmentDTO;
+      res.json(Result.success(await leaveEncashmentService.reject(activeCompanyId(req), String(req.params.id), reason)));
     } catch (error) { next(error); }
   }
 }
