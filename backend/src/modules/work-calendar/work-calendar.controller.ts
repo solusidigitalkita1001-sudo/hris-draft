@@ -6,6 +6,7 @@ import { Result } from '@/shared/core/Result';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { AuthError, ValidationError } from '@/shared/exceptions/AppError';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
+import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 
 export class WorkCalendarController {
   async getMyNextShift(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -150,10 +151,21 @@ export class WorkCalendarController {
     } catch (error) { next(error); }
   }
 
+  /**
+   * The company comes from the request context, not from the query string.
+   *
+   * It used to be read from `?companyId=`. The tenant middleware intersects that
+   * with the caller's real company, so it was never a way to read another
+   * tenant's data — but it did mean that passing a company id that was not
+   * yours, or a stale one from the client, returned an empty list rather than
+   * your own holidays. A silent wrong answer is worse than an error.
+   */
   async findAllHolidays(req: Request, res: Response, next: NextFunction) {
     try {
+      const companyId = getCurrentCompanyId();
+      if (!companyId) throw new AuthError('An active company is required to list holidays');
       const data = await workCalendarRepository.findAllHolidays(
-        req.query.companyId as string,
+        companyId,
         req.query.year ? Number(req.query.year) : undefined,
       );
       res.json(Result.success(data));

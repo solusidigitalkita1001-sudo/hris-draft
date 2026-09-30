@@ -672,13 +672,41 @@ export class WorkCalendarRepository {
     return prisma.nationalHoliday.findUnique({ where: { id } });
   }
 
+  /**
+   * `year` is derived from `date`, never taken from the caller.
+   *
+   * Both fields used to be accepted independently, so a holiday could be stored
+   * with a date in one year and a `year` column naming another — and nothing
+   * complained. Calendar generation selects holidays by `year`, so such a row
+   * silently never reaches any calendar: the holiday exists in the register, the
+   * calendar shows an ordinary working day, and there is nothing to see in
+   * either place that explains why. Updating only the date reproduced it even
+   * more easily, since `year` simply stayed behind.
+   *
+   * The year is read in UTC on purpose. A 'YYYY-MM-DD' string parses to UTC
+   * midnight, so getFullYear() would answer with the previous year on any host
+   * west of UTC — the column is a DATE and must not depend on where the server
+   * happens to run.
+   */
   async createHoliday(data: CreateHolidayDTO & { companyId: string }) {
-    return prisma.nationalHoliday.create({ data: { ...data, date: new Date(data.date) } as any });
+    const date = new Date(data.date);
+    if (Number.isNaN(date.getTime())) throw new BadRequestError('date is not a valid calendar date');
+    return prisma.nationalHoliday.create({
+      data: { ...data, date, year: date.getUTCFullYear() } as Prisma.NationalHolidayUncheckedCreateInput,
+    });
   }
 
   async updateHoliday(id: string, data: UpdateHolidayDTO) {
-    const updateData: any = { ...data };
-    if (data.date) updateData.date = new Date(data.date);
+    const updateData: Prisma.NationalHolidayUncheckedUpdateInput = { ...data };
+    if (data.date !== undefined) {
+      const date = new Date(data.date);
+      if (Number.isNaN(date.getTime())) throw new BadRequestError('date is not a valid calendar date');
+      updateData.date = date;
+      updateData.year = date.getUTCFullYear();
+    } else {
+      // Nothing may set `year` on its own, or the two fields drift apart again.
+      delete updateData.year;
+    }
     return prisma.nationalHoliday.update({ where: { id }, data: updateData });
   }
 
