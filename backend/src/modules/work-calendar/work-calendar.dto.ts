@@ -54,10 +54,13 @@ export const bulkUpdateDaysSchema = z.object({
 });
 
 export const createHolidaySchema = z.object({
-  date: z.string(), // YYYY-MM-DD
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'date must start with YYYY-MM-DD'),
   name: z.string().min(1).max(150),
   type: z.enum(['NH', 'JL']),
-  year: z.number().int(),
+  // Optional, and ignored: the repository derives it from `date`. Accepting a
+  // year that could disagree with the date produced holidays that no calendar
+  // ever picked up, because generation selects by year.
+  year: z.number().int().optional(),
   source: z.string().max(100).optional(),
 });
 
