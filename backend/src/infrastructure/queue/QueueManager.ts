@@ -19,6 +19,8 @@ export class QueueManager {
   private workers: Worker[] = [];
   private connection: ConnectionOptions;
   private healthClient?: IORedis;
+  /** BullMQ's own key namespace, derived from REDIS_KEY_PREFIX. */
+  private queuePrefix?: string;
   private readonly healthTimeoutMs: number = 1000;
   private readonly enabled: boolean;
 
@@ -30,7 +32,20 @@ export class QueueManager {
       return;
     }
 
-    const baseOptions = getRedisConnectionOptions();
+    // BullMQ refuses an ioredis connection carrying keyPrefix — it throws
+    // "ioredis does not support ioredis prefixes, use the prefix option
+    // instead" the moment a repeatable job constructs Repeat. In production the
+    // worker crash-looped on exactly that: Redis, the database and RabbitMQ all
+    // connected, then scheduling a repeating sweep killed the process.
+    //
+    // Only the host/port branch of getRedisConnectionOptions sets keyPrefix,
+    // which is why a REDIS_URL environment never saw it and local development
+    // looked fine.
+    //
+    // The namespace still matters on a shared Redis, so it moves to BullMQ's
+    // own `prefix` option rather than being dropped.
+    const { keyPrefix, ...baseOptions } = getRedisConnectionOptions();
+    this.queuePrefix = keyPrefix ? keyPrefix.replace(/:+$/, '') : undefined;
 
     this.connection = {
       ...baseOptions,
@@ -39,6 +54,7 @@ export class QueueManager {
 
     this.healthClient = new IORedis({
       ...baseOptions,
+      keyPrefix,
       maxRetriesPerRequest: null,
     });
 
@@ -69,6 +85,7 @@ export class QueueManager {
         name,
         new Queue(name, {
           connection: this.connection,
+          ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
           defaultJobOptions: {
             attempts: config.queue.defaultAttempts,
             backoff: {
@@ -95,6 +112,7 @@ export class QueueManager {
         name,
         new QueueEvents(name, {
           connection: this.connection,
+          ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
         })
       );
     }
@@ -127,6 +145,9 @@ export class QueueManager {
 
     const worker = new Worker<T>(queueName, processor, {
       connection: this.connection,
+      // Must match the queue's prefix, or the worker watches different keys
+      // from the ones the producer writes and nothing is ever processed.
+      ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
       concurrency: 5,
       ...options,
     });
