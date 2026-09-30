@@ -1234,3 +1234,56 @@ yang lebih berat daripada memilih banknya.
 
 Ledger pembayaran dan status transaksinya sudah siap menampung integrasi
 langsung bila kelak diputuskan.
+---
+
+## Pemeriksaan checklist 15-siklus (30 September, malam)
+
+Checklist "sisa gap dari 15 siklus review" diperiksa item per item terhadap
+kode, bukan terhadap catatan. Hasilnya: **sebagian sudah selesai dan
+checklist-nya yang ketinggalan.**
+
+| Item checklist | Kenyataan di kode |
+|---|---|
+| `npm audit fix` — 2 vulnerability | **Selesai.** Backend 0 vulnerability; dua HIGH di frontend (`brace-expansion`, `browserslist`) diperbaiki. Sisa dua MODERATE adalah `vitest` (dev-only, path traversal di mocker) yang butuh upgrade major — tidak dikerjakan bersamaan dengan perbaikan keamanan lain, dan tidak terjangkau dari produksi |
+| Branch protection aktif? | **TIDAK aktif** — `GET /repos/.../branches/main/protection` mengembalikan 404. Ini temuan nyata, bukan konfirmasi |
+| 5 modul belum mount `requireCompanyAccess` router-wide | **Sudah semua.** `performance`, `work-calendars`, `company-settings`, `permission-requests`, `audit-logs` — kelimanya `router.use(authenticate)` + `router.use(requireCompanyAccess())` |
+| Rate-limiting face-match live? | **Live.** `runRateLimitedFaceMatch` dipanggil di jalur check-in (`attendance.service.ts`) |
+| Browser E2E test belum ada | **Sudah ada** — 8 spec Playwright (auth session + leave self-service), jalan di CI sebagai job **blocking** |
+| OpenAPI / contract test belum ada | **Sudah ada** — `GET /meta/openapi.json` digenerate dari router yang berjalan (423 path), plus contract test frontend-backend sebagai step blocking di CI |
+| Endpoint create/update/publish Announcement | **Benar belum ada — dikerjakan sekarang** (lihat di bawah) |
+| Basic Operational (task assignment) | Model `TaskAssignment` **ada** di schema; yang belum ada endpoint/modulnya |
+| Patrol & Tracking | Model `AssetPatrolLog` **ada** di schema; yang belum ada endpoint/modulnya |
+
+### Announcement: sisi tulis (selesai 30 Sep)
+
+Sisi baca sudah lengkap — audience targeting, publish window, pin, read
+tracking — dan **tidak ada apa pun yang bisa membuat barisnya.** Portalnya
+adalah jendela ke data yang hanya bisa dihasilkan seed script.
+
+`/announcements/manage` sekarang menyediakan draft, edit, publish, arsip, daftar
+admin, dan **siapa yang sudah membaca** — pertanyaan yang sebenarnya ditanyakan
+HR.
+
+Yang ditolak, dan alasannya:
+
+- **Audience bertarget tanpa target.** `DEPARTMENT_ONLY` dengan daftar kosong
+  tidak terlihat oleh siapa pun; menerbitkannya tampak seperti berkomunikasi dan
+  tidak mencapai siapa-siapa — lebih buruk daripada error.
+- **Target dari perusahaan lain.** Daftar audience disimpan sebagai JSON opaque,
+  jadi tidak ada apa pun di hilir yang akan menangkap id departemen milik tenant
+  lain: ia hanya tidak akan pernah cocok, dan penulisnya tidak akan pernah tahu
+  kenapa pengumumannya sunyi.
+- **Daftar yang tidak sesuai audience-nya** ditolak, bukan diabaikan —
+  membuangnya diam-diam membuat penulis percaya pengumumannya lebih sempit.
+- **Jendela yang tertutup sebelum terbuka**, dan **pin yang kedaluwarsa sebelum
+  pengumumannya terlihat**.
+- **Menerbitkan yang jendelanya sudah lewat** — menghasilkan pengumuman yang
+  tidak akan pernah dilihat siapa pun.
+
+Membuat dan menerbitkan **dipisah**: `announcement:create` untuk draft,
+`announcement:approve` untuk menerbitkan. HR_STAFF boleh menyiapkan draft,
+HR_MANAGER dan COMPANY_ADMIN yang menerbitkan — sebuah pengumuman sampai ke
+semua orang sekaligus dan tidak bisa ditarik kembali. Diarsipkan, bukan dihapus:
+read receipt adalah bukti siapa sudah diberi tahu apa.
+
+Verifikasi: 38 test.

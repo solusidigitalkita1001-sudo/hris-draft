@@ -30,6 +30,8 @@ export async function seedRolePermissions(): Promise<void> {
       [
         'user:create', 'user:read', 'user:update',
         'audit-log:read',
+        // Announcement: admin may draft, edit and publish.
+        'announcement:read', 'announcement:create', 'announcement:update', 'announcement:approve',
         'employee:create', 'employee:read', 'employee:update', 'employee:delete', 'employee:export', 'employee:read-sensitive',
         'org:create', 'org:read', 'org:update',
         'att:read', 'att:approve', 'att:export',
@@ -62,6 +64,8 @@ export async function seedRolePermissions(): Promise<void> {
       [
         'employee:create', 'employee:read', 'employee:update', 'employee:export', 'employee:read-sensitive',
         'org:read',
+        // Announcement: drafting and publishing is HR management's own work.
+        'announcement:read', 'announcement:create', 'announcement:update', 'announcement:approve',
         'att:read', 'att:approve', 'att:export',
         'leave:create', 'leave:read', 'leave:approve', 'leave:export',
         'work-calendar:create', 'work-calendar:read', 'work-calendar:update',
@@ -91,6 +95,10 @@ export async function seedRolePermissions(): Promise<void> {
       [
         'employee:create', 'employee:read', 'employee:update',
         'org:read',
+        // Announcement: staff prepare the draft; publishing stays with a
+        // manager, because an announcement reaches everyone at once and cannot
+        // be unsent.
+        'announcement:read', 'announcement:create', 'announcement:update',
         'att:read',
         'leave:read',
         'work-calendar:read',
