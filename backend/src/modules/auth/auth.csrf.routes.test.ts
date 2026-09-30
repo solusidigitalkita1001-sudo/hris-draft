@@ -104,6 +104,18 @@ describe('auth CSRF cache and cookie contract', () => {
     expect(authService.logout).toHaveBeenCalledWith('refresh-secret');
   });
 
+  it('answers a missing refresh cookie with 401, not a 500 server fault', async () => {
+    // Routine session expiry: the cookie is gone, so the client must log in
+    // again. A bare Error here surfaced as 500 "Unhandled error", which both
+    // misreported the cause to the client and logged expiry as a server bug.
+    const agent = request.agent(testApp());
+    const bootstrap = await agent.get(`${BASE}/csrf`).expect(200);
+    const response = await agent.post(`${BASE}/refresh`)
+      .set('X-CSRF-Token', bootstrap.body.data.csrfToken).send({}).expect(401);
+    expect(response.body.error?.code ?? response.body.code).toBe('AUTHENTICATION_FAILED');
+    expect(authService.refreshTokens).not.toHaveBeenCalled();
+  });
+
   it('keeps cookie validation enabled when the header token exists without its cookie', async () => {
     const app = testApp();
     const bootstrap = await request(app).get(`${BASE}/csrf`).expect(200);

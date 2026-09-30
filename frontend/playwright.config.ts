@@ -18,6 +18,12 @@ export default defineConfig({
   // flaky session bug, which is exactly the class of bug this suite exists for.
   retries: 0,
   fullyParallel: false,
+  // One worker, not for speed but for correctness: every test signs in as the
+  // same seeded employee, and this suite deliberately manipulates that one
+  // session — expiring its access token, logging it out. Two workers would run
+  // two live sessions for one user, and one test's logout is another test's
+  // unexplained 401.
+  workers: 1,
   reporter: [['list']],
   use: {
     baseURL,
