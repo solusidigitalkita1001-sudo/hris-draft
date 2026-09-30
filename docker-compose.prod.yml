@@ -47,7 +47,11 @@ services:
       - hris_internal
       - database
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      # 127.0.0.1 like the other two. curl falls back from ::1 to IPv4 so this
+      # one always worked, but a compose healthcheck overrides the image's own
+      # HEALTHCHECK, which makes this line - not the Dockerfile - the one that
+      # actually runs.
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
