@@ -37,6 +37,9 @@ export const createEmployeeSalarySchema = z.object({
   companyId: z.string().uuid().optional(),
   effectiveDate: salaryDateSchema,
   baseSalary: salaryMoneySchema,
+  // IDR-only by design: PPh21 brackets, PTKP and BPJS caps are all rupiah-bound.
+  // Lifting this needs functional currency + dated FX rates, not a wider literal.
+  // See docs/payroll-formulas.md, "Mata uang: IDR saja, dan itu disengaja".
   currency: z.literal('IDR').default('IDR'),
   notes: z.string().optional(),
   components: salaryAllocationsSchema.optional(),

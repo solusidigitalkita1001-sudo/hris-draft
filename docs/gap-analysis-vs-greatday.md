@@ -650,13 +650,23 @@ Tabel referensi BPJS dipakai untuk menghitung iuran, tetapi tidak ada ekspor
 laporan bulanan BPJS maupun berkas e-Bupot/SPT. Yang ada hanya ekspor berkas
 transfer bank (GAP-12).
 
-### 🟡 GAP-34 — Payroll mono-mata-uang secara desain
+### 🟢 GAP-34 — Payroll mono-mata-uang secara desain — DITUTUP 30 Sep (didokumentasikan)
 
 `payroll.dto.ts` mengunci `currency: z.literal('IDR')`, dan jalur formula
 menolak alokasi non-IDR secara eksplisit. Ini pilihan yang sah untuk payroll
 lokal dan lebih baik daripada mendukungnya setengah jalan — tetapi perusahaan
 dengan karyawan ekspatriat atau kontrak mata uang asing tidak bisa dilayani, dan
 itu belum pernah dicatat sebagai batasan.
+
+**Ditutup dengan mendokumentasikannya, bukan dengan menambah fitur.** Yang kurang
+di sini memang catatannya: `docs/payroll-formulas.md` sekarang punya bagian
+"Mata uang: IDR saja, dan itu disengaja" yang menyebut ketiga titik penegakannya,
+alasannya (PPh21, PTKP, batas BPJS semuanya terikat rupiah), konsekuensinya untuk
+karyawan ekspatriat, dan apa yang sebenarnya dibutuhkan untuk mencabut batasan
+itu — mata uang fungsional per perusahaan, tabel kurs bertanggal, dan pemisahan
+mata uang pembayaran dari mata uang pelaporan pajak. DTO-nya juga diberi rujukan
+ke bagian itu, supaya pembaca kode tidak menyimpulkan `z.literal('IDR')` sebagai
+kelalaian.
 
 ### 🟡 GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek
 
@@ -678,6 +688,13 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 36 gap tercatat** — 19 tertutup, 3 sebagian,
-14 terbuka (8 lama + 6 baru). Yang paling mendesak dari yang baru adalah GAP-31,
-karena satu-satunya yang menjanjikan keamanan yang tidak dimilikinya.
+**Total setelah pemeriksaan ini: 36 gap tercatat** — 20 tertutup, 3 sebagian,
+13 terbuka (8 lama + 5 baru). GAP-34 ditutup dengan mendokumentasikan batasannya.
+Yang paling mendesak dari sisanya adalah GAP-31, karena satu-satunya yang
+menjanjikan keamanan yang tidak dimilikinya.
+
+**Ke-13 yang terbuka semuanya sudah berhenti di keputusanmu, bukan di pekerjaan
+teknis.** `docs/open-hr-decisions.md` memuat semuanya sebagai 17 keputusan
+konkret: apa yang ditanyakan, opsinya, rekomendasi saya, dan ukuran
+implementasinya. Tidak ada lagi gap terbuka yang bisa saya majukan tanpa jawaban
+darimu atau akses server.

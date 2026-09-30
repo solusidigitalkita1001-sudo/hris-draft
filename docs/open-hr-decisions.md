@@ -151,3 +151,89 @@ penanda tangan setara seperti sekarang?
 **Rekomendasi:** tambahkan urutan opsional. Dokumen seperti kontrak dan surat
 peringatan memang punya urutan yang mengikat, tetapi memaksakannya ke semua
 dokumen akan memperlambat yang sederhana.
+
+---
+
+# Tambahan dari pemeriksaan 30 September
+
+Enam gap baru (GAP-31…GAP-36) muncul saat perbandingan ulang dengan GreatDay.
+Satu di antaranya — GAP-34, payroll mono-mata-uang — tidak perlu keputusan dan
+sudah ditutup dengan mendokumentasikan batasannya di `docs/payroll-formulas.md`.
+Lima sisanya bergantung padamu, dan urutannya di bawah ini adalah urutan
+mendesaknya.
+
+## 13. GAP-31 — Metode absensi FINGERPRINT (S kalau dihapus, L kalau diintegrasi)
+
+**Kenapa ini paling mendesak:** ini satu-satunya gap yang menjanjikan keamanan
+yang tidak dimilikinya. `FACE_RECOGNITION` diverifikasi server dan `MOBILE_GPS`
+punya geofence plus deteksi mock location, tetapi `FINGERPRINT` sepenuhnya
+pernyataan klien — tidak ada perangkat, kredensial mesin, maupun endpoint impor
+punch. Cabang yang memilih fingerprint-only karena menganggapnya paling ketat
+justru mendapat jalur paling lemah.
+
+**Yang perlu diputuskan**
+
+1. Integrasi perangkat sungguhan: mesin fingerprint mem-posting punch dengan
+   kredensial perangkat, atau impor berkala dari mesin (**L**); atau
+2. Hapus `FINGERPRINT` dari kebijakan dan DTO sampai integrasinya ada (**S**).
+
+**Kenapa saya tidak memutuskannya sendiri:** saya sudah menulis perbaikan opsi 2
+lalu membatalkannya setelah mengukur data yang berjalan — **Head Office Jakarta
+memakai kebijakan FINGERPRINT untuk 24 karyawan**. Menolak metode itu hari ini
+berarti 24 orang tidak bisa absen besok pagi. Jadi opsi 2 pun butuh langkah
+migrasi: pindahkan cabang itu ke metode lain lebih dulu.
+
+**Rekomendasi:** kalau mesin fingerprint memang terpasang di kantor, pilih opsi 1
+dan beri tahu merek/modelnya — pola integrasinya berbeda antar vendor. Kalau
+tidak ada mesinnya, pilih opsi 2 dan pindahkan Head Office ke `MOBILE_GPS` atau
+`FACE_RECOGNITION` dalam satu migrasi, bukan dua rilis.
+
+## 14. GAP-32 — Bukti potong PPh21 tahunan / 1721-A1 (M)
+
+**Kenapa ini keputusan yang kecil:** bukti potong tahunan adalah kewajiban, jadi
+pertanyaannya bukan "perlu atau tidak" melainkan "bentuk mana".
+
+**Yang perlu diputuskan:** cetak 1721-A1 mengikuti format resmi DJP terbaru yang
+kamu pakai tahun ini (formatnya berubah beberapa kali, dan saya tidak mau
+menebak versinya), dan apakah karyawan bisa mengunduhnya sendiri atau HR yang
+membagikan. Kalau bisa diunduh sendiri: ikut aturan PIN/reautentikasi seperti
+slip gaji, karena isinya nominal setahun.
+
+**Rekomendasi:** kirim satu contoh 1721-A1 yang benar-benar kamu pakai; saya
+bangun generatornya dari data payroll yang sudah ada. Unduh sendiri di balik PIN.
+
+## 15. GAP-33 — Ekspor pelaporan BPJS dan e-Bupot (M)
+
+**Yang perlu diputuskan:** berkas mana yang benar-benar dipakai tim payroll
+setiap bulan — laporan mutasi BPJS Kesehatan, BPJS Ketenagakerjaan, e-Bupot
+bulanan, atau ketiganya? Masing-masing punya format dan siklus sendiri.
+
+**Rekomendasi:** mulai dari yang paling sering dikerjakan manual sekarang. Sama
+seperti di atas: satu contoh berkas asli jauh lebih berguna daripada spesifikasi,
+karena yang menentukan diterima atau tidak adalah detail formatnya.
+
+## 16. GAP-35 — Timesheet per proyek (L)
+
+**Yang perlu diputuskan:** apakah ada perusahaan dalam grup yang menagih klien
+berdasarkan jam kerja? Kalau tidak, ini tidak perlu dibangun sama sekali —
+`DailyActivity` sudah mencatat aktivitas harian dengan bukti GPS dan foto.
+
+**Rekomendasi:** lewati sampai ada perusahaan jasa yang benar-benar menagih per
+jam. Membangun model proyek, jam billable, dan approval-nya tanpa pengguna nyata
+adalah cara termahal untuk menebak kebutuhan.
+
+## 17. GAP-36 — Pencairan lewat API bank (L)
+
+**Kondisi sekarang:** GAP-12 ditutup dengan ekspor CSV per bank yang diunggah ke
+internet banking. Ledger pembayaran dan status transaksinya sudah siap menampung
+integrasi langsung.
+
+**Yang perlu diputuskan:** bank mana, dan apakah perusahaan bersedia menaruh
+kredensial pencairan di sistem ini. Itu pertanyaan kedua yang lebih berat
+daripada yang pertama: pencairan otomatis memindahkan uang tanpa orang menekan
+tombol di internet banking, jadi kontrol pengganti (dual approval, batas nominal
+per run, kunci rekening tujuan) harus disepakati lebih dulu.
+
+**Rekomendasi:** tetap di ekspor berkas untuk sekarang. Unggah manual memberi
+satu titik kendali manusia di depan pemindahan uang, dan itu sepadan dengan
+ketidaknyamanannya sampai volume run membuatnya tidak praktis.
