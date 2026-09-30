@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { payrollService } from './payroll.service';
 import { Result } from '@/shared/core/Result';
 import { payrollArrearsService } from './payroll-arrears.service';
+import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
 import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
@@ -509,6 +510,37 @@ export class PayrollController {
       const companyId = req.user?.companyId;
       if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
       res.json(Result.success(await payrollArrearsService.cancel(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Rekap PPh21 tahunan (bahan 1721-A1) ====================
+  async annualTaxRecap(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const year = Number(req.query.year);
+      const recap = await annualTaxRecapService.build(companyId, String(req.params.employeeId), year);
+
+      if (req.query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="rekap-pph21-${recap.employee.employeeNumber}-${recap.year}.csv"`,
+        );
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(recapToCsv(recap));
+        return;
+      }
+      res.json(Result.success(recap));
+    } catch (error) { next(error); }
+  }
+
+  async annualTaxRecapSummary(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const year = Number(req.query.year);
+      res.json(Result.success(await annualTaxRecapService.buildCompanySummary(companyId, year)));
     } catch (error) { next(error); }
   }
 }

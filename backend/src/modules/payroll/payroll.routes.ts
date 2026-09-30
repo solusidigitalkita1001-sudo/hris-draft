@@ -24,13 +24,13 @@ import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeS
 import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
-import { arrearsQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
+import { annualTaxRecapQuerySchema, arrearsQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
 
 const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -147,6 +147,26 @@ router.post(
   authorize({ resource: 'payroll', action: 'read' }),
   validate(calculateJknSchema, 'body'),
   payrollController.calculateJkn.bind(payrollController)
+);
+
+// ==================== Rekap PPh21 tahunan (bahan 1721-A1) ====================
+// Figures only, and no-store: an annual recap is a year of one person's income
+// in a single response.
+router.get(
+  '/annual-tax-recap',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(annualTaxRecapQuerySchema, 'query'),
+  payrollController.annualTaxRecapSummary.bind(payrollController)
+);
+
+router.get(
+  '/annual-tax-recap/:employeeId',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(annualTaxRecapQuerySchema, 'query'),
+  auditView({ action: 'VIEW_ANNUAL_TAX_RECAP', entity: 'Payslip' }),
+  payrollController.annualTaxRecap.bind(payrollController)
 );
 
 // ==================== Arrears (rapel periode tertutup) ====================

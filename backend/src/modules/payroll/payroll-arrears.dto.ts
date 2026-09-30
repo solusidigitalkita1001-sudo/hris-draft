@@ -19,3 +19,11 @@ export const arrearsQuerySchema = z.object({
 
 export type RegisterArrearsDTO = z.infer<typeof registerArrearsSchema>;
 export type ArrearsQueryDTO = z.infer<typeof arrearsQuerySchema>;
+
+export const annualTaxRecapQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  /// csv is for the tax team's own reconciliation — deliberately not a DJP file.
+  format: z.enum(['json', 'csv']).default('json'),
+});
+
+export type AnnualTaxRecapQueryDTO = z.infer<typeof annualTaxRecapQuerySchema>;

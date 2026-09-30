@@ -752,11 +752,32 @@ perangkat yang mengonfirmasi. Diverifikasi ujung-ke-ujung terhadap stack
 berjalan: check-in fingerprint menjawab 201 dan baris tersimpan memuat penanda
 itu bersama peringatan lain yang sudah ada.
 
-### 🟠 GAP-32 — Tidak ada bukti potong PPh21 tahunan (1721-A1)
+### 🟡 GAP-32 — Tidak ada bukti potong PPh21 tahunan (1721-A1) — SEBAGIAN 30 Sep (angkanya ada)
 
 Perhitungan PPh21 bulanan sudah sesuai regulasi dan slip gaji tersedia sebagai
 PDF, tetapi tidak ada bukti potong tahunan (1721-A1) yang wajib diterima
-karyawan. Tidak ada model, endpoint, maupun template untuk itu.
+karyawan.
+
+**SEBAGIAN DITUTUP: angkanya sudah ada, formulirnya menunggu satu contoh.**
+
+Yang sudah jalan — `GET /payroll/annual-tax-recap/:employeeId?year=` (JSON atau
+CSV) dan rekap satu baris per karyawan untuk seluruh perusahaan: penghasilan
+bruto per bulan, PPh21 dipotong per bulan, BPJS bagian karyawan, total setahun,
+NPWP karyawan dan perusahaan, serta status PTKP (`K/2`, `TK/0`) dengan
+tanggungan dibatasi tiga sesuai aturan — dan pembatasan itu **dikatakan**, tidak
+disembunyikan. Hanya run yang **disetujui** yang dihitung: draft bukan uang yang
+pernah diterima siapa pun. Rekap juga menandai apa yang membuat angkanya salah
+bila dibaca final: NPWP kosong, tahun tanpa slip disetujui, tahun sebagian.
+
+Yang belum — berkas resmi format DJP. Tata letak formulir itu sudah berubah
+lebih dari sekali, dan menebaknya menghasilkan dokumen yang ditolak kantor
+pajak: kegagalan yang baru terlihat pada saat paling mahal. Detail formatlah
+yang menentukan, dan itu hanya bisa datang dari **satu contoh 1721-A1 yang
+benar-benar kamu pakai**. Bagian yang tidak bergantung format — perakitan,
+penjumlahan, pemeriksaan kewarasan — sudah dikerjakan, jadi formulirnya tinggal
+dilapiskan.
+
+Verifikasi: 18 test. Detail: `docs/annual-tax-recap.md`.
 
 ### 🟠 GAP-33 — Tidak ada ekspor pelaporan BPJS / e-Bupot
 
@@ -909,8 +930,10 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — 26 tertutup, 3 sebagian,
-10 terbuka (5 lama + 4 dari pemeriksaan pagi + 1 dari pemeriksaan sore).
+**Total setelah pemeriksaan ini: 39 gap tercatat** — 26 tertutup, **4 sebagian**,
+9 terbuka (5 lama + 3 dari pemeriksaan pagi + 1 dari pemeriksaan sore).
+GAP-32 menjadi sebagian: angka rekap PPh21 tahunan sudah dirakit dan diuji,
+tinggal formulir DJP-nya yang menunggu satu contoh berkas asli.
 Pada 30 September ditutup tujuh: GAP-31 (integrasi mesin absensi), GAP-34
 (batasan mata uang didokumentasikan), GAP-14 (rapel), GAP-08 (cuti bersama),
 GAP-13 (email pemberitahuan slip gaji), GAP-38 (webhook), dan GAP-37 (SSO).
