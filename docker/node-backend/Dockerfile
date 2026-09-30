@@ -32,9 +32,9 @@ RUN npx prisma generate --schema=src/database/prisma/schema.prisma
 
 EXPOSE 3000
 
+# curl does fall back from ::1 to IPv4, so localhost worked here - but being
+# explicit costs nothing and removes the dependence on that behaviour.
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    # curl does fall back from ::1 to IPv4, so this one worked - but being
-    # explicit costs nothing and removes the dependence on that behaviour.
     CMD curl -f http://127.0.0.1:3000/health || exit 1
 
 CMD ["node", "dist/index.js"]

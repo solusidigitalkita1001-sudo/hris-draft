@@ -19,9 +19,9 @@ FROM nginx:1.25-alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY docker/node-frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
+# 127.0.0.1, not localhost: the nginx in this image listens on IPv4 only,
+# localhost resolves to ::1 first, and busybox wget does not fall back. That one
+# word reported the frontend unhealthy for as long as it had been deployed.
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    # 127.0.0.1, not localhost: nginx here listens on IPv4 only, localhost
-    # resolves to ::1 first, and busybox wget does not fall back. This exact
-    # line reported the frontend unhealthy for as long as it had been deployed.
     CMD wget -qO- http://127.0.0.1/health || exit 1
 CMD ["nginx", "-g", "daemon off;"]
