@@ -720,6 +720,55 @@ banking. Pencairan langsung lewat API bank/payment gateway (beserta rekonsiliasi
 status transaksi otomatis) belum ada. Ledger pembayaran dan status transaksinya
 sudah siap menampung itu bila kelak diputuskan.
 
+### Pemeriksaan ulang 30 September (sore) — tiga gap baru
+
+Diperiksa langsung ke kode, bukan dari ingatan. Yang **sudah ada** dan sempat
+saya duga kurang: bagan organisasi (`OrganizationChartPage` di frontend),
+pengalih bahasa (`LanguageSwitcher`), serta impor/ekspor karyawan lewat CSV
+(`POST /employees/import`, `GET /employees/export`). Tiga ini tidak dihitung
+sebagai gap.
+
+Yang benar-benar belum ada, dan bobotnya naik justru karena **produk ini
+dijual** — calon pembeli berikutnya yang menentukan, bukan tenant yang sedang
+jalan:
+
+### 🟠 GAP-37 — Tidak ada SSO (SAML / OIDC / Google Workspace)
+
+Autentikasi hanya email + kata sandi, dengan MFA dan sesi yang sudah rapi.
+Tidak ada `saml`, `oidc`, maupun `openid` di seluruh backend. Untuk perusahaan
+yang sudah memakai Google Workspace atau Microsoft Entra, "karyawan harus ingat
+satu kata sandi lagi" sering menjadi syarat yang menggagalkan pembelian —
+sekaligus alasan keamanan, karena akun tidak ikut mati saat karyawan keluar dari
+direktori pusat.
+
+Ukuran: **M**. Fondasinya justru sudah mendukung — sesi sudah memakai
+`sessionVersion` yang bisa dicabut serentak, jadi yang perlu ditambah adalah
+penyedia identitas dan pemetaan klaim ke pengguna/company access.
+
+### 🟠 GAP-38 — Tidak ada webhook untuk sistem luar
+
+RabbitMQ dipakai untuk event **internal** antar-instance, tetapi tidak ada satu
+pun jalur keluar: tidak ada model langganan webhook, tidak ada pengiriman
+bertanda tangan, tidak ada retry. Pembeli yang ingin absensi masuk ke sistem
+akuntansinya, atau karyawan baru otomatis dibuatkan akun di aplikasi lain, hari
+ini hanya bisa polling API.
+
+Ukuran: **M**. Yang dibutuhkan: langganan per company + per jenis event, tanda
+tangan HMAC pada payload, dan retry dengan backoff — infrastruktur queue-nya
+sudah ada untuk menampung itu.
+
+### 🟡 GAP-39 — Tidak ada custom field per perusahaan
+
+Data karyawan bersifat tetap: tidak ada `customField` di schema maupun kode.
+Setiap perusahaan punya satu-dua data yang khas (nomor anggota koperasi, ukuran
+seragam, kode mesin absen lama). Tanpa custom field, permintaan sekecil itu
+menjadi permintaan perubahan schema — mahal untuk produk yang dipakai banyak
+perusahaan sekaligus.
+
+Ukuran: **M–L**. Perlu diputuskan lebih dulu: cukup di level karyawan, atau juga
+di cuti/klaim/aset? Dan apakah custom field boleh dipakai di formula payroll —
+kalau ya, biayanya naik banyak karena ikut masuk jalur perhitungan uang.
+
 ### Yang diperiksa dan ternyata sudah ada
 
 Supaya daftar ini tidak terbaca lebih kosong dari kenyataannya: succession
@@ -727,11 +776,17 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 36 gap tercatat** — 21 tertutup, 3 sebagian,
-12 terbuka (8 lama + 4 baru). GAP-34 ditutup dengan mendokumentasikan
-batasannya; **GAP-31 ditutup dengan integrasi perangkat sungguhan**, dan
-bersamanya hilang satu-satunya gap yang menjanjikan keamanan yang tidak
-dimilikinya.
+**Total setelah pemeriksaan ini: 39 gap tercatat** — 21 tertutup, 3 sebagian,
+15 terbuka (8 lama + 4 dari pemeriksaan pagi + 3 dari pemeriksaan sore).
+GAP-34 ditutup dengan mendokumentasikan batasannya; **GAP-31 ditutup dengan
+integrasi perangkat sungguhan**, dan bersamanya hilang satu-satunya gap yang
+menjanjikan keamanan yang tidak dimilikinya.
+
+Dari 15 yang terbuka, yang paling menentukan kalau produk ini dijual adalah
+**GAP-37 (SSO)** dan **GAP-38 (webhook)** — keduanya sering jadi syarat
+pengadaan, bukan permintaan tambahan — lalu **GAP-32/33** (bukti potong 1721-A1
+dan ekspor BPJS) karena bersifat wajib secara regulasi. Sisanya bergantung
+kebijakan atau pasar yang dituju.
 
 **Ke-13 yang terbuka semuanya sudah berhenti di keputusanmu, bukan di pekerjaan
 teknis.** `docs/open-hr-decisions.md` memuat semuanya sebagai 17 keputusan
