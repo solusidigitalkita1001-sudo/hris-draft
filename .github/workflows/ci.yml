@@ -339,7 +339,9 @@ jobs:
       # runs can fail for reasons that are not regressions (a leave request left
       # behind by a previous run collides with the overlap rule). retries stay at
       # 0 on purpose — this suite exists to catch flaky session behaviour, so
-      # retrying would hide the very bug it is here to find.
+      # retrying would hide the very bug it is here to find. It does run single
+      # worker (see playwright.config.ts) because all eight tests share one
+      # seeded employee's session.
       - name: Playwright (soft)
         working-directory: frontend
         run: npm run test:e2e

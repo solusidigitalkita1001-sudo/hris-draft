@@ -18,6 +18,13 @@ export default defineConfig({
   // flaky session bug, which is exactly the class of bug this suite exists for.
   retries: 0,
   fullyParallel: false,
+  // One worker, not for speed but for correctness: every test signs in as the
+  // same seeded employee, and this suite deliberately manipulates that one
+  // session — expiring its access token, logging it out. Two workers means two
+  // live sessions for one user stepping on each other: in CI the refresh test
+  // never saw its 200, logout left `rt` in place, and the leave overlap check
+  // got 403 (rotated CSRF) instead of the 409 it was proving.
+  workers: 1,
   reporter: [['list']],
   use: {
     baseURL,
