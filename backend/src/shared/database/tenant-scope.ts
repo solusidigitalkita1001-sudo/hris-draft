@@ -20,6 +20,7 @@ const PARENT_SCOPES: Record<string, { relation: string; foreignKey: string }> = 
   WorkflowConditionRule: { relation: 'stage.template', foreignKey: 'stageId' },
   // Child tables whose tenant lives on a scoped parent (defense-in-depth: a
   // direct query on these would otherwise skip the tenant middleware entirely).
+  CollectiveLeaveExclusion: { relation: 'collectiveLeave', foreignKey: 'collectiveLeaveId' },
   DocumentSignature: { relation: 'document', foreignKey: 'documentId' },
   DocumentAccessLog: { relation: 'document', foreignKey: 'documentId' },
   SurveyQuestion: { relation: 'survey', foreignKey: 'surveyId' },

@@ -94,11 +94,35 @@ Modul `work-calendar` (termasuk `NationalHoliday`) sudah ada tapi **tidak dipaka
 
 ---
 
-### 🟡 GAP-08 — Cuti Bersama (Mass Leave)
+### 🟢 GAP-08 — Cuti Bersama (Mass Leave) — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** admin bisa deklarasikan tanggal tertentu sebagai "cuti bersama" yang memotong saldo cuti semua karyawan (atau karyawan tertentu) secara massal — mirip kebijakan pemerintah libur bersama Lebaran.
 
 **Kondisi saat ini:** tidak ada model atau endpoint untuk ini. `NationalHoliday` ada tapi bukan cuti yang memotong saldo.
+
+**DITUTUP.** Keputusan user: **memotong saldo cuti tahunan**, per perusahaan
+dengan **pengecualian per cabang**, dan saldo yang tidak cukup jatuh ke
+**unpaid** — bukan saldo minus, karena angka negatif itu merembet ke payroll dan
+pesangon lalu baru terlihat saat karyawan berhenti.
+
+- Tiga langkah dipisah sengaja: **deklarasi** (belum menyentuh saldo),
+  **preview** (siapa terpotong, siapa jatuh ke unpaid, siapa dilewati), lalu
+  **apply** dengan permission yang lebih ketat (`leave:approve`). Memotong hak
+  seluruh perusahaan dalam satu klik tanpa bisa dilihat dulu bukan cara yang
+  layak.
+- Diwujudkan sebagai `LeaveRequest` APPROVED per karyawan, bukan penanda
+  kalender: payroll membacanya lewat kalender absensi yang sudah ada, karyawan
+  melihatnya di riwayat cutinya sendiri dengan alasan yang jelas, dan laporan
+  tidak butuh jalur khusus.
+- Karyawan yang sudah punya cuti atau sudah tercatat absensi pada hari itu
+  **dilewati** — harinya tidak diubah di belakang punggungnya.
+- Seluruh perusahaan dalam satu transaksi: separuh perusahaan cuti dan separuh
+  tidak akan membuat payroll bulan itu dihitung dari hari yang setengah
+  diterapkan.
+
+Diverifikasi di MySQL sungguhan (12 test). Detail: `docs/collective-leave.md`.
+Yang sengaja belum ada: membalik hari yang sudah diterapkan — mengembalikan
+saldo dan menghapus cuti yang sudah disetujui adalah keputusan tersendiri.
 
 ---
 
@@ -407,7 +431,7 @@ Security gaps sudah didokumentasikan detail di `review.md`. Berikut ringkasan bl
 ### Fase 4 — Enhancement & Polish
 
 - [ ] **GAP-04** Implementasi EmployeeShiftOverride — service + controller + UI management
-- [ ] **GAP-08** Cuti bersama (mass leave) — model + endpoint admin + potong saldo karyawan massal
+- [x] **GAP-08** Cuti bersama — deklarasi + preview + apply, potong saldo dengan jatuhan unpaid (30 Sep)
 - [ ] **GAP-16** PPh21 annual reconciliation — December adjustment run
 - [ ] **GAP-22** Headcount Planning / Man Power Planning sebelum JobPosting
 - [ ] **GAP-25** Training post-evaluation — form evaluasi peserta + penilaian trainer
@@ -802,9 +826,10 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — 22 tertutup, 3 sebagian,
-14 terbuka (7 lama + 4 dari pemeriksaan pagi + 3 dari pemeriksaan sore).
-GAP-14 ditutup dengan rapel pada 30 September.
+**Total setelah pemeriksaan ini: 39 gap tercatat** — 23 tertutup, 3 sebagian,
+13 terbuka (6 lama + 4 dari pemeriksaan pagi + 3 dari pemeriksaan sore).
+Pada 30 September ditutup: GAP-31 (integrasi mesin absensi), GAP-34 (batasan
+mata uang didokumentasikan), GAP-14 (rapel), dan GAP-08 (cuti bersama).
 GAP-34 ditutup dengan mendokumentasikan batasannya; **GAP-31 ditutup dengan
 integrasi perangkat sungguhan**, dan bersamanya hilang satu-satunya gap yang
 menjanjikan keamanan yang tidak dimilikinya.

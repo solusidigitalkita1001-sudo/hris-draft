@@ -31,16 +31,26 @@ Jadi pertanyaannya bukan "kapan mengingatkan", tapi "apa yang disimpan".
 perpanjangan; tanpa riwayat, sistem tidak bisa memperingatkan saat batas itu
 terlampaui — dan itu justru risiko kepatuhan yang paling mahal.
 
-## 2. GAP-08 — Cuti bersama (M)
+## 2. GAP-08 — Cuti bersama — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Yang perlu diputuskan:** cuti bersama memotong saldo cuti tahunan karyawan
 (praktik umum di Indonesia) atau tidak memotong sama sekali? Lalu: berlaku ke
 seluruh perusahaan, atau bisa per cabang/departemen? Bagaimana dengan karyawan
 yang saldonya sudah habis — saldo minus, dianggap unpaid, atau dikecualikan?
 
-**Rekomendasi:** memotong saldo, dideklarasikan per perusahaan dengan
-pengecualian per cabang, dan saldo yang tidak cukup jatuh ke unpaid — bukan
-saldo minus, karena saldo minus merembet ke perhitungan payroll dan pesangon.
+**Keputusan user:** memotong saldo, per perusahaan dengan pengecualian per
+cabang, saldo tidak cukup jatuh ke unpaid. Sudah dibangun dan diuji di MySQL
+sungguhan — `docs/collective-leave.md`.
+
+Satu hal yang saya tambahkan tanpa diminta, dan alasannya: **langkah preview**.
+Memotong hak cuti seluruh perusahaan dalam satu klik tanpa bisa melihat dulu
+siapa yang akan jatuh ke unpaid berarti karyawan menemukannya di slip gaji.
+Sekarang deklarasi tidak menyentuh saldo, preview menunjukkan hasil per
+karyawan, dan apply memakai permission yang lebih ketat.
+
+Yang sengaja belum ada: membalik hari yang sudah diterapkan. Mengembalikan saldo
+dan menghapus cuti yang sudah disetujui adalah keputusan tersendiri — terutama
+bila payroll periode itu sudah berjalan.
 
 ## 3. GAP-09 — Leave encashment (M)
 

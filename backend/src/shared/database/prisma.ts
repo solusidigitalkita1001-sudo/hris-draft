@@ -27,6 +27,8 @@ const COMPANY_SCOPED_MODELS = new Set([
   'AttendanceDevice',
   'AttendanceDevicePunch',
   'PayrollArrears',
+  'CollectiveLeave',
+  'CollectiveLeaveExclusion',
   'WorkflowTemplate',
   'WorkflowInstance',
   'WorkflowInstanceStep',

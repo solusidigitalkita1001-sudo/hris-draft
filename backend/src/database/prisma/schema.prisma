@@ -125,6 +125,7 @@ model Company {
   attendanceDevices                     AttendanceDevice[]
   attendanceDevicePunches               AttendanceDevicePunch[]
   payrollArrears                        PayrollArrears[]
+  collectiveLeaves                      CollectiveLeave[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -215,16 +216,17 @@ model Branch {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  company                Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  employees              Employee[]
-  attendances            Attendance[]
-  attendanceDevices      AttendanceDevice[]
-  attendancePolicies     BranchAttendancePolicy[]
-  careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromBranch")
-  careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToBranch")
+  company                   Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employees                 Employee[]
+  attendances               Attendance[]
+  attendanceDevices         AttendanceDevice[]
+  collectiveLeaveExclusions CollectiveLeaveExclusion[]
+  attendancePolicies        BranchAttendancePolicy[]
+  careerTransactionsFrom    EmployeeCareerTransaction[] @relation("CareerFromBranch")
+  careerTransactionsTo      EmployeeCareerTransaction[] @relation("CareerToBranch")
   /// C.5+C.6 Daily Activities + Tasks scoped per branch
-  dailyActivities        DailyActivity[]
-  taskAssignments        TaskAssignment[]
+  dailyActivities           DailyActivity[]
+  taskAssignments           TaskAssignment[]
 
   @@index([companyId])
   @@index([code])
@@ -3397,9 +3399,11 @@ model LeaveType {
   updatedAt          DateTime  @updatedAt @map("updated_at")
   deletedAt          DateTime? @map("deleted_at")
 
-  company  Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  requests LeaveRequest[]
-  balances LeaveBalance[]
+  company                Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  requests               LeaveRequest[]
+  balances               LeaveBalance[]
+  collectiveLeaves       CollectiveLeave[] @relation("CollectiveLeaveType")
+  collectiveUnpaidLeaves CollectiveLeave[] @relation("CollectiveLeaveUnpaidType")
 
   @@index([companyId])
   @@index([code])
@@ -3453,6 +3457,13 @@ model LeaveRequest {
   company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
 
+  /// Terisi bila permintaan ini dibuat oleh deklarasi cuti bersama, bukan oleh
+  /// karyawan. Dipakai untuk pelaporan dan sebagai pagar agar satu deklarasi
+  /// tidak pernah memotong saldo orang yang sama dua kali.
+  collectiveLeaveId String?          @map("collective_leave_id") @db.VarChar(36)
+  collectiveLeave   CollectiveLeave? @relation(fields: [collectiveLeaveId], references: [id], onDelete: SetNull)
+
+  @@unique([collectiveLeaveId, employeeId])
   @@index([employeeId])
   @@index([companyId])
   @@index([leaveTypeId])
@@ -5442,5 +5453,72 @@ enum PayrollArrearsStatus {
   /// Sudah masuk slip; tidak akan dibayar lagi.
   APPLIED
   /// Dibatalkan HR sebelum dibayar.
+  CANCELLED
+}
+
+/// Cuti bersama: satu hari yang diumumkan perusahaan sebagai cuti kolektif.
+///
+/// Keputusan organisasi (GAP-08): hari itu **memotong saldo cuti tahunan**
+/// karyawan — praktik umum di Indonesia — dideklarasikan per perusahaan dengan
+/// pengecualian per cabang, dan karyawan yang saldonya tidak cukup jatuh ke
+/// **unpaid**, bukan saldo minus. Saldo minus merembet ke perhitungan payroll
+/// dan pesangon, jadi ia ditolak di sini.
+///
+/// Efeknya diwujudkan sebagai LeaveRequest berstatus APPROVED per karyawan,
+/// bukan sebagai penanda kalender: dengan begitu payroll, laporan, dan riwayat
+/// cuti karyawan membacanya lewat jalur yang sudah ada dan sudah teruji.
+model CollectiveLeave {
+  id                String                @id @default(uuid()) @db.VarChar(36)
+  companyId         String                @map("company_id") @db.VarChar(36)
+  date              DateTime              @db.Date
+  name              String                @db.VarChar(255)
+  /// Jenis cuti yang saldonya dipotong (biasanya cuti tahunan).
+  leaveTypeId       String                @map("leave_type_id") @db.VarChar(36)
+  /// Jenis cuti tidak dibayar untuk karyawan yang saldonya tidak cukup.
+  unpaidLeaveTypeId String                @map("unpaid_leave_type_id") @db.VarChar(36)
+  status            CollectiveLeaveStatus @default(DECLARED)
+  notes             String?               @db.Text
+  declaredBy        String?               @map("declared_by") @db.VarChar(36)
+  appliedAt         DateTime?             @map("applied_at")
+  appliedBy         String?               @map("applied_by") @db.VarChar(36)
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  company         Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  leaveType       LeaveType                  @relation("CollectiveLeaveType", fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  unpaidLeaveType LeaveType                  @relation("CollectiveLeaveUnpaidType", fields: [unpaidLeaveTypeId], references: [id], onDelete: Restrict)
+  exclusions      CollectiveLeaveExclusion[]
+  requests        LeaveRequest[]
+
+  /// Satu perusahaan tidak bisa mendeklarasikan dua cuti bersama pada tanggal
+  /// yang sama — pagar paling sederhana terhadap potongan saldo ganda.
+  @@unique([companyId, date])
+  @@index([companyId])
+  @@index([status])
+  @@map("collective_leaves")
+}
+
+/// Cabang yang dikecualikan dari satu deklarasi cuti bersama (mis. cabang yang
+/// tetap harus melayani pelanggan pada hari itu).
+model CollectiveLeaveExclusion {
+  id                String   @id @default(uuid()) @db.VarChar(36)
+  collectiveLeaveId String   @map("collective_leave_id") @db.VarChar(36)
+  branchId          String   @map("branch_id") @db.VarChar(36)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  collectiveLeave CollectiveLeave @relation(fields: [collectiveLeaveId], references: [id], onDelete: Cascade)
+  branch          Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([collectiveLeaveId, branchId])
+  @@index([branchId])
+  @@map("collective_leave_exclusions")
+}
+
+enum CollectiveLeaveStatus {
+  /// Sudah diumumkan, belum menyentuh saldo siapa pun.
+  DECLARED
+  /// Sudah diwujudkan menjadi cuti per karyawan; saldo sudah dipotong.
+  APPLIED
+  /// Dibatalkan sebelum diwujudkan.
   CANCELLED
 }
