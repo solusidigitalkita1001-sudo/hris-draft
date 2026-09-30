@@ -168,11 +168,36 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 ---
 
-### 🟠 GAP-13 — Payslip Distribution Otomatis
+### 🟢 GAP-13 — Payslip Distribution Otomatis — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** saat payslip diterbitkan (status `PUBLISHED`), sistem otomatis kirim email ke karyawan dengan PDF payslip ter-attach atau link secure.
 
 **Kondisi saat ini:** notification module scoped benar, email infrastructure ada, tapi tidak ada trigger event saat payslip published. Karyawan harus login sendiri untuk lihat payslip.
+
+**DITUTUP.** Keputusan user: **email berisi tautan aman yang tetap meminta PIN**
+— bukan PDF terlampir.
+
+Bagian yang mudah salah dan karena itu disebut terang-terangan: "aman" berarti
+tautannya **tidak membawa kredensial apa pun**. Emailnya hanya deep link ke Self
+Service; membaca slip tetap butuh masuk dan memasukkan PIN slip gaji. Token
+sekali-klik di kotak masuk akan menjadikan akses email = akses slip gaji, yaitu
+hal yang justru ingin dicegah gerbang PIN.
+
+- **Tidak ada nominal di email**, sama seperti notifikasi in-app. Ada test yang
+  memeriksa badan pesan agar tidak memuat deretan angka sepanjang uang, kata
+  `Rp`, maupun istilah seperti "netto"/"gaji bersih".
+- **Opt-in per perusahaan** (`payslip_email_notification_enabled`), karena
+  mengirim email slip gaji ke seluruh karyawan mengubah apa yang keluar dari
+  sistem — itu keputusan tenant, bukan konsekuensi deploy.
+- **Kegagalan SMTP tidak membatalkan apa pun**: email dikirim setelah run
+  disetujui dan slip sudah terlihat, jadi kegagalan per penerima dicatat lalu
+  ditelan. Server mail yang mati tidak boleh menganulir persetujuan payroll.
+
+Verifikasi: 7 test bentuk pesan + 10 test pengiriman. Detail:
+`docs/payslip-email-notification.md`.
+
+**Pertukaran yang disengaja:** karyawan yang lupa kata sandinya tidak bisa
+langsung membuka slip dari email — ia melewati alur lupa kata sandi lebih dulu.
 
 ---
 
@@ -418,7 +443,7 @@ Security gaps sudah didokumentasikan detail di `review.md`. Berikut ringkasan bl
 - [ ] **GAP-03** Default attendance policy di level company sebagai fallback BranchAttendancePolicy
 - [ ] **GAP-06** Implementasi leave carry-over & expiry otomatis via BullMQ scheduler (jalankan tiap awal tahun/periode)
 - [ ] **GAP-12** Bank transfer file generation — export format BCA/BNI/Mandiri setelah payroll disburse
-- [ ] **GAP-13** Payslip distribution otomatis via email saat status `PUBLISHED`
+- [x] **GAP-13** Email pemberitahuan slip gaji: deep link tanpa kredensial, PIN tetap diminta, opt-in per perusahaan (30 Sep)
 - [x] **GAP-14** Rapel untuk karyawan yang terlewat di periode tertutup (30 Sep) — correction run untuk nominal salah masih terbuka
 - [ ] **GAP-18** Employee transfer/mutation flow — model proposal + approval + effective date + auto-update data
 - [ ] **GAP-19** Contract/PKWT expiry monitoring + reminder otomatis via BullMQ scheduler
@@ -826,10 +851,16 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — 23 tertutup, 3 sebagian,
-13 terbuka (6 lama + 4 dari pemeriksaan pagi + 3 dari pemeriksaan sore).
-Pada 30 September ditutup: GAP-31 (integrasi mesin absensi), GAP-34 (batasan
-mata uang didokumentasikan), GAP-14 (rapel), dan GAP-08 (cuti bersama).
+**Total setelah pemeriksaan ini: 39 gap tercatat** — 24 tertutup, 3 sebagian,
+12 terbuka (5 lama + 4 dari pemeriksaan pagi + 3 dari pemeriksaan sore).
+Pada 30 September ditutup lima: GAP-31 (integrasi mesin absensi), GAP-34
+(batasan mata uang didokumentasikan), GAP-14 (rapel), GAP-08 (cuti bersama), dan
+GAP-13 (email pemberitahuan slip gaji).
+
+Dari 12 yang tersisa: **2 wajib regulasi** (GAP-32 bukti potong 1721-A1, GAP-33
+ekspor BPJS/e-Bupot — keduanya menunggu satu contoh berkas asli), **2 penentu
+penjualan** (GAP-37 SSO, GAP-38 webhook), dan **8 menunggu keputusan kebijakan**
+di `docs/open-hr-decisions.md`.
 GAP-34 ditutup dengan mendokumentasikan batasannya; **GAP-31 ditutup dengan
 integrasi perangkat sungguhan**, dan bersamanya hilang satu-satunya gap yang
 menjanjikan keamanan yang tidak dimilikinya.

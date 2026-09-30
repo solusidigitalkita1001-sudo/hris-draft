@@ -61,7 +61,7 @@ apakah perlu approval terpisah dari atasan atau cukup HR.
 **Rekomendasi:** tunda sampai kebijakan tertulis ada. Ini menyentuh uang dan
 dasar perhitungannya berbeda antar perusahaan; menebak defaultnya berisiko.
 
-## 4. GAP-13 — Distribusi slip gaji lewat email (S–M)
+## 4. GAP-13 — Distribusi slip gaji lewat email — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Yang perlu diputuskan:** ini keputusan privasi, bukan teknis. Desain sekarang
 sengaja memperketat: nominal hanya terbuka setelah PIN/reautentikasi, dan
@@ -72,8 +72,19 @@ membalik arah itu.
 (b) email berisi tautan aman yang tetap meminta PIN; (c) email dengan PDF
 terlampir, dilindungi kata sandi.
 
-**Rekomendasi:** (b). Karyawan tetap mendapat dorongan aktif tanpa nominal
-pernah meninggalkan sistem.
+**Keputusan user:** (b). Sudah dibangun dan diuji — detail di
+`docs/payslip-email-notification.md`.
+
+Satu hal yang perlu kamu tahu tentang bagaimana (b) diwujudkan: tautannya
+**tidak membawa token apa pun**. Emailnya deep link biasa; membuka slip tetap
+butuh masuk lalu memasukkan PIN. Token sekali-klik akan menjadikan akses email =
+akses slip gaji — persis yang ingin dicegah gerbang PIN. Pertukarannya:
+karyawan yang lupa kata sandinya melewati alur lupa kata sandi dulu.
+
+Fiturnya **mati sampai diaktifkan** per perusahaan lewat company setting
+`payslip_email_notification_enabled`, karena mengirim email slip gaji ke seluruh
+karyawan mengubah apa yang keluar dari sistem. SMTP juga harus dikonfigurasi,
+dan `PAYSLIP_SELF_SERVICE_URL` diarahkan ke domain produksi.
 
 ## 5. GAP-14 — Payroll susulan — ✅ DIPUTUSKAN & SELESAI 30 Sep
 

@@ -18,6 +18,7 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
+import { mailService } from '@/shared/mail/MailService';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 import { generateSystemCode } from '@/shared/utils/system-code';
@@ -386,6 +387,49 @@ export class PayrollService {
       }];
     });
     if (rows.length) await prisma.notification.createMany({ data: rows });
+
+    await this.emailPayslipsAvailable(companyId, periodName, users);
+  }
+
+  /**
+   * Email the same "it is ready" nudge, when the company has asked for it.
+   *
+   * Opt-in per company (`payslip_email_notification_enabled`), like every other
+   * setting that changes what leaves the system: sending payslip mail to an
+   * entire workforce is a tenant decision, not a deploy.
+   *
+   * Nothing here may break approval. The run is already approved and the
+   * payslips are already visible; a mail server being slow or down must not undo
+   * that, so every failure is logged and swallowed per recipient.
+   */
+  private async emailPayslipsAvailable(
+    companyId: string,
+    periodName: string | null,
+    users: Array<{ id: string; employeeId: string | null }>,
+  ) {
+    if (!users.length) return;
+
+    const setting = await prisma.companySetting.findUnique({
+      where: { companyId_key: { companyId, key: 'payslip_email_notification_enabled' } },
+      select: { value: true },
+    });
+    if (setting?.value !== 'true') return;
+
+    const recipients = await prisma.user.findMany({
+      where: { id: { in: users.map((user) => user.id) }, email: { not: '' } },
+      select: { id: true, email: true },
+    });
+
+    const results = await Promise.allSettled(
+      recipients.map((recipient) => mailService.sendPayslipAvailable(recipient.email, periodName)),
+    );
+
+    const failed = results.filter((result) => result.status === 'rejected').length;
+    const sent = results.filter((result) => result.status === 'fulfilled' && result.value).length;
+    logger.info('Payslip availability emails dispatched', { companyId, sent, failed, total: recipients.length });
+    if (failed) {
+      logger.warn('Some payslip availability emails could not be delivered', { companyId, failed });
+    }
   }
 
   async approvePayrollRun(id: string, userId: string) {
