@@ -1,6 +1,6 @@
 # Referensi API HRIS
 
-Dibuat otomatis dari router yang berjalan pada 2026-09-30 — **380 path, 521 operasi**.
+Dibuat otomatis dari router yang berjalan pada 2026-09-30 — **423 path, 575 operasi**.
 
 Dokumen ini tidak ditulis tangan. Sumbernya `GET /api/v1/meta/openapi.json`, yang dibangun dengan menyusuri stack Express: path, method, skema request (dikonversi dari skema zod yang benar-benar memvalidasi request), permission yang diminta `authorize()`, dan apakah route berada di balik autentikasi. Karena itu isinya tidak bisa menyimpang dari server — kalau sebuah endpoint berubah, dokumen ini berubah saat dibuat ulang.
 
@@ -14,13 +14,18 @@ curl -H "Authorization: Bearer $TOKEN" \
 ## Yang perlu dibaca lebih dulu
 
 - **Bentuk response dan kode error**: `docs/api-contract.md`. Semua sukses memakai satu envelope (`success`, `message`, `data`, `meta` untuk daftar berhalaman); semua error memakai `code` dari katalog tertutup (`VALIDATION_ERROR`, `FORBIDDEN`, `CONFLICT`, …).
-- **Autentikasi**: cookie `httpOnly` untuk web; klien mobile mengirim `X-Client-Type: mobile` saat login dan memakai `Authorization: Bearer` sesudahnya (lihat `docs/mobile-api.md`).
+- **Autentikasi**: cookie `httpOnly` untuk web; klien mobile mengirim `X-Client-Type: mobile` saat login dan memakai `Authorization: Bearer` sesudahnya (lihat `docs/mobile-api.md`). Untuk SSO per perusahaan: `docs/sso-oidc.md`.
 - **Konteks perusahaan**: hampir semua endpoint terikat perusahaan aktif; `companyId` dari klien divalidasi terhadap hak akses pengguna, bukan dipercaya.
 - **Idempotency**: mutasi mobile menerima header `Idempotency-Key` (replay 24 jam).
 
-Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route tersebut. Kosong berarti route hanya butuh sesi yang sah (atau, untuk beberapa endpoint publik seperti login, tidak butuh apa pun).
+Dua endpoint memakai kredensial yang **bukan** sesi pengguna, dan itu disengaja:
 
-## `auth` — 13 operasi
+- `POST /attendance-devices/punches` — kredensial perangkat absensi (`docs/attendance-device-integration.md`).
+- `GET /auth/sso/start` dan `/auth/sso/callback` — belum ada sesi saat dipanggil.
+
+Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route tersebut. Kosong berarti route hanya butuh sesi yang sah (atau, untuk beberapa endpoint publik seperti login dan callback SSO, tidak butuh apa pun).
+
+## `auth` — 19 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
@@ -37,8 +42,14 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `POST /api/v1/auth/reset-password` | — | publik | ya |
 | `GET /api/v1/auth/sessions` | — | bearer/cookie | — |
 | `DELETE /api/v1/auth/sessions/{id}` | — | bearer/cookie | — |
+| `GET /api/v1/auth/sso/callback` | — | publik | — |
+| `GET /api/v1/auth/sso/providers` | `rbac:read` | bearer/cookie | — |
+| `POST /api/v1/auth/sso/providers` | `rbac:create` | bearer/cookie | ya |
+| `PATCH /api/v1/auth/sso/providers/{id}` | `rbac:update` | bearer/cookie | ya |
+| `DELETE /api/v1/auth/sso/providers/{id}` | `rbac:delete` | bearer/cookie | — |
+| `GET /api/v1/auth/sso/start` | — | publik | — |
 
-## `employees` — 49 operasi
+## `employees` — 53 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
@@ -46,6 +57,10 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `POST /api/v1/employees` | `employee:create` | bearer/cookie | ya |
 | `GET /api/v1/employees/attendance-methods` | — | bearer/cookie | — |
 | `PATCH /api/v1/employees/career-transactions/{transactionId}/workflow-action` | `employee:update` | bearer/cookie | ya |
+| `GET /api/v1/employees/contracts` | `employee:read` | bearer/cookie | — |
+| `POST /api/v1/employees/contracts` | `employee:update` | bearer/cookie | ya |
+| `GET /api/v1/employees/contracts/expiring` | `employee:read` | bearer/cookie | — |
+| `PATCH /api/v1/employees/contracts/{id}/status` | `employee:update` | bearer/cookie | ya |
 | `GET /api/v1/employees/export` | `employee:read` | bearer/cookie | — |
 | `POST /api/v1/employees/import` | `employee:create` | bearer/cookie | — |
 | `GET /api/v1/employees/me/reporting-line` | — | bearer/cookie | — |
@@ -117,6 +132,16 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `PATCH /api/v1/attendance/{id}/checkout` | `attendance:update` | bearer/cookie | ya |
 | `PATCH /api/v1/attendance/{id}/correction` | `attendance:update` | bearer/cookie | — |
 
+## `attendance-devices` — 5 operasi
+
+| Method & path | Permission | Auth | Body |
+|---|---|---|---|
+| `GET /api/v1/attendance-devices` | `attendance:read` | bearer/cookie | — |
+| `POST /api/v1/attendance-devices` | `attendance:create` | bearer/cookie | ya |
+| `POST /api/v1/attendance-devices/punches` | — | publik | ya |
+| `PATCH /api/v1/attendance-devices/{id}` | `attendance:update` | bearer/cookie | ya |
+| `GET /api/v1/attendance-devices/{id}/punches` | `attendance:read` | bearer/cookie | — |
+
 ## `attendance-corrections` — 8 operasi
 
 | Method & path | Permission | Auth | Body |
@@ -130,7 +155,7 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `PUT /api/v1/attendance-corrections/{id}/reject` | `attendance:update` | bearer/cookie | ya |
 | `PATCH /api/v1/attendance-corrections/{id}/workflow-action` | `attendance:update` | bearer/cookie | ya |
 
-## `leave` — 14 operasi
+## `leave` — 24 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
@@ -140,6 +165,16 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `POST /api/v1/leave/balances` | `leave:create` | bearer/cookie | ya |
 | `POST /api/v1/leave/balances/accrue` | `leave:create` | bearer/cookie | — |
 | `GET /api/v1/leave/balances/employee` | `leave:read` | bearer/cookie | — |
+| `GET /api/v1/leave/collective` | `leave:read` | bearer/cookie | — |
+| `POST /api/v1/leave/collective` | `leave:create` | bearer/cookie | ya |
+| `DELETE /api/v1/leave/collective/{id}` | `leave:update` | bearer/cookie | — |
+| `POST /api/v1/leave/collective/{id}/apply` | `leave:approve` | bearer/cookie | — |
+| `GET /api/v1/leave/collective/{id}/preview` | `leave:read` | bearer/cookie | — |
+| `GET /api/v1/leave/encashment` | `leave:read` | bearer/cookie | — |
+| `POST /api/v1/leave/encashment` | `leave:create` | bearer/cookie | ya |
+| `GET /api/v1/leave/encashment/policy` | `leave:read` | bearer/cookie | — |
+| `PATCH /api/v1/leave/encashment/{id}/approve` | `leave:approve` | bearer/cookie | — |
+| `PATCH /api/v1/leave/encashment/{id}/reject` | `leave:approve` | bearer/cookie | ya |
 | `GET /api/v1/leave/types` | `leave:read` | bearer/cookie | — |
 | `POST /api/v1/leave/types` | `leave:create` | bearer/cookie | ya |
 | `GET /api/v1/leave/{id}` | `leave:read` | bearer/cookie | — |
@@ -203,10 +238,16 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `POST /api/v1/work-calendars/{id}/generate` | `work-calendar:update` | bearer/cookie | — |
 | `GET /api/v1/work-calendars/{id}/working-days` | `work-calendar:read` | bearer/cookie | — |
 
-## `payroll` — 49 operasi
+## `payroll` — 55 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
+| `GET /api/v1/payroll/annual-tax-recap` | `payroll:read` | bearer/cookie | — |
+| `GET /api/v1/payroll/annual-tax-recap/{employeeId}` | `payroll:read` | bearer/cookie | — |
+| `GET /api/v1/payroll/arrears` | `payroll:read` | bearer/cookie | — |
+| `POST /api/v1/payroll/arrears` | `payroll:create` | bearer/cookie | ya |
+| `DELETE /api/v1/payroll/arrears/{id}` | `payroll:update` | bearer/cookie | — |
+| `GET /api/v1/payroll/bpjs-report` | `payroll:read` | bearer/cookie | — |
 | `POST /api/v1/payroll/calculate-bpjs` | `payroll:read` | bearer/cookie | ya |
 | `POST /api/v1/payroll/calculate-jkn` | `payroll:read` | bearer/cookie | ya |
 | `POST /api/v1/payroll/calculate-pph21` | `payroll:read` | bearer/cookie | ya |
@@ -352,7 +393,7 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `GET /api/v1/assets/{id}/depreciation` | `employee:read` | bearer/cookie | — |
 | `POST /api/v1/assets/{id}/return` | `employee:update` | bearer/cookie | — |
 
-## `documents` — 8 operasi
+## `documents` — 13 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
@@ -360,10 +401,15 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `POST /api/v1/documents` | `document:create` | bearer/cookie | — |
 | `GET /api/v1/documents/categories` | `document:read` | bearer/cookie | — |
 | `POST /api/v1/documents/categories` | `document:create` | bearer/cookie | — |
+| `GET /api/v1/documents/signatures/mine` | — | bearer/cookie | — |
 | `GET /api/v1/documents/{id}` | `document:read` | bearer/cookie | — |
+| `POST /api/v1/documents/{id}/decline` | — | bearer/cookie | ya |
 | `GET /api/v1/documents/{id}/download` | `document:read` | bearer/cookie | — |
 | `GET /api/v1/documents/{id}/file` | `document:read` | bearer/cookie | — |
+| `POST /api/v1/documents/{id}/sign` | — | bearer/cookie | — |
 | `GET /api/v1/documents/{id}/signed-url` | `document:read` | bearer/cookie | — |
+| `GET /api/v1/documents/{id}/signers` | `document:read` | bearer/cookie | — |
+| `POST /api/v1/documents/{id}/signers` | `document:update` | bearer/cookie | ya |
 
 ## `announcements` — 4 operasi
 
@@ -405,7 +451,7 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `PUT /api/v1/workflow-engine/templates/{id}` | `workflow:update` | bearer/cookie | ya |
 | `DELETE /api/v1/workflow-engine/templates/{id}` | `workflow:delete` | bearer/cookie | — |
 
-## `performance` — 96 operasi
+## `performance` — 99 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
@@ -432,6 +478,9 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `PUT /api/v1/performance/formulas/{id}` | `performance:update` | bearer/cookie | ya |
 | `GET /api/v1/performance/goals` | `performance:read` | bearer/cookie | — |
 | `POST /api/v1/performance/goals` | `performance:create` | bearer/cookie | ya |
+| `GET /api/v1/performance/goals/{id}/chain` | `performance:read` | bearer/cookie | — |
+| `GET /api/v1/performance/goals/{id}/children` | `performance:read` | bearer/cookie | — |
+| `PATCH /api/v1/performance/goals/{id}/parent` | `performance:update` | bearer/cookie | ya |
 | `PATCH /api/v1/performance/goals/{id}/progress` | `performance:update` | bearer/cookie | ya |
 | `GET /api/v1/performance/grades` | `performance:read` | bearer/cookie | — |
 | `POST /api/v1/performance/grades` | `performance:create` | bearer/cookie | ya |
@@ -506,7 +555,7 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `PATCH /api/v1/performance/reviews/{id}/approve` | `performance:approve` | bearer/cookie | — |
 | `PATCH /api/v1/performance/reviews/{id}/submit` | `performance:update` | bearer/cookie | — |
 
-## `training` — 13 operasi
+## `training` — 16 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
@@ -521,10 +570,13 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `GET /api/v1/training/enrollments` | `training:read` | bearer/cookie | — |
 | `POST /api/v1/training/enrollments` | `training:create` | bearer/cookie | ya |
 | `PATCH /api/v1/training/enrollments/{id}/complete` | `training:update` | bearer/cookie | — |
+| `GET /api/v1/training/enrollments/{id}/evaluation` | `training:read` | bearer/cookie | — |
+| `POST /api/v1/training/enrollments/{id}/feedback` | — | bearer/cookie | ya |
+| `PATCH /api/v1/training/enrollments/{id}/score` | `training:update` | bearer/cookie | ya |
 | `GET /api/v1/training/sessions` | `training:read` | bearer/cookie | — |
 | `POST /api/v1/training/sessions` | `training:create` | bearer/cookie | ya |
 
-## `recruitment` — 18 operasi
+## `recruitment` — 24 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
@@ -546,6 +598,12 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `PATCH /api/v1/recruitment/job-postings/{id}/close` | `recruitment:update` | bearer/cookie | — |
 | `PATCH /api/v1/recruitment/offers/{id}/approve` | `recruitment:approve` | bearer/cookie | — |
 | `PATCH /api/v1/recruitment/offers/{id}/respond` | `recruitment:update` | bearer/cookie | ya |
+| `GET /api/v1/recruitment/requisitions` | `recruitment:read` | bearer/cookie | — |
+| `POST /api/v1/recruitment/requisitions` | `recruitment:create` | bearer/cookie | ya |
+| `PATCH /api/v1/recruitment/requisitions/{id}/approve` | `recruitment:approve` | bearer/cookie | — |
+| `PATCH /api/v1/recruitment/requisitions/{id}/cancel` | `recruitment:update` | bearer/cookie | — |
+| `PATCH /api/v1/recruitment/requisitions/{id}/reject` | `recruitment:approve` | bearer/cookie | ya |
+| `PATCH /api/v1/recruitment/requisitions/{id}/submit` | `recruitment:update` | bearer/cookie | — |
 
 ## `onboarding` — 11 operasi
 
@@ -642,6 +700,17 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `DELETE /api/v1/users/{id}/company-access/{accessId}` | `user:update` | bearer/cookie | — |
 | `GET /api/v1/users/{id}/roles` | `rbac:read` | bearer/cookie | — |
 | `PUT /api/v1/users/{id}/roles` | `rbac:update` | bearer/cookie | ya |
+
+## `webhooks` — 6 operasi
+
+| Method & path | Permission | Auth | Body |
+|---|---|---|---|
+| `GET /api/v1/webhooks` | `rbac:read` | bearer/cookie | — |
+| `POST /api/v1/webhooks` | `rbac:create` | bearer/cookie | ya |
+| `GET /api/v1/webhooks/deliveries` | `rbac:read` | bearer/cookie | — |
+| `GET /api/v1/webhooks/events` | `rbac:read` | bearer/cookie | — |
+| `PATCH /api/v1/webhooks/{id}` | `rbac:update` | bearer/cookie | ya |
+| `DELETE /api/v1/webhooks/{id}` | `rbac:delete` | bearer/cookie | — |
 
 ## `reports` — 7 operasi
 
