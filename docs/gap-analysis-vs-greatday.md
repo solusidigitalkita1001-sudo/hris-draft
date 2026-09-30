@@ -594,7 +594,7 @@ masuk daftar sama sekali?** Enam area diperiksa dari schema, enum, dan daftar
 endpoint. Hasilnya lima gap baru, dan satu di antaranya bukan sekadar fitur yang
 belum ada.
 
-### 🔴 GAP-31 — Metode absensi FINGERPRINT dipercaya dari klien
+### 🟢 GAP-31 — Metode absensi FINGERPRINT dipercaya dari klien — DITUTUP 30 Sep
 
 Ini yang paling perlu perhatian, karena bentuknya bukan "fitur belum ada"
 melainkan asimetri kepercayaan yang menyesatkan.
@@ -624,7 +624,46 @@ Dua jalan keluar sesungguhnya, keduanya keputusan:
 2. hapus `FINGERPRINT` dari kebijakan dan DTO sampai ada integrasinya, supaya
    tidak ada yang mengandalkan jaminan yang tidak ada.
 
-**Kenapa keduanya keputusan, bukan perbaikan teknis:** pada data yang berjalan,
+**DITUTUP dengan opsi 1 (integrasi perangkat).** User memilih menyediakan
+integrasinya — *"sediain aja, soalnya buat jaga2 kalo apps ini mau gw jual"* —
+dan karena belum ada merek mesin tertentu yang dipakai, yang dibangun adalah
+jalur punch netral vendor, bukan SDK satu merek:
+
+- `AttendanceDevice` — satu baris per mesin. Kredensialnya disimpan **hanya
+  sebagai SHA-256** dan ditampilkan sekali saat registrasi, jadi dump database
+  maupun admin yang membaca tabel tidak bisa menyamar sebagai terminal.
+- `POST /api/v1/attendance-devices/punches` — yang diautentikasi adalah mesin,
+  bukan orang. Kredensial perangkat ditolak di endpoint HR dan sesi pengguna
+  ditolak di endpoint punch; kedua arah diuji.
+- `AttendanceDevicePunch` — ledger punch mentah yang ditulis **sebelum** absensi
+  diturunkan darinya, termasuk punch yang tidak cocok ke karyawan mana pun,
+  supaya "punch saya tidak muncul" punya bukti untuk diperiksa. `externalId`
+  unik per perangkat membuat pengiriman ulang backlog aman.
+- Satu punch yang ditolak tidak menggugurkan batch: mesin yang tersambung
+  kembali setelah seminggu mengirim ratusan punch, dan satu punch pada periode
+  payroll tertutup tidak boleh membuang sisanya.
+- Kebijakan cabang, keterlambatan, hari kerja, dan guard periode payroll tetap
+  diputuskan server — jalur punch memakai `attendanceService` yang sama dengan
+  jalur HR.
+- Jalur punch berjalan di system context, jadi middleware tenant bukan yang
+  memfilter; filter `companyId` eksplisit pada pencarian karyawan yang mengurung,
+  dan satu test memakukan itu: kode karyawan yang sama di perusahaan lain jatuh
+  sebagai `UNMATCHED_EMPLOYEE`.
+- Tanda `method:FINGERPRINT_NOT_DEVICE_ATTESTED` sekarang **hanya** dipasang
+  pada fingerprint yang dinyatakan klien. Punch dari terminal terdaftar membawa
+  bukti perangkatnya di `policySnapshot.attendanceDevice`.
+
+Jalur klien sengaja **tidak** dihapus: Head Office Jakarta berkebijakan
+FINGERPRINT untuk 24 karyawan dan belum tentu punya mesinnya, jadi menolak
+metode itu hari ini akan membuat 24 orang tidak bisa absen besok pagi. Yang
+berubah: sekarang ada jalur yang sungguh terverifikasi untuk dipakai begitu
+mesinnya terpasang, dan record membedakan keduanya dengan jujur.
+
+Panduan integrator: `docs/attendance-device-integration.md`. Verifikasi: 15 test
+`attendance-device.service.test.ts` (termasuk isolasi lintas perusahaan), 7 test
+`attendance-device.routes.test.ts`, 7 test attestasi.
+
+**Catatan keputusan asli (sebelum ditutup):** pada data yang berjalan,
 Head Office Jakarta memakai kebijakan fingerprint-only dengan **24 karyawan**.
 Menolak metode itu dari aplikasi akan membuat ke-24 orang tersebut tidak bisa
 absen sama sekali — memperbaiki kejujuran data dengan mematikan hal yang mereka
@@ -688,10 +727,11 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 36 gap tercatat** — 20 tertutup, 3 sebagian,
-13 terbuka (8 lama + 5 baru). GAP-34 ditutup dengan mendokumentasikan batasannya.
-Yang paling mendesak dari sisanya adalah GAP-31, karena satu-satunya yang
-menjanjikan keamanan yang tidak dimilikinya.
+**Total setelah pemeriksaan ini: 36 gap tercatat** — 21 tertutup, 3 sebagian,
+12 terbuka (8 lama + 4 baru). GAP-34 ditutup dengan mendokumentasikan
+batasannya; **GAP-31 ditutup dengan integrasi perangkat sungguhan**, dan
+bersamanya hilang satu-satunya gap yang menjanjikan keamanan yang tidak
+dimilikinya.
 
 **Ke-13 yang terbuka semuanya sudah berhenti di keputusanmu, bukan di pekerjaan
 teknis.** `docs/open-hr-decisions.md` memuat semuanya sebagai 17 keputusan

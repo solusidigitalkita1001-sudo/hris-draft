@@ -162,7 +162,7 @@ sudah ditutup dengan mendokumentasikan batasannya di `docs/payroll-formulas.md`.
 Lima sisanya bergantung padamu, dan urutannya di bawah ini adalah urutan
 mendesaknya.
 
-## 13. GAP-31 — Metode absensi FINGERPRINT (S kalau dihapus, L kalau diintegrasi)
+## 13. GAP-31 — Metode absensi FINGERPRINT — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Kenapa ini paling mendesak:** ini satu-satunya gap yang menjanjikan keamanan
 yang tidak dimilikinya. `FACE_RECOGNITION` diverifikasi server dan `MOBILE_GPS`
@@ -183,10 +183,17 @@ memakai kebijakan FINGERPRINT untuk 24 karyawan**. Menolak metode itu hari ini
 berarti 24 orang tidak bisa absen besok pagi. Jadi opsi 2 pun butuh langkah
 migrasi: pindahkan cabang itu ke metode lain lebih dulu.
 
-**Rekomendasi:** kalau mesin fingerprint memang terpasang di kantor, pilih opsi 1
-dan beri tahu merek/modelnya — pola integrasinya berbeda antar vendor. Kalau
-tidak ada mesinnya, pilih opsi 2 dan pindahkan Head Office ke `MOBILE_GPS` atau
-`FACE_RECOGNITION` dalam satu migrasi, bukan dua rilis.
+**Keputusan user:** opsi 1 — *"sediain aja, soalnya buat jaga2 kalo apps ini mau
+gw jual"*. Karena belum ada merek mesin tertentu yang dipakai, yang dibangun
+adalah jalur punch **netral vendor**: mesin apa pun, atau middleware kecil di
+sebelahnya, yang bisa HTTP POST dapat memakainya. Sudah selesai dan diuji —
+panduannya di `docs/attendance-device-integration.md`.
+
+Jalur fingerprint yang dinyatakan klien sengaja dipertahankan supaya 24 karyawan
+Head Office tidak kehilangan cara absen, tetapi hanya jalur itu yang masih
+memikul tanda `method:FINGERPRINT_NOT_DEVICE_ATTESTED`. Begitu mesin benar-benar
+terpasang di satu cabang, HR mendaftarkannya lewat `POST /attendance-devices`
+dan punch dari cabang itu langsung terverifikasi tanpa perubahan kode.
 
 ## 14. GAP-32 — Bukti potong PPh21 tahunan / 1721-A1 (M)
 
