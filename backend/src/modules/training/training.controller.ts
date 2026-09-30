@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
+import { trainingEvaluationService } from './training-evaluation.service';
+import type { RecordTrainingScoreDTO, SubmitTrainingFeedbackDTO } from './training.dto';
 import { trainingService } from './training.service';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
-import { ForbiddenError } from '@/shared/exceptions/AppError';
+import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
 
 export class TrainingController {
@@ -102,6 +104,36 @@ export class TrainingController {
       res.json(
         Result.updated(await trainingService.completeSelf(req.params.id as string, employeeId, companyId))
       );
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Evaluasi pasca-training ====================
+  async recordScore(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(
+        await trainingEvaluationService.recordScore(companyId, String(req.params.id), req.body as RecordTrainingScoreDTO),
+      ));
+    } catch (error) { next(error); }
+  }
+
+  async submitFeedback(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.status(201).json(Result.success(
+        await trainingEvaluationService.submitFeedback(companyId, String(req.params.id), req.body as SubmitTrainingFeedbackDTO),
+        'Terima kasih — masukanmu tercatat.',
+      ));
+    } catch (error) { next(error); }
+  }
+
+  async findEvaluation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await trainingEvaluationService.findByEnrollment(companyId, String(req.params.id))));
     } catch (error) { next(error); }
   }
 }

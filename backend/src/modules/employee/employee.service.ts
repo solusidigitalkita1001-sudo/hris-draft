@@ -416,6 +416,9 @@ export class EmployeeService {
             transactionType: data.transactionType,
             toPositionId: data.toPositionId,
             toBaseSalary: data.toBaseSalary,
+            // Approvers decide on money; the stated reason travels with it.
+            salaryJustification: data.salaryJustification,
+            budgetReference: data.budgetReference,
             effectiveDate: data.effectiveDate,
             companyId,
           },

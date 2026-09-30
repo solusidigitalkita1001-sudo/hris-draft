@@ -30,3 +30,28 @@ export const createDocumentSchema = z.object({
 export type CreateDocumentCategoryDTO = z.infer<typeof createDocumentCategorySchema>;
 export type DocumentQueryDTO = z.infer<typeof documentQuerySchema>;
 export type CreateDocumentDTO = z.infer<typeof createDocumentSchema>;
+
+/**
+ * Signer list for a document (GAP-27). `order` is optional: omit it everywhere
+ * and the signers are equal, as documents behaved before ordering existed.
+ * Equal values mean one step signed in parallel.
+ */
+export const setDocumentSignersSchema = z.object({
+  signers: z
+    .array(
+      z.object({
+        userId: z.string().uuid(),
+        order: z.number().int().min(1).max(50).optional(),
+        dueAt: z.string().datetime().optional(),
+      }),
+    )
+    .min(1)
+    .max(20),
+});
+
+export const declineDocumentSchema = z.object({
+  reason: z.string().min(1).max(255),
+});
+
+export type SetDocumentSignersDTO = z.infer<typeof setDocumentSignersSchema>;
+export type DeclineDocumentDTO = z.infer<typeof declineDocumentSchema>;

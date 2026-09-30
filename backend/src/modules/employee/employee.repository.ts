@@ -723,6 +723,8 @@ export class EmployeeRepository {
           fromEmploymentType: employee.employmentType,
           toEmploymentType: data.toEmploymentType || null,
           toBaseSalary: data.toBaseSalary ?? null,
+          salaryJustification: data.salaryJustification ?? null,
+          budgetReference: data.budgetReference ?? null,
           status: requiresApproval ? 'PENDING' : 'APPROVED',
           referenceNumber: data.referenceNumber,
           reason: data.reason,

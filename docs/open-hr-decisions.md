@@ -161,7 +161,7 @@ siapa pun tetap harus dipelihara serta tetap bisa salah.
 Kalau kelak ada pembeli yang memakainya: bentuk yang benar adalah opsi **per
 perusahaan** (seperti pencairan cuti), bukan mode global.
 
-## 8. GAP-21 — Alur proposal revisi gaji (M)
+## 8. GAP-21 — Alur proposal revisi gaji — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Kondisi sekarang:** transaksi karier sudah bisa membawa `toBaseSalary` dengan
 tanggal efektif dan melewati approval, lalu membuat `EmployeeSalary` baru.
@@ -173,6 +173,12 @@ karier yang ada.
 **Rekomendasi:** cukup jalur yang ada, tambahkan field alasan/justifikasi.
 Menambah alur kedua untuk hal yang sama akan membelah riwayat karier.
 
+**Keputusan user:** cukup jalur karier yang ada, ditambah field justifikasi.
+Sudah dibangun: `salaryJustification` **wajib** saat gaji diubah, plus
+`budgetReference` opsional, dan keduanya ikut ke payload approval sehingga yang
+menyetujui uang melihat alasannya. Kenaikan gaji tanpa alasan tertulis adalah
+satu hal yang tidak bisa direkonstruksi setahun kemudian.
+
 ## 9. GAP-22 — Man Power Planning / requisition (L)
 
 **Yang perlu diputuskan:** apakah rekrutmen harus berangkat dari requisition
@@ -183,7 +189,7 @@ anggaran), atau job posting boleh langsung dibuat seperti sekarang?
 dikontrol terpusat. Kalau tidak, ini menambah birokrasi tanpa pengendalian yang
 nyata.
 
-## 10. GAP-25 — Evaluasi pasca-training (S–M)
+## 10. GAP-25 — Evaluasi pasca-training — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Konteks teknis:** `TrainingEnrollment.score` sudah ada di schema tetapi tidak
 dipakai kode manapun.
@@ -193,6 +199,17 @@ juga form reaksi peserta (level 1) dengan rekap efektivitas per course?
 
 **Rekomendasi:** mulai dari mengaktifkan `score` yang sudah ada plus satu form
 reaksi sederhana. Rekap efektivitas menyusul setelah ada datanya.
+
+**Keputusan user:** nilai trainer plus form reaksi peserta. Sudah dibangun.
+
+Yang ditemukan saat mengerjakannya: `TrainingEnrollment.score` bukan hanya tidak
+dipakai — **tidak ada endpoint yang bisa menulisnya**. Kolom yang mencatat
+apakah ada yang dipelajari, tanpa cara mengisinya. Sekarang bisa, dan hanya
+untuk pendaftaran yang sudah `COMPLETED`.
+
+Rekap efektivitas per course sengaja belum dibuat: rekap sebelum ada datanya
+menghasilkan grafik kosong, dan grafik kosong dibaca sebagai "tidak ada
+masalah".
 
 ## 11. GAP-26 — Hierarki dan cascade goal (M)
 
@@ -207,7 +224,7 @@ formal?
 menuntut struktur goal organisasi yang biasanya belum mapan saat sistemnya baru
 dipakai.
 
-## 12. GAP-27 — Urutan tanda tangan dokumen (M)
+## 12. GAP-27 — Urutan tanda tangan dokumen — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Yang perlu diputuskan:** apakah dokumen perlu urutan penanda tangan (karyawan
 dulu, lalu HR, lalu direktur) dengan tenggat per penanda tangan, atau semua
@@ -226,6 +243,16 @@ Satu di antaranya — GAP-34, payroll mono-mata-uang — tidak perlu keputusan d
 sudah ditutup dengan mendokumentasikan batasannya di `docs/payroll-formulas.md`.
 Lima sisanya bergantung padamu, dan urutannya di bawah ini adalah urutan
 mendesaknya.
+
+**Keputusan user:** urutan opsional per dokumen. Sudah dibangun.
+
+Satu hal yang perlu kamu tahu tentang cakupannya: `DocumentSignature` ada di
+schema **tanpa satu pun kode yang memakainya** — tidak ada endpoint tanda tangan
+sama sekali. Jadi yang dibangun bukan hanya urutannya, melainkan alur tanda
+tangannya sendiri: daftar penanda tangan, aksi tanda tangan, penolakan dengan
+alasan, tenggat per penanda tangan, dan daftar "menunggu tanda tanganku".
+
+Dokumen yang tidak menetapkan urutan tetap berperilaku seperti sebelumnya.
 
 ## 13. GAP-31 — Metode absensi FINGERPRINT — ✅ DIPUTUSKAN & SELESAI 30 Sep
 

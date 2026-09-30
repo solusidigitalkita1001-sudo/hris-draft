@@ -369,11 +369,29 @@ Detail: `docs/employment-contracts.md`.
 
 ---
 
-### 🟠 GAP-21 — Salary Revision Formal Flow
+### 🟢 GAP-21 — Salary Revision Formal Flow — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** alur formal kenaikan/penurunan gaji — HR ajukan revision proposal (effective date, component changes, reason) → approval → otomatis update `EmployeeSalary` di tanggal efektif dan record di career history.
 
 **Kondisi saat ini:** gaji diubah langsung edit di endpoint salary tanpa approval flow atau effective date management.
+
+**DITUTUP** sesuai keputusanmu: tetap di jalur karier, ditambah field
+justifikasi — bukan alur approval kedua.
+
+Alur kedua untuk hal yang sama akan membelah riwayat karier ke dua tempat, dan
+riwayat gaji yang terbelah justru yang paling sering ditanyakan saat sengketa
+atau audit. Yang hilang dari satu jalur itu bukan approval-nya (sudah ada),
+melainkan **alasan untuk uangnya**, terpisah dari alasan untuk perpindahannya.
+
+- `salaryJustification` **wajib** saat `toBaseSalary` diisi — kenaikan gaji tanpa
+  alasan tertulis adalah satu hal yang tidak bisa direkonstruksi setahun
+  kemudian, dan itu persis yang ditanyakan saat dipersoalkan.
+- `budgetReference` opsional, untuk menunjuk dokumen anggaran atau
+  persetujuannya.
+- Keduanya ikut ke payload approval, jadi yang menyetujui uang melihat
+  alasannya.
+
+Verifikasi: 9 test. 
 
 ---
 
@@ -411,11 +429,33 @@ Detail: `docs/employment-contracts.md`.
 
 ## Domain 6: Training & Performance
 
-### 🟡 GAP-25 — Training Post-Evaluation
+### 🟢 GAP-25 — Training Post-Evaluation — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** setelah training selesai, peserta bisa isi form evaluasi (reaction level — Kirkpatrick Level 1), trainer bisa input nilai (learning level). Ada rekap efektivitas training per course.
 
 **Kondisi saat ini:** `TrainingAttendance` ada (attendance tracking) tapi tidak ada model untuk evaluasi/nilai post-training.
+
+**DITUTUP** pada dua level, sesuai keputusanmu.
+
+**Level 2 — nilai trainer.** `TrainingEnrollment.score` sudah ada di schema dan
+**tidak bisa ditulis oleh endpoint mana pun**: kolom yang mencatat apakah ada
+yang dipelajari, tanpa cara mengisinya. Sekarang bisa, dan hanya untuk
+pendaftaran yang benar-benar `COMPLETED` — nilai untuk pelatihan yang tidak
+diselesaikan tidak mengukur apa pun.
+
+**Level 1 — reaksi peserta.** Ini yang sebelumnya tidak ada sama sekali. Tanpa
+itu tidak ada cara mengetahui apakah sebuah course berguna — hanya apakah
+pesertanya lulus, dan course yang buruk pun bisa menghasilkan kelulusan. Empat
+pertanyaan skala 1–5 plus "akan merekomendasikan atau tidak".
+
+Hanya peserta itu sendiri yang bisa mengisinya, dan hanya sekali: form yang bisa
+diisi orang lain atas namanya, atau diisi ulang, bukan bukti apa pun.
+
+**Sengaja belum dibuat:** rekap efektivitas per course. Membangun rekap sebelum
+ada datanya menghasilkan grafik kosong — dan grafik kosong dibaca sebagai "tidak
+ada masalah di sini".
+
+Verifikasi: 25 test. 
 
 ---
 
@@ -429,11 +469,33 @@ Detail: `docs/employment-contracts.md`.
 
 ## Domain 7: Document Management
 
-### 🟡 GAP-27 — E-Signature Workflow Tidak Terstruktur
+### 🟢 GAP-27 — E-Signature Workflow Tidak Terstruktur — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** dokumen yang butuh tanda tangan punya urutan signer yang jelas (misal: karyawan sign dulu → HR sign → direktur sign), dengan deadline per signer dan reminder otomatis.
 
 **Kondisi saat ini:** `DocumentSignature` model ada tapi tidak ada workflow ordering — semua signer setara tanpa urutan.
+
+**DITUTUP** dengan urutan **opsional per dokumen**, sesuai keputusanmu.
+
+Catatan cakupan yang penting: `DocumentSignature` ada di schema **tanpa satu pun
+kode yang memakainya** — tidak ada endpoint tanda tangan sama sekali. Jadi yang
+dibangun bukan hanya urutannya, melainkan alur tanda tangannya: daftar penanda
+tangan yang diharapkan, aksi tanda tangan, penolakan dengan alasan, dan daftar
+"menunggu tanda tanganku".
+
+- **Urutan opsional.** Dokumen tanpa daftar penanda tangan berperilaku seperti
+  sebelumnya. Nilai `order` yang sama = satu langkah (boleh paralel). Kontrak dan
+  surat peringatan memang punya urutan yang mengikat, tetapi memaksakannya ke
+  semua dokumen memperlambat yang sederhana tanpa menambah kepastian.
+- **Langkah sebelumnya harus selesai** sebelum langkah berikutnya bisa
+  menandatangani — itulah gunanya urutan: penanda tangan berikutnya melihat apa
+  yang disetujui sebelumnya.
+- **Daftar tidak bisa diubah** setelah ada yang menandatangani; mengacak urutan
+  di tengah jalan akan mengubah apa yang sudah disetujui orang.
+- **Tenggat per penanda tangan** dan penanda `overdue`, plus penolakan dengan
+  alasan — dokumen yang tidak dijawab lebih buruk daripada yang ditolak.
+
+Verifikasi: 23 test. 
 
 ---
 
@@ -1041,8 +1103,14 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — **31 tertutup**, 5 sebagian,
-3 terbuka.
+**Total setelah pemeriksaan ini: 39 gap tercatat** — **34 tertutup**, 5 sebagian,
+**0 terbuka yang tertahan keputusan**.
+
+Yang tersisa: GAP-22 (man power planning — diputuskan sebagai setting per
+perusahaan, sedang dikerjakan), GAP-32/33 (angkanya ada, menunggu satu contoh
+berkas resmi), GAP-35 (timesheet per proyek) dan GAP-36 (API bank) yang
+disarankan dilewati sampai ada pembeli yang benar-benar memerlukannya, serta
+GAP-26 (hierarki goal) yang masih menunggu keputusan.
 
 Ditutup pada 30 September sore, semuanya dari keputusan user: GAP-09 (pencairan
 cuti sebagai setting per perusahaan), GAP-16 (rekonsiliasi PPh21 Desember), dan

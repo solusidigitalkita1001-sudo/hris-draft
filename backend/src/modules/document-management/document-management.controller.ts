@@ -9,6 +9,9 @@ import {
   documentQuerySchema,
 } from './document-management.dto';
 import { documentManagementService } from './document-management.service';
+import { documentSigningService } from './document-signing.service';
+import type { DeclineDocumentDTO, SetDocumentSignersDTO } from './document-management.dto';
+import { BadRequestError } from '@/shared/exceptions/AppError';
 
 export class DocumentManagementController {
   async findCategories(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -123,6 +126,52 @@ export class DocumentManagementController {
     } catch (error) {
       next(error);
     }
+  }
+
+  // ==================== Tanda tangan dan urutannya ====================
+  async setSigners(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const { signers } = req.body as SetDocumentSignersDTO;
+      res.json(Result.success(
+        await documentSigningService.setSigners(companyId, String(req.params.id), signers),
+        'Daftar penanda tangan disimpan.',
+      ));
+    } catch (error) { next(error); }
+  }
+
+  async signerStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await documentSigningService.status(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  async signDocument(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await documentSigningService.sign(companyId, String(req.params.id)), 'Dokumen ditandatangani.'));
+    } catch (error) { next(error); }
+  }
+
+  async declineDocument(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const { reason } = req.body as DeclineDocumentDTO;
+      res.json(Result.success(await documentSigningService.decline(companyId, String(req.params.id), reason)));
+    } catch (error) { next(error); }
+  }
+
+  async myPendingSignatures(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await documentSigningService.myPending(companyId)));
+    } catch (error) { next(error); }
   }
 }
 

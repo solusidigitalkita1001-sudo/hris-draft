@@ -132,6 +132,7 @@ model Company {
   ssoLoginAttempts                      SsoLoginAttempt[]
   leaveEncashments                      LeaveEncashment[]
   employmentContracts                   EmploymentContract[]
+  trainingFeedback                      TrainingFeedback[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -1868,6 +1869,7 @@ model TrainingEnrollment {
   deletedAt   DateTime?        @map("deleted_at")
 
   course                                TrainingCourse                         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  feedback                              TrainingFeedback?
   employee                              Employee                               @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   company                               Company                                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   performanceDevelopmentRecommendations PerformanceDevelopmentRecommendation[]
@@ -2251,6 +2253,7 @@ model User {
   payrollUnlockGuards        PayrollUnlockGuard[]
   uploadedDocuments          Document[]                  @relation("DocumentUploader")
   documentSignatures         DocumentSignature[]
+  documentSignerAssignments  DocumentSigner[]
   documentAccessLogs         DocumentAccessLog[]
   createdCareerTransactions  EmployeeCareerTransaction[]
   companyAccesses            UserCompanyAccess[]
@@ -2471,36 +2474,43 @@ model UserCompanyAccess {
 }
 
 model EmployeeCareerTransaction {
-  id                 String                @id @default(uuid()) @db.VarChar(36)
-  employeeId         String                @map("employee_id") @db.VarChar(36)
-  companyId          String                @map("company_id") @db.VarChar(36)
-  transactionType    CareerTransactionType @map("transaction_type")
-  effectiveDate      DateTime              @map("effective_date")
-  fromBranchId       String?               @map("from_branch_id") @db.VarChar(36)
-  toBranchId         String?               @map("to_branch_id") @db.VarChar(36)
-  fromDepartmentId   String?               @map("from_department_id") @db.VarChar(36)
-  toDepartmentId     String?               @map("to_department_id") @db.VarChar(36)
-  fromPositionId     String?               @map("from_position_id") @db.VarChar(36)
-  toPositionId       String?               @map("to_position_id") @db.VarChar(36)
-  fromEmploymentType EmploymentType?       @map("from_employment_type")
-  toEmploymentType   EmploymentType?       @map("to_employment_type")
-  referenceNumber    String?               @map("reference_number") @db.VarChar(100)
+  id                  String                @id @default(uuid()) @db.VarChar(36)
+  employeeId          String                @map("employee_id") @db.VarChar(36)
+  companyId           String                @map("company_id") @db.VarChar(36)
+  transactionType     CareerTransactionType @map("transaction_type")
+  effectiveDate       DateTime              @map("effective_date")
+  fromBranchId        String?               @map("from_branch_id") @db.VarChar(36)
+  toBranchId          String?               @map("to_branch_id") @db.VarChar(36)
+  fromDepartmentId    String?               @map("from_department_id") @db.VarChar(36)
+  toDepartmentId      String?               @map("to_department_id") @db.VarChar(36)
+  fromPositionId      String?               @map("from_position_id") @db.VarChar(36)
+  toPositionId        String?               @map("to_position_id") @db.VarChar(36)
+  fromEmploymentType  EmploymentType?       @map("from_employment_type")
+  toEmploymentType    EmploymentType?       @map("to_employment_type")
+  referenceNumber     String?               @map("reference_number") @db.VarChar(100)
   /// New base salary applied with the movement (null = compensation unchanged).
-  toBaseSalary       Decimal?              @map("to_base_salary") @db.Decimal(15, 2)
+  toBaseSalary        Decimal?              @map("to_base_salary") @db.Decimal(15, 2)
+  /// Why the pay changed, as distinct from why the person moved (GAP-21).
+  /// Required whenever toBaseSalary is set: a raise recorded without a stated
+  /// reason is the one thing nobody can reconstruct a year later, and it is
+  /// exactly what gets asked about in a pay dispute or an audit.
+  salaryJustification String?               @map("salary_justification") @db.Text
+  /// Optional pointer to the budget or approval document the raise came from.
+  budgetReference     String?               @map("budget_reference") @db.VarChar(100)
   /// Approval state (checklist §9 approval routing). PENDING movements do not
   /// touch the employee until APPROVED; auto-APPROVED when no workflow template.
-  status             String                @default("APPROVED") @db.VarChar(20)
-  approvedBy         String?               @map("approved_by") @db.VarChar(36)
-  approvedAt         DateTime?             @map("approved_at")
+  status              String                @default("APPROVED") @db.VarChar(20)
+  approvedBy          String?               @map("approved_by") @db.VarChar(36)
+  approvedAt          DateTime?             @map("approved_at")
   /// When the movement was applied to the live employee row. Future-dated
   /// transactions stay pending (null) until the scheduler applies them.
-  appliedAt          DateTime?             @map("applied_at")
-  reason             String?               @db.Text
-  notes              String?               @db.Text
-  createdBy          String?               @map("created_by") @db.VarChar(36)
-  createdAt          DateTime              @default(now()) @map("created_at")
-  updatedAt          DateTime              @updatedAt @map("updated_at")
-  deletedAt          DateTime?             @map("deleted_at")
+  appliedAt           DateTime?             @map("applied_at")
+  reason              String?               @db.Text
+  notes               String?               @db.Text
+  createdBy           String?               @map("created_by") @db.VarChar(36)
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  deletedAt           DateTime?             @map("deleted_at")
 
   employee       Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   company        Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
@@ -2983,6 +2993,7 @@ model Document {
   employee                    Employee?                    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   uploader                    User                         @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: Restrict)
   signatures                  DocumentSignature[]
+  signers                     DocumentSigner[]
   accessLogs                  DocumentAccessLog[]
   esignatureTransactions      ESignatureTransaction[]
   performanceResultAttachment PerformanceResultAttachment?
@@ -5790,4 +5801,71 @@ enum EmploymentContractStatus {
   TERMINATED
   /// Sudah digantikan kontrak berikutnya (perpanjangan).
   RENEWED
+}
+
+/// Penanda tangan yang **diharapkan** untuk sebuah dokumen, beserta urutannya
+/// bila memang berurutan (GAP-27).
+///
+/// Urutan bersifat **opsional per dokumen**: dokumen yang tidak menetapkannya
+/// berjalan setara seperti sebelumnya. Kontrak dan surat peringatan memang punya
+/// urutan yang mengikat, tetapi memaksakan urutan ke semua dokumen akan
+/// memperlambat yang sederhana tanpa menambah kepastian apa pun.
+model DocumentSigner {
+  id             String               @id @default(uuid()) @db.VarChar(36)
+  documentId     String               @map("document_id") @db.VarChar(36)
+  userId         String               @map("user_id") @db.VarChar(36)
+  /// Langkah urutan. Nilai sama = satu langkah (boleh menandatangani paralel).
+  /// Seluruh dokumen memakai 1 bila urutan tidak dipakai.
+  order          Int                  @default(1)
+  /// Tenggat per penanda tangan, kalau ada.
+  dueAt          DateTime?            @map("due_at")
+  status         DocumentSignerStatus @default(PENDING)
+  signedAt       DateTime?            @map("signed_at")
+  declinedReason String?              @map("declined_reason") @db.VarChar(255)
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  /// Satu orang hanya sekali per dokumen.
+  @@unique([documentId, userId])
+  @@index([documentId, order])
+  @@index([userId, status])
+  @@map("document_signers")
+}
+
+enum DocumentSignerStatus {
+  PENDING
+  SIGNED
+  DECLINED
+}
+
+/// Reaksi peserta setelah mengikuti training (GAP-25, Kirkpatrick level 1).
+///
+/// Nilai dari trainer sudah ada sebagai `TrainingEnrollment.score` (level 2);
+/// yang hilang adalah suara pesertanya. Tanpa itu tidak ada cara mengetahui
+/// apakah trainingnya dianggap berguna — hanya apakah pesertanya lulus.
+///
+/// Rekap efektivitas per course sengaja belum dibuat: membangun rekap sebelum
+/// ada datanya hanya menghasilkan grafik kosong.
+model TrainingFeedback {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  enrollmentId    String   @unique @map("enrollment_id") @db.VarChar(36)
+  companyId       String   @map("company_id") @db.VarChar(36)
+  /// Skala 1–5. Empat pertanyaan yang benar-benar bisa ditindaklanjuti.
+  contentRating   Int      @map("content_rating")
+  trainerRating   Int      @map("trainer_rating")
+  relevanceRating Int      @map("relevance_rating")
+  facilityRating  Int?     @map("facility_rating")
+  /// Apakah ia akan merekomendasikannya ke rekan kerja.
+  wouldRecommend  Boolean  @map("would_recommend")
+  comment         String?  @db.Text
+  submittedAt     DateTime @default(now()) @map("submitted_at")
+
+  enrollment TrainingEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@map("training_feedback")
 }
