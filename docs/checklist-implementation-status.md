@@ -1,5 +1,15 @@
 # Status implementasi checklist — 10 September 2026
 
+> **Catatan keandalan dokumen (30 September 2026).** Tiga baris di dokumen ini
+> sempat lebih pesimis daripada kenyataan: MANAGER_TEAM tercatat masih 403
+> padahal sudah aktif, dan lint frontend tercatat 254 error padahal sudah nol
+> dan kini blocking di CI. Status yang ketinggalan lebih berbahaya daripada
+> status yang kosong — orang bisa mengerjakan ulang hal yang sudah selesai, atau
+> berhenti mempercayai dokumennya. Ketiganya diperbaiki dengan pengukuran ulang,
+> bukan dari ingatan: `eslint` dijalankan langsung dan suite scope dijalankan
+> ulang. Lihat juga `docs/gap-analysis-vs-greatday.md` untuk status per-gap dan
+> `docs/open-hr-decisions.md` untuk yang menunggu keputusan.
+
 Status keseluruhan: **partial**. Perbaikan P0 dan lanjutan P1 di bawah sudah diimplementasikan dan diuji. Seluruh backlog belum selesai; aplikasi belum dinyatakan production-ready.
 
 ## Update mobile/auth — 21 September 2026
@@ -147,7 +157,7 @@ Status P1 tetap **partial**: formula/DSL/versioning sudah terhubung, tetapi corr
 - WorkflowInstanceStep, WorkflowInstanceLog, dan ExpenseApproval dibatasi lewat relasi parent, karena model ini tidak memiliki kolom companyId. Reassignment parent pada record yang sudah ada ditolak.
 - Company pilihan yang lolos validasi assignment sekarang diteruskan ke AsyncLocalStorage sebelum controller dijalankan; query database tidak lagi memakai company lama dari token ketika pengguna memilih company lain yang memang ditugaskan kepadanya.
 - Repository pegawai membaca scope langsung dari konteks server dan konfigurasi database, lalu menerapkannya pada list/count/detail/update/soft-delete/status. Export memakai list yang sama. Scope tidak lagi bergantung pada filter HTTP yang bisa diabaikan DTO/controller.
-- **MANAGER_TEAM tetap 403.** Audit menemukan celah tenant/filter di bawah jalur ini, sehingga pengaktifan hierarchy ditunda sampai fondasi scope aman. Belum ada perubahan schema atau reporting line pegawai.
+- ~~**MANAGER_TEAM tetap 403.**~~ **Sudah aktif** (diverifikasi 30 September). Penundaan di atas berlaku saat fondasi scope belum aman; sejak itu `shared/security/manager-team.ts` menyelesaikan daftar pegawai yang dipimpin seorang manager (jatuh ke diri sendiri bila ia tidak memimpin siapa pun) dan `employee-data-scope.ts` menerapkannya. Diverifikasi: 22 test lulus di `manager-team.test.ts` dan `administration.scope.test.ts`. Tidak ada perubahan schema atau reporting line pegawai.
 
 Verifikasi tambahan: `tenant-scope.test.ts`, `employee.scope.test.ts`, dan test propagasi company context. Pada iterasi tenant sebelumnya, 495 test backend lulus dan 1 dilewati. Hasil gabungan terbaru tersedia pada tabel verifikasi di bawah.
 
@@ -179,8 +189,8 @@ Verifikasi dilakukan pada salinan source di `/tmp/hris-backend-verify` dan `/tmp
 | Kalender dengan `TZ=America/Los_Angeles` | **18 passed**; hasil tanggal UTC tetap sama di zona waktu server berbeda. |
 | Frontend `npm test` | **18 passed; 5 suites passed** (8 September; frontend tidak berubah pada fase backend setelahnya) |
 | Frontend `npm run build` | Passed pada 8 September, termasuk TypeScript; masih ada peringatan ukuran bundle |
-| Backend `npm run lint` | Passed: **0 errors, 821 warnings** pada 353 file; helper akses dan tiga suite EWA baru tanpa temuan. |
-| Frontend `npm run lint` | **254 errors, 15 warnings**; gate keseluruhan belum lulus. Panel/service formula beserta UI test lulus lint tanpa warning. |
+| Backend `npm run lint` | Passed: **0 errors, 825 warnings** (diverifikasi 30 September). Ratchet `--max-warnings 825` menahan angka ini agar tidak naik; seluruh warning adalah `any`/non-null assertion yang tersisa, bukan error. |
+| Frontend `npm run lint` | **Passed: 0 errors, 0 warnings** (diverifikasi 30 September, `--max-warnings 0`). Angka 254 errors di atas berasal dari 8 September dan sudah tidak berlaku; lint frontend sekarang **blocking** di `ci.yml`. |
 | Migration baru dan rollback | Keempat migration diterapkan dan rollback diuji pada database test dengan fixture dibersihkan; schema hasil migration sama dengan schema Prisma (`No difference detected`). |
 | CORS aplikasi hasil build | Preflight origin aplikasi dengan `Idempotency-Key` berhasil (204). |
 | Chromium desktop/mobile | Panel pembayaran dan formula dengan data sintetis; form, permission/konfirmasi diuji. Formula pada 1280px dan 390px tanpa overflow atau page error. Detector UI: tanpa temuan. |
