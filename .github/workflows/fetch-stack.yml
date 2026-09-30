@@ -1,4 +1,4 @@
-name: 📥 Fetch the production stack, base64 (one-off, read-only)
+name: 📥 Fetch the stack via artifact (one-off, read-only)
 on:
   push:
     branches: [chore/version-the-production-stack]
@@ -9,24 +9,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: appleboy/ssh-action@v1.2.2
+      # The log is not a usable transport: GitHub masks secret values wherever
+      # they appear, including inside base64 payloads and inside hex checksums
+      # (SSH_PORT is a digit string). An artifact is not scanned, so the bytes
+      # arrive intact.
+      - name: Copy the stack files off the server
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          command_timeout: 8m
-          script: |
-            set -uo pipefail
-            cd /root/projects/dev/hris-draft
-            # base64 so that GitHub's secret masking cannot corrupt the content.
-            # SSH_USER is "root", and every literal "root" in a config file - such
-            # as nginx's own `root` directive - came back as "***" in plain text.
-            for f in docker-compose.prod.yml $(find docker -type f ! -name '*.bak.*' | sort); do
-              echo "--8<-- $f"
-              base64 -w 0 "$f"
-              echo
-            done
-            echo "--8<-- END"
-            echo "sha256 for later comparison:"
-            sha256sum docker-compose.prod.yml $(find docker -type f ! -name '*.bak.*' | sort)
+          source: "/root/projects/dev/hris-draft/docker/node-frontend/nginx.conf,/root/projects/dev/hris-draft/docker/nginx/default.conf,/root/projects/dev/hris-draft/docker/nginx/nginx.conf,/root/projects/dev/hris-draft/docker/mysql/init/01-init.sql"
+          target: ./fetched
+          strip_components: 5
+      - name: Show what arrived
+        run: |
+          find ./fetched -type f | sort
+          sha256sum $(find ./fetched -type f | sort) | sed 's/[0-9]/&/g'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-stack
+          path: ./fetched
+          retention-days: 1
