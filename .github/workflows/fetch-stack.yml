@@ -1,0 +1,33 @@
+name: 📥 Fetch the production stack definition (one-off, read-only)
+on:
+  push:
+    branches: [chore/version-the-production-stack]
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          command_timeout: 8m
+          script: |
+            set -uo pipefail
+            cd /root/projects/dev/hris-draft
+            echo "=== what is actually there ==="
+            find docker -type f | sort
+            ls -la docker-compose*.yml 2>/dev/null | awk '{print $NF, $5}'
+            echo "=== anything secret-looking in these files? (names only, no values) ==="
+            grep -rlniE "password|secret|token|api[_-]?key|private[_-]?key" docker/ docker-compose.prod.yml 2>/dev/null || echo "  none"
+            echo "=== are they tracked or ignored? ==="
+            git check-ignore -v docker docker-compose.prod.yml 2>&1 | head -4
+            for f in docker-compose.prod.yml $(find docker -type f | sort); do
+              echo "########## BEGIN $f ##########"
+              cat "$f"
+              echo "########## END $f ##########"
+            done
