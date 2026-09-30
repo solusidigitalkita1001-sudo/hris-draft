@@ -15,6 +15,13 @@ export const createJobPostingSchema = z.object({
   requirements: z.string().optional(),
   responsibilities: z.string().optional(),
   vacancies: z.number().int().positive().default(1),
+  /**
+   * Requisition this vacancy draws on (GAP-22). Optional in the schema because
+   * whether it is mandatory is a per-company setting — a company without a
+   * central headcount budget should not gain a required extra step for every
+   * replacement hire.
+   */
+  requisitionId: z.string().uuid().optional(),
 }).superRefine((value, ctx) => {
   if (value.minSalary !== undefined && value.maxSalary !== undefined && value.maxSalary < value.minSalary) {
     ctx.addIssue({
@@ -99,3 +106,30 @@ export type CreateApplicationDTO = z.infer<typeof createApplicationSchema>;
 export type UpdateApplicationStatusDTO = z.infer<typeof updateApplicationStatusSchema>;
 export type CreateInterviewDTO = z.infer<typeof createInterviewSchema>;
 export type CreateInterviewFeedbackDTO = z.infer<typeof createInterviewFeedbackSchema>;
+
+/** Headcount request that a vacancy can be opened against (GAP-22). */
+export const createJobRequisitionSchema = z.object({
+  code: z.string().min(1).max(50),
+  title: z.string().min(1).max(255),
+  headcount: z.number().int().min(1).max(500),
+  /// Why the head is needed: a replacement, growth, a new project. Required,
+  /// because "we need someone" is not a headcount decision anyone can review.
+  reason: z.string().min(10).max(2000),
+  departmentId: z.string().uuid().optional(),
+  positionId: z.string().uuid().optional(),
+  budgetPerHire: z.number().positive().optional(),
+  targetStartDate: z.string().datetime().optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+export const requisitionQuerySchema = z.object({
+  status: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'FULFILLED', 'CANCELLED']).optional(),
+});
+
+export const rejectRequisitionSchema = z.object({
+  reason: z.string().min(1).max(255),
+});
+
+export type CreateJobRequisitionDTO = z.infer<typeof createJobRequisitionSchema>;
+export type RequisitionQueryDTO = z.infer<typeof requisitionQuerySchema>;
+export type RejectRequisitionDTO = z.infer<typeof rejectRequisitionSchema>;

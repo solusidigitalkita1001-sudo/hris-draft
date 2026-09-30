@@ -395,11 +395,33 @@ Verifikasi: 9 test.
 
 ---
 
-### 🟡 GAP-22 — Headcount Planning / Man Power Planning (MPP)
+### 🟢 GAP-22 — Headcount Planning / Man Power Planning (MPP) — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** sebelum buka rekrutmen, ada proses formal MPP — department head ajukan kebutuhan headcount (posisi, jumlah, timeline, justifikasi budget) → approval → baru job posting dibuat.
 
 **Kondisi saat ini:** `JobPosting` langsung dibuat tanpa MPP. Tidak ada model `HeadcountRequisition`.
+
+**DITUTUP** sebagai **setting per perusahaan**, sesuai keputusanmu:
+requisition-nya dibangun, dan `recruitment_requisition_required` (default mati)
+menentukan apakah lowongan wajib merujuk requisition yang sudah disetujui.
+
+Perusahaan yang anggaran headcount-nya terpusat mendapat kontrol yang ia bayar;
+perusahaan yang tidak punya kendali itu tidak ikut mendapat satu langkah wajib
+untuk setiap penggantian karyawan yang resign. Requisition-nya tetap ada meski
+gerbangnya mati, jadi bisa dipakai sebagai catatan niat lebih dulu.
+
+Yang dijaga saat lowongan dibuka — sebuah foreign key saja tidak cukup:
+requisition harus `APPROVED`, harus milik perusahaan aktif, dan **jumlah vacancy
+tidak boleh melewati headcount yang disetujui**. Tanpa yang terakhir,
+persetujuannya menjadi formalitas: sejumlah lowongan berapa pun bisa dibuka atas
+satu kepala yang disetujui. Requisition yang headcount-nya habis otomatis
+menjadi `FULFILLED`.
+
+Maker-checker: pengaju tidak bisa menyetujui requisition-nya sendiri — headcount
+adalah anggaran. Setiap transisi memakai update bersyarat, jadi dua penyetuju
+yang bersamaan tidak bisa dua-duanya berhasil.
+
+Verifikasi: 33 test. Detail: `docs/job-requisition.md`.
 
 ---
 
@@ -1103,14 +1125,15 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — **34 tertutup**, 5 sebagian,
-**0 terbuka yang tertahan keputusan**.
+**Total setelah pemeriksaan ini: 39 gap tercatat** — **35 tertutup**, 5 sebagian,
+dan **tidak ada lagi yang tertahan pekerjaan teknis**.
 
-Yang tersisa: GAP-22 (man power planning — diputuskan sebagai setting per
-perusahaan, sedang dikerjakan), GAP-32/33 (angkanya ada, menunggu satu contoh
-berkas resmi), GAP-35 (timesheet per proyek) dan GAP-36 (API bank) yang
-disarankan dilewati sampai ada pembeli yang benar-benar memerlukannya, serta
-GAP-26 (hierarki goal) yang masih menunggu keputusan.
+Yang tersisa: **GAP-32/33** (angkanya sudah dirakit dan diuji, menunggu satu
+contoh berkas resmi darimu — formatnya yang menentukan diterima atau tidak),
+**GAP-26** (hierarki goal — satu-satunya keputusan kebijakan yang belum
+ditanyakan), serta **GAP-35** (timesheet per proyek) dan **GAP-36** (API bank)
+yang disarankan dilewati sampai ada pembeli yang benar-benar memerlukannya —
+keduanya tercatat sebagai keputusan sadar, bukan kelalaian.
 
 Ditutup pada 30 September sore, semuanya dari keputusan user: GAP-09 (pencairan
 cuti sebagai setting per perusahaan), GAP-16 (rekonsiliasi PPh21 Desember), dan

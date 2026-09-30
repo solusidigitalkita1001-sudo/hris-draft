@@ -133,6 +133,7 @@ model Company {
   leaveEncashments                      LeaveEncashment[]
   employmentContracts                   EmploymentContract[]
   trainingFeedback                      TrainingFeedback[]
+  jobRequisitions                       JobRequisition[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -290,6 +291,8 @@ model Department {
   careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromDepartment")
   careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToDepartment")
 
+  jobRequisitions JobRequisition[]
+
   @@index([divisionId])
   @@index([companyId])
   @@index([parentId])
@@ -348,6 +351,8 @@ model Position {
   jobPostings            JobPosting[]
   careerTransactionsFrom EmployeeCareerTransaction[] @relation("CareerFromPosition")
   careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToPosition")
+
+  jobRequisitions JobRequisition[]
 
   @@index([departmentId])
   @@index([companyId])
@@ -1920,6 +1925,11 @@ model JobPosting {
   requirements     String?       @db.Text
   responsibilities String?       @db.Text
   vacancies        Int           @default(1)
+  /// Requisition yang menjadi dasar lowongan ini. Wajib atau tidaknya
+  /// ditentukan setting per perusahaan (GAP-22): perusahaan yang anggaran
+  /// headcount-nya terpusat mewajibkannya, yang tidak tidak perlu terhambat
+  /// birokrasi tambahan.
+  requisitionId    String?       @map("requisition_id") @db.VarChar(36)
   status           PostingStatus @default(DRAFT)
   postedAt         DateTime?     @map("posted_at")
   closedAt         DateTime?     @map("closed_at")
@@ -1927,6 +1937,7 @@ model JobPosting {
   updatedAt        DateTime      @updatedAt @map("updated_at")
   deletedAt        DateTime?     @map("deleted_at")
 
+  requisition  JobRequisition?  @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
   company      Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
   department   Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   position     Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
@@ -5868,4 +5879,53 @@ model TrainingFeedback {
 
   @@index([companyId])
   @@map("training_feedback")
+}
+
+/// Permintaan penambahan headcount sebelum lowongan dibuka (GAP-22).
+///
+/// Wajib atau tidaknya ditentukan **setting per perusahaan**: perusahaan yang
+/// anggaran headcount-nya dikendalikan terpusat menyalakannya; yang tidak, tidak
+/// perlu menambah satu langkah untuk setiap penggantian karyawan yang keluar.
+model JobRequisition {
+  id              String               @id @default(uuid()) @db.VarChar(36)
+  companyId       String               @map("company_id") @db.VarChar(36)
+  departmentId    String?              @map("department_id") @db.VarChar(36)
+  positionId      String?              @map("position_id") @db.VarChar(36)
+  code            String               @unique @db.VarChar(50)
+  title           String               @db.VarChar(255)
+  headcount       Int                  @default(1)
+  /// Alasan kebutuhan: penggantian, pertumbuhan, proyek baru.
+  reason          String               @db.Text
+  /// Anggaran per orang per bulan, kalau dikendalikan.
+  budgetPerHire   Decimal?             @map("budget_per_hire") @db.Decimal(15, 2)
+  targetStartDate DateTime?            @map("target_start_date") @db.Date
+  status          JobRequisitionStatus @default(DRAFT)
+  requestedBy     String?              @map("requested_by") @db.VarChar(36)
+  approvedBy      String?              @map("approved_by") @db.VarChar(36)
+  approvedAt      DateTime?            @map("approved_at")
+  rejectedReason  String?              @map("rejected_reason") @db.VarChar(255)
+  notes           String?              @db.Text
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  deletedAt       DateTime?            @map("deleted_at")
+
+  company    Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  department Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position   Position?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  postings   JobPosting[]
+
+  @@index([companyId])
+  @@index([status])
+  @@map("job_requisitions")
+}
+
+enum JobRequisitionStatus {
+  DRAFT
+  SUBMITTED
+  /// Disetujui; lowongan boleh dibuka atas dasar ini.
+  APPROVED
+  REJECTED
+  /// Seluruh headcount-nya sudah dipakai lowongan.
+  FULFILLED
+  CANCELLED
 }

@@ -179,15 +179,20 @@ Sudah dibangun: `salaryJustification` **wajib** saat gaji diubah, plus
 menyetujui uang melihat alasannya. Kenaikan gaji tanpa alasan tertulis adalah
 satu hal yang tidak bisa direkonstruksi setahun kemudian.
 
-## 9. GAP-22 — Man Power Planning / requisition (L)
+## 9. GAP-22 — Man Power Planning / requisition — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Yang perlu diputuskan:** apakah rekrutmen harus berangkat dari requisition
 yang disetujui (kepala departemen mengajukan kebutuhan headcount, lalu approval
 anggaran), atau job posting boleh langsung dibuat seperti sekarang?
 
-**Rekomendasi:** wajibkan requisition hanya jika anggaran headcount memang
-dikontrol terpusat. Kalau tidak, ini menambah birokrasi tanpa pengendalian yang
-nyata.
+**Keputusan user:** setting per perusahaan, default tidak wajib — yang
+menyelesaikan ketegangan di rekomendasi saya tanpa harus memilih satu sisi.
+Sudah dibangun dan diuji: `docs/job-requisition.md`.
+
+Requisition-nya ada meski gerbangnya mati, jadi bisa dipakai sebagai catatan
+niat lebih dulu. Yang perlu kamu tahu: begitu `recruitment_requisition_required`
+dinyalakan, **setiap** lowongan wajib merujuk requisition yang sudah disetujui,
+dan jumlah vacancy-nya tidak boleh melewati headcount yang disetujui.
 
 ## 10. GAP-25 — Evaluasi pasca-training — ✅ DIPUTUSKAN & SELESAI 30 Sep
 

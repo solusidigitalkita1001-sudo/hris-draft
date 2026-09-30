@@ -27,6 +27,10 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   // take-home pay in the last month of the year; switching it on is a tenant
   // decision. Only the period that actually ends in December is settled.
   pph21_december_reconciliation_enabled: 'false',
+  // Man power planning (GAP-22). Off by default: a company without a central
+  // headcount budget would otherwise gain a mandatory extra step for every
+  // replacement hire, which is bureaucracy with nothing behind it.
+  recruitment_requisition_required: 'false',
 };
 
 const WORKWEEK_DAYS_KEY = 'attendance_workweek_days';

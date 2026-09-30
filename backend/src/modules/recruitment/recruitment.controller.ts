@@ -1,7 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
+import { BadRequestError } from '@/shared/exceptions/AppError';
+import { jobRequisitionService } from './job-requisition.service';
+import type { CreateJobRequisitionDTO, RejectRequisitionDTO, RequisitionQueryDTO } from './recruitment.dto';
 import { recruitmentService } from './recruitment.service';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
+
+function activeCompanyId(req: AuthenticatedRequest): string {
+  const companyId = req.user?.companyId;
+  if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+  return companyId;
+}
 
 export class RecruitmentController {
   async findAllJobPostings(req: Request, res: Response, next: NextFunction) {
@@ -92,6 +101,53 @@ export class RecruitmentController {
   async respondOffer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try { res.json(Result.updated(await recruitmentService.respondOffer(req.params.id as string, req.body.decision, req.body.notes))); }
     catch (error) { next(error); }
+  }
+
+  // ==================== Requisition (man power planning) ====================
+  async createRequisition(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = activeCompanyId(req);
+      res.status(201).json(Result.success(
+        await jobRequisitionService.create(companyId, req.body as CreateJobRequisitionDTO),
+        'Requisition dibuat sebagai DRAFT. Ajukan untuk disetujui sebelum lowongan dibuka.',
+      ));
+    } catch (error) { next(error); }
+  }
+
+  async findAllRequisitions(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const query = req.query as unknown as RequisitionQueryDTO;
+      const companyId = activeCompanyId(req);
+      res.json(Result.success({
+        required: await jobRequisitionService.isRequired(companyId),
+        requisitions: await jobRequisitionService.list(companyId, query),
+      }));
+    } catch (error) { next(error); }
+  }
+
+  async submitRequisition(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await jobRequisitionService.submit(activeCompanyId(req), String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  async approveRequisition(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await jobRequisitionService.approve(activeCompanyId(req), String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  async rejectRequisition(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { reason } = req.body as RejectRequisitionDTO;
+      res.json(Result.success(await jobRequisitionService.reject(activeCompanyId(req), String(req.params.id), reason)));
+    } catch (error) { next(error); }
+  }
+
+  async cancelRequisition(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      res.json(Result.success(await jobRequisitionService.cancel(activeCompanyId(req), String(req.params.id))));
+    } catch (error) { next(error); }
   }
 }
 

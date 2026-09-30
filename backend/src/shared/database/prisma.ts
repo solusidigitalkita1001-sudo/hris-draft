@@ -32,6 +32,7 @@ const COMPANY_SCOPED_MODELS = new Set([
   'EmploymentContract',
   'DocumentSigner',
   'TrainingFeedback',
+  'JobRequisition',
   'CollectiveLeaveExclusion',
   'WebhookSubscription',
   'WebhookDelivery',
