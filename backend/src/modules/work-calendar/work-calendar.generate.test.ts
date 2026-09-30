@@ -28,14 +28,17 @@ import { workCalendarRepository } from './work-calendar.repository';
 
 type Day = { date: Date; dayType: string; name?: string | null; workStart?: string | null };
 
+// The keys are the three-letter ones normalizeWorkDaysConfig reads. Spelling
+// them out in full silently yields a week with no working days at all, since
+// every unrecognised key falls back to disabled.
 const MON_TO_FRI = {
-  monday: { enabled: true, workStart: '08:00', workEnd: '17:00' },
-  tuesday: { enabled: true, workStart: '08:00', workEnd: '17:00' },
-  wednesday: { enabled: true, workStart: '08:00', workEnd: '17:00' },
-  thursday: { enabled: true, workStart: '08:00', workEnd: '17:00' },
-  friday: { enabled: true, workStart: '08:00', workEnd: '17:00' },
-  saturday: { enabled: false, workStart: null, workEnd: null },
-  sunday: { enabled: false, workStart: null, workEnd: null },
+  mon: { enabled: true, workStart: '08:00', workEnd: '17:00' },
+  tue: { enabled: true, workStart: '08:00', workEnd: '17:00' },
+  wed: { enabled: true, workStart: '08:00', workEnd: '17:00' },
+  thu: { enabled: true, workStart: '08:00', workEnd: '17:00' },
+  fri: { enabled: true, workStart: '08:00', workEnd: '17:00' },
+  sat: { enabled: false, workStart: null, workEnd: null },
+  sun: { enabled: false, workStart: null, workEnd: null },
 };
 
 function key(date: Date) {
@@ -83,8 +86,28 @@ describe('generating a calendar year', () => {
   });
 
   it('still applies the weekly pattern everywhere else', () => {
+    // 17 August 2026 is a Monday, so the 18th is a Tuesday and the 16th a Sunday.
     expect(written.find((day) => key(day.date) === '2026-08-18')?.dayType).toBe('WD');
     expect(written.find((day) => key(day.date) === '2026-08-16')?.dayType).toBe('WE');
+  });
+
+  /**
+   * Counting the two kinds guards against the whole week silently collapsing to
+   * one of them - which is exactly what a mistyped day key produces, and it
+   * would otherwise leave most of these assertions still passing.
+   */
+  it('produces a plausible working year, not a week of one kind', () => {
+    const counts = written.reduce<Record<string, number>>((acc, day) => {
+      acc[day.dayType] = (acc[day.dayType] ?? 0) + 1;
+      return acc;
+    }, {});
+    // 2026 has 104 weekend days. All three holidays used here land on a weekday
+    // (17 Aug Monday, 25 Dec Friday, 23 Mar Monday), so they come out of the
+    // working-day count rather than the weekend one.
+    expect(counts.WE).toBe(104);
+    expect(counts.NH).toBe(2);
+    expect(counts.JL).toBe(1);
+    expect(counts.WD).toBe(365 - 104 - 3);
   });
 
   it('only reads the holidays of the company that owns the calendar', () => {
