@@ -528,28 +528,89 @@ export class WorkCalendarRepository {
     return prisma.$transaction(ops);
   }
 
+  /**
+   * Regenerate a calendar year from its weekly working pattern.
+   *
+   * The weekly pattern alone is not the calendar: a public holiday that falls on
+   * a Tuesday is not a working day, and payroll, attendance and leave all read
+   * this table to decide that. Generating from the pattern only, as this used to
+   * do, produced a year in which every national holiday was an ordinary working
+   * day — and because generating starts by deleting the existing rows, the
+   * holidays already recorded for that year were destroyed rather than kept.
+   *
+   * So the national holidays registered for the owning company are applied on
+   * top of the pattern.
+   *
+   * Manually entered special days (WS, OT, and the rest) are still lost, because
+   * regenerating is defined as rebuilding the year from the pattern. That is a
+   * product decision rather than a defect, but it deserves a confirmation in the
+   * UI before it is triggered.
+   */
   async generateDefaultDays(calendarId: string, year: number, workDaysConfig: Record<string, unknown>) {
     const workDays = normalizeWorkDaysConfig(workDaysConfig);
-    const days: { calendarId: string; date: Date; dayType: string; workStart?: string | null; workEnd?: string | null }[] = [];
+
+    const calendar = await prisma.workCalendar.findUnique({
+      where: { id: calendarId },
+      select: { companyId: true },
+    });
+    if (!calendar) return { count: 0 };
+
+    const holidays = await prisma.nationalHoliday.findMany({
+      where: { companyId: calendar.companyId, year },
+      select: { date: true, name: true, type: true },
+    });
+    // Keyed by calendar date, not by timestamp: the column is a DATE, and a
+    // holiday must match the generated day whatever time component it carries.
+    const holidayByDate = new Map(
+      holidays.map((holiday) => [toDateKey(holiday.date), holiday])
+    );
+
+    const days: {
+      calendarId: string;
+      date: Date;
+      dayType: string;
+      name?: string | null;
+      workStart?: string | null;
+      workEnd?: string | null;
+    }[] = [];
     const start = new Date(year, 0, 1);
     const end = new Date(year, 11, 31);
 
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const date = new Date(d);
+      const holiday = holidayByDate.get(toDateKey(date));
+      if (holiday) {
+        days.push({
+          calendarId,
+          date,
+          // 'JL' is a joint leave day (cuti bersama); both are non-working.
+          dayType: holiday.type === 'JL' ? 'JL' : 'NH',
+          name: holiday.name,
+          workStart: null,
+          workEnd: null,
+        });
+        continue;
+      }
+
       const dow = DAY_KEYS_BY_INDEX[d.getDay()];
       const rule = workDays[dow];
       const isWorkDay = rule.enabled;
       days.push({
         calendarId,
-        date: new Date(d),
+        date,
         dayType: isWorkDay ? 'WD' : 'WE',
         workStart: isWorkDay ? rule.workStart : null,
         workEnd: isWorkDay ? rule.workEnd : null,
       });
     }
 
-    // Bulk create
-    await prisma.workCalendarDay.deleteMany({ where: { calendarId } });
-    return prisma.workCalendarDay.createMany({ data: days });
+    // Replacing the year has to be all-or-nothing: a failure between the delete
+    // and the create would leave the calendar empty, and an empty calendar reads
+    // as "no working days" to attendance and leave.
+    return prisma.$transaction(async (tx) => {
+      await tx.workCalendarDay.deleteMany({ where: { calendarId } });
+      return tx.workCalendarDay.createMany({ data: days });
+    });
   }
 
   // ─── Copy Calendar ───────────────────────────────────────
