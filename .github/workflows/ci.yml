@@ -4,7 +4,8 @@ name: CI
 # Does NOT deploy — deployment stays in deploy.yml (push to main).
 # Blocking steps: filename hygiene, backend type-check + build, migration
 # apply-from-empty, frontend build. Soft steps (report only, flip to blocking
-# once the backlog is cleared): npm audit, secret scan, browser E2E.
+# once the backlog is cleared): npm audit, secret scan. Browser E2E is blocking:
+# it gets a fresh database every run, so it has no cross-run flake source.
 
 on:
   pull_request:
@@ -339,17 +340,15 @@ jobs:
             sleep 1
           done
           echo "::error::frontend dev server did not start"; cat /tmp/frontend.log; exit 1
-      # Soft for now: a browser suite that shares one seeded database across
-      # runs can fail for reasons that are not regressions (a leave request left
-      # behind by a previous run collides with the overlap rule). retries stay at
-      # 0 on purpose — this suite exists to catch flaky session behaviour, so
-      # retrying would hide the very bug it is here to find. It does run single
-      # worker (see playwright.config.ts) because all eight tests share one
-      # seeded employee's session.
-      - name: Playwright (soft)
+      # Blocking, and it can be: the leftover-data flake that makes this suite
+      # unreliable locally cannot happen here, because every run gets a fresh
+      # MySQL service and a fresh seed. retries stay at 0 on purpose — this
+      # suite exists to catch flaky session behaviour, so retrying would hide
+      # the very bug it is here to find. Single worker (see
+      # playwright.config.ts): all eight tests share one employee's session.
+      - name: Playwright (blocking)
         working-directory: frontend
         run: npm run test:e2e
-        continue-on-error: true
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
