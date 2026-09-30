@@ -11,7 +11,7 @@ ikut dikerjakan, sesuai standar yang berlaku di repo ini.
 
 ---
 
-## 1. GAP-19 & GAP-20 — Monitoring kontrak PKWT dan probasi (M)
+## 1. GAP-19 & GAP-20 — Monitoring kontrak PKWT dan probasi — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
 **Kenapa ini keputusan:** schema sama sekali tidak menyimpan tanggal akhir
 kontrak maupun probasi per karyawan. Yang ada hanya `EmploymentType.CONTRACT`,
@@ -27,9 +27,18 @@ Jadi pertanyaannya bukan "kapan mengingatkan", tapi "apa yang disimpan".
 3. Offset reminder: 30/14/7 hari sebelum berakhir? Dan penerimanya: HR saja,
    atau atasan langsung juga?
 
-**Rekomendasi:** opsi 2. PKWT punya batas hukum jumlah dan total masa
-perpanjangan; tanpa riwayat, sistem tidak bisa memperingatkan saat batas itu
-terlampaui — dan itu justru risiko kepatuhan yang paling mahal.
+**Keputusan user:** opsi 2 — tabel `EmploymentContract` dengan riwayat utuh,
+plus pengingat 30/14/7 hari ke HR dan atasan langsung. Sudah dibangun dan
+diuji — `docs/employment-contracts.md`.
+
+Dua hal dari implementasinya yang perlu kamu tahu:
+
+- **Probasi di atas 3 bulan ditolak**, bukan diperingatkan. Di atas itu klausul
+  percobaannya batal dan memberhentikan orang dengan dasar itu menjadi PHK tidak
+  sah, jadi menyimpannya diam-diam berarti menyimpan bom waktu.
+- **Batas 5 tahun PKWT diperingatkan, bukan ditolak.** Ada susunan yang sah yang
+  tidak terlihat dari sistem — jeda masa kerja yang sungguh terjadi, badan hukum
+  berbeda — jadi HR diberi tahu apa kata aturannya, lalu HR memutuskan.
 
 ## 2. GAP-08 — Cuti bersama — ✅ DIPUTUSKAN & SELESAI 30 Sep
 

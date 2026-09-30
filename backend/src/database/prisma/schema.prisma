@@ -131,6 +131,7 @@ model Company {
   ssoProviders                          SsoProvider[]
   ssoLoginAttempts                      SsoLoginAttempt[]
   leaveEncashments                      LeaveEncashment[]
+  employmentContracts                   EmploymentContract[]
   /// B.7 Face Rec audit trail
   attendanceFaceLogs                    AttendanceFaceLog[]
   employeeFaceProfiles                  EmployeeFaceProfile[]
@@ -2370,6 +2371,7 @@ model Employee {
   attendanceDevicePunches                       AttendanceDevicePunch[]
   payrollArrears                                PayrollArrears[]
   leaveEncashments                              LeaveEncashment[]
+  employmentContracts                           EmploymentContract[]
   attendanceCorrections                         AttendanceCorrection[]
   overtimeRequests                              OvertimeRequest[]
   leaveBalances                                 LeaveBalance[]
@@ -5730,4 +5732,62 @@ enum LeaveEncashmentStatus {
   PAID
   /// Dibatalkan pemohon sebelum disetujui.
   CANCELLED
+}
+
+/// Kontrak kerja per karyawan, dengan riwayat perpanjangan utuh (GAP-19/20).
+///
+/// Dipilih sebagai tabel, bukan dua kolom tanggal di data karyawan, karena PKWT
+/// punya **batas hukum** pada total masa kerja berkontrak: tanpa riwayat,
+/// sistem tidak bisa memperingatkan saat batas itu terlampaui, dan itu risiko
+/// kepatuhan yang paling mahal. Perpanjangan kedua akan menimpa yang pertama.
+model EmploymentContract {
+  id               String                   @id @default(uuid()) @db.VarChar(36)
+  companyId        String                   @map("company_id") @db.VarChar(36)
+  employeeId       String                   @map("employee_id") @db.VarChar(36)
+  /// Nomor kontrak sebagaimana tertulis di dokumennya.
+  contractNumber   String?                  @map("contract_number") @db.VarChar(100)
+  type             EmploymentContractType
+  startDate        DateTime                 @map("start_date") @db.Date
+  /// Wajib untuk PKWT dan probasi; harus kosong untuk PKWTT yang tidak berbatas
+  /// waktu.
+  endDate          DateTime?                @map("end_date") @db.Date
+  status           EmploymentContractStatus @default(ACTIVE)
+  notes            String?                  @db.Text
+  /// Kapan pengingat terakhir dikirim, supaya sweep harian tidak mengirim
+  /// pemberitahuan yang sama berulang kali.
+  lastReminderAt   DateTime?                @map("last_reminder_at")
+  /// Offset pengingat terakhir yang sudah terkirim (30, 14, atau 7 hari).
+  lastReminderDays Int?                     @map("last_reminder_days")
+  createdBy        String?                  @map("created_by") @db.VarChar(36)
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+  deletedAt        DateTime?                @map("deleted_at")
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([endDate])
+  @@index([status])
+  @@map("employment_contracts")
+}
+
+enum EmploymentContractType {
+  /// Perjanjian Kerja Waktu Tertentu — berbatas waktu, ada batas total masa.
+  PKWT
+  /// Perjanjian Kerja Waktu Tidak Tertentu — tetap, tanpa tanggal berakhir.
+  PKWTT
+  /// Masa percobaan. Hanya sah pada PKWTT dan maksimal 3 bulan.
+  PROBATION
+}
+
+enum EmploymentContractStatus {
+  ACTIVE
+  /// Berakhir sesuai tanggalnya.
+  ENDED
+  /// Diakhiri lebih awal.
+  TERMINATED
+  /// Sudah digantikan kontrak berikutnya (perpanjangan).
+  RENEWED
 }

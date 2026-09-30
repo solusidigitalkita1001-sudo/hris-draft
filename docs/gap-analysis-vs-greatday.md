@@ -318,19 +318,54 @@ Verifikasi: 13 + 6 + 1 test. Detail: `docs/pph21-december-reconciliation.md`.
 
 ---
 
-### 🟠 GAP-19 — Contract/PKWT Renewal Monitoring
+### 🟢 GAP-19 — Contract/PKWT Renewal Monitoring — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** sistem tracking tanggal berakhir kontrak PKWT karyawan, kirim reminder otomatis ke HR X hari sebelum expired (misal 30, 14, 7 hari). HR bisa mark: perpanjang, angkat tetap, atau tidak diperpanjang.
 
 **Kondisi saat ini:** field `contractEndDate` ada di `Employee`, tapi tidak ada scheduler untuk reminder maupun alur perpanjangan kontrak.
 
+**DITUTUP** dengan `EmploymentContract` — tabel, sesuai keputusanmu, bukan dua
+kolom tanggal di data karyawan.
+
+Alasannya bukan selera desain: PKWT punya **batas hukum pada total masa kerja
+berkontrak**, dan dengan dua kolom tanggal perpanjangan kedua menimpa yang
+pertama. Begitu riwayatnya hilang, sistem tidak bisa lagi tahu batas itu sudah
+terlampaui — dan melewatinya mengubah status menjadi tetap **karena hukum**,
+kegagalan kepatuhan yang tidak kelihatan sampai ada yang mempersoalkannya.
+
+Ditolak: PKWTT dengan tanggal berakhir, PKWT/probasi tanpa tanggal berakhir,
+tanggal berakhir yang tidak setelah mulai, dan kontrak aktif yang tumpang tindih
+(dua kontrak aktif berarti dua jawaban untuk "sekarang dia berstatus apa").
+
+Diperingatkan, bukan ditolak: total PKWT melewati 5 tahun (PP 35/2021), dan
+nomor perpanjangan. Diperingatkan karena ada susunan yang sah yang tidak
+terlihat dari sini — jeda masa kerja yang sungguh terjadi, badan hukum berbeda —
+jadi HR diberi tahu apa kata aturannya lalu HR yang memutuskan.
+
+Pengingat 30/14/7 hari ke atasan langsung dan role HR/admin, **satu kali per
+offset** (offset terakhir dicatat di barisnya): pengingat yang datang tiga puluh
+kali adalah kebisingan yang dilatih untuk diabaikan.
+
+Verifikasi: 26 test. Detail: `docs/employment-contracts.md`.
+
 ---
 
-### 🟠 GAP-20 — Probation Monitoring & Review
+### 🟢 GAP-20 — Probation Monitoring & Review — DITUTUP 30 Sep
 
 **Yang seharusnya ada:** karyawan baru punya masa probasi (3–6 bulan). Sistem tracking deadline probasi, kirim reminder ke atasan untuk lakukan review, atasan input keputusan (lulus/diperpanjang/tidak lulus).
 
 **Kondisi saat ini:** field `probationEndDate` ada di `Employee`, tapi tidak ada flow review probasi maupun reminder.
+
+**DITUTUP** bersama GAP-19: probasi adalah salah satu tipe pada
+`EmploymentContract`, jadi ia ikut mendapat pengingat 30/14/7 hari ke atasan
+langsung dan HR.
+
+Satu aturan ditegakkan keras: **probasi lebih dari 3 bulan ditolak** (UU 13/2003
+pasal 60). Di atas itu klausul percobaannya batal, dan memberhentikan orang
+dengan dasar percobaan setelahnya menjadi PHK yang tidak sah — menyimpannya
+diam-diam berarti menyimpan bom waktu.
+
+Detail: `docs/employment-contracts.md`.
 
 ---
 
@@ -1006,8 +1041,8 @@ planning muncul di kode hanya sebagai kata dalam pengklasifikasi teks, bukan
 fitur — dan itu memang sudah tercatat di P2 §47 bersama career path dan 9-box,
 jadi tidak dihitung sebagai gap baru.
 
-**Total setelah pemeriksaan ini: 39 gap tercatat** — **29 tertutup**, 5 sebagian,
-5 terbuka.
+**Total setelah pemeriksaan ini: 39 gap tercatat** — **31 tertutup**, 5 sebagian,
+3 terbuka.
 
 Ditutup pada 30 September sore, semuanya dari keputusan user: GAP-09 (pencairan
 cuti sebagai setting per perusahaan), GAP-16 (rekonsiliasi PPh21 Desember), dan

@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { webhookService } from '@/modules/webhook/webhook.service';
+import { CONTRACT_EXPIRY_REMINDER_JOB, runContractExpiryReminders, scheduleContractExpiryReminders } from '@/modules/employee/employment-contract.scheduler';
 import { runWebhookSweep, scheduleWebhookSweep } from '@/modules/webhook/webhook.scheduler';
 import config from '@/config';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
@@ -163,6 +164,9 @@ async function bootstrapWorker(): Promise<void> {
       if (job.name === RETENTION_SWEEP_JOB) {
         return runInSystemContext('retention-worker', () => runRetentionSweep());
       }
+      if (job.name === CONTRACT_EXPIRY_REMINDER_JOB) {
+        return runContractExpiryReminders();
+      }
       const year = job.data.year ?? new Date().getFullYear();
       return runInSystemContext('leave-automation-worker', () => runYearlyLeaveAccrual(year));
     },
@@ -182,6 +186,7 @@ async function bootstrapWorker(): Promise<void> {
   await runInSystemContext('retention-scheduler-bootstrap', () => scheduleRetentionSweep());
   await runInSystemContext('push-scheduler-bootstrap', () => schedulePushDeliverySweep());
   await runInSystemContext('webhook-scheduler-bootstrap', () => scheduleWebhookSweep());
+  await runInSystemContext('contract-reminder-bootstrap', () => scheduleContractExpiryReminders());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,

@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import { employmentContractService } from './employment-contract.service';
+import type { ContractQueryDTO, CreateContractDTO, ExpiringContractQueryDTO, UpdateContractStatusDTO } from './employment-contract.dto';
 import { employeeService } from './employee.service';
 import { Result } from '@/shared/core/Result';
 import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
@@ -468,6 +470,50 @@ export class EmployeeController {
     try {
       await employeeService.deleteAttachment(req.params.id as string, req.params.attachmentId as string);
       res.json(Result.deleted());
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Kontrak kerja (PKWT / probasi) ====================
+  async createContract(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const { contract, warnings } = await employmentContractService.create(companyId, req.body as CreateContractDTO);
+      res.status(201).json(
+        Result.success(
+          { ...contract, warnings },
+          warnings.length
+            ? 'Kontrak dibuat dengan catatan kepatuhan — periksa warnings.'
+            : 'Kontrak dibuat.',
+        ),
+      );
+    } catch (error) { next(error); }
+  }
+
+  async findAllContracts(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as ContractQueryDTO;
+      res.json(Result.success(await employmentContractService.list(companyId, query)));
+    } catch (error) { next(error); }
+  }
+
+  async findExpiringContracts(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const { days } = req.query as unknown as ExpiringContractQueryDTO;
+      res.json(Result.success(await employmentContractService.expiring(companyId, days)));
+    } catch (error) { next(error); }
+  }
+
+  async updateContractStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const { status } = req.body as UpdateContractStatusDTO;
+      res.json(Result.success(await employmentContractService.updateStatus(companyId, String(req.params.id), status)));
     } catch (error) { next(error); }
   }
 }
