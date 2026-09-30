@@ -1,12 +1,11 @@
 # Referensi API HRIS
 
-Dibuat otomatis dari router yang berjalan pada 2026-09-30 — **423 path, 575 operasi**.
+Dibuat otomatis dari router yang berjalan pada 2026-09-30 — **428 path, 581 operasi**.
 
 Dokumen ini tidak ditulis tangan. Sumbernya `GET /api/v1/meta/openapi.json`, yang dibangun dengan menyusuri stack Express: path, method, skema request (dikonversi dari skema zod yang benar-benar memvalidasi request), permission yang diminta `authorize()`, dan apakah route berada di balik autentikasi. Karena itu isinya tidak bisa menyimpang dari server — kalau sebuah endpoint berubah, dokumen ini berubah saat dibuat ulang.
 
-Cara mengambil versi terbaru sendiri (butuh akun dengan `rbac:read`):
-
 ```bash
+# ambil sendiri versi terbaru (butuh akun dengan rbac:read)
 curl -H "Authorization: Bearer $TOKEN" \
   https://<host>/api/v1/meta/openapi.json > openapi.json
 ```
@@ -14,16 +13,16 @@ curl -H "Authorization: Bearer $TOKEN" \
 ## Yang perlu dibaca lebih dulu
 
 - **Bentuk response dan kode error**: `docs/api-contract.md`. Semua sukses memakai satu envelope (`success`, `message`, `data`, `meta` untuk daftar berhalaman); semua error memakai `code` dari katalog tertutup (`VALIDATION_ERROR`, `FORBIDDEN`, `CONFLICT`, …).
-- **Autentikasi**: cookie `httpOnly` untuk web; klien mobile mengirim `X-Client-Type: mobile` saat login dan memakai `Authorization: Bearer` sesudahnya (lihat `docs/mobile-api.md`). Untuk SSO per perusahaan: `docs/sso-oidc.md`.
+- **Autentikasi**: cookie `httpOnly` untuk web; klien mobile mengirim `X-Client-Type: mobile` saat login lalu `Authorization: Bearer` (`docs/mobile-api.md`). SSO per perusahaan: `docs/sso-oidc.md`.
 - **Konteks perusahaan**: hampir semua endpoint terikat perusahaan aktif; `companyId` dari klien divalidasi terhadap hak akses pengguna, bukan dipercaya.
 - **Idempotency**: mutasi mobile menerima header `Idempotency-Key` (replay 24 jam).
 
-Dua endpoint memakai kredensial yang **bukan** sesi pengguna, dan itu disengaja:
+Tiga endpoint memakai kredensial yang **bukan** sesi pengguna, dan itu disengaja:
 
-- `POST /attendance-devices/punches` — kredensial perangkat absensi (`docs/attendance-device-integration.md`).
-- `GET /auth/sso/start` dan `/auth/sso/callback` — belum ada sesi saat dipanggil.
+- `POST /attendance-devices/punches` — kredensial mesin absensi (`docs/attendance-device-integration.md`).
+- `GET /auth/sso/start` dan `GET /auth/sso/callback` — belum ada sesi saat dipanggil (`docs/sso-oidc.md`).
 
-Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route tersebut. Kosong berarti route hanya butuh sesi yang sah (atau, untuk beberapa endpoint publik seperti login dan callback SSO, tidak butuh apa pun).
+Kolom **Permission** adalah yang diminta `authorize()` pada route tersebut. Kosong berarti route hanya butuh sesi yang sah (atau, untuk endpoint publik seperti login dan callback SSO, tidak butuh apa pun).
 
 ## `auth` — 19 operasi
 
@@ -411,11 +410,17 @@ Kolom **Permission** di bawah adalah yang diminta `authorize()` pada route terse
 | `GET /api/v1/documents/{id}/signers` | `document:read` | bearer/cookie | — |
 | `POST /api/v1/documents/{id}/signers` | `document:update` | bearer/cookie | ya |
 
-## `announcements` — 4 operasi
+## `announcements` — 10 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
 | `GET /api/v1/announcements` | — | bearer/cookie | — |
+| `GET /api/v1/announcements/manage` | `announcement:read` | bearer/cookie | — |
+| `POST /api/v1/announcements/manage` | `announcement:create` | bearer/cookie | ya |
+| `PUT /api/v1/announcements/manage/{id}` | `announcement:update` | bearer/cookie | ya |
+| `PATCH /api/v1/announcements/manage/{id}/archive` | `announcement:update` | bearer/cookie | — |
+| `PATCH /api/v1/announcements/manage/{id}/publish` | `announcement:approve` | bearer/cookie | — |
+| `GET /api/v1/announcements/manage/{id}/readers` | `announcement:read` | bearer/cookie | — |
 | `GET /api/v1/announcements/unread-count` | — | bearer/cookie | — |
 | `GET /api/v1/announcements/{id}` | — | bearer/cookie | — |
 | `PUT /api/v1/announcements/{id}/read` | — | bearer/cookie | — |
