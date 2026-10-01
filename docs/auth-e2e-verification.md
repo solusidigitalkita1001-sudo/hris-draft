@@ -76,3 +76,15 @@ dikerjakan.
 Akun demo dikembalikan ke `ACTIVE` setelah pengujian dan login diverifikasi
 kembali normal. `session_version` tetap naik satu — itu memang efek yang tidak
 bisa dibatalkan dan tidak berbahaya.
+
+## Catatan kemudian (30 September 2026)
+
+Dua hal yang di atas disebut "belum diputuskan" sudah dikerjakan sejak dokumen
+ini ditulis: `@playwright/test` ada di frontend, dan `.github/workflows/ci.yml`
+menjalankan job **Browser E2E (Playwright)** pada setiap push dan pull request.
+Jadi batasan "tidak ada yang mencegahnya rusak diam-diam nanti" sudah tidak
+berlaku untuk alur yang sudah punya spec.
+
+Yang tetap berlaku adalah sifat dokumen ini: ia catatan verifikasi manual satu
+waktu, bukan sumber kebenaran. Saat membacanya nanti, bandingkan dengan spec di
+`frontend/e2e/` — di sanalah perilaku sesi sekarang dijaga.
