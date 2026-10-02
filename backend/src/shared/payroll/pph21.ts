@@ -106,3 +106,46 @@ export function calculatePph21(input: Pph21Input, config: Partial<Pph21Config> =
   annualTax = Math.round(annualTax);
   return { ptkp, annualNet, pkp, annualTax, monthlyTax: Math.round(annualTax / 12) };
 }
+
+export interface Pph21GrossUp {
+  /** Tax allowance to pay, equal to the tax it causes. */
+  allowance: number;
+  /** The tax computation at the fixed point, for the payslip breakdown. */
+  result: Pph21Result;
+  /** False when the iteration ran out of passes before settling. */
+  converged: boolean;
+}
+
+/**
+ * Gross-up (GAP-17): the company bears the employee's PPh 21 by paying a tax
+ * allowance that is itself taxable income. The allowance A must therefore
+ * satisfy its own consequence:
+ *
+ *     A = tax(gross + A)
+ *
+ * Across the progressive brackets that has no closed form, so it is solved by
+ * fixed-point iteration from A = 0. The map is a contraction — one extra
+ * rupiah of allowance raises the annual tax by at most the top marginal rate
+ * net of biaya jabatan (0.35 x 0.95 < 1), so every pass cuts the gap by two
+ * thirds or better and a handful of passes land inside one rupiah.
+ *
+ * `allowance` is read back from the final tax figure rather than from the
+ * value fed into it, so the allowance and the PPh 21 deduction on the payslip
+ * are the same number to the rupiah. That is the whole point of gross-up: the
+ * employee's take-home must not move when the tax does.
+ */
+export function grossUpTaxAllowance(
+  input: Pph21Input,
+  config: Partial<Pph21Config> = {},
+  maxPasses = 24,
+): Pph21GrossUp {
+  let allowance = 0;
+  let result = calculatePph21(input, config);
+  let passes = 0;
+  while (passes < maxPasses && Math.abs(result.monthlyTax - allowance) >= 1) {
+    allowance = result.monthlyTax;
+    result = calculatePph21({ ...input, monthlyGross: input.monthlyGross + allowance }, config);
+    passes += 1;
+  }
+  return { allowance: result.monthlyTax, result, converged: Math.abs(result.monthlyTax - allowance) < 1 };
+}
