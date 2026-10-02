@@ -57,8 +57,11 @@ describe('gross-up inside the payroll calculation', () => {
     const row = grossed.components.find(component => component.salaryComponentId === 'allowance');
     const withheld = grossed.components.find(component => component.name === 'Tax');
     expect(row).toMatchObject({ type: 'ALLOWANCE', isTaxable: true });
-    expect(row!.amount).toBe(withheld!.amount);
-    expect(grossed.taxAllowance).toBe(row!.amount);
+    // Pinned to a positive figure first, so a missing row cannot satisfy these
+    // by comparing undefined to undefined.
+    expect(grossed.taxAllowance).toBeGreaterThan(0);
+    expect(row?.amount).toBe(grossed.taxAllowance);
+    expect(withheld?.amount).toBe(grossed.taxAllowance);
   });
 
   it('does not hand out an allowance when the allocation has no PPh21 to deduct', () => {
