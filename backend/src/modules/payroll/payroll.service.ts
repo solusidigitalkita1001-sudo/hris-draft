@@ -638,6 +638,16 @@ export class PayrollService {
     const benefitDeductionEnabled = benefitSetting?.value === 'true';
     // Unpaid-leave deduction (org decision, dynamic per company): approved
     // leave on an unpaid leave type deducts a daily wage when enabled.
+    // Gross-up (GAP-17): the company pays its employees' PPh21 as a taxable
+    // tax allowance, so take-home pay no longer moves with the tax. Opt-in per
+    // company — it raises employer cost and rewrites every payslip.
+    const grossUpSetting = await database.companySetting.findUnique({
+      where: { companyId_key: { companyId: run.companyId, key: 'pph21_gross_up_enabled' } },
+      select: { value: true },
+    });
+    const taxAllowanceComponent = grossUpSetting?.value === 'true'
+      ? await this.ensureTaxAllowanceComponent(run.companyId, database)
+      : null;
     const unpaidLeaveSetting = await database.companySetting.findUnique({
       where: { companyId_key: { companyId: run.companyId, key: 'unpaid_leave_deduction_enabled' } },
       select: { value: true },
@@ -694,6 +704,7 @@ export class PayrollService {
           bpjs: payrollPolicy.bpjs,
           lateConfig: lateCfg,
           workweekDays,
+          grossUp: taxAllowanceComponent !== null,
         })),
       },
     });
@@ -932,7 +943,12 @@ export class PayrollService {
         BASE_SALARY: salary.baseSalary.toString(), WORK_DAYS: String(workDaysInPeriod),
         PRESENT_DAYS: String(attd.present), LEAVE_DAYS: String(leaveDaysForEmployee),
         ABSENT_DAYS: String(absentDays), OVERTIME_HOURS: String(overtimeHoursForEmployee),
-      }, formulaVersions, payrollPolicy);
+      }, formulaVersions, {
+        ...payrollPolicy,
+        taxAllowance: taxAllowanceComponent
+          ? { salaryComponentId: taxAllowanceComponent.id, name: taxAllowanceComponent.name }
+          : null,
+      });
 
       let earningsTotal = pay.earningsTotal;
       let deductionsTotal = pay.deductionsTotal;
@@ -1265,6 +1281,26 @@ export class PayrollService {
       isProrated: false,
       description: 'System generated: daily-wage deduction for approved leave whose leave type is unpaid (enabled per company via unpaid_leave_deduction_enabled).',
       sortOrder: 993,
+    }, database);
+  }
+
+  private async ensureTaxAllowanceComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'TAX_ALLOWANCE_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Tunjangan Pajak (Gross-Up)',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      // Taxable on purpose: the allowance is ordinary income, which is why its
+      // own amount has to be solved for rather than copied from the tax.
+      isTaxable: true,
+      isProrated: false,
+      description: 'System generated: taxable tax allowance equal to the PPh21 it causes, so the employer bears the tax (enabled per company via pph21_gross_up_enabled).',
+      sortOrder: 992,
     }, database);
   }
 
