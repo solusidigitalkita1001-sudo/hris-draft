@@ -7,6 +7,7 @@ import { CreateCompanyDTO, UpdateCompanyDTO, CreateBranchDTO } from '../organiza
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { branchService } from './branch.service';
+import { bootstrapCompany } from './company-bootstrap.service';
 
 const logger = new WinstonLogger('CompanyService');
 
@@ -49,6 +50,12 @@ export class CompanyService {
     };
     await branchService.create(defaultBranchDto);
 
+    // A company with no leave types and no salary components cannot be used:
+    // nobody can request leave and payroll cannot be calculated at all. Seed
+    // the structure it cannot work without, so onboarding a customer does not
+    // mean finishing the tenant by hand in the database.
+    await bootstrapCompany(company.id);
+
     await eventBus.publish({
       name: DomainEvents.COMPANY_CREATED,
       aggregateId: company.id,
@@ -57,7 +64,7 @@ export class CompanyService {
       metadata: { eventId: uuidv4(), occurredAt: new Date() },
     });
 
-    logger.info(`Company created: ${company.name} under group ${dto.groupId} with default HQ branch + attendance policy`);
+    logger.info(`Company created: ${company.name} under group ${dto.groupId} with default HQ branch, attendance policy and starter leave/payroll catalogue`);
     return company;
   }
 
