@@ -1223,7 +1223,7 @@ export async function seedTestData(): Promise<void> {
   const createdLeaveTypes: any[] = [];
   for (const lt of leaveTypes) {
     const created = await prisma.leaveType.upsert({
-      where: { code: lt.code },
+      where: { companyId_code: { companyId: company.id, code: lt.code } },
       update: {}, create: { ...lt, companyId: company.id, sortOrder: leaveTypes.indexOf(lt) },
     });
     createdLeaveTypes.push(created);
@@ -1342,14 +1342,17 @@ export async function seedTestData(): Promise<void> {
 
   for (const bp of benefitPlans) {
     await prisma.benefitPlan.upsert({
-      where: { code: bp.code }, update: {}, create: { ...bp, companyId: company.id, isActive: true },
+      where: { companyId_code: { companyId: company.id, code: bp.code } },
+      update: {}, create: { ...bp, companyId: company.id, isActive: true },
     });
   }
   console.log(`  ✓ ${benefitPlans.length} benefit plans created`);
 
-  const bpjsKes = await prisma.benefitPlan.findUnique({ where: { code: 'BPJS-KES' } });
-  const bpjsTk = await prisma.benefitPlan.findUnique({ where: { code: 'BPJS-TK' } });
-  const privateInsurance = await prisma.benefitPlan.findUnique({ where: { code: 'PRIV-INS' } });
+  const planByCode = (code: string) =>
+    prisma.benefitPlan.findUnique({ where: { companyId_code: { companyId: company.id, code } } });
+  const bpjsKes = await planByCode('BPJS-KES');
+  const bpjsTk = await planByCode('BPJS-TK');
+  const privateInsurance = await planByCode('PRIV-INS');
 
   // Benefit enrollments
   if (bpjsKes && bpjsTk && privateInsurance) {
