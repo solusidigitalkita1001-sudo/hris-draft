@@ -867,7 +867,7 @@ model BenefitPlan {
   id                   String    @id @default(uuid()) @db.VarChar(36)
   companyId            String    @map("company_id") @db.VarChar(36)
   name                 String    @db.VarChar(255)
-  code                 String    @unique @db.VarChar(50)
+  code                 String     @db.VarChar(50)
   type                 String    @db.VarChar(50)
   description          String?   @db.Text
   provider             String?   @db.VarChar(255)
@@ -885,6 +885,7 @@ model BenefitPlan {
   company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
   enrollments BenefitEnrollment[]
 
+  @@unique([companyId, code])
   @@index([companyId])
   @@index([code])
   @@map("benefit_plans")
@@ -3430,7 +3431,7 @@ model LeaveType {
   id                 String    @id @default(uuid()) @db.VarChar(36)
   companyId          String    @map("company_id") @db.VarChar(36)
   name               String    @db.VarChar(255)
-  code               String    @unique @db.VarChar(50)
+  code               String     @db.VarChar(50)
   description        String?   @db.Text
   isPaid             Boolean   @default(true) @map("is_paid")
   isAnnual           Boolean   @default(false) @map("is_annual")
@@ -3449,6 +3450,7 @@ model LeaveType {
   collectiveUnpaidLeaves CollectiveLeave[] @relation("CollectiveLeaveUnpaidType")
   encashments            LeaveEncashment[]
 
+  @@unique([companyId, code])
   @@index([companyId])
   @@index([code])
   @@map("leave_types")

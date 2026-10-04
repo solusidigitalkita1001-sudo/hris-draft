@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { companyService } from '../services/company.service';
+import { bootstrapCompany } from '../services/company-bootstrap.service';
 import { branchRepository } from '../repositories/branch.repository';
 import { Result } from '@/shared/core/Result';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
@@ -43,6 +44,20 @@ export class CompanyController {
     try {
       const company = await companyService.create(req.body);
       res.status(201).json(Result.created(company, 'Company created successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Fills in the starter leave and payroll catalogue for a company that
+   * predates the bootstrap, or whose setup was interrupted. Idempotent, and it
+   * never overwrites what the tenant has already configured.
+   */
+  async bootstrap(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const summary = await bootstrapCompany(req.params.id as string);
+      res.status(200).json(Result.success(summary, 'Company starter catalogue is in place'));
     } catch (error) {
       next(error);
     }
