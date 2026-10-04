@@ -105,7 +105,7 @@ app.use(
     origin: config.cors.origins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Idempotency-Key', 'X-Payroll-Unlock-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Idempotency-Key', 'X-Payroll-Unlock-Token', 'X-Payslip-Unlock'],
     exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-Office-Timezone', 'X-Server-Date', 'Idempotency-Replayed'],
     maxAge: 86400, // 24 hours
   })
