@@ -1,9 +1,9 @@
 import { Prisma, SalaryType } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { NotFoundError } from '@/shared/exceptions/AppError';
+import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 
 const logger = new WinstonLogger('CompanyBootstrap');
-import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 
 /**
  * A newly created company used to be born unusable: it had a head-office
