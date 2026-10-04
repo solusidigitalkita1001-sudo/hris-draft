@@ -1,7 +1,7 @@
 import { Prisma, SalaryType } from '@prisma/client';
 import { BadRequestError } from '@/shared/exceptions/AppError';
 import { calculateBpjs, BpjsConfig } from './bpjs';
-import { calculatePph21, Pph21Config } from './pph21';
+import { calculatePph21, grossUpTaxAllowance, Pph21Config } from './pph21';
 import { FormulaInputs, FormulaVersionInput, resolvePayrollComponents } from './formula';
 
 export interface PayComponent { salaryComponentId: string; name: string; type: SalaryType; amount: number; isTaxable: boolean }
@@ -15,7 +15,14 @@ export interface SalaryForCalculation {
 export function calculateEmployeePay(salary: SalaryForCalculation, extraComponents: PayComponent[],
   taxContext: { married: boolean; dependents: number; hasNpwp: boolean }, inputs: FormulaInputs,
   versions: Map<string, FormulaVersionInput>,
-  policy: { pph21?: Partial<Pph21Config>; bpjs?: Partial<BpjsConfig> } = {}) {
+  policy: {
+    pph21?: Partial<Pph21Config>; bpjs?: Partial<BpjsConfig>;
+    /**
+     * Present only when the company pays its employees' PPh 21 (gross-up,
+     * GAP-17). The component it names carries the tax allowance on the payslip.
+     */
+    taxAllowance?: { salaryComponentId: string; name: string } | null;
+  } = {}) {
   const active = salary.components.filter(allocation => allocation.isActive);
   if (active.some(allocation => !allocation.salaryComponent.isActive || allocation.salaryComponent.deletedAt)) {
     throw new BadRequestError('An allocated salary component is inactive or deleted; review the salary allocation');
@@ -37,17 +44,36 @@ export function calculateEmployeePay(salary: SalaryForCalculation, extraComponen
   const taxableGross = resolved.filter(row => row.entry.type === 'ALLOWANCE' && row.entry.isTaxable)
     .reduce((sum, row) => sum.plus(row.entry.amount), new Prisma.Decimal(0)).toNumber();
   const bpjs = calculateBpjs(wage, policy.bpjs ?? {});
-  const pph = calculatePph21(
-    { monthlyGross: taxableGross, ...taxContext, monthlyPensionContribution: bpjs.employee.jht + bpjs.employee.jp },
-    policy.pph21 ?? {},
-  );
+  const taxInput = {
+    monthlyGross: taxableGross, ...taxContext,
+    monthlyPensionContribution: bpjs.employee.jht + bpjs.employee.jp,
+  };
+  // Gross-up needs somewhere to deduct the tax it pays for. An allocation
+  // without a PPH21 row has no tax deducted at all, so adding the allowance
+  // alone would simply raise take-home pay — not gross-up, a pay rise.
+  const grossUp = policy.taxAllowance && resolved.some(row => row.code === 'PPH21')
+    ? grossUpTaxAllowance(taxInput, policy.pph21 ?? {})
+    : null;
+  const pph = grossUp ? grossUp.result : calculatePph21(taxInput, policy.pph21 ?? {});
   for (const row of resolved) {
     if (row.code === 'BPJS-TK') row.entry.amount = bpjs.employee.jht + bpjs.employee.jp;
     else if (row.code === 'BPJS-KES') row.entry.amount = bpjs.employee.jkn;
     else if (row.code === 'PPH21') row.entry.amount = pph.monthlyTax;
   }
   const components: PayComponent[] = [...resolved.map(row => row.entry), ...extraComponents];
+  if (grossUp && policy.taxAllowance && grossUp.allowance > 0) {
+    components.push({
+      salaryComponentId: policy.taxAllowance.salaryComponentId,
+      name: policy.taxAllowance.name,
+      type: 'ALLOWANCE',
+      amount: grossUp.allowance,
+      // The allowance is ordinary taxable income — that is why solving for it
+      // takes an iteration instead of one subtraction.
+      isTaxable: true,
+    });
+  }
   const total = (type: SalaryType) => components.filter(component => component.type === type)
     .reduce((sum, component) => sum.plus(component.amount), new Prisma.Decimal(0)).toDecimalPlaces(2).toNumber();
-  return { earningsTotal: total('ALLOWANCE'), deductionsTotal: total('DEDUCTION'), components, formulaCalculations: result.calculations };
+  return { earningsTotal: total('ALLOWANCE'), deductionsTotal: total('DEDUCTION'), components,
+    formulaCalculations: result.calculations, taxAllowance: grossUp?.allowance ?? 0 };
 }

@@ -27,6 +27,10 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   // take-home pay in the last month of the year; switching it on is a tenant
   // decision. Only the period that actually ends in December is settled.
   pph21_december_reconciliation_enabled: 'false',
+  // Gross-up PPh21 (GAP-17). Off by default: switching it on makes the
+  // company bear its employees' income tax, which raises employer cost and
+  // changes every payslip — a tenant decision, never a deploy's side effect.
+  pph21_gross_up_enabled: 'false',
   // Man power planning (GAP-22). Off by default: a company without a central
   // headcount budget would otherwise gain a mandatory extra step for every
   // replacement hire, which is bureaucracy with nothing behind it.
@@ -80,6 +84,7 @@ const BOOLEAN_SETTINGS = new Set([
   'leave_encashment_enabled',
   'leave_encashment_include_allowances',
   'recruitment_requisition_required',
+  'pph21_gross_up_enabled',
 ]);
 
 const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boolean }> = {
