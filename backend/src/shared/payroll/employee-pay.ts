@@ -41,8 +41,17 @@ export function calculateEmployeePay(salary: SalaryForCalculation, extraComponen
     isTaxable: allocation.salaryComponent.isTaxable,
   } }));
   const wage = Number(salary.baseSalary);
-  const taxableGross = resolved.filter(row => row.entry.type === 'ALLOWANCE' && row.entry.isTaxable)
-    .reduce((sum, row) => sum.plus(row.entry.amount), new Prisma.Decimal(0)).toNumber();
+  // Overtime, rapel and leave encashment arrive as extraComponents and are
+  // marked isTaxable: true by the payroll run, with comments saying exactly
+  // why. They were nonetheless left out of the tax base, which was computed
+  // from the salary allocation alone — so that flag was written and never
+  // read, and PPh 21 came out short for everyone who worked an hour of
+  // overtime. The December reconciliation then recomputes the year from the
+  // payslip components, which DO include them, so the shortfall was not even
+  // lost: it accumulated and landed on the employee in one December bill.
+  const taxableGross = [...resolved.map(row => row.entry), ...extraComponents]
+    .filter(component => component.type === 'ALLOWANCE' && component.isTaxable)
+    .reduce((sum, component) => sum.plus(component.amount), new Prisma.Decimal(0)).toNumber();
   const bpjs = calculateBpjs(wage, policy.bpjs ?? {});
   const taxInput = {
     monthlyGross: taxableGross, ...taxContext,
