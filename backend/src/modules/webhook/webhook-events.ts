@@ -17,20 +17,45 @@ import { DomainEvents } from '@/shared/events/events';
  * data, which is what the fan-out uses to find the right tenant.
  */
 export const WEBHOOK_EVENTS: string[] = [
+  DomainEvents.PAYROLL_RUN_CREATED,
+  DomainEvents.PAYROLL_RUN_APPROVED,
+  DomainEvents.BENEFIT_ENROLLMENT_CREATED,
+  DomainEvents.BRANCH_CREATED,
+  DomainEvents.DEPARTMENT_CREATED,
+  DomainEvents.POSITION_CREATED,
+];
+
+/**
+ * Events an integrator will reasonably expect and which this catalogue does
+ * NOT yet carry, with why each is more than a one-line addition. They are
+ * listed here rather than in the catalogue because advertising a name that
+ * never fires is worse than not advertising it: a subscriber builds against
+ * it, receives silence, and has no way to tell that from "nothing happened".
+ *
+ * - employee.created / .updated / .terminated / .resigned — `employee.service`
+ *   publishes nothing at all today; it has no event bus wired in. The hooks
+ *   belong on create, update and the status transition, each needing a payload
+ *   that carries `companyId` for the tenant fan-out.
+ * - payroll.run.disbursed — settlement writes the status inside a transaction
+ *   (`payroll-payment-settlement.ts`). Publishing from there would emit for a
+ *   payment that then rolls back, so this one waits on the transactional
+ *   outbox already on the backlog rather than being bolted on.
+ * - application.submitted / .status_changed / interview.scheduled /
+ *   review.approved / enrollment.completed — recruitment, performance and
+ *   training have no publish points yet.
+ *
+ * `webhook-catalogue.test.ts` fails if an entry above is moved into the
+ * catalogue without a publisher, so the two cannot drift apart again.
+ */
+export const WEBHOOK_EVENTS_PENDING_PUBLISHERS: string[] = [
   DomainEvents.EMPLOYEE_CREATED,
   DomainEvents.EMPLOYEE_UPDATED,
   DomainEvents.EMPLOYEE_TERMINATED,
   DomainEvents.EMPLOYEE_RESIGNED,
-  DomainEvents.PAYROLL_RUN_CREATED,
-  DomainEvents.PAYROLL_RUN_APPROVED,
   DomainEvents.PAYROLL_RUN_DISBURSED,
-  DomainEvents.BENEFIT_ENROLLMENT_CREATED,
   DomainEvents.ENROLLMENT_COMPLETED,
   DomainEvents.APPLICATION_SUBMITTED,
   DomainEvents.APPLICATION_STATUS_CHANGED,
   DomainEvents.INTERVIEW_SCHEDULED,
   DomainEvents.REVIEW_APPROVED,
-  DomainEvents.BRANCH_CREATED,
-  DomainEvents.DEPARTMENT_CREATED,
-  DomainEvents.POSITION_CREATED,
 ];
