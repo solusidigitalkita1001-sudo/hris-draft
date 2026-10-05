@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { errorDetail } from '@/shared/logger/error-detail';
 import { webhookService } from '@/modules/webhook/webhook.service';
+import { AUTO_ABSENT_JOB, runAutoAbsent, scheduleAutoAbsent } from '@/modules/attendance/auto-absent.scheduler';
 import { CONTRACT_EXPIRY_REMINDER_JOB, runContractExpiryReminders, scheduleContractExpiryReminders } from '@/modules/employee/employment-contract.scheduler';
 import { runWebhookSweep, scheduleWebhookSweep } from '@/modules/webhook/webhook.scheduler';
 import config from '@/config';
@@ -183,6 +184,9 @@ async function bootstrapWorker(): Promise<void> {
       if (job.name === RETENTION_SWEEP_JOB) {
         return runInSystemContext('retention-worker', () => runRetentionSweep());
       }
+      if (job.name === AUTO_ABSENT_JOB) {
+        return runAutoAbsent();
+      }
       if (job.name === CONTRACT_EXPIRY_REMINDER_JOB) {
         return runContractExpiryReminders();
       }
@@ -206,6 +210,7 @@ async function bootstrapWorker(): Promise<void> {
   await runInSystemContext('push-scheduler-bootstrap', () => schedulePushDeliverySweep());
   await runInSystemContext('webhook-scheduler-bootstrap', () => scheduleWebhookSweep());
   await runInSystemContext('contract-reminder-bootstrap', () => scheduleContractExpiryReminders());
+  await runInSystemContext('auto-absent-bootstrap', () => scheduleAutoAbsent());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,
