@@ -279,6 +279,14 @@ router.get(
   payrollController.findPayrollRunById.bind(payrollController)
 );
 
+router.get(
+  '/runs/:id/journal',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(payrollRunIdParamSchema, 'params'),
+  auditView({ action: 'VIEW_PAYROLL_JOURNAL', entity: 'PayrollRun' }),
+  payrollController.payrollRunJournal.bind(payrollController)
+);
+
 router.post(
   '/runs',
   authorize({ resource: 'payroll', action: 'process' }),

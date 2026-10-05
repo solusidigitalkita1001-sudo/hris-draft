@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { payrollService } from './payroll.service';
+import { journalToCsv } from '@/shared/payroll/journal';
 import { Result } from '@/shared/core/Result';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
@@ -261,6 +262,22 @@ export class PayrollController {
     try {
       const id = req.params.id as string;
       const data = await payrollService.findPayrollRunById(id);
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Jurnal akuntansi per cost centre; `?format=csv` untuk diimpor. */
+  async payrollRunJournal(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await payrollService.runJournal(req.params.id as string);
+      if (req.query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="journal-${data.runId}.csv"`);
+        res.send(journalToCsv(data.lines));
+        return;
+      }
       res.json(Result.success(data));
     } catch (error) {
       next(error);
