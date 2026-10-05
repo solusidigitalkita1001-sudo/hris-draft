@@ -4,9 +4,33 @@ import { ForbiddenError, BadRequestError } from '@/shared/exceptions/AppError';
 import type { CompanySetting, Prisma } from '@prisma/client';
 import type { BulkUpsertSettingsDTO } from './company-settings.dto';
 
+/**
+ * Setiap kunci di sini adalah janji: menampilkannya berarti menyatakan sistem
+ * akan bertindak sesuai nilainya. `company-settings.unread.test.ts` menolak
+ * kunci yang tidak dibaca siapa pun, karena setting yang tidak dibaca lebih
+ * buruk daripada setting yang tidak ada — yang menyetelnya menyimpulkan
+ * kemampuan yang tidak dimiliki sistem.
+ *
+ * Dua kunci dihapus dari daftar ini karena justru begitu:
+ *
+ * - `currency_code: 'IDR'` tidak pernah dibaca, dan bahkan tidak divalidasi,
+ *   sementara mesin payroll menolak alokasi non-IDR secara keras
+ *   (`employee-pay.ts`). Menyetelnya ke 'USD' tidak mengubah apa pun, tetapi
+ *   membuat implementer menyimpulkan ada dukungan multi-mata-uang. Keputusan
+ *   mono-mata-uang itu sendiri sudah dicatat sebagai GAP-34.
+ *
+ * - `fiscal_year_start_month` divalidasi 1-12 dan tidak pernah dibaca. Rekap
+ *   pajak tahunan menanam Januari secara literal (`Date.UTC(year, 0, 1)`) dan
+ *   tahun akrual cuti memakai `getUTCFullYear()`. Lebih dari itu: PPh 21
+ *   adalah pajak tahun kalender, jadi tahun fiskal Juli TIDAK BISA menggeser
+ *   tahun pajaknya — setting ini paling jauh hanya bisa memengaruhi periode
+ *   pelaporan, bukan perhitungan. Menampilkannya menjanjikan lebih dari itu.
+ *
+ * Keduanya tetap bisa disimpan: store ini sengaja terbuka terhadap kunci yang
+ * belum pernah didengarnya. Yang berhenti adalah mengiklankannya sebagai
+ * sesuatu yang sistem ini hormati.
+ */
 export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
-  fiscal_year_start_month: '1',
-  currency_code: 'IDR',
   late_deduction_enabled: 'true',
   late_deduction_default_rate_per_minute: '500',
   late_deduction_daily_cap_percent: '10',
@@ -105,7 +129,6 @@ const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boo
   attendance_default_working_days_per_month: { min: 1, max: 31, integer: true },
   leave_carryover_max_days: { min: 0, max: 365, integer: true },
   leave_carryover_expiry_month: { min: 0, max: 12, integer: true },
-  fiscal_year_start_month: { min: 1, max: 12, integer: true },
 };
 
 export function validateSettingValue(key: string, value: string): void {

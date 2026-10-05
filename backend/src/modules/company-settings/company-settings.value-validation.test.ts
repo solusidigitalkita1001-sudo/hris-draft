@@ -69,7 +69,9 @@ describe('numeric settings', () => {
     ['late_deduction_daily_cap_percent', '101'],
     ['absence_deduction_daily_basic_percent', '-5'],
     ['attendance_default_working_days_per_month', '0'],
-    ['fiscal_year_start_month', '13'],
+    // was fiscal_year_start_month '13'; that key is retired because nothing
+    // read it. leave_carryover_expiry_month is the same integer-range shape.
+    ['leave_carryover_expiry_month', '13'],
   ])('refuses %s = %p', (key, value) => {
     expect(() => validateSettingValue(key, value)).toThrow(/must be/);
   });
