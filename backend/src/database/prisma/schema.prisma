@@ -482,6 +482,7 @@ model PayrollRun {
   totalDeductions     Decimal                     @default(0) @map("total_deductions") @db.Decimal(15, 2)
   totalNetPay         Decimal                     @default(0) @map("total_net_pay") @db.Decimal(15, 2)
   status              PayrollRunStatus            @default(DRAFT)
+  runType             PayrollRunType              @default(REGULAR) @map("run_type")
   createdBy           String?                     @map("created_by") @db.VarChar(36)
   approvedBy          String?                     @map("approved_by") @db.VarChar(36)
   approvedAt          DateTime?                   @map("approved_at")
@@ -507,6 +508,7 @@ model PayrollRun {
   @@index([periodId])
   @@index([companyId])
   @@index([status])
+  @@index([companyId, periodId, runType])
   @@map("payroll_runs")
 }
 
@@ -3652,6 +3654,18 @@ enum PayrollRunStatus {
   DISBURSED
   VOIDED
 }
+
+/// Jenis run. Satu periode boleh punya satu run per jenis — gaji bulanan dan
+/// THR hidup bersama, dan koreksi tidak menuntut run lama dibuka ulang.
+/// Hanya REGULAR yang bergantung pada rekap absensi; THR, pesangon dan
+/// koreksi tidak, sehingga gate `attendanceReviewedAt` hanya berlaku di sana.
+enum PayrollRunType {
+  REGULAR
+  THR
+  SEVERANCE
+  CORRECTION
+}
+
 
 /// Payslip status
 enum PayslipStatus {

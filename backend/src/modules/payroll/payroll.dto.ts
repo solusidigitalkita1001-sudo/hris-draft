@@ -77,6 +77,11 @@ export const createPayrollRunSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
   notes: z.string().optional(),
+  /**
+   * Jenis run. Default REGULAR supaya klien yang sudah ada tidak berubah
+   * perilakunya; satu periode boleh punya satu run per jenis.
+   */
+  runType: z.enum(['REGULAR', 'THR', 'SEVERANCE', 'CORRECTION']).optional(),
 });
 
 export const approvePayrollRunSchema = z.object({
