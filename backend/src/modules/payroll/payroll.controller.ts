@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { payrollService } from './payroll.service';
+import { importSalaryMaster } from './salary-import.service';
 import { Result } from '@/shared/core/Result';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
@@ -262,6 +263,34 @@ export class PayrollController {
       const id = req.params.id as string;
       const data = await payrollService.findPayrollRunById(id);
       res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Impor master gaji (GAP-44). `?dryRun=true` memeriksa seluruh berkas dan
+   * melaporkan semua masalahnya tanpa menulis apa pun — itu yang dipakai
+   * implementer sebelum menekan impor sungguhan.
+   */
+  async importSalaryMaster(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      if (!req.file) throw new BadRequestError('Berkas CSV wajib diunggah pada field "file"');
+      const result = await importSalaryMaster(companyId, req.file, { dryRun: req.query.dryRun === 'true' });
+      // The import ran and reported; it simply wrote nothing. Result.error
+      // carries no payload, and the per-row errors ARE the value here — so
+      // this stays a success envelope with the findings in `data.errors`,
+      // matching the employee importer rather than inventing a second shape.
+      res.json(Result.success(
+        result,
+        result.errors.length
+          ? 'Impor dibatalkan; tidak ada baris yang ditulis — periksa errors'
+          : result.dryRun
+            ? 'Berkas valid; belum ada yang ditulis'
+            : 'Master gaji diimpor',
+      ));
     } catch (error) {
       next(error);
     }

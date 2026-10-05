@@ -1,3 +1,4 @@
+import multer from 'multer';
 import { Router } from 'express';
 import payrollPaymentRoutes from './payroll-payment.routes';
 import payrollFormulaRoutes from './payroll-formula.routes';
@@ -25,6 +26,9 @@ import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
 import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
+
+// Memory storage: the importer parses the buffer and never needs a path.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -277,6 +281,14 @@ router.get(
   authorize({ resource: 'payroll', action: 'read' }),
   validate(payrollRunIdParamSchema, 'params'),
   payrollController.findPayrollRunById.bind(payrollController)
+);
+
+router.post(
+  '/salaries/import',
+  authorize({ resource: 'payroll', action: 'process' }),
+  auditLog({ action: 'IMPORT_SALARY_MASTER', entity: 'EmployeeSalary' }),
+  upload.single('file'),
+  payrollController.importSalaryMaster.bind(payrollController)
 );
 
 router.post(
