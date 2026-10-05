@@ -118,7 +118,10 @@ describe('monthly BPJS contribution report', () => {
 
   it('reads approved runs of that period only', async () => {
     await service.build(COMPANY, PERIOD);
-    expect(state.queries[0]).toMatchObject({ payrollRun: { periodId: PERIOD, status: 'APPROVED' } });
+    // Paid runs are DISBURSED; filtering APPROVED alone reported an empty month.
+    expect(state.queries[0]).toMatchObject({
+      payrollRun: { periodId: PERIOD, status: { in: ['APPROVED', 'DISBURSED'] } },
+    });
   });
 
   /**

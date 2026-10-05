@@ -64,7 +64,7 @@ export class BpjsReportService {
     const payslips = await prisma.payslip.findMany({
       where: {
         companyId,
-        payrollRun: { periodId: period.id, status: 'APPROVED' },
+        payrollRun: { periodId: period.id, status: { in: ['APPROVED', 'DISBURSED'] } },
       },
       select: {
         baseSalary: true,

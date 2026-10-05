@@ -75,7 +75,8 @@ export class AnnualTaxRecapService {
         employeeId,
         companyId,
         payrollRun: {
-          status: 'APPROVED',
+          // Paid runs are DISBURSED; see payroll-payment-settlement.ts:34.
+          status: { in: ['APPROVED', 'DISBURSED'] },
           period: {
             startDate: { gte: new Date(Date.UTC(year, 0, 1)) },
             endDate: { lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59)) },
@@ -192,7 +193,8 @@ export class AnnualTaxRecapService {
       where: {
         companyId,
         payrollRun: {
-          status: 'APPROVED',
+          // Paid runs are DISBURSED; see payroll-payment-settlement.ts:34.
+          status: { in: ['APPROVED', 'DISBURSED'] },
           period: {
             startDate: { gte: new Date(Date.UTC(year, 0, 1)) },
             endDate: { lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59)) },
