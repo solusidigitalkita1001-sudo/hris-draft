@@ -25,6 +25,43 @@ export interface PerformanceReview {
 export interface Goal {
   id: string; employeeId: string; title: string; type: string; progress: number; status: string; priority: string;
   startDate: string; endDate?: string; employee?: { id: string; fullName: string };
+  /** Hierarki goal (GAP-26): rujukan bebas ke goal induk, null bila lepas. */
+  parentGoalId?: string | null;
+}
+
+/**
+ * Hierarki goal (GAP-26). Kontrak backend: `GET /performance/goals/:id/chain`,
+ * `GET /performance/goals/:id/children`, `PATCH /performance/goals/:id/parent`.
+ * Rujukan bebas — induk tidak dihitung ulang dari anaknya, dan siklus ditolak
+ * di server sehingga pesan penolakannya yang ditampilkan ke pengguna.
+ */
+export interface GoalChainNode {
+  id: string; title: string; employeeId: string; progress: number; status: string; parentGoalId: string | null;
+}
+
+export interface GoalChain {
+  /** Goal yang ditanyakan. */
+  goal: GoalChainNode;
+  /** Leluhur dari yang terdekat ke paling atas. */
+  ancestors: GoalChainNode[];
+}
+
+export interface GoalChildNode {
+  id: string; title: string; progress: number; status: string;
+  employee?: { employeeNumber: string; fullName: string } | null;
+}
+
+export interface GoalChildren {
+  goalId: string;
+  ownProgress: number;
+  children: GoalChildNode[];
+  /** null bila goal ini belum punya anak. */
+  averageChildProgress: number | null;
+}
+
+export interface GoalParentResult {
+  id: string;
+  parentGoalId: string | null;
 }
 
 export interface PerformanceComponent {
@@ -1026,6 +1063,18 @@ class PerformanceService {
   }
   async updateGoalProgress(id: string, data: { progress: number; note?: string }): Promise<Goal> {
     const r = await api.patch(`/performance/goals/${id}/progress`, data); return r.data.data;
+  }
+
+  // ── Hierarki goal (GAP-26) ──────────────────────────
+  async getGoalChain(id: string): Promise<GoalChain> {
+    const r = await api.get(`/performance/goals/${id}/chain`); return r.data.data;
+  }
+  async getGoalChildren(id: string): Promise<GoalChildren> {
+    const r = await api.get(`/performance/goals/${id}/children`); return r.data.data;
+  }
+  /** `parentGoalId: null` melepas goal dari induknya. Siklus ditolak server. */
+  async setGoalParent(id: string, parentGoalId: string | null): Promise<GoalParentResult> {
+    const r = await api.patch(`/performance/goals/${id}/parent`, { parentGoalId }); return r.data.data;
   }
 
   async getMethods(companyId: string): Promise<PerformanceMethod[]> {
