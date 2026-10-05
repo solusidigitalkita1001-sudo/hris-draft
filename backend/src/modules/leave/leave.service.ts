@@ -4,7 +4,7 @@ import { NotFoundError, BadRequestError, ForbiddenError, ConflictError } from '@
 import { assertPayrollRangeOpen } from '@/shared/payroll/payroll-period-guard';
 import { logger } from '@/shared/logger/WinstonLogger';
 import prisma from '@/shared/database/prisma';
-import { calculateOpeningBalance } from '@/shared/leave/accrual';
+import { calculateCarryOver, calculateProratedEntitlement } from '@/shared/leave/accrual';
 import { leaveNeedsAttachment } from '@/shared/leave/attachment-policy';
 import {
   evaluateLeaveBalance,
@@ -507,7 +507,7 @@ export class LeaveService {
     maxCarryOver?: number;
   }) {
     const year = params.year ?? new Date().getFullYear();
-    const { employee, leaveType, previousBalance } = await leaveRepository.findAccrualInputs(
+    const { employee, leaveType, previousBalance, currentBalance } = await leaveRepository.findAccrualInputs(
       params.employeeId,
       params.leaveTypeId,
       year
@@ -522,13 +522,23 @@ export class LeaveService {
       throw new BadRequestError('Tanggal masuk (joinDate) karyawan belum diisi, tidak bisa pro-rate');
     }
 
-    const { entitlement, carryOver, totalDays } = calculateOpeningBalance({
+    // Accrual must be safe to run twice. Deriving the carry-over from last
+    // year's remainingDays only works the first time: expiry zeroes that field
+    // immediately afterwards, so a second run would compute zero and write
+    // totalDays back down, destroying the days the employee carried. Once a
+    // row for this year exists, the figure it recorded is the truth.
+    const entitlement = calculateProratedEntitlement({
       joinDate: employee.joinDate,
       year,
       annualQuota: leaveType.maxDays,
-      previousRemaining: previousBalance?.remainingDays ?? 0,
-      maxCarryOver: params.maxCarryOver,
     });
+    const carryOver = currentBalance
+      ? currentBalance.carryOverDays
+      : calculateCarryOver({
+          previousRemaining: previousBalance?.remainingDays ?? 0,
+          maxCarryOver: params.maxCarryOver,
+        });
+    const totalDays = entitlement + carryOver;
 
     const balance = await leaveRepository.upsertAccruedBalance({
       employeeId: employee.id,
@@ -536,6 +546,7 @@ export class LeaveService {
       leaveTypeId: leaveType.id,
       year,
       totalDays,
+      carryOverDays: carryOver,
     });
 
     logger.info('Leave balance accrued', {

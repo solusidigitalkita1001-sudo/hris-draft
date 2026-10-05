@@ -27,6 +27,11 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   // take-home pay in the last month of the year; switching it on is a tenant
   // decision. Only the period that actually ends in December is settled.
   pph21_december_reconciliation_enabled: 'false',
+  // Batas hari cuti tahun lalu yang boleh dibawa (GAP-06). Dulu nilai ini
+  // ditanam di kode sebagai 1 hari dan tidak ada pemanggil yang bisa
+  // mengubahnya, padahal batas carry-over berbeda antar perusahaan — dan di
+  // produk yang dijual, itu berarti permintaan ubah kode per pelanggan.
+  leave_carryover_max_days: '1',
   // Gross-up PPh21 (GAP-17). Off by default: switching it on makes the
   // company bear its employees' income tax, which raises employer cost and
   // changes every payslip — a tenant decision, never a deploy's side effect.
@@ -94,6 +99,7 @@ const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boo
   late_deduction_daily_cap_percent: { min: 0, max: 100 },
   absence_deduction_daily_basic_percent: { min: 0, max: 100 },
   attendance_default_working_days_per_month: { min: 1, max: 31, integer: true },
+  leave_carryover_max_days: { min: 0, max: 365, integer: true },
   fiscal_year_start_month: { min: 1, max: 12, integer: true },
 };
 
