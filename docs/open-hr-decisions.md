@@ -1,6 +1,9 @@
 # Keputusan HR — semuanya sudah dijawab (30 September 2026)
 
-> **Status: 17 dari 17 keputusan sudah diputuskan dan dikerjakan.** Dokumen ini
+> **Status: 15 dari 17 keputusan sudah diputuskan dan dikerjakan.** Item 16
+> (GAP-35 timesheet proyek) dan 17 (GAP-36 pencairan lewat API bank) hanya
+> memuat **rekomendasi**, bukan jawaban — keduanya berakhir di baris
+> "Rekomendasi:" tanpa keputusan tercatat. Dokumen ini
 > disimpan sebagai catatan apa yang diputuskan, oleh siapa, dan mengapa —
 > termasuk dua yang diputuskan **tidak dibangun** (GAP-17 gross-up, dan di
 > `gap-analysis-vs-greatday.md`: GAP-35 timesheet proyek, GAP-36 API bank),
@@ -245,7 +248,8 @@ menggantung selamanya. Kedalaman dibatasi 5 level, induk dari perusahaan lain
 ditolak, dan **progress induk tidak ditimpa** rata-rata anaknya — rujukan bebas
 berarti induk bukan jumlah anaknya, dan menimpanya berarti mengarang angka.
 
-Dengan ini seluruh 17 keputusan di dokumen ini sudah dijawab.
+Dengan ini 15 dari 17 keputusan di dokumen ini sudah dijawab. Item 16 dan 17
+masih menunggu jawaban pemilik produk; yang tertulis di sana rekomendasi.
 
 ## 12. GAP-27 — Urutan tanda tangan dokumen — ✅ DIPUTUSKAN & SELESAI 30 Sep
 
