@@ -69,7 +69,17 @@ test.describe('auth session in a browser', () => {
     // with, which is what a revoked or expired refresh token looks like.
     await context.clearCookies();
 
-    await page.goto('/self-service');
+    // `goto` defaults to waiting for `load`, but the behaviour under test is
+    // that the app redirects immediately. When the redirect wins the race the
+    // navigation is cancelled and `goto` rejects with net::ERR_ABORTED — the
+    // app having done exactly the right thing. Who wins depends on timing, so
+    // the same commit passed on one CI run and failed on another.
+    //
+    // `waitUntil: 'commit'` resolves as soon as the response starts, leaving
+    // the assertion below to judge where we ended up. Not a retry: this suite
+    // sets retries to 0 on purpose, so a flaky result has to be fixed rather
+    // than re-rolled.
+    await page.goto('/self-service', { waitUntil: 'commit' });
     await expect(page).toHaveURL(/\/login\?reason=expired/);
   });
 
