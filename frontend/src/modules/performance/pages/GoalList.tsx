@@ -1,14 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { performanceService, type Goal } from '@/services/performance.service';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { StatusChip } from '@/components/shared/StatusChip';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCompanyStore } from '@/stores/company.store';
-import { Search, RefreshCw, Plus, Target, TrendingUp, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { Search, RefreshCw, Plus, Target, TrendingUp, AlertCircle, CheckCircle2, Clock, GitBranch } from 'lucide-react';
 import { formatDate } from '@/utils/format';
 import toast from 'react-hot-toast';
 import { useI18n } from '@/i18n/provider';
 import type { TranslationKey } from '@/i18n/translations';
+import { apiErrorMessage } from '@/lib/errors';
+import { GoalAlignmentModal } from '../components/GoalAlignmentModal';
 
 const PRIORITY_STYLES: Record<string, string> = {
   LOW: 'bg-gray-50 text-gray-600 dark:bg-gray-900 dark:text-gray-400',
@@ -41,8 +44,11 @@ export function GoalList() {
   const { activeCompany } = useCompanyStore();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  // Goal yang panel keselarasannya sedang dibuka (GAP-26).
+  const [alignmentGoal, setAlignmentGoal] = useState<Goal | null>(null);
 
   const fetchData = useCallback(async () => {
     const companyId = activeCompany?.id || '';
@@ -53,12 +59,14 @@ export function GoalList() {
     }
 
     setLoading(true);
+    setError(null);
     try {
       const data = await performanceService.getGoals(companyId);
       setGoals(data);
-    } catch (error) {
-      console.error('Failed to fetch goals:', error);
-      toast.error(t('perf.goalList.loadFailed'));
+    } catch (err) {
+      const message = apiErrorMessage(err, t('perf.goalList.loadFailed'));
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -75,6 +83,10 @@ export function GoalList() {
     const matchesStatus = !statusFilter || g.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  // Judul induk dibaca dari daftar yang sama: seluruh goal perusahaan aktif
+  // sudah dimuat, sehingga kartu bisa menyebut induknya tanpa request tambahan.
+  const titleById = useMemo(() => new Map(goals.map((g) => [g.id, g.title])), [goals]);
 
   const completedCount = goals.filter((g) => g.status === 'COMPLETED').length;
   const avgProgress = goals.length
@@ -102,19 +114,19 @@ export function GoalList() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
+        <div className="bg-card rounded-card-sm border border-border p-4 shadow-card">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
             <Target size={14} /> {t('perf.goalList.stats.total')}
           </div>
           <p className="text-xl font-semibold">{goals.length}</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
+        <div className="bg-card rounded-card-sm border border-border p-4 shadow-card">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
             <CheckCircle2 size={14} className="text-emerald-500" /> {t('perf.goalList.stats.completed')}
           </div>
           <p className="text-xl font-semibold">{completedCount}</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
+        <div className="bg-card rounded-card-sm border border-border p-4 shadow-card">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
             <TrendingUp size={14} /> {t('perf.goalList.stats.avgProgress')}
           </div>
@@ -153,6 +165,15 @@ export function GoalList() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {loading ? (
           <div className="col-span-full text-center py-12 text-sm text-muted-foreground">{t('common.loading')}</div>
+        ) : error ? (
+          <div className="col-span-full rounded-card-sm bg-danger-bg p-5 text-center">
+            <p className="flex items-center justify-center gap-2 text-sm text-danger">
+              <AlertCircle size={15} /> {error}
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={fetchData}>
+              <RefreshCw size={14} className="mr-2" /> {t('common.refresh')}
+            </Button>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <div className="flex flex-col items-center gap-2">
@@ -165,7 +186,7 @@ export function GoalList() {
           filtered.map((goal) => (
             <div
               key={goal.id}
-              className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4 hover:border-primary/50 transition-colors"
+              className="bg-card rounded-card-sm border border-border p-4 shadow-card hover:border-primary/50 transition-colors"
             >
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -218,10 +239,44 @@ export function GoalList() {
                 )}
                 <span>{formatDate(goal.startDate)}</span>
               </div>
+
+              {/* Keselarasan goal (GAP-26): induknya terlihat di kartu, rantai
+                  lengkap dan turunannya dibuka di panel. */}
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+                {goal.parentGoalId ? (
+                  <StatusChip tone="accent" className="min-w-0">
+                    <GitBranch size={11} className="flex-none" />
+                    <span className="truncate">
+                      {t('perf.goalAlign.card.parent', {
+                        title: titleById.get(goal.parentGoalId) ?? '—',
+                      })}
+                    </span>
+                  </StatusChip>
+                ) : (
+                  <StatusChip tone="neutral">{t('perf.goalAlign.card.noParent')}</StatusChip>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-none"
+                  onClick={() => setAlignmentGoal(goal)}
+                >
+                  <GitBranch size={14} className="mr-2" />
+                  {t('perf.goalAlign.open')}
+                </Button>
+              </div>
             </div>
           ))
         )}
       </div>
+
+      <GoalAlignmentModal
+        open={alignmentGoal !== null}
+        goal={alignmentGoal}
+        goals={goals}
+        onClose={() => setAlignmentGoal(null)}
+        onChanged={fetchData}
+      />
     </div>
   );
 }
