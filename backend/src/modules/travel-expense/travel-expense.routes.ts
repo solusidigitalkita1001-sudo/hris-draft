@@ -7,7 +7,7 @@ import path from 'path';
 import multer from 'multer';
 import { Router } from 'express';
 import { authenticate } from '@/shared/middleware/Authenticate';
-import { authorizeRole } from '@/shared/middleware/Authorize';
+import { authorize, authorizeRole } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { auditLog } from '@/shared/middleware/AuditLog';
 import { travelExpenseController } from './travel-expense.controller';
@@ -18,6 +18,7 @@ import {
   approveExpenseClaimSchema,
   createBusinessTripSchema,
   createExpenseClaimSchema,
+  upsertClaimCategoryLimitSchema,
   createTravelAdvanceSchema,
   reimburseExpenseClaimSchema,
 } from './travel-expense.dto';
@@ -120,6 +121,15 @@ router.post(
   discardUploadOnFailure(),
   validateFileMagicBytes(),
   travelExpenseController.uploadReceipt.bind(travelExpenseController)
+);
+router.get('/claim-limits', authorizeRole(...approverRoles), travelExpenseController.listClaimLimits.bind(travelExpenseController));
+router.put(
+  '/claim-limits',
+  authorizeRole(...approverRoles),
+  authorize({ resource: 'travel', action: 'update' }),
+  auditLog({ action: 'UPSERT_CLAIM_LIMIT', entity: 'ClaimCategoryLimit' }),
+  validate(upsertClaimCategoryLimitSchema),
+  travelExpenseController.upsertClaimLimit.bind(travelExpenseController)
 );
 router.post(
   '/claims',
