@@ -1409,3 +1409,75 @@ semua orang sekaligus dan tidak bisa ditarik kembali. Diarsipkan, bukan dihapus:
 read receipt adalah bukti siapa sudah diberi tahu apa.
 
 Verifikasi: 38 test.
+
+---
+
+## Audit 5 Oktober 2026 — 39 gap diverifikasi ulang, 12 gap baru
+
+Pengukuran ketiga, dan yang pertama **tidak memakai dokumen ini sebagai
+sumber**. Alasannya ada di dokumen ini sendiri: untuk GAP-07 ia memuat tiga
+verdict yang saling bertabrakan (terbuka di baris 155, tertutup di 839,
+"sengaja dilewati" di 42), dan untuk GAP-29 ia pernah menyatakan modul
+reports tidak ada karena yang dicari `modules/report`, bukan `modules/reports`.
+Jadi deskripsi gap dipakai sebagai **pertanyaan**, dan setiap verdict
+diturunkan ulang dari kode dengan sitasi `file:LINE`.
+
+Empat pemeriksaan berjalan paralel: absensi & cuti (GAP-01…08, 31, 35),
+payroll & pajak (GAP-09…17, 21b, 32…34, 36), lifecycle & platform
+(GAP-18…30, 37…39), dan satu pemeriksaan **kelengkapan** yang tidak memeriksa
+status apa pun melainkan mencari fitur benchmark yang daftar ini tidak pernah
+sebut. Hasil yang terakhir ada di berkas terpisah:
+`gap-analysis-greatday-completeness-5-oct.md` — 12 gap baru (GAP-40…51), dan
+**36 kapabilitas benchmark yang diperiksa dan ternyata sudah ada**. Angka kedua
+itu yang membuat angka pertama bisa dipercaya.
+
+### Verdict yang berubah terhadap isi dokumen ini
+
+| Gap | Dokumen ini | Hasil pembacaan kode | Yang memutuskan |
+|---|---|---|---|
+| GAP-06 | PARTIAL, *"tidak ada satu pun simbol expiry di seluruh backend/src"* | PARTIAL, tetapi alasannya keliru — expiry **ada** | `leave.scheduler.ts:57-60`; residu sebenarnya: cap carry-over ditanam di kode, tidak ada kolom `carryOver`, dan saldo hangus walau akrual gagal |
+| GAP-07 | tiga verdict bertabrakan | **CLOSED**, di tiga lapis | `workflow-engine.repository.ts:707-722`; 10 modul lewat `applyAction` |
+| GAP-08 | lapisan lama: *"🔴 terbuka, tidak ada model/endpoint"* | **CLOSED** | `collective-leave.service.ts:268-282`, potong di bawah `FOR UPDATE`, jatuh ke unpaid, tidak pernah negatif |
+| GAP-14 | judul CLOSED | **PARTIAL** (sesuai baris 846 dokumen ini sendiri) | rapel jalan; tidak ada run koreksi untuk nominal salah |
+| GAP-16 | CLOSED | **PARTIAL** | `payroll.service.ts:612` hanya membaca run `APPROVED`; ditutup 5 Okt oleh PR #48 |
+| GAP-17 | *"tidak ada jejaknya sama sekali"* | **CLOSED** | `pph21.ts:137` + `employee-pay.ts:63-83`, dikirim 4 Okt (PR #42) |
+| GAP-19 | *"contractEndDate TIDAK ada di Employee"* | **CLOSED** — tanggalnya pindah ke tabelnya sendiri | `EmploymentContract.endDate`, sweep `employment-contract.service.ts:222`, cron di `worker.ts:187` |
+| GAP-20 | dianggap sama dengan GAP-19 | **PARTIAL** | reminder & batas 3 bulan ada; keputusan review probasi tidak ada (`ProbationReview` = 0 hit) |
+| GAP-21b | belum dicentang | **PARTIAL** | rapel masuk run; jalur correction payment tidak ada |
+| GAP-23 | CLOSED | **PARTIAL** | approve payroll masih izin datar, `payroll.routes.ts:299-311` |
+| GAP-25/26/27 | CLOSED | **PARTIAL** | per-course recap, konsumen frontend `parentGoalId`, dan reminder e-signature tidak ada |
+| GAP-29 | PARTIAL (modul ada) | **PARTIAL** → ditutup 5 Okt oleh PR #51 | laporan saldo cuti hilang; `/summary` satu-satunya route tanpa `authorize()` |
+| GAP-30 | tiga verdict | **PARTIAL** | halaman nyata 1383 baris; koreksi absensi tanpa UI |
+| GAP-35 | "dilewati dengan keputusan" | **terbuka** — jejaknya rekomendasi, bukan jawaban user | `open-hr-decisions.md:337-345` masih *"Rekomendasi: lewati"*; alasannya YAGNI, yang ditolak posisi jual produk ini |
+| GAP-39 | dilewati | **OPEN** — tidak ada keputusan yang tercatat | daftar skip sadar di baris 1281 hanya menyebut GAP-35/36 |
+
+### Ditutup 5 Oktober
+
+| PR | Yang ditutup |
+|---|---|
+| #47 | GAP-06 sebagian: akrual idempoten, expiry tidak menghanguskan saldo yang akrualnya gagal, cap jadi `leave_carryover_max_days` |
+| #48 | GAP-16: pembaca akhir-tahun menghitung run berstatus `DISBURSED`, bukan hanya `APPROVED` |
+| #50 | **GAP-43** dan flag `isProrated` yang tidak pernah dibaca |
+| #51 | GAP-29: laporan saldo cuti, dimensi departemen, dan guard `/summary` |
+| #52 | Katalog webhook: 10 event berhenti diiklankan karena tidak pernah terbit |
+| #46 | Tiga header yang dibaca API tapi tidak diizinkan CORS, termasuk `X-Client-Type` |
+| #49 | Koreksi klaim PRD soal TER |
+
+### Cacat kelas "ditulis lalu tidak pernah dibaca"
+
+Pola yang muncul lima kali dan pantas dicurigai lebih lanjut:
+
+1. `isTaxable` pada lembur/rapel/pencairan cuti — **ditutup 4 Okt (PR #45)**.
+2. `PayrollRunStatus.DISBURSED` tidak dibaca empat konsumen akhir-tahun — **ditutup (PR #48)**.
+3. `SalaryComponent.isProrated` — **ditutup (PR #50)**.
+4. `autoAbsentEnabled` / `autoCheckoutEnabled` — masih mati. Lengkap dari schema sampai policy yang ter-resolve, tetapi tidak ada queue absensi yang membacanya. HR menyalakannya, tidak terjadi apa pun.
+5. Katalog webhook mengiklankan 16 event, 6 terbit — **ditutup (PR #52)**, 10 dipindah ke daftar menunggu publisher beserta alasan masing-masing.
+
+### Yang menunggu lu, bukan menunggu kode
+
+- **GAP-40 (TER, PMK 168/2023)** — paling keras untuk jualan. Butuh lampiran
+  resminya: tiga kategori, puluhan bracket. Menuliskannya dari ingatan adalah
+  cara mesin payroll menjadi salah dengan yakin.
+- **GAP-32 / GAP-33** — satu contoh berkas 1721-A1 dan ekspor BPJS asli.
+- **GAP-35** dan **GAP-39** — keputusan dilewati-atau-dibangun belum pernah
+  diambil; yang tercatat baru rekomendasi.

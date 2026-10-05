@@ -1,5 +1,6 @@
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { validateReceiptReference } from '@/shared/storage/receipt-reference';
+import { assertWithinCategoryLimits } from './claim-limit.service';
 import { travelExpenseRepository } from './travel-expense.repository';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import { getRequestContext, getCurrentCompanyId, getCurrentRoles } from '@/shared/context/RequestContext';
@@ -256,10 +257,23 @@ export class TravelExpenseService {
 
     await assertEmployeeInScope(data.employeeId, 'expense-claim');
 
+    // Category plafond (GAP-45). No limit row means unlimited, so this is a
+    // no-op until HR actually sets one.
+    const limitVerdict = await assertWithinCategoryLimits({
+      companyId: data.companyId,
+      employeeId: data.employeeId,
+      category: data.category,
+      amount: data.amount,
+      expenseDate: data.expenseDate,
+    });
+
     const requesterId = currentUser?.id ?? undefined;
 
     return prisma.$transaction(async (_tx) => {
       const claim = await travelExpenseRepository.createClaim(data);
+      // Additive: clients that ignore it are unaffected, and a WARN plafond
+      // would otherwise be invisible to the person who just exceeded it.
+      Object.assign(claim, { limitWarnings: limitVerdict.warnings });
 
       try {
         const templateId = await this.resolveDefaultClaimTemplateId(data.companyId);
