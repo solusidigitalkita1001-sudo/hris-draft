@@ -98,6 +98,7 @@ const COMPANY_SCOPED_MODELS = new Set([
   'DocumentCategory',
   'Document',
   'ESignatureTransaction',
+  'LetterTemplate',
   'TrainingCategory',
   'TrainingCourse',
   'TrainingEnrollment',
