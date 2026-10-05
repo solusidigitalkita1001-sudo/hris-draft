@@ -3469,6 +3469,10 @@ model LeaveBalance {
   /// Hari yang dibawa dari tahun lalu. Disimpan karena expiry me-nol-kan
   /// saldo tahun lalu, sehingga angka ini tidak bisa diturunkan ulang.
   carryOverDays      Int       @default(0) @map("carry_over_days")
+  /// Saat hari bawaan yang tidak terpakai dihanguskan, bila perusahaan
+  /// memasang tenggat (`leave_carryover_expiry_month`). Terpisah dari
+  /// `expiredAt`, yang menandai seluruh saldo tahun lalu habis masa.
+  carryOverExpiredAt DateTime? @map("carry_over_expired_at")
   expiredAt     DateTime? @map("expired_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")

@@ -32,6 +32,10 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   // mengubahnya, padahal batas carry-over berbeda antar perusahaan — dan di
   // produk yang dijual, itu berarti permintaan ubah kode per pelanggan.
   leave_carryover_max_days: '1',
+  // Bulan hangusnya hari cuti bawaan (sisa GAP-06). 0 = tanpa tenggat, yang
+  // merupakan perilaku sebelum fitur ini ada sehingga tidak ada tenant yang
+  // kehilangan hari karena rilis. 3 berarti "pakai sebelum akhir Maret".
+  leave_carryover_expiry_month: '0',
   // Gross-up PPh21 (GAP-17). Off by default: switching it on makes the
   // company bear its employees' income tax, which raises employer cost and
   // changes every payslip — a tenant decision, never a deploy's side effect.
@@ -100,6 +104,7 @@ const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boo
   absence_deduction_daily_basic_percent: { min: 0, max: 100 },
   attendance_default_working_days_per_month: { min: 1, max: 31, integer: true },
   leave_carryover_max_days: { min: 0, max: 365, integer: true },
+  leave_carryover_expiry_month: { min: 0, max: 12, integer: true },
   fiscal_year_start_month: { min: 1, max: 12, integer: true },
 };
 
