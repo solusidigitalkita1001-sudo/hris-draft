@@ -18,7 +18,7 @@ HRIS Draft adalah **Human Resource Information System multi-tenant** untuk perus
 
 Produk menutup siklus hidup karyawan dari rekrutmen sampai offboarding, dengan tiga lapisan yang membedakannya dari sekadar aplikasi absensi:
 
-1. **Payroll yang patuh regulasi Indonesia** — PPh21 TER, BPJS Kesehatan & Ketenagakerjaan, THR, bukti potong 1721-A1, rekonsiliasi Desember.
+1. **Payroll yang patuh regulasi Indonesia** — PPh21, BPJS Kesehatan & Ketenagakerjaan, THR, bukti potong 1721-A1, rekonsiliasi Desember. **Catatan akurasi: pemotongan bulanan masih memakai metode netto disetahunkan (UU HPP 2022), belum TER sesuai PMK 168/2023.** Lihat GAP-40.
 2. **Kebijakan sebagai konfigurasi per perusahaan**, bukan konstanta di kode — tiap tenant mengatur aturan cuti, absensi, lembur, dan payroll-nya sendiri.
 3. **Jejak audit dan isolasi tenant yang bisa diaudit** — setiap mutasi data karyawan tercatat; tidak ada query yang bisa menembus batas company.
 
@@ -115,7 +115,7 @@ Backend terdiri dari 29 modul domain di atas ~168 model data. Tabel berikut adal
 
 | Modul | Kemampuan inti |
 |---|---|
-| **Payroll** | Komponen gaji (earning/deduction) berbasis formula, alokasi gaji per karyawan dengan riwayat, payroll run per periode dengan state machine (draft → calculated → approved → paid), input dari absensi & cuti & lembur, PPh21 metode TER + rekonsiliasi Desember, BPJS Kesehatan & Ketenagakerjaan, THR, rapel/arrears, potongan sekali-jalan, payslip dengan unlock nominal sensitif, email payslip, ledger pembayaran, file transfer bank, laporan BPJS, rekap pajak tahunan & bukti potong |
+| **Payroll** | Komponen gaji (earning/deduction) berbasis formula, alokasi gaji per karyawan dengan riwayat, payroll run per periode dengan state machine (draft → calculated → approved → paid), input dari absensi & cuti & lembur, PPh21 (metode netto disetahunkan; TER PMK 168/2023 belum diimplementasikan — GAP-40) + rekonsiliasi Desember, BPJS Kesehatan & Ketenagakerjaan, THR, rapel/arrears, potongan sekali-jalan, payslip dengan unlock nominal sensitif, email payslip, ledger pembayaran, file transfer bank, laporan BPJS, rekap pajak tahunan & bukti potong |
 | **Benefit** | Paket benefit, kepesertaan, nilai per karyawan, keterkaitan ke komponen gaji |
 | **Employee Loan** | Pinjaman karyawan: pengajuan, approval, jadwal angsuran, potongan otomatis di payroll |
 | **EWA** | Earned Wage Access — penarikan gaji yang sudah diperoleh lebih awal, batas kelayakan, approval, pemotongan di payroll berikutnya |
@@ -150,7 +150,17 @@ Absensi mentah → rekap periode → **review & kunci oleh HR** → input payrol
 Payroll run menyimpan snapshot input dan formula yang dipakai. Menjalankan ulang periode yang sama menghasilkan angka yang sama. Potongan sekali-jalan tidak boleh terpakai dua kali. Setiap perubahan gaji menyimpan justifikasi.
 
 ### FR-6 — Kepatuhan regulasi Indonesia
-PPh21 (TER bulanan + rekonsiliasi Desember + bukti potong 1721-A1), BPJS Kesehatan dan Ketenagakerjaan (JHT, JP, JKK, JKM) dengan batas upah, THR, dan ekspor laporan dalam format yang diterima instansi.
+PPh21 bulanan, rekonsiliasi Desember, bukti potong 1721-A1, BPJS Kesehatan
+dan Ketenagakerjaan (JHT, JP, JKK, JKM) dengan batas upah, THR, dan ekspor
+laporan dalam format yang diterima instansi.
+
+> **Belum terpenuhi, dan ini syarat yang paling keras.** Pemotongan PPh21
+> bulanan memakai metode **netto disetahunkan** (UU HPP 2022), bukan **TER**
+> yang diwajibkan **PMK 168/2023** sejak 1 Januari 2024. Nol jejak `TER`,
+> `tarif efektif`, atau `PMK 168` di `backend/src`; mesinnya ada di
+> `shared/payroll/pph21.ts` dan header filenya menyebut metodenya sendiri.
+> Konsultan pajak calon pembeli memeriksa hal ini lebih dulu dari apa pun.
+> Dilacak sebagai GAP-40.
 
 ### FR-7 — Riwayat tidak dihapus
 Mutasi jabatan, perubahan gaji, perubahan struktur organisasi, dan kontrak kerja menyimpan versi. Penghapusan karyawan adalah soft-delete/arsip; data payroll historis tetap terbaca.
@@ -230,7 +240,7 @@ Fase berikut mengikuti urutan nilai bagi pembeli, bukan urutan teknis.
 
 **Fase 2 — Operasional harian (selesai sebagian).** Absensi + shift + kalender kerja, cuti + saldo, workflow approval, notifikasi, ESS mobile.
 
-**Fase 3 — Payroll patuh (fokus saat ini).** Komponen & formula, payroll run, PPh21 TER + rekonsiliasi Desember, BPJS, THR, payslip, ledger pembayaran, file transfer bank, laporan BPJS & pajak tahunan.
+**Fase 3 — Payroll patuh (fokus saat ini).** Komponen & formula, payroll run, **PPh21 TER (PMK 168/2023) — belum ada, blocker rilis komersial**, rekonsiliasi Desember, BPJS, THR, payslip, ledger pembayaran, file transfer bank, laporan BPJS & pajak tahunan.
 
 **Fase 4 — Siklus talenta.** Rekrutmen + requisition, onboarding, performance, training, dokumen bertanda tangan, aset.
 
