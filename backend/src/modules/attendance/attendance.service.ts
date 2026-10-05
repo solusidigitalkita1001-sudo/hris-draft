@@ -28,6 +28,7 @@ import {
 } from '@prisma/client';
 import { assertEmployeeInScope, employeeAccessWhere } from '@/shared/security/employee-data-scope';
 import { attendanceContextService } from './attendance-context.service';
+import { buildScheduledEndTime, buildScheduledTime, minutesBetween as calculateMinutesDifference } from '@/shared/attendance/scheduled-time';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
 import { getCurrentCompanyId, getCurrentRoles, getCurrentUser, getRequestContext } from '@/shared/context/RequestContext';
@@ -95,30 +96,6 @@ function translateFaceExtractionError(error: unknown): never {
 
 type WorkflowSource = 'WORKFLOW' | 'LEGACY';
 
-function buildScheduledTime(baseDate: Date, time: string) {
-  const [hours, minutes] = time.split(':').map(Number);
-  const scheduled = new Date(baseDate);
-  scheduled.setHours(hours, minutes, 0, 0);
-  return scheduled;
-}
-
-function buildScheduledEndTime(baseDate: Date, workStart: string | null | undefined, workEnd: string | null | undefined) {
-  if (!workEnd) return null;
-
-  const scheduledEnd = buildScheduledTime(baseDate, workEnd);
-  if (workStart) {
-    const scheduledStart = buildScheduledTime(baseDate, workStart);
-    if (scheduledEnd <= scheduledStart) {
-      scheduledEnd.setDate(scheduledEnd.getDate() + 1);
-    }
-  }
-
-  return scheduledEnd;
-}
-
-function calculateMinutesDifference(laterDate: Date, earlierDate: Date) {
-  return Math.max(0, Math.round((laterDate.getTime() - earlierDate.getTime()) / 60000));
-}
 
 function dateKeyInTimezone(date: Date, timezone: string): string {
   try {
