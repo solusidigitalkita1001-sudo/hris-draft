@@ -203,12 +203,14 @@ export class ReportsRepository {
         count: t._count.id,
         totalDays: t._sum.totalDays ?? 0,
       })),
-      byDepartmentCount: byDepartment.length,
+      // This counts distinct employees, not departments; it was named after
+      // the variable rather than after what it holds.
+      employeesWithLeave: byDepartment.length,
     };
   }
 
   // ─── Payroll Report ────────────────────────────────────
-  async payroll(companyId: string, periodId?: string) {
+  async payroll(companyId: string, periodId?: string, options?: { byDepartment?: boolean }) {
     const where: Prisma.PayrollRunWhereInput = {
       companyId,
       status: { in: ['COMPLETED', 'APPROVED', 'DISBURSED'] },
@@ -240,7 +242,107 @@ export class ReportsRepository {
         }
       : { totalEarnings: 0, totalDeductions: 0, totalNetPay: 0, totalEmployees: 0 };
 
-    return { summary, runs };
+    const byDepartment = options?.byDepartment
+      ? await this.payrollByDepartment(companyId, runs.map((run) => run.id))
+      : undefined;
+
+    return { summary, runs, ...(byDepartment ? { byDepartment } : {}) };
+  }
+
+  /**
+   * Runs carry no department dimension — payslips do, in the org context
+   * frozen on them at calculation time. Reading the snapshot rather than the
+   * employee's current department is deliberate: a transfer in March must not
+   * silently move January's cost to the new department.
+   */
+  private async payrollByDepartment(companyId: string, runIds: string[]) {
+    if (!runIds.length) return [];
+    const payslips = await prisma.payslip.findMany({
+      where: { companyId, payrollRunId: { in: runIds } },
+      select: { employeeSnapshot: true, totalEarnings: true, totalDeductions: true, netPay: true },
+    });
+
+    const buckets = new Map<string, {
+      departmentId: string | null; departmentName: string; employees: number;
+      totalEarnings: number; totalDeductions: number; totalNetPay: number;
+    }>();
+    for (const slip of payslips) {
+      const snapshot = (slip.employeeSnapshot ?? {}) as { departmentId?: string | null; departmentName?: string | null };
+      const key = snapshot.departmentId ?? 'unassigned';
+      const bucket = buckets.get(key) ?? {
+        departmentId: snapshot.departmentId ?? null,
+        departmentName: snapshot.departmentName ?? 'Tanpa departemen',
+        employees: 0, totalEarnings: 0, totalDeductions: 0, totalNetPay: 0,
+      };
+      bucket.employees += 1;
+      bucket.totalEarnings += Number(slip.totalEarnings);
+      bucket.totalDeductions += Number(slip.totalDeductions);
+      bucket.totalNetPay += Number(slip.netPay);
+      buckets.set(key, bucket);
+    }
+    return [...buckets.values()].sort((a, b) => b.totalNetPay - a.totalNetPay);
+  }
+
+  /**
+   * Leave balance — the fifth standard report, and the one that was missing.
+   * The existing leave report sums days *taken* over a range, which answers a
+   * different question: it cannot tell you who is sitting on unused
+   * entitlement, which is the figure both HR and the accrual liability need.
+   */
+  async leaveBalance(companyId: string, year?: number, departmentId?: string) {
+    const targetYear = year ?? new Date().getUTCFullYear();
+    const balances = await prisma.leaveBalance.findMany({
+      where: {
+        companyId,
+        year: targetYear,
+        expiredAt: null,
+        employee: { deletedAt: null, status: 'ACTIVE', ...(departmentId ? { departmentId } : {}) },
+      },
+      select: {
+        totalDays: true, usedDays: true, remainingDays: true,
+        leaveType: { select: { id: true, name: true, isPaid: true } },
+        employee: { select: { id: true, department: { select: { id: true, name: true } } } },
+      },
+    });
+
+    const byType = new Map<string, { leaveTypeId: string; leaveTypeName: string; employees: number; entitlement: number; used: number; remaining: number }>();
+    const byDept = new Map<string, { departmentId: string | null; departmentName: string; employees: Set<string>; remaining: number }>();
+    for (const row of balances) {
+      const type = byType.get(row.leaveType.id) ?? {
+        leaveTypeId: row.leaveType.id, leaveTypeName: row.leaveType.name,
+        employees: 0, entitlement: 0, used: 0, remaining: 0,
+      };
+      type.employees += 1;
+      type.entitlement += row.totalDays;
+      type.used += row.usedDays;
+      type.remaining += row.remainingDays;
+      byType.set(row.leaveType.id, type);
+
+      const key = row.employee.department?.id ?? 'unassigned';
+      const dept = byDept.get(key) ?? {
+        departmentId: row.employee.department?.id ?? null,
+        departmentName: row.employee.department?.name ?? 'Tanpa departemen',
+        employees: new Set<string>(), remaining: 0,
+      };
+      dept.employees.add(row.employee.id);
+      dept.remaining += row.remainingDays;
+      byDept.set(key, dept);
+    }
+
+    return {
+      year: targetYear,
+      totals: {
+        employees: new Set(balances.map((row) => row.employee.id)).size,
+        entitlement: balances.reduce((sum, row) => sum + row.totalDays, 0),
+        used: balances.reduce((sum, row) => sum + row.usedDays, 0),
+        // The outstanding liability: days owed and not yet taken.
+        remaining: balances.reduce((sum, row) => sum + row.remainingDays, 0),
+      },
+      byType: [...byType.values()].sort((a, b) => b.remaining - a.remaining),
+      byDepartment: [...byDept.values()]
+        .map((dept) => ({ ...dept, employees: dept.employees.size }))
+        .sort((a, b) => b.remaining - a.remaining),
+    };
   }
 
   // ─── Turnover Report ───────────────────────────────────

@@ -159,7 +159,8 @@ describeWithMysql('reports (isolated real MySQL)', () => {
     expect(report.byType).toEqual([
       { leaveTypeId: own.leaveTypeId, leaveTypeName: 'Own Annual', count: 1, totalDays: 3 },
     ]);
-    expect(report.byDepartmentCount).toBe(1);
+    // Renamed: it counts distinct employees with leave, not departments.
+    expect(report.employeesWithLeave).toBe(1);
   });
 
   it('counts new hires within the range, reports active headcount and a turnover rate', async () => {
