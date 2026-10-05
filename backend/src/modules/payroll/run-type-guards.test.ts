@@ -70,6 +70,18 @@ describe('payroll run type', () => {
 
   it('persists the run type instead of dropping it on the floor', () => {
     expect(repository).toMatch(/runType: data\.runType \?\? 'REGULAR'/);
-    expect(repository).toMatch(/runType: true/);
+  });
+
+  it('keeps the run type out of the payslip-facing shape for now', () => {
+    // A strict allowlist test pins exactly what a payslip exposes about its
+    // run. Until THR runs exist the value is always REGULAR, so widening that
+    // contract buys nothing and would have to be un-widened if the field were
+    // ever reconsidered. The run's own list and detail use `include`, so they
+    // already return it.
+    const payslipSelect = repository.slice(
+      repository.indexOf('const payslipRunSelect'),
+      repository.indexOf('satisfies Prisma.PayrollRunSelect'),
+    );
+    expect(payslipSelect).not.toMatch(/runType: true/);
   });
 });

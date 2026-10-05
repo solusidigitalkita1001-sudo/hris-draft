@@ -13,7 +13,10 @@ import {
 } from './payroll.dto';
 
 const payslipRunSelect = {
-  id: true, name: true, runNumber: true, runType: true, status: true,
+  // runType is deliberately NOT here. This is the payslip-facing shape, and
+  // a strict allowlist test pins it; until THR runs exist the value is always
+  // REGULAR, so widening a client contract now would buy nothing. Fase 1.
+  id: true, name: true, runNumber: true, status: true,
   period: { select: { id: true, name: true, code: true, frequency: true, startDate: true, endDate: true, payDate: true } },
 } satisfies Prisma.PayrollRunSelect;
 
