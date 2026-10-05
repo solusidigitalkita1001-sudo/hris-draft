@@ -90,6 +90,7 @@ export const MENU_ITEMS: MenuCatalogItem[] = [
   { path: '/organization/positions', label: 'Positions', group: 'People' },
   { path: '/employees', label: 'Employees', group: 'People' },
   { path: '/attendance', label: 'Attendance', group: 'Operations' },
+  { path: '/attendance-corrections', label: 'Attendance Correction', group: 'Operations' },
   { path: '/work-calendar', label: 'Work Calendar', group: 'Operations' },
   { path: '/work-calendar/shifts', label: 'Shift Formulas', group: 'Operations' },
   { path: '/work-calendar/holidays', label: 'Holidays', group: 'Operations' },

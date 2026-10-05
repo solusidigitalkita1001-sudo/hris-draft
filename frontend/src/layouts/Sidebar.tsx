@@ -45,6 +45,7 @@ import {
   Workflow,
   MapPin,
   Repeat,
+  CalendarClock,
   Menu as MenuIcon,
   ShieldCheck,
   Wallet,
@@ -96,6 +97,12 @@ const navItems: NavItem[] = [
     labelKey: 'sidebar.selfService',
     icon: <UserCheck size={17} />,
     path: '/self-service',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
+    labelKey: 'sidebar.attendanceCorrection',
+    icon: <CalendarClock size={17} />,
+    path: '/attendance-corrections',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
