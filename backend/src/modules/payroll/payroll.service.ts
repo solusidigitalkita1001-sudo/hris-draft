@@ -26,6 +26,7 @@ import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.re
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { calculateBpjs } from '@/shared/payroll/bpjs';
 import { calculatePph21 } from '@/shared/payroll/pph21';
+import { buildPayrollJournal } from '@/shared/payroll/journal';
 import { employmentWindow } from '@/shared/payroll/employment-window';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 import { calculateThr } from '@/shared/payroll/thr';
@@ -1363,6 +1364,62 @@ export class PayrollService {
   }
 
   // ==================== Standalone Calculation Endpoints (B.1, B.2, B.3) ====================
+
+  /**
+   * Accounting journal for a run, grouped by cost centre (GAP-47).
+   *
+   * `Department.costCenter` has been stored since the department module was
+   * written and read by nothing, so the one question accounting asks of a
+   * payroll run — which cost centre carries this — had to be answered by
+   * re-keying the payslip list.
+   *
+   * The cost centre is resolved from the department id frozen on the payslip,
+   * not from the employee's current department, so a transfer does not move
+   * last month's cost. ponytail: the centre *code* is read live, because no
+   * snapshot of it exists — renaming a cost centre therefore relabels historic
+   * journals. Snapshotting it would need a column and a backfill.
+   */
+  async runJournal(runId: string) {
+    const run = await payrollRepository.findPayrollRunById(runId);
+    if (!run) throw new NotFoundError('Payroll run not found');
+
+    const payslips = await prisma.payslip.findMany({
+      where: { payrollRunId: runId, companyId: run.companyId },
+      select: {
+        netPay: true, employeeSnapshot: true,
+        components: { select: { name: true, type: true, amount: true } },
+      },
+    });
+
+    const departmentIds = [...new Set(payslips
+      .map((slip) => (slip.employeeSnapshot as { departmentId?: string | null } | null)?.departmentId)
+      .filter((id): id is string => Boolean(id)))];
+    const departments = departmentIds.length
+      ? await prisma.department.findMany({
+          where: { id: { in: departmentIds }, companyId: run.companyId },
+          select: { id: true, costCenter: true },
+        })
+      : [];
+
+    const lines = buildPayrollJournal(
+      payslips.map((slip) => ({ netPay: slip.netPay, employeeSnapshot: slip.employeeSnapshot, components: slip.components })),
+      new Map(departments.map((row) => [row.id, row.costCenter])),
+    );
+
+    return {
+      runId,
+      runName: run.name,
+      status: run.status,
+      lines,
+      totals: {
+        earnings: lines.reduce((sum, line) => sum + line.earnings, 0),
+        deductions: lines.reduce((sum, line) => sum + line.deductionsTotal, 0),
+        netPay: lines.reduce((sum, line) => sum + line.netPay, 0),
+        /// Non-zero means the journal does not balance and must not be posted.
+        imbalance: lines.reduce((sum, line) => sum + line.imbalance, 0),
+      },
+    };
+  }
 
   calculatePph21Standalone(data: CalculatePph21DTO) {
     return calculatePph21({
