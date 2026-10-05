@@ -173,6 +173,7 @@ model Company {
   loanTypes                             LoanType[]
   loans                                 Loan[]
   workflowTemplates                     WorkflowTemplate[]
+  letterTemplates        LetterTemplate[]
   workflowInstances                     WorkflowInstance[]
   businessTrips                         BusinessTrip[]
   travelAdvances                        TravelAdvance[]
@@ -4177,6 +4178,31 @@ enum RequestStatus {
 // ============================================================
 // WORKFLOW ENGINE
 // ============================================================
+
+/// Template surat dengan placeholder (GAP-46): surat keterangan kerja, SK,
+/// dan sejenisnya. Badan surat diisi tenant, jadi penyusunnya SENGAJA bukan
+/// template engine melainkan daftar placeholder tertutup — merender input
+/// tenant lewat engine umum adalah permukaan eksekusi kode.
+model LetterTemplate {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  companyId   String    @map("company_id") @db.VarChar(36)
+  code        String    @db.VarChar(50)
+  name        String    @db.VarChar(255)
+  /// Teks surat. Placeholder berbentuk {{employee.fullName}}; yang tidak
+  /// dikenal ditolak saat disimpan, bukan dibiarkan kosong saat dirender.
+  body        String    @db.Text
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+  @@map("letter_templates")
+}
 
 model WorkflowTemplate {
   id                String    @id @default(uuid()) @db.VarChar(36)
