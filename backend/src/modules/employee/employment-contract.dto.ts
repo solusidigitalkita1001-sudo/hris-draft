@@ -28,3 +28,12 @@ export type CreateContractDTO = z.infer<typeof createContractSchema>;
 export type ContractQueryDTO = z.infer<typeof contractQuerySchema>;
 export type ExpiringContractQueryDTO = z.infer<typeof expiringContractQuerySchema>;
 export type UpdateContractStatusDTO = z.infer<typeof updateContractStatusSchema>;
+
+/** Keputusan review masa percobaan (GAP-20). */
+export const probationDecisionSchema = z.object({
+  decision: z.enum(['PASS', 'EXTEND', 'FAIL']),
+  notes: z.string().max(1000).optional(),
+  /// Wajib untuk EXTEND; tetap dibatasi tiga bulan dari tanggal mulai.
+  extendToDate: z.string().datetime().optional(),
+});
+export type ProbationDecisionDTO = z.infer<typeof probationDecisionSchema>;

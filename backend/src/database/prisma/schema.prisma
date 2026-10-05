@@ -5797,6 +5797,14 @@ model EmploymentContract {
   lastReminderAt   DateTime?                @map("last_reminder_at")
   /// Offset pengingat terakhir yang sudah terkirim (30, 14, atau 7 hari).
   lastReminderDays Int?                     @map("last_reminder_days")
+  /// Keputusan review masa percobaan, bila kontrak ini PROBATION (GAP-20).
+  /// Riwayat keputusan hidup di audit log; kolom ini menyimpan yang berlaku.
+  /// ponytail: satu keputusan terakhir. Kalau kelak perlu rangkaian review,
+  /// pindahkan ke tabel sendiri — audit log sudah menyimpan jejaknya.
+  probationDecision   ProbationDecision? @map("probation_decision")
+  probationDecidedBy  String?            @map("probation_decided_by") @db.VarChar(36)
+  probationDecidedAt  DateTime?          @map("probation_decided_at")
+  probationNotes      String?            @map("probation_notes") @db.Text
   createdBy        String?                  @map("created_by") @db.VarChar(36)
   createdAt        DateTime                 @default(now()) @map("created_at")
   updatedAt        DateTime                 @updatedAt @map("updated_at")
@@ -5830,6 +5838,16 @@ enum EmploymentContractStatus {
   /// Sudah digantikan kontrak berikutnya (perpanjangan).
   RENEWED
 }
+
+/// Hasil review masa percobaan. ENDED/TERMINATED/RENEWED pada status kontrak
+/// tidak bisa membedakan "lulus lalu jadi permanen" dari "kontraknya sekadar
+/// berakhir", dan itu justru perbedaan yang ditanyakan orang setahun kemudian.
+enum ProbationDecision {
+  PASS
+  EXTEND
+  FAIL
+}
+
 
 /// Penanda tangan yang **diharapkan** untuk sebuah dokumen, beserta urutannya
 /// bila memang berurutan (GAP-27).
