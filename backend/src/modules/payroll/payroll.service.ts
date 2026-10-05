@@ -609,7 +609,12 @@ export class PayrollService {
           where: {
             companyId: run.companyId,
             payrollRun: {
-              status: 'APPROVED',
+              // A paid run is DISBURSED, not APPROVED: settlement moves it
+              // (payroll-payment-settlement.ts:34), the only supported payment
+              // path. Reading APPROVED alone finds nothing by December, when
+              // every earlier run has been paid — so the year-end true-up ran
+              // against an empty history and refunded December instead.
+              status: { in: ['APPROVED', 'DISBURSED'] },
               period: {
                 startDate: { gte: new Date(Date.UTC(fiscalPeriodEnd.getUTCFullYear(), 0, 1)) },
                 endDate: { lte: fiscalPeriodEnd },
