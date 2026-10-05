@@ -152,7 +152,7 @@ export class LeaveRepository {
 
   /** Ambil data yang diperlukan untuk kalkulasi akrual pro-rate + carry-over. */
   async findAccrualInputs(employeeId: string, leaveTypeId: string, year: number) {
-    const [employee, leaveType, previousBalance] = await Promise.all([
+    const [employee, leaveType, previousBalance, currentBalance] = await Promise.all([
       prisma.employee.findUnique({
         where: { id: employeeId },
         select: { id: true, companyId: true, joinDate: true },
@@ -165,8 +165,15 @@ export class LeaveRepository {
         where: { employeeId_leaveTypeId_year: { employeeId, leaveTypeId, year: year - 1 } },
         select: { remainingDays: true },
       }),
+      // The row for the year being accrued. Its presence means accrual already
+      // ran, and `carryOverDays` is then the only surviving record of what was
+      // carried — last year's remainingDays has since been zeroed by expiry.
+      prisma.leaveBalance.findUnique({
+        where: { employeeId_leaveTypeId_year: { employeeId, leaveTypeId, year } },
+        select: { carryOverDays: true },
+      }),
     ]);
-    return { employee, leaveType, previousBalance };
+    return { employee, leaveType, previousBalance, currentBalance };
   }
 
   /**
@@ -179,6 +186,7 @@ export class LeaveRepository {
     leaveTypeId: string;
     year: number;
     totalDays: number;
+    carryOverDays: number;
   }) {
     return prisma.$transaction(async (tx) => {
       // FOR UPDATE: without the lock a concurrent approval's deduction between
@@ -195,6 +203,7 @@ export class LeaveRepository {
           where: { id: existing.id },
           data: {
             totalDays: data.totalDays,
+            carryOverDays: data.carryOverDays,
             remainingDays: Math.max(0, data.totalDays - existing.usedDays),
           },
         });
@@ -207,6 +216,7 @@ export class LeaveRepository {
           leaveTypeId: data.leaveTypeId,
           year: data.year,
           totalDays: data.totalDays,
+          carryOverDays: data.carryOverDays,
           usedDays: 0,
           remainingDays: data.totalDays,
         },

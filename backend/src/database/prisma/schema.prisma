@@ -3466,6 +3466,9 @@ model LeaveBalance {
   totalDays     Int       @default(0) @map("total_days")
   usedDays      Int       @default(0) @map("used_days")
   remainingDays Int       @default(0) @map("remaining_days")
+  /// Hari yang dibawa dari tahun lalu. Disimpan karena expiry me-nol-kan
+  /// saldo tahun lalu, sehingga angka ini tidak bisa diturunkan ulang.
+  carryOverDays      Int       @default(0) @map("carry_over_days")
   expiredAt     DateTime? @map("expired_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
