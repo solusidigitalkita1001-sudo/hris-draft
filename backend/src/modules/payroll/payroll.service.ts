@@ -321,10 +321,25 @@ export class PayrollService {
           const period = await payrollRepository.findPayrollPeriodById(data.periodId, tx, data.companyId);
           if (!period || period.companyId !== data.companyId) throw new NotFoundError('Payroll period not found in this company');
           if (period.status === 'CLOSED') throw new BadRequestError('Cannot create payroll run for a closed period');
-          if (!period.attendanceReviewedAt) throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
-          // VOIDED runs free the period for a fresh, corrected run.
-          const existing = await tx.payrollRun.findFirst({ where: { companyId: data.companyId, periodId: period.id, deletedAt: null, status: { not: 'VOIDED' } }, select: { id: true } });
-          if (existing) throw new ConflictError(`Payroll already exists for this period (${existing.id}); void the existing run first if it needs correction`);
+          const runType = data.runType ?? 'REGULAR';
+          // Only the monthly run is computed from attendance. THR, severance
+          // and corrections are not, so gating them on a confirmed attendance
+          // recap would block payments that have nothing to do with it.
+          if (runType === 'REGULAR' && !period.attendanceReviewedAt) {
+            throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
+          }
+          // One run per period PER TYPE. The old rule knew nothing of types, so
+          // paying THR meant voiding the month's salary run. VOIDED runs still
+          // free their slot for a fresh, corrected run of the same type.
+          const existing = await tx.payrollRun.findFirst({
+            where: { companyId: data.companyId, periodId: period.id, runType, deletedAt: null, status: { not: 'VOIDED' } },
+            select: { id: true },
+          });
+          if (existing) {
+            throw new ConflictError(
+              `A ${runType} payroll already exists for this period (${existing.id}); void it first if it needs correction`,
+            );
+          }
           const runNumber = await payrollRepository.findLatestRunNumber(data.companyId, tx) + 1;
           const run = await payrollRepository.createPayrollRun(data, runNumber, userId, tx);
           await this.calculatePayroll(run.id, tx);

@@ -10,7 +10,15 @@ describe('payroll maker-checker persistence', () => {
   beforeEach(() => jest.clearAllMocks());
   it('persists creator from the service actor argument', async () => {
     await repository.createPayrollRun({ periodId: 'period', companyId: 'A', name: 'September' }, 1, 'maker');
-    expect(prisma.payrollRun.create).toHaveBeenCalledWith({ data: { periodId: 'period', companyId: 'A', name: 'September', runNumber: 1, createdBy: 'maker' } });
+    // runType defaults to REGULAR here rather than being omitted: a run row
+    // with no type would be invisible to the one-run-per-type guard.
+    expect(prisma.payrollRun.create).toHaveBeenCalledWith({ data: { periodId: 'period', companyId: 'A', name: 'September', runNumber: 1, runType: 'REGULAR', createdBy: 'maker' } });
+  });
+  it('carries an explicit run type through to the row', async () => {
+    await repository.createPayrollRun({ periodId: 'period', companyId: 'A', name: 'THR 2026', runType: 'THR' }, 2, 'maker');
+    expect(prisma.payrollRun.create).toHaveBeenCalledWith({
+      data: { periodId: 'period', companyId: 'A', name: 'THR 2026', runNumber: 2, runType: 'THR', createdBy: 'maker' },
+    });
   });
   it('conditions approval on completed status, known creator, and a different checker', async () => {
     jest.mocked(prisma.payrollRun.updateMany).mockResolvedValue({ count: 1 });

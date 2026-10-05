@@ -13,7 +13,7 @@ import {
 } from './payroll.dto';
 
 const payslipRunSelect = {
-  id: true, name: true, runNumber: true, status: true,
+  id: true, name: true, runNumber: true, runType: true, status: true,
   period: { select: { id: true, name: true, code: true, frequency: true, startDate: true, endDate: true, payDate: true } },
 } satisfies Prisma.PayrollRunSelect;
 
@@ -375,6 +375,7 @@ export class PayrollRepository {
         companyId: data.companyId,
         name: data.name,
         runNumber,
+        runType: data.runType ?? 'REGULAR',
         createdBy,
       },
     });
