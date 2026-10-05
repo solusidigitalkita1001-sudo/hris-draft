@@ -61,6 +61,18 @@ export class ReportsController {
       const data = await reportsRepository.payroll(
         this.resolveCompanyId(req),
         req.query.periodId as string,
+        { byDepartment: req.query.byDepartment === 'true' },
+      );
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
+  async leaveBalance(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await reportsRepository.leaveBalance(
+        this.resolveCompanyId(req),
+        req.query.year ? Number(req.query.year) : undefined,
+        req.query.departmentId as string | undefined,
       );
       res.json(Result.success(data));
     } catch (error) { next(error); }
