@@ -4,6 +4,7 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { trainingController } from './training.controller';
 import { createCategorySchema, createCourseSchema, updateCourseSchema, createSessionSchema, createEnrollmentSchema,
+  courseEffectivenessQuerySchema,
   recordTrainingScoreSchema,
   submitTrainingFeedbackSchema,
 } from './training.dto';
@@ -18,6 +19,12 @@ router.post('/categories', authorize({ resource: 'training', action: 'create' })
 
 // ==================== Evaluasi pasca-training ====================
 // Static paths before /courses/:id so "enrollments" is never read as an id.
+router.get(
+  '/effectiveness',
+  authorize({ resource: 'training', action: 'read' }),
+  validate(courseEffectivenessQuerySchema, 'query'),
+  trainingController.courseEffectiveness.bind(trainingController),
+);
 router.get(
   '/enrollments/:id/evaluation',
   authorize({ resource: 'training', action: 'read' }),
