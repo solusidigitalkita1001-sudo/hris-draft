@@ -5850,6 +5850,11 @@ model DocumentSigner {
   status         DocumentSignerStatus @default(PENDING)
   signedAt       DateTime?            @map("signed_at")
   declinedReason String?              @map("declined_reason") @db.VarChar(255)
+  /// Tenggat terdekat yang remindernya sudah dikirim. Sweep harian memakai ini
+  /// supaya satu tenggat diingatkan sekali, bukan tiga puluh kali — reminder
+  /// yang datang tiap hari adalah reminder yang orang belajar abaikan.
+  /// 0 berarti reminder "sudah terlewat" sudah dikirim.
+  lastReminderDays Int?                @map("last_reminder_days")
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
 
