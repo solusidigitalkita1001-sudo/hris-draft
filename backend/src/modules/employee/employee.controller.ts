@@ -508,6 +508,17 @@ export class EmployeeController {
     } catch (error) { next(error); }
   }
 
+  async decideProbation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const result = await employmentContractService.decideProbation(
+        companyId, req.params.id as string, req.body, req.user?.id,
+      );
+      res.json(Result.success(result, 'Keputusan masa percobaan dicatat'));
+    } catch (error) { next(error); }
+  }
+
   async updateContractStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = req.user?.companyId;
