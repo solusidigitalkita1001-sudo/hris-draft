@@ -184,14 +184,20 @@ jobs:
         run: mysql -h 127.0.0.1 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS hris_ci_shadow;"
       - name: Apply full migration chain to empty DB (blocking)
         run: npx prisma migrate deploy
-      - name: Schema-vs-migrations drift check (soft)
+      # Blocking as of 5 Oct 2026. This is the only check that detects the
+      # failure that already took production down once: a column added to
+      # schema.prisma and never migrated, so Prisma SELECTs a column the
+      # database does not have and every role gets a 500. Closing that drift
+      # took a reconciliation migration of 16 CREATE TABLE IF NOT EXISTS.
+      # Advisory, it ran and was ignored. Flipped while drift was zero, so no
+      # backlog had to be cleared first.
+      - name: Schema-vs-migrations drift check (blocking)
         run: >-
           npx prisma migrate diff
           --from-migrations src/database/prisma/migrations
           --to-schema-datamodel src/database/prisma/schema.prisma
           --shadow-database-url mysql://root:root@127.0.0.1:3306/hris_ci_shadow
           --exit-code
-        continue-on-error: true
       - name: Backend tests against migrated DB (blocking)
         run: npm test
 
