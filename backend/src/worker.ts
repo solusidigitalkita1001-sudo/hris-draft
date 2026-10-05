@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { errorDetail } from '@/shared/logger/error-detail';
 import { webhookService } from '@/modules/webhook/webhook.service';
+import { AUTO_ABSENT_JOB, runAutoAbsent, scheduleAutoAbsent } from '@/modules/attendance/auto-absent.scheduler';
 import { CONTRACT_EXPIRY_REMINDER_JOB, runContractExpiryReminders, scheduleContractExpiryReminders } from '@/modules/employee/employment-contract.scheduler';
 import { SIGNING_REMINDER_JOB, runSigningReminders, scheduleSigningReminders } from '@/modules/document-management/document-signing-reminder.scheduler';
 import { runWebhookSweep, scheduleWebhookSweep } from '@/modules/webhook/webhook.scheduler';
@@ -184,6 +185,9 @@ async function bootstrapWorker(): Promise<void> {
       if (job.name === RETENTION_SWEEP_JOB) {
         return runInSystemContext('retention-worker', () => runRetentionSweep());
       }
+      if (job.name === AUTO_ABSENT_JOB) {
+        return runAutoAbsent();
+      }
       if (job.name === SIGNING_REMINDER_JOB) {
         return runSigningReminders();
       }
@@ -210,6 +214,7 @@ async function bootstrapWorker(): Promise<void> {
   await runInSystemContext('push-scheduler-bootstrap', () => schedulePushDeliverySweep());
   await runInSystemContext('webhook-scheduler-bootstrap', () => scheduleWebhookSweep());
   await runInSystemContext('contract-reminder-bootstrap', () => scheduleContractExpiryReminders());
+  await runInSystemContext('auto-absent-bootstrap', () => scheduleAutoAbsent());
   await runInSystemContext('signing-reminder-bootstrap', () => scheduleSigningReminders());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
