@@ -120,6 +120,89 @@ export class TrainingEvaluationService {
   }
 
   /** One employee's evaluation record: score and their own reaction. */
+  /**
+   * Per-course effectiveness (GAP-25). Both Kirkpatrick levels were already
+   * captured — the participant's reaction in TrainingFeedback and the learning
+   * score on the enrollment — but only ever readable one enrollment at a time.
+   * Nobody could answer "is this course worth running again", which is the
+   * only question the ratings were collected to answer.
+   *
+   * Courses with no feedback at all are reported with null averages rather
+   * than omitted: "nobody rated it" and "it rated badly" are different
+   * findings, and dropping the first hides a course nobody is evaluating.
+   */
+  async courseEffectiveness(companyId: string, courseId?: string) {
+    const enrollments = await prisma.trainingEnrollment.findMany({
+      where: { companyId, deletedAt: null, ...(courseId ? { courseId } : {}) },
+      select: {
+        courseId: true, status: true, score: true,
+        course: { select: { id: true, title: true, code: true } },
+        feedback: {
+          select: {
+            contentRating: true, trainerRating: true, relevanceRating: true,
+            facilityRating: true, wouldRecommend: true,
+          },
+        },
+      },
+    });
+
+    const byCourse = new Map<string, {
+      courseId: string; courseTitle: string; courseCode: string;
+      enrolled: number; completed: number;
+      scores: number[]; content: number[]; trainer: number[];
+      relevance: number[]; facility: number[]; recommend: number;
+      responses: number;
+    }>();
+
+    for (const row of enrollments) {
+      const bucket = byCourse.get(row.courseId) ?? {
+        courseId: row.courseId,
+        courseTitle: row.course?.title ?? 'Tidak diketahui',
+        courseCode: row.course?.code ?? '-',
+        enrolled: 0, completed: 0,
+        scores: [], content: [], trainer: [], relevance: [], facility: [],
+        recommend: 0, responses: 0,
+      };
+      bucket.enrolled += 1;
+      if (row.status === 'COMPLETED') bucket.completed += 1;
+      if (row.score !== null) bucket.scores.push(Number(row.score));
+      if (row.feedback) {
+        bucket.responses += 1;
+        bucket.content.push(row.feedback.contentRating);
+        bucket.trainer.push(row.feedback.trainerRating);
+        bucket.relevance.push(row.feedback.relevanceRating);
+        if (row.feedback.facilityRating !== null) bucket.facility.push(row.feedback.facilityRating);
+        if (row.feedback.wouldRecommend) bucket.recommend += 1;
+      }
+      byCourse.set(row.courseId, bucket);
+    }
+
+    const mean = (values: number[]) =>
+      values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100 : null;
+
+    return [...byCourse.values()]
+      .map((bucket) => ({
+        courseId: bucket.courseId,
+        courseTitle: bucket.courseTitle,
+        courseCode: bucket.courseCode,
+        enrolled: bucket.enrolled,
+        completed: bucket.completed,
+        completionRate: bucket.enrolled ? Math.round((bucket.completed / bucket.enrolled) * 100) : 0,
+        /// Kirkpatrick level 2 — did they learn anything.
+        averageScore: mean(bucket.scores),
+        /// Kirkpatrick level 1 — what the participants thought.
+        responses: bucket.responses,
+        averageContentRating: mean(bucket.content),
+        averageTrainerRating: mean(bucket.trainer),
+        averageRelevanceRating: mean(bucket.relevance),
+        averageFacilityRating: mean(bucket.facility),
+        recommendPercent: bucket.responses
+          ? Math.round((bucket.recommend / bucket.responses) * 100)
+          : null,
+      }))
+      .sort((a, b) => b.enrolled - a.enrolled);
+  }
+
   async findByEnrollment(companyId: string, enrollmentId: string) {
     const enrollment = await prisma.trainingEnrollment.findFirst({
       where: { id: enrollmentId, companyId, deletedAt: null },
