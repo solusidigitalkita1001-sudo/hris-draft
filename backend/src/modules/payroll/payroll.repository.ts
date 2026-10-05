@@ -116,6 +116,17 @@ export class PayrollRepository {
             taxId: true,
             status: true,
             employmentType: true,
+            // The employed slice of the period: a mid-period joiner is owed
+            // part of a month, and a leaver is owed the part they worked —
+            // which the run used to drop entirely once their status left
+            // ACTIVE. An approved resignation caps the window.
+            joinDate: true,
+            resignations: {
+              where: { status: 'APPROVED' },
+              orderBy: { lastWorkingDate: 'desc' },
+              take: 1,
+              select: { lastWorkingDate: true },
+            },
             department: { select: { id: true, name: true } },
             position: { select: { id: true, name: true } },
             // dependents for PTKP (Task 2.6)

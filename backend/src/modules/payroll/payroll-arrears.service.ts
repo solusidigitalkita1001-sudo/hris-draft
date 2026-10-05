@@ -1,6 +1,7 @@
 import { Prisma, PayrollArrearsStatus } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
+import { employmentWindow } from '@/shared/payroll/employment-window';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { getCurrentUser } from '@/shared/context/RequestContext';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
@@ -12,11 +13,6 @@ export interface RegisterArrearsInput {
 }
 
 /** Whole days between two dates, inclusive of both ends. */
-function inclusiveDays(from: Date, to: Date): number {
-  const ms = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate())
-    - Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-  return Math.floor(ms / 86_400_000) + 1;
-}
 
 /**
  * Arrears — paying for a closed period in the next one.
@@ -85,17 +81,16 @@ export class PayrollArrearsService {
 
     // Proration window: the part of the period the employee was actually
     // employed for. Joining on the 20th earns eleven days, not a month.
-    const periodDays = inclusiveDays(period.startDate, period.endDate);
     const joined = employee.joinDate ? new Date(employee.joinDate) : null;
-    const from = joined && joined > period.startDate ? joined : period.startDate;
     const lastWorkingDate = employee.resignations[0]?.lastWorkingDate ?? null;
-    const to = lastWorkingDate && new Date(lastWorkingDate) < period.endDate
-      ? new Date(lastWorkingDate)
-      : period.endDate;
-    if (to < from) {
+    const slice = employmentWindow({
+      periodStart: period.startDate, periodEnd: period.endDate,
+      joinDate: joined, lastWorkingDate,
+    });
+    if (!slice.employedAtAll) {
       throw new BadRequestError('The employee was not employed during any part of that period');
     }
-    const payableDays = inclusiveDays(from, to);
+    const { periodDays, payableDays } = slice;
 
     const gross = payableDays >= periodDays
       ? monthlyGross

@@ -9,7 +9,8 @@ export interface SalaryForCalculation {
   baseSalary: Prisma.Decimal | number | string; currency: string;
   components: { isActive: boolean; amount: Prisma.Decimal | number | string;
     salaryComponent: { id: string; code: string; name: string; type: SalaryType; calculationMethod: string;
-      ratePercent: Prisma.Decimal | number | string | null; isTaxable: boolean; isActive: boolean; deletedAt: Date | null } }[];
+      ratePercent: Prisma.Decimal | number | string | null; isTaxable: boolean; isProrated?: boolean;
+      isActive: boolean; deletedAt: Date | null } }[];
 }
 
 export function calculateEmployeePay(salary: SalaryForCalculation, extraComponents: PayComponent[],
@@ -22,6 +23,13 @@ export function calculateEmployeePay(salary: SalaryForCalculation, extraComponen
      * GAP-17). The component it names carries the tax allowance on the payslip.
      */
     taxAllowance?: { salaryComponentId: string; name: string } | null;
+    /**
+     * The employed slice of the period, 0..1. Scales only the components the
+     * tenant flagged `isProrated` — a flag that until now was collected in the
+     * DTO, stored, offered as a checkbox in the UI, and read by nothing, so
+     * ticking it did precisely nothing.
+     */
+    prorationFactor?: number;
   } = {}) {
   const active = salary.components.filter(allocation => allocation.isActive);
   if (active.some(allocation => !allocation.salaryComponent.isActive || allocation.salaryComponent.deletedAt)) {
@@ -35,9 +43,16 @@ export function calculateEmployeePay(salary: SalaryForCalculation, extraComponen
     method: allocation.salaryComponent.calculationMethod, amount: allocation.amount,
     ratePercent: allocation.salaryComponent.ratePercent,
   })), inputs, versions);
+  // Clamp defensively: a factor outside 0..1 would silently scale pay.
+  const factor = Math.min(1, Math.max(0, policy.prorationFactor ?? 1));
+  const scale = (amount: Prisma.Decimal, prorated: boolean | undefined) =>
+    (prorated && factor < 1
+      ? amount.times(factor).toDecimalPlaces(2)
+      : amount).toNumber();
   const resolved = active.map(allocation => ({ code: allocation.salaryComponent.code, entry: {
     salaryComponentId: allocation.salaryComponent.id, name: allocation.salaryComponent.name,
-    type: allocation.salaryComponent.type, amount: result.amounts.get(allocation.salaryComponent.code)!.toNumber(),
+    type: allocation.salaryComponent.type,
+    amount: scale(result.amounts.get(allocation.salaryComponent.code)!, allocation.salaryComponent.isProrated),
     isTaxable: allocation.salaryComponent.isTaxable,
   } }));
   const wage = Number(salary.baseSalary);
