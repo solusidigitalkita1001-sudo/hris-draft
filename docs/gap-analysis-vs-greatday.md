@@ -1149,13 +1149,23 @@ mata uang pembayaran dari mata uang pelaporan pajak. DTO-nya juga diberi rujukan
 ke bagian itu, supaya pembaca kode tidak menyimpulkan `z.literal('IDR')` sebagai
 kelalaian.
 
-### ⚪ GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek — DIPUTUSKAN DILEWATI 30 Sep
+### ⚪ GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek — **REKOMENDASI dilewati; keputusan belum diambil**
+
+> Judul ini sebelumnya berbunyi "DIPUTUSKAN DILEWATI". Itu berlebihan:
+> `open-hr-decisions.md` mencatatnya sebagai *Rekomendasi*, bukan jawaban
+> pemilik produk. Selama belum dijawab, ini gap terbuka yang sedang
+> disarankan dilewati — bukan gap yang sudah ditutup dengan keputusan.
 
 `DailyActivity` mencatat aktivitas harian dengan bukti GPS dan foto, tetapi tidak
 ada timesheet per proyek/klien dengan jam billable dan approval — yang dipakai
 perusahaan jasa untuk menagih. Tidak ada model proyek sama sekali.
 
-### ⚪ GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank — DIPUTUSKAN DILEWATI 30 Sep
+### ⚪ GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank — **REKOMENDASI dilewati; keputusan belum diambil**
+
+> Judul ini sebelumnya berbunyi "DIPUTUSKAN DILEWATI". Itu berlebihan:
+> `open-hr-decisions.md` mencatatnya sebagai *Rekomendasi*, bukan jawaban
+> pemilik produk. Selama belum dijawab, ini gap terbuka yang sedang
+> disarankan dilewati — bukan gap yang sudah ditutup dengan keputusan.
 
 GAP-12 ditutup dengan ekspor CSV per bank yang bisa diunggah ke internet
 banking. Pencairan langsung lewat API bank/payment gateway (beserta rekonsiliasi
@@ -1281,7 +1291,8 @@ jadi tidak dihitung sebagai gap baru.
 dengan sadar** (GAP-35 timesheet proyek, GAP-36 API bank), dan **0 yang tertahan
 pekerjaan teknis atau keputusan yang belum diambil**.
 
-Seluruh 17 keputusan di `docs/open-hr-decisions.md` sudah dijawab. Yang tersisa
+Lima belas dari 17 keputusan di `docs/open-hr-decisions.md` sudah dijawab;
+item 16 (GAP-35) dan 17 (GAP-36) masih rekomendasi. Yang tersisa
 hanyalah **satu permintaan konkret**: kirim satu contoh berkas 1721-A1 dan satu
 contoh laporan BPJS yang tim payroll-mu benar-benar unggah, supaya generator
 berkas resminya bisa dilapiskan di atas angka yang sudah dirakit dan diuji.
