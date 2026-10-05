@@ -93,6 +93,7 @@ import { RoleListPage } from '@/modules/rbac/pages/RoleListPage';
 
 // Self Service Pages
 const SelfServicePage = lazy(() => import('@/modules/self-service/pages/SelfServicePage').then((m) => ({ default: m.SelfServicePage })));
+const AttendanceCorrectionPage = lazy(() => import('@/modules/attendance-correction/pages/AttendanceCorrectionPage').then((m) => ({ default: m.AttendanceCorrectionPage })));
 
 // Employee Loan Pages
 import { EmployeeLoanPage } from '@/modules/employee-loan/pages/EmployeeLoanPage';
@@ -639,6 +640,15 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
             <SelfServicePage />
+          </ProtectedRoute>
+        ),
+      },
+      // Attendance Correction (self-service, GAP-30)
+      {
+        path: 'attendance-corrections',
+        element: (
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
+            <AttendanceCorrectionPage />
           </ProtectedRoute>
         ),
       },
