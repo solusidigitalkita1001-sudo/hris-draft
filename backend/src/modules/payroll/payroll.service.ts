@@ -26,6 +26,7 @@ import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.re
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { calculateBpjs } from '@/shared/payroll/bpjs';
 import { calculatePph21 } from '@/shared/payroll/pph21';
+import { employmentWindow } from '@/shared/payroll/employment-window';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 import { calculateThr } from '@/shared/payroll/thr';
 import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
@@ -783,9 +784,22 @@ export class PayrollService {
 
     for (const salary of employeeSalaries) {
       if (!salary.isActive) continue;
-      // Terminated/resigned employees stop being paid; soft-deleted employees
-      // no longer abort the whole run via the attendance loader mismatch.
-      if (salary.employee.status !== 'ACTIVE') continue;
+      // The employed slice of this period decides both whether to pay and how
+      // much. Skipping on status alone dropped a leaver's final partial month
+      // entirely: they resign on the 10th, their status is RESIGNED by the
+      // time the run happens, and the days they actually worked were never
+      // paid. Status still ends payment — but from the period after the one
+      // their last working day falls in, not from this one.
+      const slice = employmentWindow({
+        periodStart,
+        periodEnd,
+        joinDate: salary.employee.joinDate,
+        lastWorkingDate: salary.employee.resignations?.[0]?.lastWorkingDate ?? null,
+      });
+      if (!slice.employedAtAll) continue;
+      // A non-ACTIVE employee is only paid for a period their window reaches
+      // into; once it does not, the status check does the rest as before.
+      if (salary.employee.status !== 'ACTIVE' && !slice.prorated) continue;
       if (salary.companyId !== run.companyId || salary.employee.companyId !== run.companyId || salary.components.some(allocation => allocation.salaryComponent.companyId !== run.companyId)) {
         throw new ConflictError('Salary allocation references a component outside the payroll company');
       }
@@ -950,6 +964,9 @@ export class PayrollService {
         ABSENT_DAYS: String(absentDays), OVERTIME_HOURS: String(overtimeHoursForEmployee),
       }, formulaVersions, {
         ...payrollPolicy,
+        // Only components the tenant flagged isProrated are scaled; see
+        // employee-pay.ts. A full window leaves every amount untouched.
+        prorationFactor: slice.fraction,
         taxAllowance: taxAllowanceComponent
           ? { salaryComponentId: taxAllowanceComponent.id, name: taxAllowanceComponent.name }
           : null,
