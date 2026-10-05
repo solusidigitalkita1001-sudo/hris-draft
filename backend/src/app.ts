@@ -105,7 +105,10 @@ app.use(
     origin: config.cors.origins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Idempotency-Key', 'X-Payroll-Unlock-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Idempotency-Key', 'X-Payroll-Unlock-Token', 'X-Payslip-Unlock',
+      // X-Client-Type switches the auth response to body tokens; the two
+      // trace headers are read by ErrorHandler to correlate a client's logs.
+      'X-Client-Type', 'X-Request-Id', 'X-Correlation-Id'],
     exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-Office-Timezone', 'X-Server-Date', 'Idempotency-Replayed'],
     maxAge: 86400, // 24 hours
   })
