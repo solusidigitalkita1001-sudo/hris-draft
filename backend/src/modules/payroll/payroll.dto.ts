@@ -102,6 +102,15 @@ export const calculateThrStandaloneSchema = z.object({
   monthlyWage: z.number().min(0).max(1_000_000_000_000),
   joinDate: z.string().datetime(),
   referenceDate: z.string().datetime().optional(),
+  // PTKP status, so the endpoint can also say what will be withheld. All
+  // optional: this is a pure calculator and the caller may not know the
+  // employee's status. Omit them and the response reports no tax rather than
+  // quietly assuming TK/0, which would understate it for everybody else.
+  married: z.boolean().optional(),
+  dependents: z.number().int().min(0).max(3).optional(),
+  hasNpwp: z.boolean().optional(),
+  monthlyPensionContribution: z.number().min(0).optional(),
+  method: z.enum(['ANNUALIZED', 'TER']).optional(),
 });
 
 export const calculateBpjsSchema = z.object({

@@ -89,3 +89,67 @@ describe('PPh 21 on THR', () => {
     expect(result.tax).toBe(0);
   });
 });
+
+/**
+ * Under TER the THR is not an annual increment at all. PMK 168/2023 Pasal 5
+ * lists a permanent employee's income as including "bonus, tunjangan hari
+ * raya, jasa produksi, tantiem, gratifikasi, premi", and Pasal 13 applies the
+ * monthly effective rate to that whole gross — so the month the THR lands in
+ * simply has a larger bruto and attracts the rate that bruto carries.
+ */
+describe('THR under the TER method', () => {
+  const ter = (over: Partial<Parameters<typeof calculateThrTax>[0]> = {}) =>
+    calculateThrTax({
+      monthlyGross: 10_000_000, thrAmount: 10_000_000,
+      married: false, dependents: 0, method: 'TER', ...over,
+    });
+
+  it('charges the difference between the month with and without the THR', () => {
+    const result = ter();
+    // Kategori A: 10 juta is 2%, 20 juta is 9% (PP 58/2023 Lampiran A).
+    expect(result.terRateWithoutThr).toBe(2);
+    expect(result.terRateWithThr).toBe(9);
+    // 20.000.000 x 9% - 10.000.000 x 2% = 1.800.000 - 200.000
+    expect(result.tax).toBe(1_600_000);
+    expect(result.method).toBe('TER');
+  });
+
+  it('reports no annual figures, because TER has none', () => {
+    const result = ter();
+    expect(result.annualTaxWithoutThr).toBe(0);
+    expect(result.annualTaxWithThr).toBe(0);
+  });
+
+  it('follows the employee PTKP category, not just the amount', () => {
+    // K/3 is kategori C, whose brackets differ from A at the same gross.
+    const single = ter({ married: false, dependents: 0 });
+    const married3 = ter({ married: true, dependents: 3 });
+    expect(married3.terRateWithThr).not.toBe(single.terRateWithThr);
+    expect(married3.tax).toBeLessThan(single.tax);
+  });
+
+  it('differs from the annualized answer, which is why the method is an input', () => {
+    const annualized = calculateThrTax({
+      monthlyGross: 10_000_000, thrAmount: 10_000_000, married: false, dependents: 0,
+    });
+    expect(annualized.method).toBe('ANNUALIZED');
+    expect(annualized.tax).not.toBe(ter().tax);
+  });
+
+  it('charges nothing when there is no THR to pay', () => {
+    expect(ter({ thrAmount: 0 }).tax).toBe(0);
+  });
+
+  it('honours a tenant bracket override', () => {
+    const result = ter({ terTables: { A: [[50_000_000, 10], [null, 30]] } });
+    // Both months sit in the same overridden bracket, so the THR costs 10%.
+    expect(result.terRateWithoutThr).toBe(10);
+    expect(result.terRateWithThr).toBe(10);
+    expect(result.tax).toBe(1_000_000);
+  });
+
+  it('keeps the withholding non-negative even if a table slopes the wrong way', () => {
+    // A misconfigured override must never pay the employee out of tax.
+    expect(ter({ terTables: { A: [[12_000_000, 30], [null, 1]] } }).tax).toBe(0);
+  });
+});
