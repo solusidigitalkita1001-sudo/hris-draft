@@ -113,6 +113,7 @@ const COMPANY_SCOPED_MODELS = new Set([
   'TaxBracket',
   'PtkpTable',
   'BpjsReference',
+  'TerBracket',
   'Survey',
   'Employee',
   'EmployeeCompanyAssignment',

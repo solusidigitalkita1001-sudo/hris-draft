@@ -3,11 +3,13 @@
  * - TaxBracket 2024 (UU HPP 2022, 5 tiers)
  * - PtkpTable 2024 (PTKP base 54jt, step 4.5jt, 8 combos TK/K × 0-3 dep)
  * - BpjsReference 2024 (5 JKK Risk Class I-V, JP cap 10,547,400, JKN cap 12jt)
+ * - TerBracket 2024 (PP 58/2023 Lampiran A/B/C — 44 + 40 + 41 lapisan)
  *
  * Semua idempotent: findFirst unique → skip exist, else createMany.
  * Dipanggil SETELAH seedTestData di seed.ts.
  */
 import { PrismaClient, JKKRiskClass } from '@prisma/client';
+import { DEFAULT_TER_BRACKETS } from '../../../shared/payroll/ter-tables';
 
 const TAX_YEAR = 2024;
 
@@ -110,5 +112,30 @@ export async function seedPayrollReferences(prisma: PrismaClient) {
     }
   }
 
-  console.log(`[seed] Payroll reference tables OK (year=${TAX_YEAR}): 5 TaxBracket + 8 PtkpTable + 5 BpjsReference`);
+  // TER brackets (PP 58/2023). Seeded from the same constant the calculator
+  // falls back to, so the table in the database and the statutory default can
+  // never disagree. Row-by-row create is deliberate: 125 rows once, and it
+  // skips a category already present rather than duplicating it.
+  let terSeeded = 0;
+  for (const category of ['A', 'B', 'C'] as const) {
+    const existing = await prisma.terBracket.count({
+      where: { companyId: null, year: TAX_YEAR, category },
+    });
+    if (existing > 0) continue;
+    const rows = DEFAULT_TER_BRACKETS[category];
+    await prisma.terBracket.createMany({
+      data: rows.map(([upperBound, ratePercent], index) => ({
+        companyId: null,
+        year: TAX_YEAR,
+        category,
+        level: index + 1,
+        upperBound,
+        ratePercent,
+        isActive: true,
+      })),
+    });
+    terSeeded += rows.length;
+  }
+
+  console.log(`[seed] Payroll reference tables OK (year=${TAX_YEAR}): 5 TaxBracket + 8 PtkpTable + 5 BpjsReference + ${terSeeded} TerBracket`);
 }

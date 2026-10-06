@@ -47,6 +47,7 @@ const PLATFORM_FALLBACK_MODELS = new Set([
   'TaxBracket',
   'PtkpTable',
   'BpjsReference',
+  'TerBracket',
 ]);
 
 export const TENANT_WRITE_ACTIONS = new Set([
