@@ -32,6 +32,17 @@ BACKEND_PORT="${BACKEND_PORT:-3000}"
 MAX_RETRY_WAIT_CONTAINER="${MAX_RETRY_WAIT_CONTAINER:-20}"
 MAX_RETRY_WAIT_HEALTH="${MAX_RETRY_WAIT_HEALTH:-18}"
 
+# Database backup before any schema change. Rollback of CODE exists
+# (deploy.yml re-deploys the previous commit); rollback of DATA did not exist at
+# all, so a migration that dropped or narrowed a column was unrecoverable.
+DB_BACKUP_ENABLED="${DB_BACKUP_ENABLED:-true}"
+DB_BACKUP_DIR="${DB_BACKUP_DIR:-$DEPLOY_DIR/backups}"
+DB_BACKUP_KEEP="${DB_BACKUP_KEEP:-7}"
+# The server is shared with other projects. Filling the disk would take them
+# down too, so the dump refuses to start without room to land.
+DB_BACKUP_MIN_FREE_MB="${DB_BACKUP_MIN_FREE_MB:-2048}"
+MYSQL_CONTAINER="${MYSQL_CONTAINER:-mysql-db}"
+
 MIGRATION_SCHEMA="src/database/prisma/schema.prisma"
 
 SPECIAL_MIGRATION="20260809120000_attendance_policy_company_default"
@@ -72,6 +83,135 @@ error_message() {
 
 recover_face_match_index() {
     docker exec -i "$BACKEND_CONTAINER" node - "$MIGRATION_SCHEMA" < "$FACE_MATCH_RECOVERY"
+}
+
+# =====================================================================
+# DATABASE BACKUP
+#
+# Runs BEFORE the schema sanitizer, not merely before `migrate deploy`: the
+# sanitizer in STEP 6 already issues DROP INDEX and MODIFY COLUMN, so a dump
+# taken after it would not describe the database anybody would want back.
+#
+# Only this application's database is touched, by name, read from DATABASE_URL.
+# mysql-db is shared with other projects, so nothing here writes to it and no
+# other schema is named.
+# =====================================================================
+
+backup_database() {
+    if [ "$DB_BACKUP_ENABLED" != "true" ]; then
+        warn "DB_BACKUP_ENABLED=$DB_BACKUP_ENABLED — melewati backup database"
+        return 0
+    fi
+
+    if ! docker exec "$MYSQL_CONTAINER" sh -c 'command -v mysqldump' >/dev/null 2>&1; then
+        error_message "mysqldump tidak tersedia di container $MYSQL_CONTAINER; backup tidak bisa dibuat."
+        return 1
+    fi
+
+    mkdir -p "$DB_BACKUP_DIR"
+
+    # Refuse rather than fill a shared disk.
+    local free_mb
+    free_mb="$(df -Pm "$DB_BACKUP_DIR" | awk 'NR==2 {print $4}')"
+    if [ -z "$free_mb" ]; then
+        error_message "Tidak bisa membaca sisa kapasitas disk untuk $DB_BACKUP_DIR."
+        return 1
+    fi
+    if [ "$free_mb" -lt "$DB_BACKUP_MIN_FREE_MB" ]; then
+        error_message "Sisa disk ${free_mb}MB di bawah batas ${DB_BACKUP_MIN_FREE_MB}MB; backup dibatalkan sebelum migrasi."
+        return 1
+    fi
+
+    # Credentials are read inside the container and never printed. Tab-separated
+    # so a password containing spaces survives, and percent-decoded because a
+    # DATABASE_URL encodes reserved characters.
+    local creds
+    creds="$(
+        docker exec "$BACKEND_CONTAINER" node -e '
+            const url = new URL(process.env.DATABASE_URL);
+            const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
+            if (!database) { process.stderr.write("DATABASE_URL has no database name\n"); process.exit(1); }
+            process.stdout.write([
+                decodeURIComponent(url.username),
+                decodeURIComponent(url.password),
+                database,
+            ].join("\t"));
+        '
+    )" || {
+        error_message "Gagal membaca DATABASE_URL dari container."
+        return 1
+    }
+
+    local db_user db_pass db_name
+    db_user="$(printf '%s' "$creds" | cut -f1)"
+    db_pass="$(printf '%s' "$creds" | cut -f2)"
+    db_name="$(printf '%s' "$creds" | cut -f3)"
+
+    if [ -z "$db_name" ] || [ -z "$db_user" ]; then
+        error_message "DATABASE_URL tidak lengkap; backup dibatalkan."
+        return 1
+    fi
+
+    local stamp target
+    stamp="$(date '+%Y%m%d-%H%M%S')"
+    target="$DB_BACKUP_DIR/${db_name}-${stamp}-${DEPLOY_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}.sql.gz"
+
+    log "Dumping database $db_name sebelum perubahan skema"
+
+    # MYSQL_PWD keeps the password out of the process list of a container other
+    # projects also use. --single-transaction snapshots InnoDB without locking,
+    # so no other project's queries are blocked while this runs.
+    dump_to() {
+        docker exec -i -e MYSQL_PWD="$db_pass" "$MYSQL_CONTAINER" \
+            mysqldump --user="$db_user" --single-transaction --quick \
+                --default-character-set=utf8mb4 "$@" "$db_name" \
+            | gzip -c > "$target"
+    }
+
+    # Routines and triggers need privileges beyond the table rights this user
+    # certainly has. Attempted first, because a restore silently missing them
+    # is a nasty surprise; but a user without those grants must not be the
+    # reason a deploy cannot happen at all, so the plain dump is the fallback.
+    if ! dump_to --routines --triggers; then
+        warn "mysqldump dengan --routines/--triggers gagal; mencoba tanpa keduanya."
+        if ! dump_to; then
+            error_message "mysqldump gagal; migrasi dibatalkan sebelum menyentuh skema."
+            rm -f "$target"
+            return 1
+        fi
+        warn "Backup tidak menyertakan stored routine dan trigger (hak akses kurang)."
+    fi
+
+    # A truncated dump is the dangerous failure: it restores cleanly and is
+    # missing rows. mysqldump writes its trailer only after finishing, so the
+    # trailer is the proof the dump is whole. Checked on an empty database too.
+    if ! gzip -t "$target" 2>/dev/null; then
+        error_message "Dump tidak lolos uji integritas gzip; migrasi dibatalkan."
+        rm -f "$target"
+        return 1
+    fi
+    if ! gzip -dc "$target" | tail -c 2048 | grep -q 'Dump completed'; then
+        error_message "Dump terpotong (tidak ada penanda 'Dump completed'); migrasi dibatalkan."
+        rm -f "$target"
+        return 1
+    fi
+
+    ok "Backup database tersimpan: $target ($(du -h "$target" | cut -f1))"
+
+    # Retention, newest kept. The glob names this database only, so nothing
+    # belonging to another project can be removed. A plain loop on purpose:
+    # this deletes files, and it should be obvious what it deletes.
+    local removed=0 stale
+    while IFS= read -r stale; do
+        [ -n "$stale" ] || continue
+        rm -f "$stale"
+        removed=$((removed + 1))
+    done <<EOF
+$(ls -1t "$DB_BACKUP_DIR/${db_name}"-*.sql.gz 2>/dev/null | tail -n "+$((DB_BACKUP_KEEP + 1))")
+EOF
+    if [ "$removed" -gt 0 ]; then
+        echo "Menghapus $removed backup lama (menyimpan $DB_BACKUP_KEEP terbaru)"
+    fi
 }
 
 cd "$DEPLOY_DIR"
@@ -134,7 +274,7 @@ echo "Commit        : ${DEPLOY_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null 
 # STEP 1 — VALIDATION
 # =====================================================================
 
-log "STEP 1/8: Validate deployment environment"
+log "STEP 1/9: Validate deployment environment"
 
 if ! command -v docker >/dev/null 2>&1; then
     error_message "Docker tidak ditemukan."
@@ -189,7 +329,7 @@ ok "Deployment environment valid"
 # STEP 2 — DOCKER BUILD + START
 # =====================================================================
 
-log "STEP 2/8: Docker compose build"
+log "STEP 2/9: Docker compose build"
 
 compose build
 
@@ -205,7 +345,7 @@ compose ps
 # STEP 3 — WAIT BACKEND CONTAINER
 # =====================================================================
 
-log "STEP 3/8: Waiting for $BACKEND_CONTAINER"
+log "STEP 3/9: Waiting for $BACKEND_CONTAINER"
 
 COUNT=0
 
@@ -266,7 +406,7 @@ ok "DATABASE_URL tersedia di container"
 # STEP 4 — MYSQL CONNECTIVITY
 # =====================================================================
 
-log "STEP 4/8: Test mysql-db:3306 connectivity"
+log "STEP 4/9: Test mysql-db:3306 connectivity"
 
 docker exec -i "$BACKEND_CONTAINER" node - <<'NODEEOF'
 const net = require('net');
@@ -303,6 +443,14 @@ NODEEOF
 ok "MySQL reachable"
 
 # =====================================================================
+# STEP 5 — DATABASE BACKUP
+# =====================================================================
+
+log "STEP 5/9: Backup database before schema changes"
+
+backup_database
+
+# =====================================================================
 # STEP 5 — SPECIAL MIGRATION RECOVERY
 #
 # TODO:
@@ -310,7 +458,7 @@ ok "MySQL reachable"
 # 20260809120000_attendance_policy_company_default sudah confirmed applied.
 # =====================================================================
 
-log "STEP 5/8: Check special migration recovery"
+log "STEP 6/9: Check special migration recovery"
 
 docker exec -i "$BACKEND_CONTAINER" \
     npx prisma db execute \
@@ -469,7 +617,7 @@ recover_face_match_index
 # STEP 6 — PRISMA MIGRATION
 # =====================================================================
 
-log "STEP 6/8: Prisma migrate deploy"
+log "STEP 7/9: Prisma migrate deploy"
 
 MIGRATE_LOG="$(mktemp)"
 
@@ -539,7 +687,7 @@ fi
 # STEP 7 — BACKEND HEALTH CHECK
 # =====================================================================
 
-log "STEP 7/8: Backend health check"
+log "STEP 8/9: Backend health check"
 
 COUNT=0
 
@@ -623,7 +771,7 @@ ok "Backend healthy"
 # STEP 8 — CLEANUP
 # =====================================================================
 
-log "STEP 8/8: Docker cleanup"
+log "STEP 9/9: Docker cleanup"
 
 docker image prune \
     -f \
