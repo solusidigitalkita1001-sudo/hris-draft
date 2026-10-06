@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
 import { calculateBpjs, DEFAULT_BPJS_CONFIG, type BpjsConfig } from '@/shared/payroll/bpjs';
+import { buildSippWageExport } from '@/shared/payroll/sipp-wage-export';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 
 export interface BpjsReportRow {
@@ -10,6 +11,8 @@ export interface BpjsReportRow {
   nik: string | null;
   bpjsKesehatanNumber: string | null;
   bpjsKetenagakerjaanNumber: string | null;
+  /** `yyyy-mm-dd`; SIPP matches on it alongside NIK and KPJ. */
+  dateOfBirth: string | null;
   /** The wage the contributions were computed on — base salary, as payroll uses. */
   wageBasis: string;
   employee: { jht: string; jp: string; jkn: string; total: string };
@@ -104,6 +107,8 @@ export class BpjsReportService {
           select: {
             employeeNumber: true, fullName: true, idNumber: true,
             bpjsKesehatan: true, bpjsKetenagakerjaan: true,
+            // SIPP matches a participant on NIK, KPJ and date of birth.
+            dateOfBirth: true,
           },
         },
       },
@@ -149,6 +154,9 @@ export class BpjsReportService {
         nik: payslip.employee.idNumber,
         bpjsKesehatanNumber: payslip.employee.bpjsKesehatan,
         bpjsKetenagakerjaanNumber: payslip.employee.bpjsKetenagakerjaan,
+        dateOfBirth: payslip.employee.dateOfBirth
+          ? new Date(payslip.employee.dateOfBirth).toISOString().slice(0, 10)
+          : null,
         wageBasis: money(wage).toFixed(2),
         employee: {
           jht: money(breakdown.employee.jht).toFixed(2),
@@ -204,6 +212,38 @@ export class BpjsReportService {
       warnings: reportWarnings,
     };
   }
+
+  /**
+   * The wage figures shaped for SIPP Online's Upload Upah.
+   *
+   * Built on top of the monthly report rather than a second query, so the
+   * wage SIPP is told matches the wage the contributions were computed on.
+   * See `shared/payroll/sipp-wage-export.ts` for why this fills the portal's
+   * template instead of replacing it.
+   */
+  async buildSippWages(companyId: string, periodId: string) {
+    const report = await this.build(companyId, periodId);
+    const start = new Date(report.period.startDate);
+    return {
+      ...buildSippWageExport({
+        month: start.getUTCMonth() + 1,
+        year: start.getUTCFullYear(),
+        employees: report.rows.map((row) => ({
+          employeeNumber: row.employeeNumber,
+          fullName: row.fullName,
+          nik: row.nik,
+          kpj: row.bpjsKetenagakerjaanNumber,
+          dateOfBirth: row.dateOfBirth,
+          wage: row.wageBasis,
+        })),
+      }),
+      // Named apart from the export's own `period`, which is the mm-yyyy string
+      // SIPP wants. Spreading one over the other would have silently replaced
+      // it with an object.
+      payrollPeriod: report.period,
+      company: report.company,
+    };
+  }
 }
 
 /** CSV for the payroll team's own reconciliation; deliberately not a BPJS upload file. */
@@ -214,7 +254,13 @@ export function bpjsReportToCsv(report: BpjsReport): string {
     'JKK Perusahaan', 'JKM Perusahaan', 'JHT Perusahaan', 'JP Perusahaan', 'JKN Perusahaan', 'Total Perusahaan',
     'Total', 'Catatan',
   ];
-  const escape = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+  // A leading '=', '+', '-' or '@' is executed when a spreadsheet opens the
+  // file, and employee names are tenant-supplied. Neutralised the same way
+  // `journal.ts` does.
+  const escape = (value: string) => {
+    const guarded = /^[=+\-@]/.test(value) ? `'${value}` : value;
+    return /[",\n]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
+  };
   const lines = [header.join(',')];
 
   for (const row of report.rows) {

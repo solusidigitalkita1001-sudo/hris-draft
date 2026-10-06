@@ -34,7 +34,7 @@ const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -163,6 +163,17 @@ router.get(
   validate(bpjsReportQuerySchema, 'query'),
   auditView({ action: 'VIEW_BPJS_REPORT', entity: 'PayrollPeriod' }),
   payrollController.bpjsReport.bind(payrollController)
+);
+
+// The same wages, shaped to fill SIPP Online's Upload Upah template. Not an
+// upload file: SIPP issues the template per company and defines its structure.
+router.get(
+  '/sipp-wage-export',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(bpjsReportQuerySchema, 'query'),
+  auditView({ action: 'VIEW_SIPP_WAGE_EXPORT', entity: 'PayrollPeriod' }),
+  payrollController.sippWageExport.bind(payrollController)
 );
 
 // ==================== Rekap PPh21 tahunan (bahan 1721-A1) ====================
