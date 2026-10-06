@@ -7,6 +7,7 @@ import { Result } from '@/shared/core/Result';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
 import { bpjsReportService, bpjsReportToCsv } from './bpjs-report.service';
+import { sippWageExportToCsv } from '@/shared/payroll/sipp-wage-export';
 import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
@@ -609,6 +610,28 @@ export class PayrollController {
   }
 
   // ==================== Laporan iuran BPJS bulanan ====================
+  /**
+   * The wage figures shaped for SIPP Online's Upload Upah. The payload says
+   * `verified: false` and carries a warning that the template itself must be
+   * downloaded from SIPP — see `shared/payroll/sipp-wage-export.ts`.
+   */
+  async sippWageExport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const data = await bpjsReportService.buildSippWages(companyId, String(req.query.periodId));
+
+      if (req.query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="upah-sipp-${data.payrollPeriod.code}.csv"`);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(sippWageExportToCsv(data));
+        return;
+      }
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
   async bpjsReport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = req.user?.companyId;
