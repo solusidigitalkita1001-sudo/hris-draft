@@ -81,7 +81,26 @@ export const employeeSalaryService = {
       if (!employee) throw new NotFoundError('Employee not found in the permitted payroll scope');
       const salaries = await database.employeeSalary.findMany({
         where: { companyId, employeeId: employee.id, isActive: true, deletedAt: null },
-        select: { baseSalary: true, currency: true }, take: 2,
+        select: {
+          baseSalary: true, currency: true,
+          // The allocation, because "upah sebulan" for THR is gaji pokok plus
+          // tunjangan tetap — not base salary alone, which is all this used to
+          // read. The same rows give the regular taxable gross the THR's tax
+          // depends on.
+          components: {
+            where: { isActive: true },
+            select: {
+              isActive: true, amount: true,
+              salaryComponent: {
+                select: {
+                  name: true, type: true, isTaxable: true,
+                  isFixedAllowance: true, isActive: true, deletedAt: true,
+                },
+              },
+            },
+          },
+        },
+        take: 2,
       });
       if (salaries.length > 1) throw new ConflictError('Multiple active salaries found; review the existing allocations');
       const salary = salaries[0] ?? null;

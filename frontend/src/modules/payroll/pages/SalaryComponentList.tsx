@@ -82,6 +82,7 @@ function SalaryComponentForm({
   const [ratePercent, setRatePercent] = useState(initial?.ratePercent !== undefined && initial?.ratePercent !== null ? String(initial.ratePercent) : '');
   const [isTaxable, setIsTaxable] = useState(Boolean(initial?.isTaxable ?? true));
   const [isProrated, setIsProrated] = useState(Boolean(initial?.isProrated ?? false));
+  const [isFixedAllowance, setIsFixedAllowance] = useState(Boolean(initial?.isFixedAllowance ?? false));
   const [isActive, setIsActive] = useState(Boolean(initial?.isActive ?? true));
   const [description, setDescription] = useState(initial?.description || '');
   const [sortOrder, setSortOrder] = useState<number>(initial?.sortOrder ?? 0);
@@ -123,6 +124,7 @@ function SalaryComponentForm({
         ratePercent: calculationMethod === 'PERCENTAGE' ? parsedRate : undefined,
         isTaxable,
         isProrated,
+        isFixedAllowance,
         isActive,
         description: description.trim() || undefined,
         sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
@@ -205,6 +207,10 @@ function SalaryComponentForm({
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isProrated} onChange={(event) => setIsProrated(event.target.checked)} />
           {t('fin.salary.prorated')}
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={isFixedAllowance} onChange={(event) => setIsFixedAllowance(event.target.checked)} />
+          {t('fin.salary.fixedAllowance')}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />

@@ -86,8 +86,18 @@ function salaryRow(over: Row = {}) {
   return {
     id: 'salary-1', currency: 'IDR', baseSalary: new Prisma.Decimal('10500000'),
     components: [
-      { amount: new Prisma.Decimal('1050000'), salaryComponent: { name: 'Tunjangan Transport', type: 'ALLOWANCE' } },
-      { amount: new Prisma.Decimal('200000'), salaryComponent: { name: 'Potongan Koperasi', type: 'DEDUCTION' } },
+      // Tunjangan jabatan is paid every month regardless of attendance, so it
+      // is tunjangan TETAP and belongs in "upah sebulan".
+      { isActive: true, amount: new Prisma.Decimal('1050000'),
+        salaryComponent: { name: 'Tunjangan Jabatan', type: 'ALLOWANCE', isFixedAllowance: true } },
+      // Transport moves with days attended. The statute excludes it, and this
+      // fixture used to have it as the ONLY allowance — so the expectation
+      // below was asserting that a variable allowance inflates the daily rate,
+      // which is the behaviour `isFixedAllowance` exists to end.
+      { isActive: true, amount: new Prisma.Decimal('900000'),
+        salaryComponent: { name: 'Tunjangan Transport', type: 'ALLOWANCE', isFixedAllowance: false } },
+      { isActive: true, amount: new Prisma.Decimal('200000'),
+        salaryComponent: { name: 'Potongan Koperasi', type: 'DEDUCTION' } },
     ],
     ...over,
   };
@@ -138,8 +148,9 @@ describe('encashment policy is per company, not hardcoded', () => {
   it('includes fixed allowances when the policy says so', async () => {
     state.settings = enabled({ leave_encashment_include_allowances: 'true' });
     await request();
-    // (10.500.000 + 1.050.000) / 21 = 550.000 per day × 2. The deduction
-    // component is not part of a wage basis.
+    // (10.500.000 + 1.050.000) / 21 = 550.000 per day × 2. The deduction is
+    // not part of a wage basis, and neither is the 900.000 transport
+    // allowance — it is tunjangan tidak tetap.
     expect(String(state.created[0].grossAmount)).toBe('1100000');
   });
 
@@ -148,6 +159,18 @@ describe('encashment policy is per company, not hardcoded', () => {
     state.settings = enabled({ leave_encashment_daily_divisor: divisor });
     await request();
     expect(String(state.created[0].grossAmount)).toBe('1000000');
+  });
+
+  it('leaves a variable allowance out of the daily rate even when allowances count', async () => {
+    // The whole point of the flag. Transport is paid per day attended, so
+    // including it would pay out leave at a rate the employee never earns on
+    // a non-working day.
+    state.settings = enabled({ leave_encashment_include_allowances: 'true' });
+    await request();
+    expect(String(state.created[0].grossAmount)).toBe('1100000');
+    expect(state.created[0].basis).toMatchObject({
+      allowances: [{ name: 'Tunjangan Jabatan', amount: '1050000' }],
+    });
   });
 
   it('keeps the derivation with the row so the payout can be traced', async () => {

@@ -380,6 +380,11 @@ model SalaryComponent {
   ratePercent         Decimal?                    @map("rate_percent") @db.Decimal(5, 2)
   isTaxable           Boolean                     @default(true) @map("is_taxable")
   isProrated          Boolean                     @default(false) @map("is_prorated")
+  /// Tunjangan tetap: paid every month regardless of attendance or output.
+  /// Separates it from tunjangan tidak tetap (transport per day, meal per
+  /// shift), which the statutory "upah sebulan" excludes — the base for THR
+  /// (Permenaker 6/2016) and for the leave-encashment daily rate.
+  isFixedAllowance    Boolean                     @default(false) @map("is_fixed_allowance")
   isActive            Boolean                     @default(true) @map("is_active")
   description         String?                     @db.Text
   sortOrder           Int                         @default(0) @map("sort_order")
