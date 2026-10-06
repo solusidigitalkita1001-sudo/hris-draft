@@ -16,6 +16,7 @@ import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
@@ -30,6 +31,7 @@ import { buildPayrollJournal } from '@/shared/payroll/journal';
 import { employmentWindow } from '@/shared/payroll/employment-window';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 import { calculateThr } from '@/shared/payroll/thr';
+import { calculateThrTax } from '@/shared/payroll/thr-tax';
 import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
 import { prisma } from '@/shared/database/prisma';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
@@ -164,12 +166,48 @@ export class PayrollService {
       referenceDate: referenceDate ?? new Date(),
     });
 
+    // PPh 21 on the THR. `calculateThrTax` existed with no caller at all, so
+    // this endpoint returned a gross figure and the comment in
+    // `calculateThrStandalone` said as much: "return amount THR saja". THR is
+    // irregular income, so its tax depends on the rest of the year (annualized
+    // method) or on the month it lands in (TER) — never on the THR alone.
+    const reference = referenceDate ?? new Date();
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new ForbiddenError('THR calculation requires an active company context');
+    const [policy, methodSetting] = await Promise.all([
+      loadPayrollPolicyConfig(prisma, companyId, reference.getUTCFullYear()),
+      prisma.companySetting.findUnique({
+        where: { companyId_key: { companyId, key: 'pph21_method' } },
+        select: { value: true },
+      }),
+    ]);
+    const monthlyWage = Number(salary.baseSalary);
+    const thrTax = calculateThrTax({
+      monthlyGross: monthlyWage,
+      thrAmount: result.amount,
+      married: employee.maritalStatus === 'MARRIED',
+      dependents: employee._count?.families ?? 0,
+      hasNpwp: Boolean(employee.taxId),
+      monthlyPensionContribution: bpjsPensionFor(policy, monthlyWage),
+      method: methodSetting?.value === 'TER' ? 'TER' : 'ANNUALIZED',
+      terTables: policy.ter,
+    }, policy.pph21);
+
+    // Deliberately logs the employee only. `employee-salary-read.mysql.test.ts`
+    // asserts this exact call to keep financial values out of application
+    // logs, and the tax is one — my first version logged it and that guard
+    // caught it. The method is omitted too rather than weaken an exact match.
     logger.info('THR calculated', { employeeId });
 
     return {
       employee: { id: employee.id, fullName: employee.fullName, employeeNumber: employee.employeeNumber },
-      monthlyWage: Number(salary.baseSalary),
+      monthlyWage,
       ...result,
+      /** PPh 21 withheld from the THR. */
+      tax: thrTax.tax,
+      /** What the employee actually receives. */
+      netAmount: Math.max(0, Math.round(result.amount - thrTax.tax)),
+      taxMethod: thrTax.method,
     };
   }
 
@@ -1497,12 +1535,34 @@ export class PayrollService {
       joinDate: new Date(data.joinDate),
       referenceDate: data.referenceDate ? new Date(data.referenceDate) : new Date(),
     });
-    // BONUS: hitung also PPh 21 untuk THR (aturan khusus THR: PPh dihitung tersendiri nanti)
-    // Saat ini return amount THR saja sesuai acceptance B.2.
+    // The comment that used to sit here said "return amount THR saja", and
+    // that is what it did: `calculateThrTax` existed with no caller anywhere.
+    // The tax is reported now, but only when the caller supplies the PTKP
+    // status — this endpoint has no employee to read it from, and defaulting
+    // to TK/0 would understate the withholding for everybody else.
+    const hasTaxContext = data.married !== undefined || data.dependents !== undefined;
+    const thrTax = hasTaxContext
+      ? calculateThrTax({
+          monthlyGross: data.monthlyWage,
+          thrAmount: result.amount,
+          married: data.married ?? false,
+          dependents: data.dependents ?? 0,
+          hasNpwp: data.hasNpwp,
+          monthlyPensionContribution: data.monthlyPensionContribution,
+          method: data.method ?? 'ANNUALIZED',
+        })
+      : null;
+
     return {
       ...result,
       monthlyWage: data.monthlyWage,
       joinDate: data.joinDate,
+      /** Null when no PTKP status was supplied; the response says which. */
+      tax: thrTax?.tax ?? null,
+      netAmount: thrTax ? Math.max(0, Math.round(result.amount - thrTax.tax)) : null,
+      taxMethod: thrTax?.method ?? null,
+      /** Reading `tax: null` as "no tax due" would be wrong; this says why. */
+      taxContextProvided: hasTaxContext,
     };
   }
 

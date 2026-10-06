@@ -70,7 +70,13 @@ export const employeeSalaryService = {
     return prisma.$transaction(async database => {
       const employee = await database.employee.findFirst({
         where: { id: employeeId, companyId, deletedAt: null, AND: [employeeWhere] },
-        select: { id: true, fullName: true, employeeNumber: true, joinDate: true },
+        select: {
+          id: true, fullName: true, employeeNumber: true, joinDate: true,
+          // PTKP context, for the PPh 21 on the THR. Mirrors the fields the
+          // monthly run uses, including counting only dependent families.
+          maritalStatus: true, taxId: true,
+          _count: { select: { families: { where: { isDependent: true } } } },
+        },
       });
       if (!employee) throw new NotFoundError('Employee not found in the permitted payroll scope');
       const salaries = await database.employeeSalary.findMany({
