@@ -32,3 +32,17 @@ export const createLeaveBalanceSchema = z.object({
 export type CreateLeaveTypeDTO = z.infer<typeof createLeaveTypeSchema>;
 export type CreateLeaveRequestDTO = z.infer<typeof createLeaveRequestSchema>;
 export type CreateLeaveBalanceDTO = z.infer<typeof createLeaveBalanceSchema>;
+
+/**
+ * The year a yearly accrual sweep runs for.
+ *
+ * `runYearlyLeaveAccrual(year: number)` is typed, but `req.body.year` is not:
+ * the route had no validator, so a string reached it and `year - 1` produced
+ * NaN. The sweep then ran — against every active employee — querying and
+ * writing leave balances for a NaN year. Bounded here rather than trusted.
+ */
+export const triggerYearlyAccrualSchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+
+export type TriggerYearlyAccrualDTO = z.infer<typeof triggerYearlyAccrualSchema>;
