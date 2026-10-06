@@ -12,6 +12,8 @@ export interface SalaryComponent {
   ratePercent?: number;
   isTaxable: boolean;
   isProrated: boolean;
+  /** Tunjangan tetap — enters the statutory wage for THR and leave encashment. */
+  isFixedAllowance: boolean;
   isActive: boolean;
   description?: string;
   sortOrder: number;

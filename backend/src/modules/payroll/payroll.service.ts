@@ -32,6 +32,7 @@ import { employmentWindow } from '@/shared/payroll/employment-window';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 import { calculateThr } from '@/shared/payroll/thr';
 import { calculateThrTax } from '@/shared/payroll/thr-tax';
+import { monthlyStatutoryWage } from '@/shared/payroll/statutory-wage';
 import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
 import { prisma } from '@/shared/database/prisma';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
@@ -160,8 +161,15 @@ export class PayrollService {
       throw new BadRequestError('Data gaji aktif karyawan tidak ditemukan');
     }
 
+    // "Upah sebulan" under Permenaker 6/2016 is gaji pokok PLUS tunjangan
+    // tetap. This passed base salary alone, which paid less THR than the law
+    // requires for anybody whose package includes a fixed allowance — and
+    // `thr.ts` has stated the right rule in its own header all along, with no
+    // data to express it until `isFixedAllowance` existed.
+    const { wage: statutoryWage, fixedAllowances } = monthlyStatutoryWage(
+      salary.baseSalary, salary.components);
     const result = calculateThr({
-      monthlyWage: Number(salary.baseSalary),
+      monthlyWage: statutoryWage.toNumber(),
       joinDate: employee.joinDate,
       referenceDate: referenceDate ?? new Date(),
     });
@@ -181,14 +189,26 @@ export class PayrollService {
         select: { value: true },
       }),
     ]);
-    const monthlyWage = Number(salary.baseSalary);
+    // The tax base stays base salary, deliberately, and it is NOT the same
+    // question as the THR base above.
+    //
+    // The regular monthly taxable gross ought to be base pay plus taxable
+    // allowances. But in this codebase base pay lives only in
+    // `EmployeeSalary.baseSalary`: the seeded `Gaji Pokok` component carries no
+    // amount and is therefore never allocated, so `employee-pay.ts` — which
+    // derives its taxable gross from the allocation alone — leaves base pay out
+    // of the monthly tax base entirely. That is a systemic defect the audit has
+    // already named, and it is not this change's to fix. Summing the allocation
+    // here would inherit it and tax a THR against allowances only; adding base
+    // pay to it would create a second, different base from the monthly run.
+    // Base salary alone is the closest of the three and changes nothing.
     const thrTax = calculateThrTax({
-      monthlyGross: monthlyWage,
+      monthlyGross: Number(salary.baseSalary),
       thrAmount: result.amount,
       married: employee.maritalStatus === 'MARRIED',
       dependents: employee._count?.families ?? 0,
       hasNpwp: Boolean(employee.taxId),
-      monthlyPensionContribution: bpjsPensionFor(policy, monthlyWage),
+      monthlyPensionContribution: bpjsPensionFor(policy, Number(salary.baseSalary)),
       method: methodSetting?.value === 'TER' ? 'TER' : 'ANNUALIZED',
       terTables: policy.ter,
     }, policy.pph21);
@@ -201,7 +221,10 @@ export class PayrollService {
 
     return {
       employee: { id: employee.id, fullName: employee.fullName, employeeNumber: employee.employeeNumber },
-      monthlyWage,
+      /** gaji pokok + tunjangan tetap — the base the THR is a month of. */
+      monthlyWage: statutoryWage.toNumber(),
+      /** Which components counted toward it, so the figure can be checked. */
+      fixedAllowances,
       ...result,
       /** PPh 21 withheld from the THR. */
       tax: thrTax.tax,
@@ -1265,7 +1288,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: December reconciliation of annual PPh21',
       sortOrder: 994,
     }, database);
@@ -1285,7 +1308,7 @@ export class PayrollService {
       isTaxable: true,
       // The amount was computed from a daily rate at approval; prorating it
       // against this period would shrink what was already agreed.
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: unused leave exchanged for money',
       sortOrder: 995,
     }, database);
@@ -1305,7 +1328,7 @@ export class PayrollService {
       isTaxable: true,
       // Never prorated: the amount was already prorated for the period it came
       // from, and prorating it again against this period would shrink it twice.
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: pay for a closed period the employee was missed in',
       sortOrder: 996,
     }, database);
@@ -1323,7 +1346,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: true,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: overtime pay per PP 35/2021',
       sortOrder: 998,
     }, database);
@@ -1345,7 +1368,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated deduction for employee loan installments',
       sortOrder: 999,
     }, database);
@@ -1363,7 +1386,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: automatic late attendance deduction per minutes after branch tolerance',
       sortOrder: 997,
     }, database);
@@ -1381,7 +1404,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: automatic absence per day deduction based on basic salary / working days',
       sortOrder: 996,
     }, database);
@@ -1399,7 +1422,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: daily-wage deduction for approved leave whose leave type is unpaid (enabled per company via unpaid_leave_deduction_enabled).',
       sortOrder: 993,
     }, database);
@@ -1419,7 +1442,7 @@ export class PayrollService {
       // Taxable on purpose: the allowance is ordinary income, which is why its
       // own amount has to be solved for rather than copied from the tax.
       isTaxable: true,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: taxable tax allowance equal to the PPh21 it causes, so the employer bears the tax (enabled per company via pph21_gross_up_enabled).',
       sortOrder: 992,
     }, database);
@@ -1437,7 +1460,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: employee contribution for active benefit enrollments (percent of base salary per plan).',
       sortOrder: 994,
     }, database);
@@ -1455,7 +1478,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: automatic deduction for approved Earned Wage Access paid requests (employer-funded float model). Deducted bulan berjalan di payslip.',
       sortOrder: 995,
     }, database);

@@ -15,7 +15,7 @@ describe('salary component company switch', () => {
     companies.activeCompanyId = 'company-a';
     vi.mocked(payrollService.getSalaryComponents).mockImplementation(async companyId => [{
       id: `${companyId}-bonus`, companyId, code: 'BONUS', name: `Bonus ${companyId}`, type: 'ALLOWANCE', calculationMethod: 'FIXED', amount: 100,
-      isTaxable: true, isProrated: false, isActive: true, sortOrder: 0, createdAt: '',
+      isTaxable: true, isProrated: false, isFixedAllowance: false, isActive: true, sortOrder: 0, createdAt: '',
     }]);
     const view = render(<I18nProvider><SalaryComponentList /></I18nProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'Kelola formula Bonus company-a' }));

@@ -23,6 +23,7 @@ jest.mock('./employee-salary.service', () => ({
   employeeSalaryService: { thrInputs: jest.fn(async () => employee.value) },
 }));
 
+import { Prisma } from '@prisma/client';
 import { PayrollService } from './payroll.service';
 
 /**
@@ -42,7 +43,15 @@ beforeEach(() => {
       joinDate: new Date('2020-01-01'), maritalStatus: 'SINGLE', taxId: '12.345',
       _count: { families: 0 },
     },
-    salary: { baseSalary: { toString: () => '20000000', isFinite: () => true, lessThanOrEqualTo: () => false }, currency: 'IDR' },
+    salary: {
+      baseSalary: new Prisma.Decimal('20000000'), currency: 'IDR',
+      components: [
+        { isActive: true, amount: new Prisma.Decimal('2000000'),
+          salaryComponent: { name: 'Tunjangan Jabatan', type: 'ALLOWANCE', isTaxable: true, isFixedAllowance: true, isActive: true, deletedAt: null } },
+        { isActive: true, amount: new Prisma.Decimal('1000000'),
+          salaryComponent: { name: 'Tunjangan Transport', type: 'ALLOWANCE', isTaxable: true, isFixedAllowance: false, isActive: true, deletedAt: null } },
+      ],
+    },
   };
 });
 
@@ -76,6 +85,25 @@ describe('the employee THR endpoint withholds PPh 21', () => {
     const married = await service.calculateEmployeeThr('employee-1', new Date('2026-03-01'));
     expect(married.tax).not.toBe(single.tax);
     expect(married.tax).toBeLessThan(single.tax);
+  });
+});
+
+describe('the THR base is "upah sebulan", not base salary', () => {
+  it('counts gaji pokok plus tunjangan tetap and excludes tunjangan tidak tetap', async () => {
+    const result = await service.calculateEmployeeThr('employee-1', new Date('2026-03-01'));
+    // 20.000.000 + 2.000.000 fixed. The 1.000.000 transport allowance is
+    // tunjangan tidak tetap and must not inflate a statutory entitlement.
+    expect(result.monthlyWage).toBe(22_000_000);
+    expect(result.amount).toBe(22_000_000);
+    expect(result.fixedAllowances).toEqual([{ name: 'Tunjangan Jabatan', amount: '2000000' }]);
+  });
+
+  it('falls back to base salary alone when nothing is marked fixed', async () => {
+    const salary = (employee.value as { salary: { components: Array<{ salaryComponent: Record<string, unknown> }> } }).salary;
+    for (const row of salary.components) row.salaryComponent.isFixedAllowance = false;
+    const result = await service.calculateEmployeeThr('employee-1', new Date('2026-03-01'));
+    expect(result.monthlyWage).toBe(20_000_000);
+    expect(result.fixedAllowances).toEqual([]);
   });
 });
 

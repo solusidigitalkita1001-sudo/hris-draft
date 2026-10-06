@@ -9,7 +9,7 @@ vi.mock('@/services/payroll-formula.service', () => ({ payrollFormulaService: { 
 const auth = vi.hoisted(() => ({ user: { id: 'reviewer' }, hasPermission: (_resource: string, action: string) => ['update', 'approve'].includes(action) }));
 vi.mock('@/stores/auth.store', () => ({ useAuthStore: (selector: (state: typeof auth) => unknown) => selector(auth) }));
 const component: SalaryComponent = { id: 'bonus', companyId: 'company', name: 'Bonus', code: 'BONUS', type: 'ALLOWANCE', calculationMethod: 'FIXED', amount: 100,
-  isTaxable: true, isProrated: false, isActive: true, sortOrder: 0, createdAt: '' };
+  isTaxable: true, isProrated: false, isFixedAllowance: false, isActive: true, sortOrder: 0, createdAt: '' };
 const version: PayrollFormulaVersion = { id: 'v1', componentId: 'bonus', version: 1, expression: 'BASE_SALARY / 10', effectiveFrom: '2026-10-01', status: 'DRAFT', createdBy: 'maker', previewedAt: '2026-09-08T00:00:00Z', publishedAt: null, publishedBy: null, engineVersion: 1 };
 function renderPanel() {
   // The panel reads copy through useI18n, which throws outside the provider.

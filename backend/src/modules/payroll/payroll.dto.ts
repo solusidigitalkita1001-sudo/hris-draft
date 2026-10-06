@@ -12,6 +12,10 @@ export const createSalaryComponentSchema = z.object({
   ratePercent: z.number().min(0).max(100).optional(),
   isTaxable: z.boolean().default(true),
   isProrated: z.boolean().default(false),
+  // Tunjangan tetap: enters the statutory "upah sebulan" used for THR and the
+  // leave-encashment daily rate. Default false so a new component is only a
+  // fixed allowance when somebody says so.
+  isFixedAllowance: z.boolean().default(false),
   description: z.string().optional(),
   sortOrder: z.number().int().default(0),
 });
