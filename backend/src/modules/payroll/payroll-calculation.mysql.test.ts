@@ -135,7 +135,6 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
 
     const regular = await run(f);
     expect(regular.payslips).toHaveLength(1);
-    const monthly = Number(regular.payslips[0].netPay);
 
     const thr = await runOfType(f, 'THR');
     expect(thr.status).toBe('COMPLETED');
@@ -145,19 +144,29 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     // One month of upah, which here is base salary alone: the BASE component
     // is not flagged as a fixed allowance, so it does not join "upah sebulan".
     expect(Number(slip.totalEarnings)).toBe(1000);
-    // Withheld, not paid gross.
-    expect(Number(slip.totalDeductions)).toBeGreaterThanOrEqual(0);
     expect(Number(slip.netPay)).toBe(Number(slip.totalEarnings) - Number(slip.totalDeductions));
-    // And it is NOT the monthly payslip repeated: a THR slip has no attendance.
+    // A THR slip has no attendance: it is not a month of work.
     expect(slip.workDays).toBe(0);
     expect(slip.presentDays).toBe(0);
-    expect(Number(slip.netPay)).not.toBe(monthly);
 
-    // Exactly two components: the THR and its tax. No BPJS, no loan, no overtime.
-    const components = await mockDatabase.payslipComponent.findMany({ where: { payslipId: slip.id } });
+    // Exactly two components: the THR and its tax. No BPJS, no loan, no
+    // overtime, and — the point — the earning is the THR component, not the
+    // salary allocation's own component repeated under a new run.
+    //
+    // This used to assert `netPay !== monthlyNetPay`, which passed for the
+    // wrong reason and then failed for one: with a 1000 base, no deductions
+    // configured and a THR under the PTKP threshold, both nets are 1000. The
+    // coincidence said nothing either way, so the component identity is
+    // asserted instead.
+    const components = await mockDatabase.payslipComponent.findMany({
+      where: { payslipId: slip.id }, include: { salaryComponent: true },
+    });
     expect(components).toHaveLength(2);
-    expect(components.filter((row) => row.type === 'ALLOWANCE')).toHaveLength(1);
-    expect(components.filter((row) => row.type === 'DEDUCTION')).toHaveLength(1);
+    const earning = components.find((row) => row.type === 'ALLOWANCE');
+    const deduction = components.find((row) => row.type === 'DEDUCTION');
+    expect(earning?.salaryComponent.code).toBe('THR_EARNING_AUTO');
+    expect(earning?.salaryComponent.code).not.toBe(f.component.code);
+    expect(deduction?.salaryComponent.code).toBe('PPH21');
     // The working is frozen with the payment.
     expect((slip.employeeSnapshot as { thr?: { tenureMonths?: number } })?.thr?.tenureMonths)
       .toBeGreaterThanOrEqual(12);
