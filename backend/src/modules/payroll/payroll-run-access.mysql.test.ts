@@ -237,6 +237,13 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
     await expect(asActor(f, () => service.approvePayrollRun(foreign.run.id, checker), { id: checker })).rejects.toMatchObject({ statusCode: 404 });
     const approved = await asActor(f, () => service.approvePayrollRun(f.run.id, checker), { id: checker });
     expect(approved).toMatchObject({ companyId: f.companyId, status: 'APPROVED', approvedBy: checker });
+    // The payslip stops being a draft at approval, which is when its figures
+    // stop moving. This column had no writer anywhere, so every real payslip
+    // stayed DRAFT for life while the PDF printed "Status: DRAFT".
+    expect((await mockDatabase.payslip.findUniqueOrThrow({ where: { id: f.slip.id } })).status).toBe('FINAL');
+    // The other company's approval was refused, so its payslip stays a draft:
+    // the status write is scoped to the approved run and its company, not global.
+    expect((await mockDatabase.payslip.findUniqueOrThrow({ where: { id: foreign.slip.id } })).status).toBe('DRAFT');
     await expect(asActor(f, () => service.approvePayrollRun(f.run.id, checker), { id: checker })).rejects.toMatchObject({ statusCode: 400 });
     expect((await mockDatabase.payrollRun.findUniqueOrThrow({ where: { id: foreign.run.id } })).status).toBe('COMPLETED');
     expect(eventBus.publish).toHaveBeenCalledTimes(1);

@@ -391,6 +391,12 @@ export class PayrollRepository {
         data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
       });
       if (result.count !== 1) throw new ConflictError('Payroll changed or maker-checker validation failed');
+      // A payslip's figures stop moving once the run is approved, so that is
+      // when it stops being a draft. Nothing ever wrote this column: every real
+      // payslip stayed DRAFT for life while the PDF printed "Status: DRAFT" and
+      // self-service showed a draft chip. Only the demo seed set FINAL, which is
+      // why it looked right in the demo and nowhere else.
+      await tx.payslip.updateMany({ where: { payrollRunId: id, companyId }, data: { status: 'FINAL' } });
       return tx.payrollRun.findUniqueOrThrow({ where: { id, companyId } });
     });
   }
