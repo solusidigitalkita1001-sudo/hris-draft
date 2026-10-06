@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
-import { calculateBpjs, DEFAULT_BPJS_CONFIG } from '@/shared/payroll/bpjs';
+import { calculateBpjs, DEFAULT_BPJS_CONFIG, type BpjsConfig } from '@/shared/payroll/bpjs';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 
 export interface BpjsReportRow {
@@ -46,7 +46,37 @@ const money = (value: number | string | Prisma.Decimal) => new Prisma.Decimal(va
  * and the same company policy the payroll run used, which also means the
  * employee figures here reconcile with the payslips rather than drifting from
  * them.
+ *
+ * That last sentence was a claim the code did not keep. It loaded the CURRENT
+ * reference rates, not the ones frozen on the run that produced these
+ * payslips — so editing a BPJS rate silently rewrote the contribution report
+ * for every period already filed, and it no longer matched the money actually
+ * deducted. `PayrollRun.policySnapshot` was written for exactly this and had
+ * no reader anywhere. Each row is now computed with its own run's snapshot,
+ * falling back to live rates only for runs recorded before snapshots existed —
+ * and saying so in a warning when it has to.
  */
+/**
+ * The BPJS rates frozen on a run, or null when that run has none.
+ *
+ * Deliberately narrow: a snapshot is stored JSON, so every field is checked to
+ * be a finite number before it can influence a contribution figure. A
+ * malformed snapshot falls back to live rates and is reported, rather than
+ * contributing a NaN that would surface as a blank in a filing.
+ */
+export function bpjsRatesFromSnapshot(snapshot: unknown): Partial<BpjsConfig> | null {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+  const bpjs = (snapshot as Record<string, unknown>).bpjs;
+  if (!bpjs || typeof bpjs !== 'object' || Array.isArray(bpjs)) return null;
+  const rates: Record<string, number> = {};
+  for (const [key, value] of Object.entries(bpjs as Record<string, unknown>)) {
+    const numeric = typeof value === 'string' ? Number(value) : value;
+    if (typeof numeric !== 'number' || !Number.isFinite(numeric)) continue;
+    rates[key] = numeric;
+  }
+  return Object.keys(rates).length ? (rates as Partial<BpjsConfig>) : null;
+}
+
 export class BpjsReportService {
   async build(companyId: string, periodId: string): Promise<BpjsReport> {
     const period = await prisma.payrollPeriod.findFirst({
@@ -68,6 +98,8 @@ export class BpjsReportService {
       },
       select: {
         baseSalary: true,
+        // The rates this payslip was actually paid with.
+        payrollRun: { select: { policySnapshot: true } },
         employee: {
           select: {
             employeeNumber: true, fullName: true, idNumber: true,
@@ -83,15 +115,23 @@ export class BpjsReportService {
     // company with no overrides has an empty override set, and publishing that
     // would make the report look rate-less — leaving a filing impossible to
     // re-derive a year later. A test caught exactly that.
-    const config = { ...DEFAULT_BPJS_CONFIG, ...policy.bpjs } as unknown as Record<string, number>;
+    const liveConfig = { ...DEFAULT_BPJS_CONFIG, ...policy.bpjs } as unknown as Record<string, number>;
 
     const rows: BpjsReportRow[] = [];
     let employeeTotal = money(0);
     let employerTotal = money(0);
 
+    /** Distinct rate sets the rows were computed with, to publish and to compare. */
+    const rateSetsUsed = new Map<string, Partial<BpjsConfig>>();
+    let rowsWithoutSnapshot = 0;
+
     for (const payslip of payslips) {
       const wage = Number(payslip.baseSalary);
-      const breakdown = calculateBpjs(wage, policy.bpjs);
+      const snapshotRates = bpjsRatesFromSnapshot(payslip.payrollRun?.policySnapshot);
+      if (!snapshotRates) rowsWithoutSnapshot += 1;
+      const rates = snapshotRates ?? policy.bpjs;
+      rateSetsUsed.set(JSON.stringify(rates), rates);
+      const breakdown = calculateBpjs(wage, rates);
 
       const warnings: string[] = [];
       // A contribution without a membership number cannot be matched to a
@@ -131,6 +171,12 @@ export class BpjsReportService {
 
     const reportWarnings: string[] = [];
     if (rows.length === 0) reportWarnings.push('payroll:NO_APPROVED_PAYSLIPS_IN_PERIOD');
+    // Say it rather than let the reader assume the figures are frozen.
+    if (rowsWithoutSnapshot) {
+      reportWarnings.push(`bpjs:${rowsWithoutSnapshot}_PAYSLIPS_WITHOUT_RATE_SNAPSHOT`);
+    }
+    // One published `config` cannot describe two sets of rates honestly.
+    if (rateSetsUsed.size > 1) reportWarnings.push('bpjs:MULTIPLE_RATE_SNAPSHOTS_IN_PERIOD');
     const missingNumbers = rows.filter((row) => row.warnings.length).length;
     if (missingNumbers) reportWarnings.push(`bpjs:${missingNumbers}_EMPLOYEES_WITH_MISSING_IDENTIFIERS`);
 
@@ -143,7 +189,11 @@ export class BpjsReportService {
         endDate: new Date(period.endDate).toISOString(),
       },
       company,
-      config,
+      // The rates the rows were actually computed with. With no rows, or with
+      // rows disagreeing, the live set is the only thing left to publish.
+      config: rateSetsUsed.size === 1
+        ? { ...DEFAULT_BPJS_CONFIG, ...[...rateSetsUsed.values()][0] } as unknown as Record<string, number>
+        : liveConfig,
       rows,
       totals: {
         employee: employeeTotal.toFixed(2),

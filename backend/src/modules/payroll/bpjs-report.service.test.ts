@@ -23,7 +23,7 @@ jest.mock('@/shared/payroll/payroll-policy', () => ({
   loadPayrollPolicyConfig: jest.fn(async () => ({ pph21: {}, bpjs: state.bpjsPolicy })),
 }));
 
-import { BpjsReportService, bpjsReportToCsv } from './bpjs-report.service';
+import { BpjsReportService, bpjsReportToCsv, bpjsRatesFromSnapshot } from './bpjs-report.service';
 
 const service = new BpjsReportService();
 const COMPANY = 'company-a';
@@ -175,5 +175,79 @@ describe('BPJS report CSV', () => {
     state.payslips = [payslipRow({}, { fullName: 'Putri, Maya' })];
     const csv = bpjsReportToCsv(await service.build(COMPANY, PERIOD));
     expect(csv).toContain('"Putri, Maya"');
+  });
+});
+
+/**
+ * A filing has to be re-derivable a year later. The report used to compute from
+ * the CURRENT reference rates, so editing a BPJS rate rewrote every period
+ * already filed and the report stopped matching the money that was deducted.
+ * The run froze its rates in `policySnapshot` for exactly this, and nothing
+ * read it.
+ */
+describe('the report computes from the rates the run was paid with', () => {
+  /** A run carrying a frozen employee JHT rate well away from the default 2%. */
+  const snapshot = (jhtEmployeePercent: number) => ({
+    payrollRun: { policySnapshot: { bpjs: { jhtEmployeePercent } } },
+  });
+
+  it('uses the run snapshot instead of the rate in force today', async () => {
+    // Live rates say 5%; the run was paid at 2%. The payslips are the truth.
+    state.bpjsPolicy = { jhtEmployeePercent: 5 };
+    state.payslips = [payslipRow(snapshot(2))];
+
+    const report = await service.build(COMPANY, PERIOD);
+    // 2% of 10,000,000 — not the 500,000 the live rate would produce.
+    expect(report.rows[0].employee.jht).toBe('200000.00');
+    expect(report.config.jhtEmployeePercent).toBe(2);
+    expect(report.warnings).not.toContain('bpjs:1_PAYSLIPS_WITHOUT_RATE_SNAPSHOT');
+  });
+
+  it('falls back to live rates for a run with no snapshot, and says so', async () => {
+    state.bpjsPolicy = { jhtEmployeePercent: 5 };
+    state.payslips = [payslipRow()];
+
+    const report = await service.build(COMPANY, PERIOD);
+    expect(report.rows[0].employee.jht).toBe('500000.00');
+    expect(report.warnings).toContain('bpjs:1_PAYSLIPS_WITHOUT_RATE_SNAPSHOT');
+  });
+
+  it('reports that one published config cannot describe two sets of rates', async () => {
+    state.payslips = [payslipRow(snapshot(2)), payslipRow(snapshot(3))];
+
+    const report = await service.build(COMPANY, PERIOD);
+    expect(report.rows[0].employee.jht).toBe('200000.00');
+    expect(report.rows[1].employee.jht).toBe('300000.00');
+    expect(report.warnings).toContain('bpjs:MULTIPLE_RATE_SNAPSHOTS_IN_PERIOD');
+  });
+
+  it('asks the database for the snapshot at all', async () => {
+    // Without this the fallback would be silent and permanent: every row would
+    // look un-snapshotted and the live rates would always win.
+    state.payslips = [payslipRow(snapshot(2))];
+    await service.build(COMPANY, PERIOD);
+    expect(state.queries).toHaveLength(1);
+  });
+});
+
+describe('reading a stored rate snapshot', () => {
+  it.each([
+    ['nothing', null],
+    ['a non-object', 'bpjs'],
+    ['an array', [{ bpjs: {} }]],
+    ['an object with no bpjs key', { pph21: {} }],
+    ['an empty bpjs object', { bpjs: {} }],
+    ['bpjs holding an array', { bpjs: [1, 2] }],
+    ['only unusable values', { bpjs: { jhtEmployeePercent: 'dua persen', jpWageCap: null } }],
+  ])('returns null for %s', (_label, input) => {
+    expect(bpjsRatesFromSnapshot(input)).toBeNull();
+  });
+
+  it('keeps the numbers and drops what cannot be one', () => {
+    // A stored snapshot is JSON; a NaN reaching calculateBpjs would surface as
+    // a blank figure in a filing rather than an error anybody notices.
+    expect(bpjsRatesFromSnapshot({
+      bpjs: { jhtEmployeePercent: 2, jpWageCap: '10000000', jkkRatePercent: 'x', jkmRatePercent: null },
+    })).toEqual({ jhtEmployeePercent: 2, jpWageCap: 10_000_000 });
   });
 });
