@@ -548,6 +548,20 @@ export class PayrollService {
     const run = await payrollRepository.findPayrollRunById(runId, database);
     if (!run) throw new NotFoundError('Payroll run not found');
 
+    // runType reached the create DTO before this calculation learned what the
+    // types mean, and nothing below reads it: a THR run recalculated a full
+    // month of salary, so a period already paid gained a second complete set
+    // of payslips that could be approved and disbursed on its own. THR is one
+    // month of upah under Permenaker 6/2016, not a second salary, and
+    // severance has its own tax treatment. Refuse the types this engine cannot
+    // compute instead of paying a regular salary under their name.
+    if (run.runType !== 'REGULAR') {
+      throw new ConflictError(
+        `A ${run.runType} payroll run cannot be calculated: this engine computes regular monthly payroll only. `
+        + 'Void the run, or record the amounts as arrears on a regular run.',
+      );
+    }
+
     // As-of salary selection (checklist §18): the run pays the LATEST salary
     // row effective on or before the period end. Future-dated raises no
     // longer leak into the current run. A row deactivated only because a
