@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { companySettingsService } from './company-settings.service';
+import { companySettingsService, describeSettings } from './company-settings.service';
 import { Result } from '@/shared/core/Result';
 import type {
   BulkUpsertSettingsDTO,
@@ -14,6 +14,10 @@ export class CompanySettingsController {
     const explicitCompanyId = typeof req.query.companyId === 'string' ? req.query.companyId : undefined;
     const settings = await companySettingsService.getAllSettings(explicitCompanyId);
     res.json(Result.success(settings, 'Company settings loaded'));
+  }
+
+  async findCatalog(_req: Request, res: Response) {
+    res.json(Result.success(describeSettings(), 'Company setting catalog loaded'));
   }
 
   async findByKey(req: Request<GetSettingByKeyParamsDTO>, res: Response) {

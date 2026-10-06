@@ -50,7 +50,7 @@ import {
   ShieldCheck,
   Wallet,
   Receipt,
-  X,
+  X, SlidersHorizontal,
 } from 'lucide-react';
 import { administrationService } from '@/services/administration.service';
 import { SidebarAttendanceCard } from './SidebarAttendanceCard';
@@ -310,6 +310,12 @@ const navItems: NavItem[] = [
         icon: <ShieldCheck size={16} />,
         path: '/admin/data-scope',
         access: { requireAuth: true, requiredPermissions: [{ resource: 'rbac', action: 'update' }] },
+      },
+      {
+        labelKey: 'sidebar.administration.companySettings',
+        icon: <SlidersHorizontal size={16} />,
+        path: '/admin/company-settings',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'settings', action: 'read' }] },
       },
       {
         labelKey: 'sidebar.administration.ewaApproval',

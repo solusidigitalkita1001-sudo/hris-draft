@@ -29,6 +29,13 @@ router.post(
   companySettingsController.bulkUpsert.bind(companySettingsController),
 );
 
+// Registered before '/:key', or the literal path would be read as a key name.
+router.get(
+  '/catalog',
+  authorize({ resource: 'settings', action: 'read' }),
+  companySettingsController.findCatalog.bind(companySettingsController),
+);
+
 router.get(
   '/:key',
   authorize({ resource: 'settings', action: 'read' }),
