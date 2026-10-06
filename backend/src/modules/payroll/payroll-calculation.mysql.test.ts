@@ -100,15 +100,19 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(await mockDatabase.salaryComponent.count({ where: { companyId: f.companyId } })).toBe(1);
     expect(eventBus.publish).not.toHaveBeenCalled();
   }
-  it.each(['THR', 'SEVERANCE', 'CORRECTION'] as const)(
+  it.each(['SEVERANCE', 'CORRECTION'] as const)(
     'refuses to calculate a %s run instead of paying a second month of salary', async runType => {
-      const f = await fixture(); await employee(f);
       // The period's REGULAR run already exists and carries the month's pay.
       // One run per period PER TYPE means this second run is created
-      // legitimately — it is the calculation that must refuse. It reads no
-      // runType at all before this guard, so a THR run recalculated a full
+      // legitimately — it is the calculation that must refuse. It read no
+      // runType at all before this guard, so any of these recalculated a full
       // month of salary: a second complete set of payslips for a period
       // already paid, separately approvable and separately disbursable.
+      //
+      // THR used to be in this list and is now calculated properly; severance
+      // is computed and taxed on the exit path instead of as a run, and a
+      // correction run would need to know which period it corrects.
+      const f = await fixture(); await employee(f);
       const regular = await run(f);
       expect(regular.payslips).toHaveLength(1);
       await expect(runOfType(f, runType)).rejects.toThrow(
@@ -117,6 +121,82 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       expect(await mockDatabase.payslip.count({ where: { companyId: f.companyId } })).toBe(1);
       expect(await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } })).toBe(1);
     });
+
+  it('pays a THR run one month of upah with its PPh 21, not a second salary', async () => {
+    const f = await fixture();
+    // Two years of service at 1000 base: a full, unprorated THR.
+    const person = await employee(f);
+    await mockDatabase.employee.update({
+      where: { id: person.person.id }, data: { joinDate: new Date('2024-01-01') },
+    });
+    await mockDatabase.salaryComponent.create({ data: {
+      companyId: f.companyId, code: 'PPH21', name: 'PPh 21', type: 'DEDUCTION', amount: '0', isTaxable: false,
+    } });
+
+    const regular = await run(f);
+    expect(regular.payslips).toHaveLength(1);
+
+    const thr = await runOfType(f, 'THR');
+    expect(thr.status).toBe('COMPLETED');
+    expect(thr.payslips).toHaveLength(1);
+    const slip = thr.payslips[0];
+
+    // One month of upah, which here is base salary alone: the BASE component
+    // is not flagged as a fixed allowance, so it does not join "upah sebulan".
+    expect(Number(slip.totalEarnings)).toBe(1000);
+    expect(Number(slip.netPay)).toBe(Number(slip.totalEarnings) - Number(slip.totalDeductions));
+    // A THR slip has no attendance: it is not a month of work.
+    expect(slip.workDays).toBe(0);
+    expect(slip.presentDays).toBe(0);
+
+    // Exactly two components: the THR and its tax. No BPJS, no loan, no
+    // overtime, and — the point — the earning is the THR component, not the
+    // salary allocation's own component repeated under a new run.
+    //
+    // This used to assert `netPay !== monthlyNetPay`, which passed for the
+    // wrong reason and then failed for one: with a 1000 base, no deductions
+    // configured and a THR under the PTKP threshold, both nets are 1000. The
+    // coincidence said nothing either way, so the component identity is
+    // asserted instead.
+    const components = await mockDatabase.payslipComponent.findMany({
+      where: { payslipId: slip.id }, include: { salaryComponent: true },
+    });
+    expect(components).toHaveLength(2);
+    const earning = components.find((row) => row.type === 'ALLOWANCE');
+    const deduction = components.find((row) => row.type === 'DEDUCTION');
+    expect(earning?.salaryComponent.code).toBe('THR_EARNING_AUTO');
+    expect(earning?.salaryComponent.code).not.toBe(f.component.code);
+    expect(deduction?.salaryComponent.code).toBe('PPH21');
+    // The working is frozen with the payment.
+    expect((slip.employeeSnapshot as { thr?: { tenureMonths?: number } })?.thr?.tenureMonths)
+      .toBeGreaterThanOrEqual(12);
+  });
+
+  it('refuses a THR run with no PPH21 component rather than paying it gross', async () => {
+    const f = await fixture();
+    const person = await employee(f);
+    await mockDatabase.employee.update({
+      where: { id: person.person.id }, data: { joinDate: new Date('2024-01-01') },
+    });
+    // No PPH21 component exists, so the withholding has nowhere to be recorded.
+    await expect(runOfType(f, 'THR')).rejects.toThrow(/No PPH21 salary component/);
+    expect(await mockDatabase.payslip.count({ where: { companyId: f.companyId } })).toBe(0);
+  });
+
+  it('skips an employee with under a month of service instead of paying nothing visibly', async () => {
+    const f = await fixture();
+    const person = await employee(f);
+    await mockDatabase.employee.update({
+      where: { id: person.person.id }, data: { joinDate: new Date('2026-10-20') },
+    });
+    await mockDatabase.salaryComponent.create({ data: {
+      companyId: f.companyId, code: 'PPH21', name: 'PPh 21', type: 'DEDUCTION', amount: '0', isTaxable: false,
+    } });
+    const thr = await runOfType(f, 'THR');
+    // A payslip for nothing would appear in every report as if it were paid.
+    expect(thr.payslips).toHaveLength(0);
+    expect(Number(thr.totalEarnings)).toBe(0);
+  });
   it('rolls back earlier slips, formula/loan snapshots and generated components when a later employee formula fails; retry succeeds', async () => {
     const f = await fixture(), first = await employee(f), second = await employee(f, '100.00', '2026-08-01');
     await loan(f, first.person.id); const advance = await ewa(f, first.person.id);
