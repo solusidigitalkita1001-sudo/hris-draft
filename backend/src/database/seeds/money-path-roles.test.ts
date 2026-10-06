@@ -61,3 +61,75 @@ describe('the payroll money path is reachable without the super-admin', () => {
     expect(testData).toMatch(/roleCode: 'FINANCE'/);
   });
 });
+
+/**
+ * Holding the permission is not the same as being able to reach the route that
+ * needs it. FINANCE held `payroll:disburse` while every payment-batch route sat
+ * behind a router-level `payroll:process` guard, so the role could not reach a
+ * single one of them and disbursement remained a super-admin-only act.
+ *
+ * This asserts reachability rather than that one guard: for each payment route,
+ * everything it demands must be a subset of what the role owning that step is
+ * seeded with. A new route that forgets this fails here, and so does a widened
+ * router-level guard.
+ */
+const paymentRoutes = readFileSync(
+  join(__dirname, '..', '..', 'modules', 'payroll', 'payroll-payment.routes.ts'), 'utf8'
+);
+
+/** Payroll permissions a slice of source demands or grants, in order. */
+function payrollPermissions(source: string): string[] {
+  return [...source.matchAll(/authorize\(\{\s*resource: 'payroll', action: '(\w+)' \}\)/g)]
+    .map((match) => `payroll:${match[1]}`);
+}
+
+function seededPayrollPermissions(role: string): string[] {
+  const start = rolePerms.indexOf(`roleMap.get('${role}')`);
+  expect(start).toBeGreaterThan(-1);
+  // Bound at the next role so a long block cannot borrow its neighbour's grants.
+  const next = rolePerms.indexOf('roleMap.get(', start + 1);
+  const block = rolePerms.slice(start, next === -1 ? undefined : next);
+  return [...block.matchAll(/'(payroll:\w+)'/g)].map((match) => match[1]);
+}
+
+const firstRoute = paymentRoutes.search(/^router\.(get|post|patch|put|delete)\(/m);
+const routerLevel = payrollPermissions(paymentRoutes.slice(0, firstRoute));
+const paymentRouteTable = [...paymentRoutes.slice(firstRoute).matchAll(
+  /^router\.(get|post|patch|put|delete)\(\n {2}'([^']+)',([\s\S]*?)^\);$/gm
+)].map((match) => ({
+  route: `${match[1].toUpperCase()} ${match[2]}`,
+  requires: [...routerLevel, ...payrollPermissions(match[3])],
+}));
+
+/** Which role is expected to perform each step of the payment path. */
+const STEP_OWNER: Record<string, string> = {
+  'POST /': 'HR_MANAGER',
+  'GET /run/:runId': 'FINANCE',
+  'GET /:id': 'FINANCE',
+  'POST /:id/export': 'FINANCE',
+  'PATCH /:id/transactions/:transactionId': 'FINANCE',
+  'POST /:id/reconcile': 'FINANCE',
+  'POST /:id/cancel': 'HR_MANAGER',
+};
+
+describe('every payment-batch route is reachable by the role that owns its step', () => {
+  it('found the routes to check', () => {
+    expect(firstRoute).toBeGreaterThan(-1);
+    expect(paymentRouteTable.map((entry) => entry.route).sort()).toEqual(Object.keys(STEP_OWNER).sort());
+  });
+
+  it.each(Object.entries(STEP_OWNER))('%s is walkable by %s', (route, role) => {
+    const entry = paymentRouteTable.find((candidate) => candidate.route === route);
+    expect(entry).toBeDefined();
+    expect(entry?.requires.length).toBeGreaterThan(0);
+    expect(seededPayrollPermissions(role)).toEqual(expect.arrayContaining(entry?.requires ?? []));
+  });
+
+  it('still keeps releasing money out of the preparer\'s hands', () => {
+    const recording = paymentRouteTable.filter((entry) => entry.requires.includes('payroll:disburse'));
+    expect(recording.map((entry) => entry.route).sort())
+      .toEqual(['PATCH /:id/transactions/:transactionId', 'POST /:id/reconcile']);
+    const hrManager = seededPayrollPermissions('HR_MANAGER');
+    expect(hrManager).not.toContain('payroll:disburse');
+  });
+});

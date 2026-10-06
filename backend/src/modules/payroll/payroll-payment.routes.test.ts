@@ -39,6 +39,8 @@ const TRANSACTION = '66666666-6666-4666-8666-666666666666';
 const KEY = 'request-key-0001';
 const BASE = '/api/v1/payroll/payment-batches';
 const context = { companyId: COMPANY_A, actorId: ACTOR };
+/** Every payroll authority the payment routes distinguish between. */
+const ALL_PAYROLL = ['payroll:read', 'payroll:process', 'payroll:export', 'payroll:disburse'];
 
 function app(options: { authenticated?: boolean; permissions?: string[] } = {}) {
   const instance = express();
@@ -48,7 +50,7 @@ function app(options: { authenticated?: boolean; permissions?: string[] } = {}) 
       req.user = {
         id: ACTOR, email: 'payroll@example.test', companyId: COMPANY_A,
         companyScope: [COMPANY_A], roles: ['GROUP_ADMIN'],
-        permissions: options.permissions ?? ['payroll:process', 'payroll:disburse'],
+        permissions: options.permissions ?? ALL_PAYROLL,
       };
     }
     next();
@@ -86,8 +88,8 @@ describe('payroll payment HTTP boundary', () => {
     expect(response.headers['cache-control']).toBe('no-store'); expect(service.exportBatch).not.toHaveBeenCalled();
   });
 
-  it.each(['record', 'reconcile'])('requires payroll:disburse in addition to process for %s', async action => {
-    const client = request(app({ permissions: ['payroll:process'] }));
+  it.each(['record', 'reconcile'])('requires payroll:disburse for %s', async action => {
+    const client = request(app({ permissions: ALL_PAYROLL.filter(code => code !== 'payroll:disburse') }));
     const response = action === 'record'
       ? client.patch(`${BASE}/${BATCH}/transactions/${TRANSACTION}`)
       : client.post(`${BASE}/${BATCH}/reconcile`);
@@ -178,12 +180,23 @@ describe('payroll payment HTTP boundary', () => {
     expect(service.recordTransaction).not.toHaveBeenCalled();
   });
 
+  // Reading a batch, preparing one, producing the bank file and releasing the
+  // money are four different authorities. This block used to demand
+  // payroll:process on every route, which pinned a router-level guard that made
+  // the whole module unreachable for FINANCE — the role holding only
+  // payroll:disburse, and the one the approver != disburser rule exists to
+  // serve — so releasing money required the platform super-admin.
   it.each([
-    ['get', `/${BATCH}`], ['get', `/run/${RUN}`], ['post', ''], ['post', `/${BATCH}/export`],
-    ['patch', `/${BATCH}/transactions/${TRANSACTION}`],
-    ['post', `/${BATCH}/reconcile`], ['post', `/${BATCH}/cancel`],
-  ])('requires payroll:process on %s %s', async (method, path) => {
-    const response = await request(app({ permissions: ['payroll:read'] }))[method](`${BASE}${path}`).expect(403);
+    ['get', `/${BATCH}`, 'payroll:read'],
+    ['get', `/run/${RUN}`, 'payroll:read'],
+    ['post', '', 'payroll:process'],
+    ['post', `/${BATCH}/export`, 'payroll:export'],
+    ['patch', `/${BATCH}/transactions/${TRANSACTION}`, 'payroll:disburse'],
+    ['post', `/${BATCH}/reconcile`, 'payroll:disburse'],
+    ['post', `/${BATCH}/cancel`, 'payroll:process'],
+  ])('refuses %s %s without %s', async (method, path, required) => {
+    const permissions = ALL_PAYROLL.filter(code => code !== required);
+    const response = await request(app({ permissions }))[method as 'get'](`${BASE}${path}`).expect(403);
     expect(response.headers['cache-control']).toBe('no-store');
   });
 

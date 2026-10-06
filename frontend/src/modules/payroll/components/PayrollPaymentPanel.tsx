@@ -26,7 +26,11 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
 }) {
   const { t } = useI18n();
   const user = useAuthStore(state => state.user);
-  const permitted = useAuthStore(state => state.hasPermission('payroll', 'process'));
+  // Three separate authorities, matching the route guards: reading a batch,
+  // preparing or cancelling one, and releasing the money are different rights.
+  const canView = useAuthStore(state => state.hasPermission('payroll', 'read'));
+  const canPrepare = useAuthStore(state => state.hasPermission('payroll', 'process'));
+  const canExport = useAuthStore(state => state.hasPermission('payroll', 'export'));
   const canDisburse = useAuthStore(state => state.hasPermission('payroll', 'disburse'));
   const [batch, setBatch] = useState<PaymentBatch | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,14 +51,14 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    if (!permitted) { setLoading(false); return () => { active.current = false; }; }
+    if (!canView) { setLoading(false); return () => { active.current = false; }; }
     void service.forRun(runId, controller.signal).then(data => {
       if (!controller.signal.aborted) setBatch(data);
     }).catch(cause => {
       if (!controller.signal.aborted) setError(errorMessage(cause, t));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { active.current = false; controller.abort(); };
-  }, [runId, reload, permitted, t]);
+  }, [runId, reload, canView, t]);
 
   async function perform(action: string, payload: unknown, work: (key: string) => Promise<PaymentBatch>): Promise<boolean> {
     if (pending.current) return false;
@@ -103,7 +107,7 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
       {batch && <span className="text-sm font-medium">{t(labelKeys[batch.status])}</span>}
     </div>
     <p className="mt-2 max-w-prose text-sm text-muted-foreground">{t('fin.pay.description')}</p>
-    {!permitted ? <p className="mt-4 text-sm">{t('fin.pay.needProcessPerm')}</p> : <>
+    {!canView ? <p className="mt-4 text-sm">{t('fin.pay.needReadPerm')}</p> : <>
       {error && <div role="alert" className="mt-4 text-sm text-destructive"><p>{error}</p>
         <Button variant="outline" className="mt-2" disabled={busy} onClick={() => { setSelected(null); setFiles([]); setReload(value => value + 1); }}>{t('fin.pay.reload')}</Button>
       </div>}
@@ -111,12 +115,14 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
       {!loading && !batch && !error && (runStatus === 'DISBURSED'
         ? <p className="mt-3 text-sm">{t('fin.pay.legacyNoHistory')}</p>
         : <div className="mt-3 space-y-3"><p className="text-sm">{t('fin.pay.notCreated')}</p>
-          <Button disabled={busy} onClick={() => void perform('create', { runId }, key => service.create(runId, key))}>{busy ? t('fin.common.savingEllipsis') : t('fin.pay.createList')}</Button></div>)}
+          {canPrepare
+            ? <Button disabled={busy} onClick={() => void perform('create', { runId }, key => service.create(runId, key))}>{busy ? t('fin.common.savingEllipsis') : t('fin.pay.createList')}</Button>
+            : <p className="text-sm text-muted-foreground">{t('fin.pay.needProcessPerm')}</p>}</div>)}
       {!loading && batch && <>
         <p className="mt-3 text-sm font-medium tabular-nums">{t('fin.pay.batchSummary', { count: batch.transactionCount, amount: money(batch.totalAmount) })}</p>
         {checker && <p className="mt-3 text-sm text-muted-foreground">{t('fin.pay.checkerBlocked')}</p>}
         {!canDisburse && <p className="mt-3 text-sm text-muted-foreground">{t('fin.pay.needDisbursePerm')}</p>}
-        {!closed && !allPaid && <div className="mt-4 space-y-2">
+        {!closed && !allPaid && canExport && <div className="mt-4 space-y-2">
           <Button variant="outline" disabled={busy} onClick={() => void prepareFiles()}>{busy ? t('fin.common.processingEllipsis') : t('fin.pay.prepareFiles')}</Button>
           <p className="max-w-prose text-sm text-muted-foreground">{t('fin.pay.prepareHint')}</p>
         </div>}
@@ -140,7 +146,7 @@ export function PayrollPaymentPanel({ runId, runStatus, onReconciled }: {
         }} />}
         {!closed && <div className="mt-5 flex flex-wrap gap-3">
           {allPaid && canDisburse && !checker && <Button disabled={busy} onClick={() => { setConfirmation('reconcile'); setConfirmed(false); }}>{t('fin.pay.reviewReconcile')}</Button>}
-          {!batch.transactions.some(transaction => transaction.status === 'PAID') && <Button variant="outline" disabled={busy} onClick={() => { setConfirmation('cancel'); setConfirmed(false); }}>{t('fin.pay.cancelList')}</Button>}
+          {canPrepare && !batch.transactions.some(transaction => transaction.status === 'PAID') && <Button variant="outline" disabled={busy} onClick={() => { setConfirmation('cancel'); setConfirmed(false); }}>{t('fin.pay.cancelList')}</Button>}
         </div>}
         {confirmation && <div className="mt-4 space-y-3 border-t border-border pt-4">
           <p className="max-w-prose text-sm">{confirmation === 'reconcile' ? t('fin.pay.reconcileWarn') : t('fin.pay.cancelWarn')}</p>
