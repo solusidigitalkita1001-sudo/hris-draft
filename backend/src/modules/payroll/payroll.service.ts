@@ -193,7 +193,11 @@ export class PayrollService {
       terTables: policy.ter,
     }, policy.pph21);
 
-    logger.info('THR calculated', { employeeId, tax: thrTax.tax, method: thrTax.method });
+    // Deliberately logs the employee only. `employee-salary-read.mysql.test.ts`
+    // asserts this exact call to keep financial values out of application
+    // logs, and the tax is one — my first version logged it and that guard
+    // caught it. The method is omitted too rather than weaken an exact match.
+    logger.info('THR calculated', { employeeId });
 
     return {
       employee: { id: employee.id, fullName: employee.fullName, employeeNumber: employee.employeeNumber },
