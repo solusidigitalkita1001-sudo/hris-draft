@@ -561,6 +561,23 @@ export class PayrollController {
   }
 
   // ==================== Rekap PPh21 tahunan (bahan 1721-A1) ====================
+  /**
+   * The bukti potong 1721-A1 figures, laid out by PER-2/PJ/2024's line
+   * numbers. The response carries `verified: false` until somebody has
+   * compared it with a form a tax office accepted — see
+   * `shared/payroll/form-1721-a1.ts`.
+   */
+  async buktiPotong1721A1(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const year = Number(req.query.year);
+      const form = await annualTaxRecapService.buildBuktiPotong(
+        companyId, String(req.params.employeeId), year);
+      res.json(Result.success(form));
+    } catch (error) { next(error); }
+  }
+
   async annualTaxRecap(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = req.user?.companyId;
