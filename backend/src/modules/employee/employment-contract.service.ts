@@ -1,3 +1,4 @@
+import { PROBATION_MAX_MONTHS } from '@/shared/employment/probation';
 import { EmploymentContractStatus, EmploymentContractType } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
@@ -8,7 +9,7 @@ import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 /** PP 35/2021: PKWT and its renewals may not exceed five years in total. */
 export const PKWT_MAX_TOTAL_MONTHS = 60;
 /** UU 13/2003 art. 60: probation is capped at three months. */
-export const PROBATION_MAX_MONTHS = 3;
+export { PROBATION_MAX_MONTHS } from '@/shared/employment/probation';
 /** When a reminder goes out before the contract ends. */
 export const REMINDER_OFFSETS_DAYS = [30, 14, 7];
 
