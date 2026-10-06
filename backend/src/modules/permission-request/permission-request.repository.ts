@@ -73,7 +73,40 @@ export class PermissionRequestRepository {
     });
   }
 
+  /**
+   * Refuse the direct path when a workflow is running for this request.
+   *
+   * `startWorkflow` says the intent plainly — "no template → keep the
+   * direct-approve path" — but nothing enforced the other half. With a
+   * template configured, `PATCH /:id/approve` still wrote APPROVED straight to
+   * the row, so a configured approval chain could be finished by anybody
+   * holding `permission-request:update`: the engine's step order, its assigned
+   * approvers and its own self-approval rejection were all skipped. The
+   * workflow action endpoint is the only way in once a chain exists.
+   */
+  private async assertNoRunningWorkflow(id: string) {
+    const instance = await prisma.workflowInstance.findFirst({
+      where: { referenceType: 'PERMISSION_REQUEST', referenceId: id },
+      select: { id: true, status: true },
+    });
+    // PENDING and ESCALATED are the states where the chain is still deciding.
+    // A cancelled chain was abandoned, and an APPROVED/REJECTED one has already
+    // written the request's final status, which the status guard below catches.
+    if (instance && (instance.status === 'PENDING' || instance.status === 'ESCALATED')) {
+      throw new ForbiddenError(
+        'This permission request is in an approval workflow; act on it through the workflow action '
+        + 'so the configured approvers and their order are honoured',
+      );
+    }
+  }
+
   async approve(id: string, approverId: string, data?: ApprovePermissionDTO & { approverEmployeeId?: string | null }) {
+    await this.assertNoRunningWorkflow(id);
+    return this.markApproved(id, approverId, data);
+  }
+
+  /** The status write itself, reached either directly or by the workflow engine. */
+  private async markApproved(id: string, approverId: string, data?: ApprovePermissionDTO & { approverEmployeeId?: string | null }) {
     // [Finding #11] Self-approval guard: approver tidak boleh approve request milik sendiri
     const record = await this.findById(id);
     if (record && data?.approverEmployeeId && record.employeeId === data.approverEmployeeId) {
@@ -90,6 +123,11 @@ export class PermissionRequestRepository {
   }
 
   async reject(id: string, approverId: string, data?: ApprovePermissionDTO & { approverEmployeeId?: string | null }) {
+    await this.assertNoRunningWorkflow(id);
+    return this.markRejected(id, approverId, data);
+  }
+
+  private async markRejected(id: string, approverId: string, data?: ApprovePermissionDTO & { approverEmployeeId?: string | null }) {
     // [Finding #11] Self-approval guard: approver tidak boleh reject request milik sendiri
     const record = await this.findById(id);
     if (record && data?.approverEmployeeId && record.employeeId === data.approverEmployeeId) {
@@ -135,10 +173,12 @@ export class PermissionRequestRepository {
     const updated = await workflowEngineRepository.applyAction(instance.id, userId, roles, action);
     if (!updated) throw new NotFoundError('Failed to update workflow instance');
     if (updated.status === 'APPROVED') {
-      await this.approve(id, userId, { notes: action.comment, approverEmployeeId } as ApprovePermissionDTO & { approverEmployeeId?: string | null });
+      // The engine has already decided; going through `approve` would refuse
+      // its own instance.
+      await this.markApproved(id, userId, { notes: action.comment, approverEmployeeId } as ApprovePermissionDTO & { approverEmployeeId?: string | null });
     }
     if (action.action === 'REJECT') {
-      await this.reject(id, userId, { notes: action.comment, approverEmployeeId } as ApprovePermissionDTO & { approverEmployeeId?: string | null });
+      await this.markRejected(id, userId, { notes: action.comment, approverEmployeeId } as ApprovePermissionDTO & { approverEmployeeId?: string | null });
     }
     return { permissionRequest: await this.findById(id), workflowInstance: updated };
   }
