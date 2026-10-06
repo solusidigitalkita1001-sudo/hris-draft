@@ -1,5 +1,5 @@
 jest.mock('@/shared/database/prisma', () => {
-  const tx = { payrollRun: { updateMany: jest.fn(), findUniqueOrThrow: jest.fn(), create: jest.fn() } };
+  const tx = { payrollRun: { updateMany: jest.fn(), findUniqueOrThrow: jest.fn(), create: jest.fn() }, payslip: { updateMany: jest.fn() } };
   return { prisma: { ...tx, $transaction: jest.fn(async (work: (client: typeof tx) => Promise<unknown>) => work(tx)) } };
 });
 import { prisma } from '@/shared/database/prisma';
@@ -27,10 +27,17 @@ describe('payroll maker-checker persistence', () => {
       where: { id: 'run', companyId: 'A', period: { companyId: 'A', deletedAt: null }, status: 'COMPLETED', createdBy: { not: null }, AND: [{ createdBy: { not: 'checker' } }], deletedAt: null },
       data: { status: 'APPROVED', approvedBy: 'checker', approvedAt: expect.any(Date) },
     });
+    // Approval is also what finalises the payslips, inside the same
+    // transaction and scoped to this run and company.
+    expect(prisma.payslip.updateMany).toHaveBeenCalledWith({
+      where: { payrollRunId: 'run', companyId: 'A' }, data: { status: 'FINAL' },
+    });
   });
   it('rejects a lost status race or maker violation without returning success', async () => {
     jest.mocked(prisma.payrollRun.updateMany).mockResolvedValue({ count: 0 });
     await expect(repository.approvePayrollRun('run', 'maker', 'A')).rejects.toThrow(ConflictError);
     expect(prisma.payrollRun.findUniqueOrThrow).not.toHaveBeenCalled();
+    // A refused approval must not finalise anything either.
+    expect(prisma.payslip.updateMany).not.toHaveBeenCalled();
   });
 });
