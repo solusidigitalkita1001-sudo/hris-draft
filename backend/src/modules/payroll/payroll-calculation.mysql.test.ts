@@ -89,6 +89,9 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
   }
   const run = (f: Awaited<ReturnType<typeof fixture>>, periodId = f.period.id) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
     () => service.createPayrollRun({ companyId: f.companyId, periodId, name: 'Synthetic payroll' }, f.maker));
+  const runOfType = (f: Awaited<ReturnType<typeof fixture>>, runType: 'THR' | 'SEVERANCE' | 'CORRECTION') =>
+    runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+      () => service.createPayrollRun({ companyId: f.companyId, periodId: f.period.id, name: `Synthetic ${runType}`, runType }, f.maker));
   async function expectNoPayroll(f: Awaited<ReturnType<typeof fixture>>) {
     for (const count of [await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } }),
       await mockDatabase.payslip.count({ where: { companyId: f.companyId } }),
@@ -97,6 +100,23 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(await mockDatabase.salaryComponent.count({ where: { companyId: f.companyId } })).toBe(1);
     expect(eventBus.publish).not.toHaveBeenCalled();
   }
+  it.each(['THR', 'SEVERANCE', 'CORRECTION'] as const)(
+    'refuses to calculate a %s run instead of paying a second month of salary', async runType => {
+      const f = await fixture(); await employee(f);
+      // The period's REGULAR run already exists and carries the month's pay.
+      // One run per period PER TYPE means this second run is created
+      // legitimately — it is the calculation that must refuse. It reads no
+      // runType at all before this guard, so a THR run recalculated a full
+      // month of salary: a second complete set of payslips for a period
+      // already paid, separately approvable and separately disbursable.
+      const regular = await run(f);
+      expect(regular.payslips).toHaveLength(1);
+      await expect(runOfType(f, runType)).rejects.toThrow(
+        new RegExp(`A ${runType} payroll run cannot be calculated`));
+      // The refusal rolls the second run back whole: no extra slip, no extra run.
+      expect(await mockDatabase.payslip.count({ where: { companyId: f.companyId } })).toBe(1);
+      expect(await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } })).toBe(1);
+    });
   it('rolls back earlier slips, formula/loan snapshots and generated components when a later employee formula fails; retry succeeds', async () => {
     const f = await fixture(), first = await employee(f), second = await employee(f, '100.00', '2026-08-01');
     await loan(f, first.person.id); const advance = await ewa(f, first.person.id);
