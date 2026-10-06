@@ -4,6 +4,7 @@ import { NotFoundError, BadRequestError, ConflictError, ForbiddenError } from '@
 import prisma from '@/shared/database/prisma';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { calculateSeverance, EmploymentEndReason } from '@/shared/payroll/severance';
+import { calculateSeveranceTax } from '@/shared/payroll/severance-tax';
 
 export class OnboardingService {
   async getChecklists(employeeId: string) {
@@ -193,6 +194,8 @@ export class OnboardingService {
       upmkFactor?: number;
       compensationOfRights?: number;
       monthlyWorkingDays?: number;
+      previouslyPaidGross?: number;
+      calendarYearIndex?: number;
     }
   ) {
     const inputs = await onboardingRepository.findFinalPayrollInputs(resignationId);
@@ -218,11 +221,23 @@ export class OnboardingService {
       monthlyWorkingDays: opts?.monthlyWorkingDays,
     });
 
+    // PPh 21 final atas pesangon (PP 68/2009). Until now this endpoint quoted
+    // a gross figure and nothing worked out the withholding, so the number an
+    // employee was shown on their last day was not the number they received.
+    // Pasal 1 angka 4 puts UP, UPMK and UPH in one base, which is exactly what
+    // `total` is.
+    const tax = calculateSeveranceTax({
+      gross: result.total,
+      previouslyPaidGross: opts?.previouslyPaidGross,
+      calendarYearIndex: opts?.calendarYearIndex,
+    });
+
     logger.info('Final payroll calculated', {
       resignationId,
       employeeId: resignation.employeeId,
       reason: opts?.reason ?? 'RESIGN',
       total: result.total,
+      tax: tax.tax,
     });
 
     return {
@@ -235,6 +250,13 @@ export class OnboardingService {
       monthlyWage: Number(activeSalary.baseSalary),
       unusedLeaveDays,
       ...result,
+      /** PPh 21 final withheld from this payment (PP 68/2009 pasal 4). */
+      tax: tax.tax,
+      /** What the employee actually receives. */
+      netTotal: Math.max(0, Math.round(result.total - tax.tax)),
+      /** Gross including earlier instalments of the same termination. */
+      cumulativeGross: tax.cumulativeGross,
+      taxIsFinal: tax.isFinal,
     };
   }
 }
