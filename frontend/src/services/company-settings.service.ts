@@ -8,11 +8,13 @@ import api from './api';
  */
 export interface SettingDescriptor {
   key: string;
-  type: 'boolean' | 'number' | 'text';
+  type: 'boolean' | 'number' | 'enum' | 'text';
   defaultValue: string;
   min?: number;
   max?: number;
   integer?: boolean;
+  /** The permitted values, for `type: 'enum'` only. */
+  options?: string[];
 }
 
 class CompanySettingsService {

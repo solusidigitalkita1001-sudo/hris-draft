@@ -99,3 +99,32 @@ export function calculatePph21Correction(
     delta: Math.round(annual.annualTax - input.withheldToDate),
   };
 }
+
+/**
+ * Whether the run being calculated must settle the year's PPh 21.
+ *
+ * Two reasons, and only one of them is a preference:
+ *
+ * - Under TER the monthly figure is a withholding RATE, not a twelfth of the
+ *   year's tax, so the twelve months do not add up to the liability by
+ *   construction. Without the year-end settlement the difference simply stays
+ *   with whoever happened to bear it, and nothing in the system says so. So
+ *   TER makes the settlement mandatory, not optional.
+ * - Under the annualized method the months already sum to the annual tax for
+ *   an employee whose pay never changed, so settling is a correctness
+ *   improvement rather than a necessity — a bonus, a raise or a mid-year join
+ *   are what make it matter. That stays the tenant's choice, because it moves
+ *   money in December.
+ *
+ * Either way it only ever happens in the period that ends the fiscal year.
+ */
+export function shouldReconcileAnnualTax(input: {
+  isFinalPeriodOfYear: boolean;
+  /** The company withholds by TER. */
+  useTer: boolean;
+  /** The company opted into the December true-up. */
+  optedIn: boolean;
+}): boolean {
+  if (!input.isFinalPeriodOfYear) return false;
+  return input.useTer || input.optedIn;
+}

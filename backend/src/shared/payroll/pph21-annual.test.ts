@@ -1,4 +1,4 @@
-import { calculateAnnualPph21, calculatePph21Correction } from './pph21-annual';
+import { shouldReconcileAnnualTax, calculateAnnualPph21, calculatePph21Correction } from './pph21-annual';
 import { calculatePph21 } from './pph21';
 
 const TWELVE = (value: number) => Array.from({ length: 12 }, () => value);
@@ -127,5 +127,29 @@ describe('December correction', () => {
       biayaJabatan: 6_000_000,
     });
     expect(correction.delta).toBe(correction.annual.annualTax);
+  });
+});
+
+describe('when the year must be settled', () => {
+  it.each([
+    ['never outside the final period, even under TER', false, true, true, false],
+    ['never outside the final period when opted in', false, false, true, false],
+    ['always in the final period under TER, opt-in or not', true, true, false, true],
+    ['in the final period under TER when also opted in', true, true, true, true],
+    ['in the final period on the annualized method only when opted in', true, false, true, true],
+    ['not on the annualized method without the opt-in', true, false, false, false],
+  ])('%s', (_label, isFinalPeriodOfYear, useTer, optedIn, expected) => {
+    expect(shouldReconcileAnnualTax({
+      isFinalPeriodOfYear: isFinalPeriodOfYear as boolean,
+      useTer: useTer as boolean,
+      optedIn: optedIn as boolean,
+    })).toBe(expected);
+  });
+
+  it('cannot be switched off under TER, which is the point', () => {
+    // TER withholds a rate per month; the months do not add up to the year by
+    // construction. Letting the opt-in disable the settlement would leave the
+    // difference with whoever bore it and nothing recording that.
+    expect(shouldReconcileAnnualTax({ isFinalPeriodOfYear: true, useTer: true, optedIn: false })).toBe(true);
   });
 });
