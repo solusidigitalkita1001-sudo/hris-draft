@@ -133,7 +133,23 @@ export function CompanySettingsPage() {
                 </dd>
               </div>
               <dd>
-                {entry.type === 'boolean'
+                {entry.type === 'enum' && entry.options?.length
+                  ? <select id={controlId} disabled={!canSave || busy}
+                      aria-describedby={describedBy}
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={value}
+                      onChange={event => setDraft(current => ({ ...current, [entry.key]: event.target.value }))}>
+                      {entry.options.map(option => {
+                        // A value the server offers but no copy names must
+                        // still be selectable, so the raw value is the label.
+                        const optionKey = `adm.set.option.${entry.key}.${option}` as TranslationKey;
+                        const optionLabel = t(optionKey);
+                        return <option key={option} value={option}>
+                          {optionLabel === optionKey ? option : optionLabel}
+                        </option>;
+                      })}
+                    </select>
+                  : entry.type === 'boolean'
                   ? <label className="flex items-center gap-2 text-sm">
                       <input id={controlId} type="checkbox" className="h-4 w-4" disabled={!canSave || busy}
                         aria-describedby={describedBy}

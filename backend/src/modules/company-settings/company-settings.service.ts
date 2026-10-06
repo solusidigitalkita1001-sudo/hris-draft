@@ -77,6 +77,11 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   benefit_payroll_deduction_enabled: 'false',
   unpaid_leave_deduction_enabled: 'false',
   payslip_email_notification_enabled: 'false',
+  // Metode pemotongan PPh 21 (GAP-40). TER (PP 58/2023) wajib sejak Januari
+  // 2024, tetapi menyalakannya mengubah take-home pay setiap karyawan ke dua
+  // arah — jadi defaultnya tetap metode lama sampai tenant memutuskan.
+  // Menyalakan TER otomatis mewajibkan rekonsiliasi Desember.
+  pph21_method: 'ANNUALIZED',
 };
 
 const WORKWEEK_DAYS_KEY = 'attendance_workweek_days';
@@ -129,6 +134,17 @@ const BOOLEAN_SETTINGS = new Set([
   'pph21_gross_up_enabled',
 ]);
 
+/**
+ * Settings whose value is one of a fixed set.
+ *
+ * Same reason as BOOLEAN_SETTINGS, only sharper: storing 'ter' instead of
+ * 'TER' would leave the old withholding method silently in force while the
+ * setting read as configured. A free-text key would have accepted it.
+ */
+const ENUM_SETTINGS: Record<string, readonly string[]> = {
+  pph21_method: ['ANNUALIZED', 'TER'],
+};
+
 const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boolean }> = {
   leave_encashment_max_days_per_year: { min: 0, max: 365, integer: true },
   leave_encashment_daily_divisor: { min: 1, max: 31 },
@@ -148,11 +164,13 @@ const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boo
 /** What a client needs to render one setting without guessing its type. */
 export type SettingDescriptor = {
   key: string;
-  type: 'boolean' | 'number' | 'text';
+  type: 'boolean' | 'number' | 'enum' | 'text';
   defaultValue: string;
   min?: number;
   max?: number;
   integer?: boolean;
+  /** The permitted values, for `type: 'enum'` only. */
+  options?: readonly string[];
 };
 
 /**
@@ -166,6 +184,8 @@ export type SettingDescriptor = {
 export function describeSettings(): SettingDescriptor[] {
   return Object.entries(DEFAULT_COMPANY_SETTINGS).map(([key, defaultValue]) => {
     if (BOOLEAN_SETTINGS.has(key)) return { key, type: 'boolean' as const, defaultValue };
+    const options = ENUM_SETTINGS[key];
+    if (options) return { key, type: 'enum' as const, defaultValue, options };
     const numeric = NUMERIC_SETTINGS[key];
     if (numeric) {
       return {
@@ -183,6 +203,16 @@ export function validateSettingValue(key: string, value: string): void {
       throw new BadRequestError(
         `Setting ${key} accepts only 'true' or 'false' (lowercase); received '${value}'. ` +
         'A near-miss here would leave the feature off while looking enabled.',
+      );
+    }
+    return;
+  }
+
+  const allowed = ENUM_SETTINGS[key];
+  if (allowed) {
+    if (!allowed.includes(value)) {
+      throw new BadRequestError(
+        `Setting ${key} accepts only ${allowed.map((option) => `'${option}'`).join(' or ')}; received '${value}'`,
       );
     }
     return;

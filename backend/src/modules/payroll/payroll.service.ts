@@ -19,7 +19,7 @@ import { NotFoundError, ConflictError, BadRequestError, ValidationError, Forbidd
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
-import { calculatePph21Correction } from '@/shared/payroll/pph21-annual';
+import { calculatePph21Correction, shouldReconcileAnnualTax } from '@/shared/payroll/pph21-annual';
 import { mailService } from '@/shared/mail/MailService';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
@@ -622,13 +622,33 @@ export class PayrollService {
     // changes take-home pay in the last month of the year; and only in the
     // period that actually ends the fiscal year, so a mid-year run cannot
     // accidentally settle a year that is not over.
+    // PPh 21 withholding method (GAP-40). TER (PP 58/2023) has been the
+    // mandatory monthly method since January 2024, but switching it on changes
+    // every employee's take-home pay in both directions, so it stays a
+    // deliberate tenant decision rather than a consequence of deploying.
+    const methodSetting = await database.companySetting.findUnique({
+      where: { companyId_key: { companyId: run.companyId, key: 'pph21_method' } },
+      select: { value: true },
+    });
+    const useTer = methodSetting?.value === 'TER';
+
     const reconciliationSetting = await database.companySetting.findUnique({
       where: { companyId_key: { companyId: run.companyId, key: 'pph21_december_reconciliation_enabled' } },
       select: { value: true },
     });
     const fiscalPeriodEnd = new Date(run.period.endDate);
     const isFinalPeriodOfYear = fiscalPeriodEnd.getUTCMonth() === 11;
-    const reconcileAnnualTax = reconciliationSetting?.value === 'true' && isFinalPeriodOfYear;
+    // TER forces the year-end settlement on. Under TER the monthly figure is a
+    // withholding rate, not a twelfth of the year's tax, so without the
+    // December true-up the year's withholding would simply never equal the
+    // year's liability — and the employee would carry the difference with
+    // nothing in the system saying so. Under the annualized method it stays
+    // opt-in, because there the twelve months already add up.
+    const reconcileAnnualTax = shouldReconcileAnnualTax({
+      isFinalPeriodOfYear,
+      useTer,
+      optedIn: reconciliationSetting?.value === 'true',
+    });
     const taxComponent = reconcileAnnualTax
       ? await payrollRepository.findSalaryComponentByCode(run.companyId, 'PPH21', database)
       : null;
@@ -684,6 +704,16 @@ export class PayrollService {
     const taxAllowanceComponent = grossUpSetting?.value === 'true'
       ? await this.ensureTaxAllowanceComponent(run.companyId, database)
       : null;
+    // Gross-up solves `allowance = tax(gross + allowance)` against the annual
+    // method; against TER that is a different equation. Running both would
+    // produce a number neither policy means, so the run stops before writing
+    // anything rather than paying it.
+    if (useTer && taxAllowanceComponent) {
+      throw new ConflictError(
+        'PPh 21 gross-up (pph21_gross_up_enabled) and the TER method (pph21_method=TER) '
+        + 'cannot both be enabled; turn one off before running payroll',
+      );
+    }
     const unpaidLeaveSetting = await database.companySetting.findUnique({
       where: { companyId_key: { companyId: run.companyId, key: 'unpaid_leave_deduction_enabled' } },
       select: { value: true },
@@ -997,6 +1027,7 @@ export class PayrollService {
         // Only components the tenant flagged isProrated are scaled; see
         // employee-pay.ts. A full window leaves every amount untouched.
         prorationFactor: slice.fraction,
+        useTer,
         taxAllowance: taxAllowanceComponent
           ? { salaryComponentId: taxAllowanceComponent.id, name: taxAllowanceComponent.name }
           : null,

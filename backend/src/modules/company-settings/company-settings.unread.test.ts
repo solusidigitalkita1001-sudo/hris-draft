@@ -97,6 +97,8 @@ describe('every advertised company setting is read by something', () => {
         .flatMap(match => [...match[1].matchAll(/'([a-z0-9_]+)'/g)].map(key => key[1])),
       ...[...service.matchAll(/NUMERIC_SETTINGS[^=]*= \{([\s\S]*?)\n\};/g)]
         .flatMap(match => [...match[1].matchAll(/^ {2}([a-z0-9_]+):/gm)].map(key => key[1])),
+      ...[...service.matchAll(/ENUM_SETTINGS[^=]*= \{([\s\S]*?)\n\};/g)]
+        .flatMap(match => [...match[1].matchAll(/^ {2}([a-z0-9_]+):/gm)].map(key => key[1])),
     ];
     expect(validated.length).toBeGreaterThanOrEqual(15);
     expect(validated.filter(key => !keys.includes(key))).toEqual([]);

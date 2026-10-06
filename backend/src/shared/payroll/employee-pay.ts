@@ -2,6 +2,8 @@ import { Prisma, SalaryType } from '@prisma/client';
 import { BadRequestError } from '@/shared/exceptions/AppError';
 import { calculateBpjs, BpjsConfig } from './bpjs';
 import { calculatePph21, grossUpTaxAllowance, Pph21Config } from './pph21';
+import { calculateTerWithholding } from './ter';
+import type { TerBracketRow, TerCategoryCode } from './ter-tables';
 import { FormulaInputs, FormulaVersionInput, resolvePayrollComponents } from './formula';
 
 export interface PayComponent { salaryComponentId: string; name: string; type: SalaryType; amount: number; isTaxable: boolean }
@@ -30,6 +32,21 @@ export function calculateEmployeePay(salary: SalaryForCalculation, extraComponen
      * ticking it did precisely nothing.
      */
     prorationFactor?: number;
+    /**
+     * TER brackets per category, as the policy loader returns them. Always
+     * present, so it cannot double as the switch: an empty record means the
+     * statutory annex applies, not that TER is off.
+     */
+    ter?: Partial<Record<TerCategoryCode, readonly TerBracketRow[]>>;
+    /**
+     * Switches monthly withholding to Tarif Efektif Rata-rata (PP 58/2023),
+     * the mandatory monthly method since January 2024. TER is a withholding
+     * rate, not a different tax: the month takes `bruto x TER` and the final
+     * period of the year settles the real liability against what was taken.
+     * That settlement is why enabling TER forces the December reconciliation
+     * on — without it the year never squares up.
+     */
+    useTer?: boolean;
   } = {}) {
   const active = salary.components.filter(allocation => allocation.isActive);
   if (active.some(allocation => !allocation.salaryComponent.isActive || allocation.salaryComponent.deletedAt)) {
@@ -78,11 +95,29 @@ export function calculateEmployeePay(salary: SalaryForCalculation, extraComponen
   const grossUp = policy.taxAllowance && resolved.some(row => row.code === 'PPH21')
     ? grossUpTaxAllowance(taxInput, policy.pph21 ?? {})
     : null;
-  const pph = grossUp ? grossUp.result : calculatePph21(taxInput, policy.pph21 ?? {});
+  // Gross-up solves `allowance = tax(gross + allowance)` against the annual
+  // method. Against TER the answer is a different equation, and the two
+  // policies together would quietly produce a number neither of them means.
+  // The run refuses the combination before reaching here; this is the second
+  // lock, because it decides what an employee is paid.
+  if (policy.useTer && grossUp) {
+    throw new BadRequestError(
+      'PPh 21 gross-up and the TER withholding method cannot both be enabled; '
+      + 'turn one off before running payroll',
+    );
+  }
+  const monthlyTax = policy.useTer
+    ? new Prisma.Decimal(calculateTerWithholding({
+        monthlyGross: taxableGross,
+        married: taxContext.married,
+        dependents: taxContext.dependents,
+        tables: policy.ter,
+      }).tax).toDecimalPlaces(2).toNumber()
+    : (grossUp ? grossUp.result : calculatePph21(taxInput, policy.pph21 ?? {})).monthlyTax;
   for (const row of resolved) {
     if (row.code === 'BPJS-TK') row.entry.amount = bpjs.employee.jht + bpjs.employee.jp;
     else if (row.code === 'BPJS-KES') row.entry.amount = bpjs.employee.jkn;
-    else if (row.code === 'PPH21') row.entry.amount = pph.monthlyTax;
+    else if (row.code === 'PPH21') row.entry.amount = monthlyTax;
   }
   const components: PayComponent[] = [...resolved.map(row => row.entry), ...extraComponents];
   if (grossUp && policy.taxAllowance && grossUp.allowance > 0) {

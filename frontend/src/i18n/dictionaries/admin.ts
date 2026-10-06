@@ -61,6 +61,10 @@ export const adminDictionary = defineDictionary({
     'adm.set.help.benefit_payroll_deduction_enabled': 'Memindahkan uang: kontribusi karyawan atas program benefit ikut dipotong di payroll.',
     'adm.set.key.payslip_email_notification_enabled': 'Email pemberitahuan slip gaji',
     'adm.set.help.payslip_email_notification_enabled': 'Mengirim email ke karyawan saat payroll disetujui, agar tidak perlu memeriksa aplikasi.',
+    'adm.set.key.pph21_method': 'Metode pemotongan PPh 21',
+    'adm.set.help.pph21_method': 'TER (PP 58/2023) wajib untuk pemotongan bulanan sejak Januari 2024. Menyalakannya mengubah take-home pay setiap karyawan ke dua arah, dan otomatis mewajibkan rekonsiliasi Desember karena tarif bulanan TER bukan seperduabelas pajak setahun. Tidak bisa digabung dengan gross-up PPh 21.',
+    'adm.set.option.pph21_method.ANNUALIZED': 'Annualized (setahun dibagi 12)',
+    'adm.set.option.pph21_method.TER': 'TER — Tarif Efektif Rata-rata',
     'adm.set.key.recruitment_requisition_required': 'Permintaan tenaga kerja wajib sebelum rekrutmen',
     'adm.set.help.recruitment_requisition_required': 'Menambah satu langkah persetujuan untuk setiap lowongan. Nonaktifkan jika tidak ada anggaran headcount terpusat.',
     // ── Shared: TableShell ─────────────────────────────
@@ -586,6 +590,10 @@ export const adminDictionary = defineDictionary({
     'adm.set.help.benefit_payroll_deduction_enabled': 'Moves money: employee contributions to benefit plans are deducted in payroll.',
     'adm.set.key.payslip_email_notification_enabled': 'Payslip availability email',
     'adm.set.help.payslip_email_notification_enabled': 'Emails employees when payroll is approved, so they need not keep checking the app.',
+    'adm.set.key.pph21_method': 'PPh 21 withholding method',
+    'adm.set.help.pph21_method': 'TER (PP 58/2023) has been mandatory for monthly withholding since January 2024. Switching it on moves every employee\u2019s take-home pay in both directions, and forces the December reconciliation on, because a TER monthly rate is not a twelfth of the year\u2019s tax. Cannot be combined with PPh 21 gross-up.',
+    'adm.set.option.pph21_method.ANNUALIZED': 'Annualized (year divided by 12)',
+    'adm.set.option.pph21_method.TER': 'TER \u2014 average effective rate',
     'adm.set.key.recruitment_requisition_required': 'Manpower requisition required before recruiting',
     'adm.set.help.recruitment_requisition_required': 'Adds one approval step to every opening. Leave off when there is no central headcount budget.',
     // ── Shared: TableShell ─────────────────────────────

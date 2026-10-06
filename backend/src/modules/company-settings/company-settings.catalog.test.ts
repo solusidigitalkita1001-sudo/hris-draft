@@ -48,6 +48,30 @@ describe('the company setting catalog matches the boundary that validates it', (
       else expect(() => validateSettingValue(key, fractional)).not.toThrow();
     });
 
+  it.each(descriptors.filter((entry) => entry.type === 'enum').map((entry) => [entry.key, entry] as const))(
+    '%s offers exactly the values the boundary accepts', (_key, entry) => {
+      const { key, options } = entry;
+      expect(options?.length).toBeGreaterThan(1);
+      for (const option of options ?? []) {
+        expect(() => validateSettingValue(key, option)).not.toThrow();
+      }
+      // A near-miss is the failure this exists to prevent: the wrong case
+      // would read as configured while leaving the old behaviour in force.
+      const wrongCase = (options?.[0] ?? '').toLowerCase();
+      if (wrongCase && !options?.includes(wrongCase)) {
+        expect(() => validateSettingValue(key, wrongCase)).toThrow();
+      }
+      expect(() => validateSettingValue(key, 'definitely-not-an-option')).toThrow();
+      expect(() => validateSettingValue(key, '')).toThrow();
+    });
+
+  it('describes pph21_method as the enum it is, not free text', () => {
+    // A free-text descriptor would render as a text box and accept 'ter'.
+    const method = descriptors.find((entry) => entry.key === 'pph21_method');
+    expect(method).toMatchObject({ type: 'enum', defaultValue: 'ANNUALIZED' });
+    expect(method?.options).toEqual(['ANNUALIZED', 'TER']);
+  });
+
   it('serves the catalog on its own path rather than as a setting named "catalog"', () => {
     // Express matches in order: '/:key' declared first would swallow this.
     // Comments are stripped first — the explanatory comment above the route

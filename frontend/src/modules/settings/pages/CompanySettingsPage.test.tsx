@@ -19,8 +19,12 @@ const CATALOG: SettingDescriptor[] = [
   { key: 'leave_carryover_max_days', type: 'number', defaultValue: '1', min: 0, max: 365, integer: true },
   // Deliberately in no group the page knows about.
   { key: 'some_future_setting', type: 'text', defaultValue: 'x' },
+  { key: 'pph21_method', type: 'enum', defaultValue: 'ANNUALIZED', options: ['ANNUALIZED', 'TER'] },
 ];
-const VALUES = { pph21_gross_up_enabled: 'false', leave_carryover_max_days: '1', some_future_setting: 'x' };
+const VALUES = {
+  pph21_gross_up_enabled: 'false', leave_carryover_max_days: '1',
+  some_future_setting: 'x', pph21_method: 'ANNUALIZED',
+};
 
 function renderPage() {
   return render(<I18nProvider><CompanySettingsPage /></I18nProvider>);
@@ -77,5 +81,27 @@ describe('company settings page', () => {
     renderPage();
     expect(await screen.findByText('Hak akses baca pengaturan diperlukan untuk membuka halaman ini.')).toBeTruthy();
     expect(service.catalog).not.toHaveBeenCalled();
+  });
+
+  it('offers an enum setting as a choice, not a text box', () => {
+    // A text box would accept 'ter', which the server rejects and which would
+    // otherwise read as configured while leaving the old method in force.
+    renderPage();
+    return screen.findByLabelText('Metode pemotongan PPh 21').then(control => {
+      expect(control.tagName).toBe('SELECT');
+      const values = Array.from((control as HTMLSelectElement).options).map(option => option.value);
+      expect(values).toEqual(['ANNUALIZED', 'TER']);
+      expect((control as HTMLSelectElement).value).toBe('ANNUALIZED');
+    });
+  });
+
+  it('sends the chosen enum value verbatim', async () => {
+    vi.mocked(service.save).mockResolvedValue(undefined);
+    renderPage();
+    const control = await screen.findByLabelText('Metode pemotongan PPh 21');
+    fireEvent.change(control, { target: { value: 'TER' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Simpan perubahan' }));
+    await waitFor(() => expect(service.save).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(service.save).mock.calls[0][0]).toEqual({ pph21_method: 'TER' });
   });
 });
