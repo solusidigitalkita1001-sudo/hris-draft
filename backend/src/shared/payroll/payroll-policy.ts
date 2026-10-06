@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { Pph21Config } from './pph21';
 import type { BpjsConfig } from './bpjs';
+import type { TerBracketRow, TerCategoryCode } from './ter-tables';
 
 /**
  * Loads the tenant's tax/BPJS reference configuration for a payroll year.
@@ -12,6 +13,8 @@ import type { BpjsConfig } from './bpjs';
 export interface PayrollPolicyConfig {
   pph21: Partial<Pph21Config>;
   bpjs: Partial<BpjsConfig>;
+  /** TER brackets per category; an absent category falls back to the annex. */
+  ter: Partial<Record<TerCategoryCode, readonly TerBracketRow[]>>;
 }
 
 // Upper bounds at or beyond the seed sentinel mean "no upper limit".
@@ -31,7 +34,7 @@ function pickYearScope<T extends { companyId: string | null; year: number }>(row
 }
 
 export async function loadPayrollPolicyConfig(db: Db, companyId: string, year: number): Promise<PayrollPolicyConfig> {
-  const [taxBrackets, ptkpRows, bpjsRows] = await Promise.all([
+  const [taxBrackets, ptkpRows, bpjsRows, terRows] = await Promise.all([
     db.taxBracket.findMany({
       where: { OR: [{ companyId }, { companyId: null }], year: { lte: year } },
       orderBy: [{ year: 'desc' }, { level: 'asc' }],
@@ -45,6 +48,10 @@ export async function loadPayrollPolicyConfig(db: Db, companyId: string, year: n
       // classes need an employee-level field before they can be honored.
       where: { OR: [{ companyId }, { companyId: null }], year: { lte: year }, jkkRiskClass: 'I' },
       orderBy: { year: 'desc' },
+    }),
+    db.terBracket.findMany({
+      where: { OR: [{ companyId }, { companyId: null }], year: { lte: year }, isActive: true },
+      orderBy: [{ year: 'desc' }, { category: 'asc' }, { level: 'asc' }],
     }),
   ]);
 
@@ -80,5 +87,16 @@ export async function loadPayrollPolicyConfig(db: Db, companyId: string, year: n
       }
     : {};
 
-  return { pph21, bpjs };
+  // TER is resolved per category, so a company that overrides only kategori A
+  // keeps the statutory B and C rather than losing them.
+  const ter: Partial<Record<TerCategoryCode, readonly TerBracketRow[]>> = {};
+  for (const category of ['A', 'B', 'C'] as const) {
+    const scoped = pickYearScope(terRows.filter((row) => row.category === category), companyId, year);
+    if (!scoped.length) continue;
+    ter[category] = scoped
+      .sort((a, b) => a.level - b.level)
+      .map((row) => [row.upperBound === null ? null : Number(row.upperBound), Number(row.ratePercent)] as TerBracketRow);
+  }
+
+  return { pph21, bpjs, ter };
 }
