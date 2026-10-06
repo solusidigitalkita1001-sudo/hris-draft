@@ -246,7 +246,7 @@ jobs:
         run: bash ../scripts/migration-rehearsal.sh
 
   frontend:
-    name: Frontend (build [blocking], lint [soft])
+    name: Frontend (build + lint + test [blocking])
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -263,6 +263,12 @@ jobs:
         run: npm run build
       - name: Lint (blocking)
         run: npm run lint
+      # The frontend unit suite was never run here, so it rotted until it could
+      # not pass on any machine: no vitest configuration meant it collected
+      # Playwright's e2e specs and rendered components outside their providers.
+      # Blocking rather than soft, because soft is how it got into that state.
+      - name: Test (blocking)
+        run: npm test
 
   e2e:
     name: Browser E2E (Playwright, soft)

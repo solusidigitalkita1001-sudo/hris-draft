@@ -75,11 +75,16 @@ test.describe('auth session in a browser', () => {
     // app having done exactly the right thing. Who wins depends on timing, so
     // the same commit passed on one CI run and failed on another.
     //
-    // `waitUntil: 'commit'` resolves as soon as the response starts, leaving
-    // the assertion below to judge where we ended up. Not a retry: this suite
-    // sets retries to 0 on purpose, so a flaky result has to be fixed rather
-    // than re-rolled.
-    await page.goto('/self-service', { waitUntil: 'commit' });
+    // `waitUntil: 'commit'` resolves as soon as the response starts, which was
+    // not enough: when the redirect fires BEFORE the response commits, there
+    // is no commit to wait for and `goto` still rejects with ERR_ABORTED. The
+    // abort is the app behaving correctly, so it is tolerated by name — any
+    // other navigation error still fails loudly, and the assertion below is
+    // what decides where we ended up. Not a retry: this suite sets retries to
+    // 0 on purpose, so a flaky result has to be fixed rather than re-rolled.
+    await page.goto('/self-service', { waitUntil: 'commit' }).catch((error: unknown) => {
+      if (!String(error).includes('net::ERR_ABORTED')) throw error;
+    });
     await expect(page).toHaveURL(/\/login\?reason=expired/);
   });
 
