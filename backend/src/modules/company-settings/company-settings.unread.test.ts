@@ -85,6 +85,23 @@ describe('every advertised company setting is read by something', () => {
     },
   );
 
+  it('advertises every key it validates', () => {
+    // The inverse of the assertion below, and the direction that was missing.
+    // A key can be validated at the boundary and still be invisible to
+    // `getAllSettings`, which is the only way a client discovers what is
+    // configurable. Three money-or-mail switches sat in BOOLEAN_SETTINGS and
+    // not in the defaults, so the only person who could set them was somebody
+    // who already knew the key existed — and no UI could offer them at all.
+    const validated = [
+      ...[...service.matchAll(/BOOLEAN_SETTINGS = new Set\(\[([\s\S]*?)\]\)/g)]
+        .flatMap(match => [...match[1].matchAll(/'([a-z0-9_]+)'/g)].map(key => key[1])),
+      ...[...service.matchAll(/NUMERIC_SETTINGS[^=]*= \{([\s\S]*?)\n\};/g)]
+        .flatMap(match => [...match[1].matchAll(/^ {2}([a-z0-9_]+):/gm)].map(key => key[1])),
+    ];
+    expect(validated.length).toBeGreaterThanOrEqual(15);
+    expect(validated.filter(key => !keys.includes(key))).toEqual([]);
+  });
+
   it('has a consumer for each key', () => {
     const unread = keys.filter((key) => {
       const occurrences = (corpus.match(new RegExp(`'${key}'|\\b${key}:`, 'g')) ?? []).length;

@@ -68,6 +68,15 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   // headcount budget would otherwise gain a mandatory extra step for every
   // replacement hire, which is bureaucracy with nothing behind it.
   recruitment_requisition_required: 'false',
+  // These three were validated as booleans but never advertised here, so
+  // `getAllSettings` — the only way a client can discover what is
+  // configurable — did not mention them at all. Three switches that move money
+  // or send mail existed and were reachable only by someone who already knew
+  // the key. 'false' is what the readers already saw when the row was absent
+  // (`?.value === 'true'`), so publishing them changes nothing but visibility.
+  benefit_payroll_deduction_enabled: 'false',
+  unpaid_leave_deduction_enabled: 'false',
+  payslip_email_notification_enabled: 'false',
 };
 
 const WORKWEEK_DAYS_KEY = 'attendance_workweek_days';
@@ -129,7 +138,44 @@ const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boo
   attendance_default_working_days_per_month: { min: 1, max: 31, integer: true },
   leave_carryover_max_days: { min: 0, max: 365, integer: true },
   leave_carryover_expiry_month: { min: 0, max: 12, integer: true },
+  // PP 35/2021 only recognises a 5- or 6-day workweek for the holiday overtime
+  // band, and `resolveWorkweekDays` already silently falls back to 5 for
+  // anything else. Unvalidated, saving 7 looked accepted and quietly meant 5;
+  // now the boundary says so, and the catalog can offer the real choice.
+  attendance_workweek_days: { min: 5, max: 6, integer: true },
 };
+
+/** What a client needs to render one setting without guessing its type. */
+export type SettingDescriptor = {
+  key: string;
+  type: 'boolean' | 'number' | 'text';
+  defaultValue: string;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+};
+
+/**
+ * The boolean and numeric lists above are the only place that knows a setting's
+ * shape, and `getAllSettings` returns bare strings. Without this, any client
+ * offering an editor has to keep its own copy of which key is a switch and
+ * which is a number — and the two copies drift the moment a key is added,
+ * which is how a tenant ends up storing `TRUE` in a field the validator then
+ * rejects, or a free-text key rendered as a checkbox.
+ */
+export function describeSettings(): SettingDescriptor[] {
+  return Object.entries(DEFAULT_COMPANY_SETTINGS).map(([key, defaultValue]) => {
+    if (BOOLEAN_SETTINGS.has(key)) return { key, type: 'boolean' as const, defaultValue };
+    const numeric = NUMERIC_SETTINGS[key];
+    if (numeric) {
+      return {
+        key, type: 'number' as const, defaultValue,
+        min: numeric.min, max: numeric.max, integer: numeric.integer ?? false,
+      };
+    }
+    return { key, type: 'text' as const, defaultValue };
+  });
+}
 
 export function validateSettingValue(key: string, value: string): void {
   if (BOOLEAN_SETTINGS.has(key)) {

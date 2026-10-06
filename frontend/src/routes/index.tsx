@@ -124,6 +124,7 @@ import { AdminAuditLogDetailPage } from '@/modules/admin/pages/AdminAuditLogDeta
 import { AdminSettingsPage } from '@/modules/admin/pages/AdminSettingsPage';
 import { AdminMenuAccessPage } from '@/modules/admin/pages/AdminMenuAccessPage';
 import { AdminDataScopePage } from '@/modules/admin/pages/AdminDataScopePage';
+import { CompanySettingsPage } from '@/modules/settings/pages/CompanySettingsPage';
 const WorkflowAdminPage = lazy(() => import('@/modules/workflow-engine/pages/WorkflowAdminPage').then((m) => ({ default: m.WorkflowAdminPage })));
 import { EMPLOYEE_SELF_SERVICE_ROLES, OPERATIONAL_ROLES } from '@/lib/access-control';
 
@@ -886,6 +887,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'rbac', action: 'update' }]}>
             <AdminDataScopePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/company-settings',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
+            <CompanySettingsPage />
           </ProtectedRoute>
         ),
       },
