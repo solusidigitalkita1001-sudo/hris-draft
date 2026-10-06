@@ -11,6 +11,7 @@ import { payrollService } from '@/services/payroll.service';
 import { employeeService } from '@/services/employee.service';
 import { organizationService } from '@/services/organization.service';
 import { assetService } from '@/services/asset.service';
+import { I18nProvider } from '@/i18n/provider';
 
 vi.mock('@/services/payroll.service', () => ({
   payrollService: { getPayrollRuns: vi.fn() },
@@ -73,7 +74,7 @@ describe('company switching without a browser refresh', () => {
   });
 
   it('reloads Payroll for A → B → A from the central company store', async () => {
-    render(<MemoryRouter><PayrollRunList /></MemoryRouter>);
+    render(<I18nProvider><MemoryRouter><PayrollRunList /></MemoryRouter></I18nProvider>);
     await switchAtoBtoA((companyId) => {
       expect(payrollService.getPayrollRuns).toHaveBeenLastCalledWith(companyId);
     });
@@ -82,7 +83,7 @@ describe('company switching without a browser refresh', () => {
   });
 
   it('reloads Employee and its reference data for A → B → A', async () => {
-    render(<MemoryRouter><EmployeeListPage /></MemoryRouter>);
+    render(<I18nProvider><MemoryRouter><EmployeeListPage /></MemoryRouter></I18nProvider>);
     await switchAtoBtoA((companyId) => {
       expect(employeeService.getEmployees).toHaveBeenLastCalledWith(
         expect.objectContaining({ companyId }),
@@ -94,7 +95,7 @@ describe('company switching without a browser refresh', () => {
   });
 
   it('reloads Asset for A → B → A', async () => {
-    render(<MemoryRouter><AssetList /></MemoryRouter>);
+    render(<I18nProvider><MemoryRouter><AssetList /></MemoryRouter></I18nProvider>);
     await switchAtoBtoA((companyId) => {
       expect(assetService.getAll).toHaveBeenLastCalledWith(companyId);
     });
