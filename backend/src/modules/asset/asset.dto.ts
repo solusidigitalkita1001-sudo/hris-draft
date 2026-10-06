@@ -19,8 +19,12 @@ export const assignAssetSchema = z.object({
 });
 
 export const returnAssetSchema = z.object({
+  // The controller reads this from the body and hands it to the repository as
+  // the assignment to close. It was never declared here, so nothing checked it
+  // was even a UUID.
+  assignmentId: z.string().uuid(),
   conditionAtReturn: z.enum(['GOOD', 'FAIR', 'DAMAGED', 'LOST']),
-  notes: z.string().optional(),
+  notes: z.string().max(2000).optional(),
 });
 
 export const myAssetsQuerySchema = z.object({
