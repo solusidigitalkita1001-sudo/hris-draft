@@ -7,9 +7,10 @@ const state: {
   actorId: string | null;
   updateCount: number;
   updates: Array<{ where: Row; data: Row }>;
+  documentUpdates: Array<{ where: Row; data: Row }>;
   created: Row[];
   deletes: number;
-} = { document: null, signers: [], users: [], actorId: 'user-employee', updateCount: 1, updates: [], created: [], deletes: 0 };
+} = { document: null, signers: [], users: [], actorId: 'user-employee', updateCount: 1, updates: [], documentUpdates: [], created: [], deletes: 0 };
 
 jest.mock('@/shared/database/prisma', () => {
   const signerApi = {
@@ -38,8 +39,15 @@ jest.mock('@/shared/database/prisma', () => {
   const signatureApi = {
     create: jest.fn(async ({ data }: { data: Row }) => ({ id: 'signature-1', signedAt: new Date('2026-09-30T00:00:00Z'), ...data })),
   };
+  const documentApi = {
+    findFirst: jest.fn(async () => state.document),
+    updateMany: jest.fn(async ({ where, data }: { where: Row; data: Row }) => {
+      state.documentUpdates.push({ where, data });
+      return { count: 1 };
+    }),
+  };
   const client = {
-    document: { findFirst: jest.fn(async () => state.document) },
+    document: documentApi,
     documentSigner: signerApi,
     documentSignature: signatureApi,
     user: { findMany: jest.fn(async () => state.users) },
@@ -47,7 +55,7 @@ jest.mock('@/shared/database/prisma', () => {
     // form used by setSigners().
     $transaction: jest.fn(async (arg: unknown): Promise<unknown> =>
       (typeof arg === 'function'
-        ? (arg as (tx: unknown) => Promise<unknown>)({ documentSigner: signerApi, documentSignature: signatureApi })
+        ? (arg as (tx: unknown) => Promise<unknown>)({ documentSigner: signerApi, documentSignature: signatureApi, document: documentApi })
         : Promise.all(arg as Promise<unknown>[]))),
   };
   return { __esModule: true, default: client, prisma: client };
@@ -78,6 +86,7 @@ beforeEach(() => {
   state.actorId = 'user-employee';
   state.updateCount = 1;
   state.updates = [];
+  state.documentUpdates = [];
   state.created = [];
   state.deletes = 0;
 });
@@ -233,6 +242,51 @@ describe('status and declining', () => {
       status: 'DECLINED',
     });
     expect(state.updates[0].data).toMatchObject({ declinedReason: 'Isi kontrak belum sesuai kesepakatan' });
+  });
+
+  /**
+   * A refusal used to mark only the refuser's own row. The blocking filter in
+   * sign() looks for PENDING, and a declined signer is DECLINED — so the later
+   * steps went on signing a document somebody had refused, and to every reader
+   * it looked like the document had simply progressed.
+   */
+  it('stops the remaining steps from signing a document that was declined', async () => {
+    state.signers = [signer('user-employee', 1, { status: 'DECLINED' }), signer('user-hr', 2)];
+    state.actorId = 'user-hr';
+
+    await expect(service.sign(COMPANY, DOCUMENT)).rejects.toThrow(/declined and can no longer be signed/i);
+    expect(state.updates).toEqual([]);
+  });
+
+  it('stops a signer in the same step as the refuser too', async () => {
+    // Same order, so no earlier step is pending and the old blocking filter
+    // would have waved this signature straight through.
+    state.signers = [signer('user-employee', 1, { status: 'DECLINED' }), signer('user-hr', 1)];
+    state.actorId = 'user-hr';
+
+    await expect(service.sign(COMPANY, DOCUMENT)).rejects.toThrow(/declined and can no longer be signed/i);
+  });
+
+  it('refuses a document already recorded as rejected, even with no signer list', async () => {
+    // loadDocument has always selected the status and nothing read it.
+    state.document = { id: DOCUMENT, title: 'Kontrak Kerja', status: 'REJECTED' };
+
+    await expect(service.sign(COMPANY, DOCUMENT)).rejects.toThrow(/declined and can no longer be signed/i);
+  });
+
+  it('records the refusal on the document, not only on the signer row', async () => {
+    await expect(service.decline(COMPANY, DOCUMENT, 'tidak setuju')).resolves.toMatchObject({ status: 'DECLINED' });
+    expect(state.documentUpdates).toHaveLength(1);
+    expect(state.documentUpdates[0]).toMatchObject({
+      where: { id: DOCUMENT, companyId: COMPANY, status: 'ACTIVE' },
+      data: { status: 'REJECTED' },
+    });
+  });
+
+  it('leaves the document alone when the decline itself was refused', async () => {
+    state.updateCount = 0;
+    await expect(service.decline(COMPANY, DOCUMENT, 'tidak setuju')).rejects.toThrow(/no pending signature/i);
+    expect(state.documentUpdates).toEqual([]);
   });
 
   it('refuses a decline when nothing is pending for that person', async () => {
