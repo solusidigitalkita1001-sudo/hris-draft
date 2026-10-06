@@ -34,7 +34,7 @@ const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bpjs-report'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -183,6 +183,17 @@ router.get(
   validate(annualTaxRecapQuerySchema, 'query'),
   auditView({ action: 'VIEW_ANNUAL_TAX_RECAP', entity: 'Payslip' }),
   payrollController.annualTaxRecap.bind(payrollController)
+);
+
+// The same figures laid out as Formulir 1721-A1. Registered after
+// '/annual-tax-recap/:employeeId' would have swallowed it, so it comes first.
+router.get(
+  '/bukti-potong-1721-a1/:employeeId',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(annualTaxRecapQuerySchema, 'query'),
+  auditView({ action: 'VIEW_BUKTI_POTONG_1721_A1', entity: 'Payslip' }),
+  payrollController.buktiPotong1721A1.bind(payrollController)
 );
 
 // ==================== Arrears (rapel periode tertutup) ====================

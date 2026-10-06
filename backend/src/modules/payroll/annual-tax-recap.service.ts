@@ -3,6 +3,10 @@ import prisma from '@/shared/database/prisma';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
+import { buildForm1721A1 } from '@/shared/payroll/form-1721-a1';
+import { calculateAnnualPph21 } from '@/shared/payroll/pph21-annual';
+import { DEFAULT_PPH21_CONFIG } from '@/shared/payroll/pph21';
+import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 
 export interface MonthlyTaxRow {
   month: number;
@@ -50,27 +54,23 @@ function decimal(value: Prisma.Decimal | number | string): Prisma.Decimal {
  * The figures are the part that is expensive to get right and the part that is
  * format-independent, so they exist now and the form can be laid over them.
  *
- * Only APPROVED runs count. A draft or rejected run is not money anybody
- * received, and a recap that included one would overstate both income and tax
- * withheld.
+ * Only APPROVED and DISBURSED runs count. A draft or rejected run is not money
+ * anybody received, and a recap that included one would overstate both income
+ * and tax withheld. This comment used to say APPROVED alone, which is how a
+ * paid run — settlement moves it to DISBURSED — came to be missed by the
+ * year-end readers once before.
  */
 export class AnnualTaxRecapService {
-  async build(companyId: string, employeeId: string, year: number): Promise<AnnualTaxRecap> {
-    if (year < 2000 || year > 2100) throw new BadRequestError('Year is out of range');
-    await assertEmployeeInScope(employeeId, 'payroll');
-
-    const employee = await prisma.employee.findFirst({
-      where: { id: employeeId, companyId, deletedAt: null },
-      select: {
-        id: true, employeeNumber: true, fullName: true, taxId: true,
-        maritalStatus: true, joinDate: true,
-        _count: { select: { families: true } },
-        company: { select: { id: true, name: true, taxId: true } },
-      },
-    });
-    if (!employee) throw new NotFoundError('Employee not found in the active company');
-
-    const payslips = await prisma.payslip.findMany({
+  /**
+   * The payslips a tax year counts, for both the recap and the bukti potong.
+   *
+   * Shared on purpose: when the status filter lived in two places, a paid run —
+   * settlement moves it to DISBURSED, not APPROVED — was missed by one of
+   * them, and the December reconciliation refunded nearly a whole month of
+   * tax. One query, one answer.
+   */
+  private countedPayslips(companyId: string, employeeId: string, year: number) {
+    return prisma.payslip.findMany({
       where: {
         employeeId,
         companyId,
@@ -91,6 +91,28 @@ export class AnnualTaxRecapService {
         payrollRun: { select: { period: { select: { code: true, startDate: true } } } },
       },
     });
+  }
+
+  async build(companyId: string, employeeId: string, year: number): Promise<AnnualTaxRecap> {
+    if (year < 2000 || year > 2100) throw new BadRequestError('Year is out of range');
+    await assertEmployeeInScope(employeeId, 'payroll');
+
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, companyId, deletedAt: null },
+      select: {
+        id: true, employeeNumber: true, fullName: true, taxId: true,
+        maritalStatus: true, joinDate: true,
+        // Counted the way the payroll run counts them. Without the filter this
+        // included every family member, dependent or not, so the recap could
+        // state a larger PTKP than the one the tax was actually withheld with
+        // — and the bukti potong would carry that wrong figure on line 16.
+        _count: { select: { families: { where: { isDependent: true } } } },
+        company: { select: { id: true, name: true, taxId: true } },
+      },
+    });
+    if (!employee) throw new NotFoundError('Employee not found in the active company');
+
+    const payslips = await this.countedPayslips(companyId, employeeId, year);
 
     const months: MonthlyTaxRow[] = [];
     let grossTotal = decimal(0);
@@ -182,6 +204,88 @@ export class AnnualTaxRecapService {
         monthsPaid: months.length,
       },
       warnings,
+    };
+  }
+
+
+  /**
+   * The bukti potong 1721-A1 figures for one employee and year.
+   *
+   * The layout is PER-2/PJ/2024's; see `shared/payroll/form-1721-a1.ts` for
+   * where every line number came from and what has not been verified. This
+   * method's job is only to feed it the year the employee actually had.
+   */
+  async buildBuktiPotong(companyId: string, employeeId: string, year: number) {
+    const recap = await this.build(companyId, employeeId, year);
+    const payslips = await this.countedPayslips(companyId, employeeId, year);
+
+    const components = payslips.flatMap((payslip) => payslip.components.map((component) => ({
+      code: component.salaryComponent?.code ?? null,
+      name: component.name,
+      type: component.type as 'ALLOWANCE' | 'DEDUCTION',
+      amount: Number(component.amount),
+      isTaxable: component.isTaxable,
+    })));
+
+    // Taxable gross per payslip, defined the same way the December
+    // reconciliation defines it, so the form and the true-up cannot disagree
+    // about the year.
+    const taxableOf = (slip: (typeof payslips)[number]) => slip.components
+      .filter((component) => component.type === 'ALLOWANCE' && component.isTaxable)
+      .reduce((sum, component) => sum + Number(component.amount), 0);
+    const pensionOf = (slip: (typeof payslips)[number]) => slip.components
+      .filter((component) => component.type === 'DEDUCTION' && component.salaryComponent?.code === 'BPJS-TK')
+      .reduce((sum, component) => sum + Number(component.amount), 0);
+    const withheldOf = (slip: (typeof payslips)[number]) => slip.components
+      .filter((component) => component.type === 'DEDUCTION' && component.salaryComponent?.code === 'PPH21')
+      .reduce((sum, component) => sum + Number(component.amount), 0);
+
+    const byMonth = [...payslips].sort((a, b) =>
+      new Date(a.payrollRun.period.startDate).getTime() - new Date(b.payrollRun.period.startDate).getTime());
+    const monthOf = (slip: (typeof payslips)[number]) =>
+      new Date(slip.payrollRun.period.startDate).getUTCMonth() + 1;
+
+    const policy = await loadPayrollPolicyConfig(prisma, companyId, year);
+    const married = recap.employee.maritalStatus === 'MARRIED';
+    const dependents = recap.employee.dependents;
+    const annual = calculateAnnualPph21({
+      monthlyGrosses: byMonth.map(taxableOf),
+      monthlyPensions: byMonth.map(pensionOf),
+      married,
+      dependents,
+      hasNpwp: Boolean(recap.employee.taxId),
+    }, policy.pph21);
+
+    const withheldTotal = byMonth.reduce((sum, slip) => sum + withheldOf(slip), 0);
+    // The last period is the one the form settles; everything before it is
+    // line 22a.
+    const lastMonth = byMonth.length ? monthOf(byMonth[byMonth.length - 1]) : 12;
+    const firstMonth = byMonth.length ? monthOf(byMonth[0]) : 1;
+    const withheldBeforeLastPeriod = byMonth
+      .filter((slip) => monthOf(slip) !== lastMonth)
+      .reduce((sum, slip) => sum + withheldOf(slip), 0);
+
+    const form = buildForm1721A1({
+      taxYear: year,
+      firstMonth,
+      lastMonth,
+      components,
+      ptkp: annual.ptkp,
+      annualTaxDue: annual.annualTax,
+      withheldTotal,
+      withheldBeforeLastPeriod,
+      biayaJabatanRate: policy.pph21.biayaJabatanRate ?? DEFAULT_PPH21_CONFIG.biayaJabatanRate,
+      biayaJabatanMaxMonth: policy.pph21.biayaJabatanMaxMonth ?? DEFAULT_PPH21_CONFIG.biayaJabatanMaxMonth,
+    });
+
+    return {
+      ...form,
+      // The recap's own warnings matter here too: a missing NPWP or a partial
+      // year changes what the form means.
+      warnings: [...form.warnings, ...recap.warnings],
+      employee: recap.employee,
+      company: recap.company,
+      year,
     };
   }
 
