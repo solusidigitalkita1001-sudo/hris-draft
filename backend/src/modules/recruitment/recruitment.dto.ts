@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PROBATION_MAX_MONTHS } from '@/shared/employment/probation';
 
 export const createJobPostingSchema = z.object({
   companyId: z.string().uuid(),
@@ -86,7 +87,10 @@ export const createOfferSchema = z.object({
   grade: z.string().max(50).optional(),
   positionId: z.string().uuid().optional(),
   employmentType: z.enum(['PROBATION', 'CONTRACT', 'PERMANENT', 'INTERNSHIP', 'FULL_TIME', 'PART_TIME']).optional(),
-  probationMonths: z.number().int().min(0).max(24).optional(),
+  // 24 months was eight times the statutory ceiling the contract layer
+  // enforces, so an offer could promise a probation clause that is void by law
+  // and that the contract would then refuse to record.
+  probationMonths: z.number().int().min(0).max(PROBATION_MAX_MONTHS).optional(),
   joinDate: z.string().datetime().optional(),
   expiryDate: z.string().datetime().optional(),
   notes: z.string().max(2000).optional(),
