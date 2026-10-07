@@ -483,3 +483,72 @@ plus mengosongkan `deletedAt` tanpa pernah memanggil `create`.
 Jalur service-nya sendiri tidak dapat test unit baru: graf impor `payroll.service`
 terlalu besar untuk dimock dengan jujur. Jalur itu dijaga `*.mysql.test.ts` di job
 `Real-database integration suites (blocking)`.
+
+---
+
+## Tugas — indeks unik leave/benefit: cari berdasarkan kolom, bukan nama
+
+Risiko yang dicatat sejak tugas nomor karyawan dan belum pernah ditutup.
+
+### Masalahnya
+
+`20261002100000_tenant_scoped_leave_and_benefit_codes` memindahkan
+`leave_types.code` dan `benefit_plans.code` ke indeks unik per perusahaan. Tapi
+DROP indeks lamanya dijaga **berdasarkan nama**:
+
+```sql
+SET @drop_leave := IF(
+  (SELECT COUNT(*) ... AND index_name = 'leave_types_code_key') > 0,
+  'DROP INDEX `leave_types_code_key` ON `leave_types`', 'DO 0');
+```
+
+Kalau di sebuah database nama indeksnya ternyata bukan itu, DROP-nya jadi `DO 0`
+sementara `CREATE UNIQUE INDEX` kompositnya tetap sukses. Migrasinya **hijau di
+atas database yang masih memaksa kode unik se-instalasi** — dan tenant kedua tetap
+tertolak saat membuat katalog cutinya sendiri, tepat bug yang migrasi itu niat
+perbaiki.
+
+**CI tidak bisa menangkap ini.** Semua job CI memulai dari database kosong, di mana
+nama indeksnya memang nama default Prisma. Hanya database yang sudah hidup yang
+bisa menyimpang, dan di sana tidak ada yang memeriksanya.
+
+### Yang berubah
+
+Satu migrasi, `20261007130000_leave_benefit_unique_index_by_column`, dengan bentuk
+yang sama seperti tiga migrasi sesudah migrasi bermasalah itu: cari indeks unik
+single-column di kolom `code` **berdasarkan kolom**, drop apa pun namanya,
+pastikan indeks komposit dan `@@index([code])` ada.
+
+Tidak ada perubahan `schema.prisma` — bentuk akhirnya sudah benar sejak dulu. Yang
+diperbaiki adalah database yang mungkin tidak sampai ke bentuk itu.
+
+Aman di tiga keadaan: database yang sudah benar (tidak ada indeks single-column →
+`DO 0`), database yang namanya beda (ketemu, di-drop), dan data lama (kalau
+`(code)` unik maka `(company_id, code)` pasti unik — dan saat migrasi ini jalan,
+indeks global itulah yang masih memaksa keunikannya).
+
+### Cara memeriksa database yang sudah hidup
+
+Migrasi di atas memperbaiki tanpa perlu tahu jawabannya lebih dulu, tapi kalau
+ingin tahu apakah suatu database memang terkena, ini query baca-saja-nya:
+
+```sql
+SELECT table_name, index_name, GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols
+  FROM information_schema.statistics
+ WHERE table_schema = DATABASE()
+   AND table_name IN ('leave_types', 'benefit_plans')
+   AND non_unique = 0
+ GROUP BY table_name, index_name;
+```
+
+Yang sehat hanya menampilkan `PRIMARY` (kolom `id`) dan
+`*_company_id_code_key` (`company_id,code`). Baris unik apa pun yang kolomnya
+hanya `code` adalah indeks lama yang lolos dari guard berbasis nama.
+
+### Status verifikasi
+
+Tidak ada kode aplikasi yang berubah. Yang bisa dibuktikan CI adalah
+replay-safety-nya: job `Migration rehearsal` dan `Migration validation`
+menjalankan seluruh rantai migrasi dari database kosong, jadi blok guard-nya harus
+melewati keadaan "indeksnya sudah tidak ada" tanpa error. Skenario "nama indeksnya
+beda" tidak bisa direproduksi di CI — itu sebabnya ia tidak pernah tertangkap.
