@@ -414,3 +414,72 @@ itu `undefined & string` — yaitu `never`. Satu error TS2322 menjatuhkan dua jo
 sekaligus (type-check, dan `administration-access.test.ts` yang mengimpor service
 itu). Pelajarannya: menyempitkan tipe sebuah field di DTO **mengubah aljabar
 setiap intersection yang memakainya**; `Omit` dulu, baru intersect.
+
+---
+
+## Tugas — audit soft delete pada komponen gaji
+
+Sisa yang dicatat di tugas sembilan model: `findSalaryComponentByCode` menyaring
+`deletedAt: null` padahal indeks uniknya tidak. Auditnya menemukan tiga hal, dan
+yang paling besar bukan yang dicatat.
+
+### Temuan 1 — payroll run bisa mati, bukan cuma salah kode status
+
+Dua belas helper `ensure*Component` memakai pola cari-lalu-insert, dan
+pencariannya menyaring baris terhapus. Kalau ada yang menghapus satu komponen
+sistem (`EWA-DEDUCT`, `LATE_DEDUCTION_AUTO`, `THR_EARNING_AUTO`, …), pencarian
+bilang kosong, `INSERT` jalan, dan **transaksi payroll run mati di indeks unik.**
+Ini bukan 500 di form admin; ini perhitungan payroll yang gagal di tengah jalan.
+
+Perbaikannya `reviveOrCreateSystemSalaryComponent` — `upsert` pada
+`companyId_code` yang mengosongkan `deletedAt` dan mengaktifkan kembali. Dua belas
+helper itu sekarang satu pemanggilan, dan dua baris cari-lalu-insert hilang dari
+masing-masing. Alasan memilih "hidupkan" dan opsi yang ditolak ada di D-007.
+
+### Temuan 2 — `isFixedAllowance` diterima DTO, tidak pernah ditulis
+
+Ini yang paling serius, dan ketemu tanpa dicari. `createSalaryComponentSchema`
+menerima `isFixedAllowance` (dengan komentar yang menjelaskan maksudnya), tapi
+**`createSalaryComponent` dan `updateSalaryComponent` di repository tidak
+memetakannya.** Jadi nilainya selalu jatuh ke `@default(false)`.
+
+Field itu bukan kosmetik: `shared/payroll/statutory-wage.ts` memakai
+`isFixedAllowance === true` untuk menyusun "upah sebulan", yang jadi basis **THR
+(Permenaker 6/2016)** dan tarif harian pencairan cuti. Perusahaan yang menandai
+tunjangan jabatannya sebagai tunjangan tetap tetap mendapat THR yang dihitung
+dari basis lebih kecil — tanpa error, tanpa peringatan. Satu-satunya cara field
+itu pernah bernilai `true` adalah backfill langsung di database, dan
+`leave-encashment.service.ts` memang menyebut backfill itu.
+
+Sekarang dipetakan di `create`, `update`, dan di jalur revive.
+
+### Temuan 3 — yang memang sudah dicatat
+
+Pemeriksaan konflik di `createSalaryComponent` memakai pencarian yang menyaring
+`deletedAt`, jadi kode yang masih dipegang komponen terhapus lolos pemeriksaan
+lalu mati di indeks — 500, bukan 409. Sekarang ada dua pertanyaan yang berbeda dan
+dua method yang berbeda:
+
+| Method | Untuk |
+|---|---|
+| `findSalaryComponentByCode` | pertanyaan bisnis: komponen yang sudah dihapus **tidak boleh** muncul di payslip |
+| `findSalaryComponentByCodeIncludingDeleted` | pertanyaan keunikan: indeks unik tidak tahu soal soft delete, jadi komponen terhapus **masih memegang** kodenya |
+
+### Yang tidak diubah
+
+Pencarian `'PPH21'` di dua tempat (posting pajak) tetap memakai pencarian yang
+menyaring baris terhapus — itu pertanyaan bisnis, dan memang benar begitu. Celah
+UX "tidak ada cara memulihkan komponen yang dihapus" dicatat di D-007, tidak
+ditambal di sini.
+
+### Status verifikasi
+
+`salary-component-code.test.ts` (baru, level repository seperti preseden
+`payroll.maker-checker.test.ts`) menguji lima hal: `isFixedAllowance` benar-benar
+ditulis di `create` dan di `update`, pencarian bisnis tetap menyaring
+`deletedAt`, pencarian keunikan tidak, dan jalur revive memakai kunci komposit
+plus mengosongkan `deletedAt` tanpa pernah memanggil `create`.
+
+Jalur service-nya sendiri tidak dapat test unit baru: graf impor `payroll.service`
+terlalu besar untuk dimock dengan jujur. Jalur itu dijaga `*.mysql.test.ts` di job
+`Real-database integration suites (blocking)`.

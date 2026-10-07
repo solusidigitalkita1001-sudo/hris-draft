@@ -140,3 +140,11 @@ jawabannya.
 
 Dengan itu audit ini selesai: sebelas model, sepuluh dipindah ke kunci komposit,
 satu diputuskan tetap global dengan alasan yang tercatat.
+
+**Sisa yang ikut ditutup sesudahnya.** Dokumen ini mencatat satu lubang soft
+delete di `findSalaryComponentByCode` sebagai pekerjaan tersendiri. Auditnya
+ternyata menemukan masalah yang lebih besar di sekitarnya — dua belas helper
+`ensure*Component` yang bisa mematikan transaksi payroll run, dan
+`isFixedAllowance` yang diterima DTO tapi tidak pernah ditulis sehingga basis THR
+mengecil tanpa suara. Rinciannya di [PROGRESS.md](PROGRESS.md) ("audit soft delete
+pada komponen gaji") dan [DECISIONS.md](DECISIONS.md) D-007.

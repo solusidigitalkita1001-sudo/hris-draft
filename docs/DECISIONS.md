@@ -174,3 +174,32 @@ memilih kode role sendiri; saat itu drift Prisma jadi harga yang masuk akal.
 `createRoleSchema`/`updateRoleSchema` — dikirim pun ditolak 400 dengan alasannya,
 bukan dibuang tanpa suara. Indeks unik global `roles.code` tidak disentuh, jadi
 tugas ini tidak punya migrasi.
+
+---
+
+## D-007 — Komponen gaji sistem yang sudah di-soft-delete: hidupkan, gagalkan, atau biarkan?
+
+**Konteks.** Dua belas helper `ensure*Component` di `payroll.service.ts` memakai
+pola yang sama: cari komponen berdasarkan kode, kalau tidak ada buat baru.
+Pencariannya menyaring `deletedAt: null`, sementara `@@unique([companyId, code])`
+tidak tahu soal soft delete. Jadi kalau ada yang menghapus `EWA-DEDUCT` atau
+`LATE_DEDUCTION_AUTO`, pencarian bilang "kosong", `INSERT` jalan, lalu **mati di
+indeks unik — di dalam transaksi payroll run.** Bukan 409 di form, tapi
+perhitungan payroll yang gagal.
+
+| Opsi | Akibat |
+|---|---|
+| **A. Hidupkan kembali (`upsert` yang mengosongkan `deletedAt`)** | Run selesai. Komponen ini milik sistem, bukan milik pengguna — tuas untuk "jangan potong keterlambatan" adalah policy-nya, bukan menghapus baris masternya. Dan helper-nya hanya dipanggil ketika engine memang perlu memposting baris itu. |
+| B. Gagalkan run dengan error yang jelas | Benar secara prinsip "jangan ubah data diam-diam", tapi payroll berhenti karena sesuatu yang **tidak bisa diperbaiki admin dari UI**: tidak ada layar untuk memulihkan komponen yang sudah dihapus. |
+| C. Buat baris baru dengan kode lain (misal bersuffix) | Master komponen jadi berisi duplikat, dan laporan yang mengelompokkan per kode pecah. |
+| D. Biarkan (status quo) | Payroll run mati dengan error constraint mentah. |
+
+**Dipilih: A.** Hanya berlaku untuk dua belas kode milik sistem lewat
+`reviveOrCreateSystemSalaryComponent`; komponen buatan pengguna tidak ikut
+dihidupkan oleh jalur mana pun.
+
+**Yang tidak diputuskan di sini:** untuk komponen **buatan pengguna**, membuat
+komponen dengan kode yang masih dipegang komponen terhapus sekarang menjawab
+**409**, bukan 500 seperti sebelumnya. Itu perbaikan, tapi menyisakan satu celah
+UX: belum ada cara memulihkan komponen yang di-soft-delete, jadi kodenya terkunci.
+Menambah endpoint restore adalah pekerjaan tersendiri, bukan tempelan di sini.
