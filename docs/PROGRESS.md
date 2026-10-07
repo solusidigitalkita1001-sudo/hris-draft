@@ -552,3 +552,46 @@ replay-safety-nya: job `Migration rehearsal` dan `Migration validation`
 menjalankan seluruh rantai migrasi dari database kosong, jadi blok guard-nya harus
 melewati keadaan "indeksnya sudah tidak ada" tanpa error. Skenario "nama indeksnya
 beda" tidak bisa direproduksi di CI — itu sebabnya ia tidak pernah tertangkap.
+
+---
+
+## Tugas — memulihkan komponen gaji yang dihapus
+
+Menutup celah yang dicatat di D-007: sesudah pemeriksaan konflik diperbaiki,
+komponen gaji yang di-soft-delete menjawab 409 dan **tidak ada cara memulihkan
+barisnya**, jadi kodenya terkunci selamanya.
+
+### Yang ditambahkan
+
+| Endpoint | Izin | Catatan |
+|---|---|---|
+| `GET /payroll/salary-components/deleted` | `payroll:read` | daftar terpisah, bukan flag `includeDeleted` pada daftar normal — supaya tidak ada pemanggil lama yang tiba-tiba ikut menerima baris terhapus |
+| `POST /payroll/salary-components/:id/restore` | `payroll:update` | beraudit (`action: 'RESTORE'`) |
+
+`companyId` untuk restore diambil dari konteks permintaan, **bukan** dari
+pemanggil: endpointnya hanya punya `:id`, dan id milik tenant lain tidak boleh
+bisa dipulihkan dari sini. Pencariannya `{ id, companyId, deletedAt: { not: null } }`
+— jadi id yang bukan milik perusahaan itu, dan id yang tidak dalam keadaan
+terhapus, dua-duanya 404.
+
+Keunikan tidak diperiksa saat restore, dan itu disengaja:
+`@@unique([companyId, code])` mencakup baris terhapus juga, jadi selama baris itu
+ada, tidak mungkin ada baris lain di perusahaan yang sama dengan kode yang sama.
+
+### Yang ikut diperiksa
+
+`deleteSalaryComponent(id)` yang sudah ada memanggil `findSalaryComponentById(id)`
+yang **tidak** discoped per perusahaan. Endpoint restore yang baru tidak meniru
+pola itu — ia discoped. Jalur delete-nya sendiri tidak diubah di tugas ini:
+memperbaikinya berarti mengubah perilaku endpoint yang sudah dipakai, dan itu
+pekerjaan tersendiri. Dicatat di sini supaya tidak hilang.
+
+### Status verifikasi
+
+Tiga kasus baru di `salary-component-code.test.ts`: daftar terhapus hanya memuat
+baris terhapus, pencarian sebelum restore memuat filter `companyId` **dan**
+`deletedAt: { not: null }`, dan restore mengosongkan `deletedAt` + mengaktifkan
+kembali sambil tetap discoped.
+
+`docs/api-reference.md` ikut diperbarui (dua baris, dan hitungan operasi payroll
+55 → 57).

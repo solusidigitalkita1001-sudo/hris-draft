@@ -4,6 +4,7 @@ jest.mock('@/shared/database/prisma', () => {
       create: jest.fn(async () => ({ id: 'component-1' })),
       update: jest.fn(async () => ({ id: 'component-1' })),
       findFirst: jest.fn(async () => null),
+      findMany: jest.fn(async () => []),
       upsert: jest.fn(async () => ({ id: 'component-1' })),
     },
   };
@@ -18,6 +19,7 @@ const model = prisma.salaryComponent as unknown as {
   create: jest.Mock;
   update: jest.Mock;
   findFirst: jest.Mock;
+  findMany: jest.Mock;
   upsert: jest.Mock;
 };
 
@@ -87,5 +89,34 @@ describe('a system component the company retired is revived, not re-inserted', (
     // Inserting instead would hit @@unique([companyId, code]) and take the whole
     // payroll run's transaction down with it.
     expect(model.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('memulihkan komponen yang dihapus', () => {
+  it('daftar komponen terhapus hanya memuat baris terhapus', async () => {
+    await repository.findDeletedSalaryComponents('company-1');
+
+    expect(model.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { companyId: 'company-1', deletedAt: { not: null } },
+    }));
+  });
+
+  it('pencarian sebelum restore discoped per perusahaan dan hanya baris terhapus', async () => {
+    // Endpoint-nya hanya punya :id, jadi filter companyId di sini yang mencegah
+    // id milik tenant lain dipulihkan.
+    await repository.findDeletedSalaryComponent('component-1', 'company-1');
+
+    expect(model.findFirst).toHaveBeenCalledWith({
+      where: { id: 'component-1', companyId: 'company-1', deletedAt: { not: null } },
+    });
+  });
+
+  it('restore mengosongkan deletedAt, mengaktifkan kembali, dan tetap discoped', async () => {
+    await repository.restoreSalaryComponent('component-1', 'company-1');
+
+    expect(model.update).toHaveBeenCalledWith({
+      where: { id: 'component-1', companyId: 'company-1' },
+      data: { deletedAt: null, isActive: true },
+    });
   });
 });

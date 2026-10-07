@@ -39,6 +39,34 @@ export class PayrollRepository {
     });
   }
 
+  // Daftar komponen yang sudah dihapus. Terpisah dari daftar normal, bukan lewat
+  // flag `includeDeleted`, supaya tidak ada pemanggil lama yang tiba-tiba ikut
+  // menerima baris terhapus karena salah satu parameter default.
+  async findDeletedSalaryComponents(companyId: string) {
+    return prisma.salaryComponent.findMany({
+      where: { companyId, deletedAt: { not: null } },
+      orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+    });
+  }
+
+  // Dipakai restore: memastikan barisnya memang milik perusahaan ini dan memang
+  // dalam keadaan terhapus, sebelum ada yang diubah.
+  async findDeletedSalaryComponent(id: string, companyId: string) {
+    return prisma.salaryComponent.findFirst({
+      where: { id, companyId, deletedAt: { not: null } },
+    });
+  }
+
+  // Keunikan tidak perlu diperiksa di sini: @@unique([companyId, code]) mencakup
+  // baris terhapus juga, jadi selama baris ini ada, tidak mungkin ada baris lain
+  // di perusahaan yang sama dengan kode yang sama.
+  async restoreSalaryComponent(id: string, companyId: string) {
+    return prisma.salaryComponent.update({
+      where: { id, companyId },
+      data: { deletedAt: null, isActive: true },
+    });
+  }
+
   async findSalaryComponentById(id: string) {
     return prisma.salaryComponent.findFirst({
       where: { id, deletedAt: null },
