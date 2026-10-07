@@ -53,6 +53,21 @@ router.get(
   payrollController.findAllSalaryComponents.bind(payrollController)
 );
 
+// Statis, jadi harus di atas /salary-components/:id.
+router.get(
+  '/salary-components/deleted',
+  authorize({ resource: 'payroll', action: 'read' }),
+  payrollController.findDeletedSalaryComponents.bind(payrollController)
+);
+
+router.post(
+  '/salary-components/:id/restore',
+  authorize({ resource: 'payroll', action: 'update' }),
+  auditLog({ action: 'RESTORE', entity: 'SalaryComponent', model: 'salaryComponent' }),
+  validate(idParamSchema, 'params'),
+  payrollController.restoreSalaryComponent.bind(payrollController)
+);
+
 router.get(
   '/salary-components/:id',
   authorize({ resource: 'payroll', action: 'read' }),

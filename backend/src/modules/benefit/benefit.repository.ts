@@ -37,9 +37,13 @@ export class BenefitRepository {
     });
   }
 
+  // Satu-satunya pemakai method ini adalah pemeriksaan keunikan di createPlan,
+  // dan @@unique([companyId, code]) tidak tahu soal soft delete -- plan yang
+  // sudah dihapus masih memegang kodenya. Menyaring deletedAt di sini membuat
+  // pemeriksaan itu lolos lalu gagal di database: 500, bukan 409.
   async findPlanByCode(companyId: string, code: string) {
     return prisma.benefitPlan.findFirst({
-      where: { companyId, code, deletedAt: null },
+      where: { companyId, code },
     });
   }
 
