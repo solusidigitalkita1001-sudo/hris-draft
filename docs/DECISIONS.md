@@ -71,11 +71,21 @@ soft-deleted juga.
 
 ## D-003 — Basis PR: `main` atau branch berjalan?
 
-Branch `feat/tenant-onboarding` punya 3 commit yang belum masuk `main`, dan
-pekerjaan ini menumpuk di atasnya (migrasinya mengikuti preseden dari commit di
-sana). PR diarahkan ke **`feat/tenant-onboarding`**, bukan `main`, supaya diff
-tiap PR hanya berisi tugasnya sendiri. `main` tidak disentuh dan tidak ada
-merge yang dijalankan.
+Rencana awal: PR bertumpu pada `feat/tenant-onboarding`, yang punya 3 commit
+belum masuk `main`, supaya diff tiap PR hanya berisi tugasnya sendiri.
+
+**Itu tidak bisa dilakukan.** `feat/tenant-onboarding` ternyata hanya ada di
+lokal — GitHub menolak dengan `Base ref must be a branch`. Mendorong branch itu
+lebih dulu berarti mempublikasikan tiga commit yang bukan bagian dari tugas ini,
+jadi tidak dilakukan.
+
+PR pertama (#96) karena itu diarahkan ke **`main`** dan memuat 4 commit. Yang
+tidak dilakukan: push ke `main`, dan merge apa pun. Base sebuah PR bisa diganti
+satu klik, jadi kalau `feat/tenant-onboarding` nanti didorong, PR #96 tinggal
+diarahkan ulang.
+
+PR tugas-tugas sesudahnya bertumpu pada branch tugas sebelumnya (yang sudah ada
+di remote), jadi diff per PR kembali bersih satu tugas.
 
 ---
 

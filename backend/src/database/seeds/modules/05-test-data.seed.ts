@@ -878,7 +878,7 @@ export async function seedTestData(): Promise<void> {
     const branchRecord = emp.branch ?? branch;
 
     const created = await (prisma as any).employee.upsert({
-      where: { employeeNumber: emp.employeeNumber },
+      where: { companyId_employeeNumber: { companyId: company.id, employeeNumber: emp.employeeNumber } },
       update: {
         companyId: company.id,
         branchId: branchRecord.id,
@@ -2729,7 +2729,7 @@ export async function seedTestData(): Promise<void> {
     const fullName = `${emp.firstName} ${emp.lastName}`;
     const joinDate = addDays(digiStartedAt, emp.joinOffset);
     const created = await (prisma as any).employee.upsert({
-      where: { employeeNumber: emp.employeeNumber },
+      where: { companyId_employeeNumber: { companyId: companyDigi.id, employeeNumber: emp.employeeNumber } },
       update: {
         companyId: companyDigi.id,
         branchId: digiBranch.id,
