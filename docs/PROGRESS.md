@@ -555,6 +555,60 @@ beda" tidak bisa direproduksi di CI — itu sebabnya ia tidak pernah tertangkap.
 
 ---
 
+## Tugas — jenis cuti dan benefit plan: konflik kode yang tidak pernah diperiksa
+
+Dua model yang tidak tersentuh PR #96 karena indeks kompositnya sudah benar sejak
+`20261002100000`. Yang belum diperiksa adalah jalur `create`-nya, dan dua-duanya
+bermasalah.
+
+### `LeaveType.create` sama sekali tidak memeriksa konflik
+
+```ts
+async createLeaveType(data: CreateLeaveTypeDTO) {
+  const type = await leaveRepository.createLeaveType(data);   // langsung INSERT
+```
+
+Tidak ada pemeriksaan apa pun. DTO-nya **mewajibkan** `code` (dan itu benar —
+kode jenis cuti memang dipilih pelanggan), jadi `ANNUAL`, `SICK`, `UNPAID` adalah
+kode yang setiap tenant mau. Membuatnya dua kali, atau membuat ulang sesudah
+menghapus, berarti `INSERT` mati di indeks unik dan pemanggil melihat **500**,
+bukan 409. Ini jalur yang disentuh setiap pelanggan baru saat menyusun katalog
+cutinya.
+
+Sekarang ada `findLeaveTypeByCode(companyId, code)` yang **tidak** menyaring
+`deletedAt` — indeks uniknya juga tidak — dan `createLeaveType` menjawab 409.
+
+### `BenefitPlan` — dua hal
+
+1. `findPlanByCode` menyaring `deletedAt: null`, padahal satu-satunya pemakainya
+   adalah pemeriksaan keunikan di `createPlan`. Jadi filternya salah di
+   satu-satunya tempat ia dipakai: plan yang sudah dihapus masih memegang
+   kodenya, pemeriksaan lolos, lalu gagal di database. Filternya dihapus, bukan
+   ditambah method kedua, karena tidak ada pemakaian bisnis yang perlu dijaga.
+2. DTO-nya menerima `code` lalu membuangnya tanpa pemberitahuan — pola yang sama
+   yang ditutup untuk sepuluh model di PR #96. BenefitPlan terlewat di sana
+   karena auditnya menandai model ini "sudah komposit" dan berhenti di situ.
+   Sekarang kode kiriman klien dipakai kalau ada.
+
+### Yang diperiksa dan ternyata aman
+
+`company-bootstrap.service.ts` memakai pola cari-lalu-create untuk leave type dan
+komponen gaji default, tapi pencariannya `findUnique` pada kunci komposit — dan
+`findUnique` komposit tidak bisa menyaring `deletedAt`, jadi baris terhapus
+**ikut** ketemu dan bootstrap melewatinya alih-alih menabrak indeks. Tidak seperti
+dua belas helper `ensure*Component` di payroll, yang memakai `findFirst` dengan
+filter.
+
+Pemetaan field di `createLeaveType` (spread seluruh DTO) dan `createPlan`
+(dipetakan satu per satu) dua-duanya lengkap — tidak ada ulangan temuan
+`isFixedAllowance` di sini.
+
+### Status verifikasi
+
+`leave-type-code.test.ts` dan `benefit-plan-code.test.ts` (baru): kode bebas →
+tersimpan, kode terpakai → `ConflictError` tanpa pernah memanggil repository
+create, pencarian discoped per perusahaan, dan untuk benefit plan kode kiriman
+klien benar-benar dipakai sementara yang kosong/spasi tetap di-generate.
 ## Tugas — memulihkan komponen gaji yang dihapus
 
 Menutup celah yang dicatat di D-007: sesudah pemeriksaan konflik diperbaiki,

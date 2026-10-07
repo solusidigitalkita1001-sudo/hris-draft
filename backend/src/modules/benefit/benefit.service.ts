@@ -27,7 +27,12 @@ export class BenefitService {
   }
 
   async createPlan(data: CreateBenefitPlanDTO) {
-    const code = await generateSystemCode({
+    // DTO-nya menerima `code` sejak awal lalu membuangnya tanpa pemberitahuan --
+    // pola yang sama yang ditutup untuk sepuluh model lain di PR #96. BenefitPlan
+    // terlewat di sana karena indeks kompositnya sudah benar sejak migrasi
+    // 20261002100000, jadi yang tersisa hanya keluhan keduanya.
+    const requested = data.code?.trim();
+    const code = requested || await generateSystemCode({
       prefix: 'BEN',
       label: data.name,
       exists: async (candidate) => Boolean(await benefitRepository.findPlanByCode(data.companyId, candidate)),
