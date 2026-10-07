@@ -45,9 +45,50 @@ export class PayrollRepository {
     });
   }
 
+  // Business reads: a component the company retired must not come back into a
+  // payslip, so soft-deleted rows stay filtered out here.
   async findSalaryComponentByCode(companyId: string, code: string, database: Prisma.TransactionClient = prisma) {
     return database.salaryComponent.findFirst({
       where: { companyId, code, deletedAt: null },
+    });
+  }
+
+  // Uniqueness is a different question from visibility. @@unique([companyId, code])
+  // does not know about soft delete, so a retired component still holds its code;
+  // asking with deletedAt filtered gives the caller a false "free" and the insert
+  // then dies on the index. create() asks this one so it can answer 409.
+  async findSalaryComponentByCodeIncludingDeleted(companyId: string, code: string, database: Prisma.TransactionClient = prisma) {
+    return database.salaryComponent.findFirst({
+      where: { companyId, code },
+    });
+  }
+
+  // System components (`*_AUTO`, `EWA-DEDUCT`, the PPh21 pair) are machinery the
+  // engine needs before it can post a line at all, and the payroll run is the
+  // caller. If somebody retired one, reviving it is the only outcome that lets
+  // the run finish: looking it up with deletedAt filtered and inserting instead
+  // hits the unique index and kills the whole transaction.
+  async reviveOrCreateSystemSalaryComponent(
+    data: CreateSalaryComponentDTO & { code: string },
+    database: Prisma.TransactionClient = prisma
+  ) {
+    return database.salaryComponent.upsert({
+      where: { companyId_code: { companyId: data.companyId, code: data.code } },
+      update: { deletedAt: null, isActive: true },
+      create: {
+        companyId: data.companyId,
+        name: data.name,
+        code: data.code,
+        type: data.type,
+        calculationMethod: data.calculationMethod,
+        amount: data.amount,
+        ratePercent: data.ratePercent,
+        isTaxable: data.isTaxable,
+        isProrated: data.isProrated,
+        isFixedAllowance: data.isFixedAllowance,
+        description: data.description,
+        sortOrder: data.sortOrder,
+      },
     });
   }
 
@@ -63,6 +104,9 @@ export class PayrollRepository {
         ratePercent: data.ratePercent,
         isTaxable: data.isTaxable,
         isProrated: data.isProrated,
+        // Dropping this silently understated "upah sebulan", which is the base
+        // for THR (Permenaker 6/2016) and for the leave-encashment daily rate.
+        isFixedAllowance: data.isFixedAllowance,
         description: data.description,
         sortOrder: data.sortOrder,
       },
@@ -80,6 +124,7 @@ export class PayrollRepository {
         ratePercent: data.ratePercent,
         isTaxable: data.isTaxable,
         isProrated: data.isProrated,
+        isFixedAllowance: data.isFixedAllowance,
         description: data.description,
         sortOrder: data.sortOrder,
       },

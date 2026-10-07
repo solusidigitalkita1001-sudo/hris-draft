@@ -91,9 +91,13 @@ export class PayrollService {
     const code = requested || await generateSystemCode({
       prefix: 'PAY-CMP',
       label: data.name,
-      exists: async (candidate) => Boolean(await payrollRepository.findSalaryComponentByCode(data.companyId, candidate)),
+      exists: async (candidate) => Boolean(await payrollRepository.findSalaryComponentByCodeIncludingDeleted(data.companyId, candidate)),
     });
-    const existing = await payrollRepository.findSalaryComponentByCode(data.companyId, code);
+    // A retired component keeps its code in the unique index, so this asks the
+    // uniqueness question (deleted rows included). Asking the business question
+    // here returned a false "free" and the insert then died on the index -- 500
+    // where the caller should have seen 409.
+    const existing = await payrollRepository.findSalaryComponentByCodeIncludingDeleted(data.companyId, code);
     if (existing) throw new ConflictError('Salary component code already exists');
 
     const component = await payrollRepository.createSalaryComponent({ ...data, code });
@@ -1434,9 +1438,10 @@ export class PayrollService {
 
   private async ensureTaxCorrectionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'PPH21_ANNUAL_CORRECTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Koreksi PPh21 Tahunan',
       code,
@@ -1452,9 +1457,10 @@ export class PayrollService {
 
   private async ensureLeaveEncashmentComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'LEAVE_ENCASHMENT_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Pencairan Sisa Cuti',
       code,
@@ -1472,9 +1478,10 @@ export class PayrollService {
 
   private async ensureThrEarningComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'THR_EARNING_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Tunjangan Hari Raya',
       code,
@@ -1494,9 +1501,10 @@ export class PayrollService {
 
   private async ensureArrearsEarningComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'ARREARS_EARNING_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Rapel Periode Sebelumnya',
       code,
@@ -1514,9 +1522,10 @@ export class PayrollService {
 
   private async ensureOvertimeEarningComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'OVERTIME_EARNING_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Tunjangan Lembur',
       code,
@@ -1532,13 +1541,10 @@ export class PayrollService {
 
   private async ensureLoanDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'LOAN_DEDUCTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-
-    if (existing) {
-      return existing;
-    }
-
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Potongan Pinjaman Karyawan',
       code,
@@ -1554,9 +1560,10 @@ export class PayrollService {
 
   private async ensureLateDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'LATE_DEDUCTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Potongan Keterlambatan',
       code,
@@ -1572,9 +1579,10 @@ export class PayrollService {
 
   private async ensureAbsenceDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'ABSENCE_DEDUCTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Potongan Tidak Hadir (Alpha)',
       code,
@@ -1590,9 +1598,10 @@ export class PayrollService {
 
   private async ensureUnpaidLeaveDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'UNPAID_LEAVE_DEDUCTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Potongan Cuti Tidak Dibayar',
       code,
@@ -1608,9 +1617,10 @@ export class PayrollService {
 
   private async ensureTaxAllowanceComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'TAX_ALLOWANCE_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Tunjangan Pajak (Gross-Up)',
       code,
@@ -1628,9 +1638,10 @@ export class PayrollService {
 
   private async ensureBenefitDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'BENEFIT_DEDUCTION_AUTO';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Potongan Iuran Benefit',
       code,
@@ -1646,9 +1657,10 @@ export class PayrollService {
 
   private async ensureEWADeductionComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'EWA-DEDUCT';
-    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
-    if (existing) return existing;
-    return payrollRepository.createSalaryComponent({
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
       companyId,
       name: 'Potongan EWA (Tarik Gaji Awal)',
       code,
