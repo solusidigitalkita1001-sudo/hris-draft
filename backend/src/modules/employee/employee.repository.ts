@@ -311,8 +311,12 @@ export class EmployeeRepository {
     return prisma.employeeCompanyAssignment.delete({ where: { id } });
   }
 
+  // Dua-duanya pemakai method ini adalah pemeriksaan keunikan (create dan
+  // update), dan `Employee.email` @unique mencakup baris terhapus — karyawan
+  // yang sudah dihapus masih memegang emailnya. Menyaring `deletedAt` di sini
+  // membuat pemeriksaan itu lolos lalu gagal di indeks: 500, bukan 409.
   async findByEmail(email: string) {
-    return prisma.employee.findFirst({ where: { email, deletedAt: null } });
+    return prisma.employee.findFirst({ where: { email } });
   }
 
   async findByEmployeeNumber(companyId: string, employeeNumber: string) {
