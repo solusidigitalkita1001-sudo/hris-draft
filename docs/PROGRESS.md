@@ -707,3 +707,46 @@ tidak menyaring `deletedAt`.
 
 Berkas SQL-nya tidak dijalankan di mana pun — tidak ada database untuk
 menjalankannya di mesin ini, dan isinya memang untuk dijalankan tangan.
+## Tugas — audit: field yang diterima DTO tapi tidak pernah ditulis
+
+Laporannya: [dto-vs-repository-audit.md](dto-vs-repository-audit.md). Lahir dari
+`isFixedAllowance`, yang ketemu tanpa dicari dan dampaknya THR kurang bayar.
+Pertanyaannya: di mana lagi?
+
+### Caranya mekanis, dan alatnya disimpan
+
+`backend/scripts/dto-vs-repository-audit.py` membandingkan field top-level setiap
+schema zod `Create*`/`Update*` dengan nama yang muncul di body method yang
+menerima DTO itu. Field yang tidak muncul sama sekali dilaporkan; method yang
+meneruskan `data` utuh dilewati.
+
+Skripnya disimpan, bukan dibuang sesudah dipakai, karena ia mengubah audit
+sekali-pakai jadi pemeriksaan yang bisa diulang tiap kali ada kolom baru. Tidak
+dimasukkan ke CI: heuristiknya meleset ke arah lapor-lebih, jadi keluarannya
+daftar untuk ditriase, bukan daftar bug.
+
+### Hasilnya: satu temuan nyata
+
+`PayrollRun.notes` — diterima `createPayrollRunSchema`, ada kolomnya di model,
+tidak pernah ditulis `createPayrollRun`. Catatan kenapa sebuah payroll run dibuat
+hilang tanpa suara, dan tidak ada endpoint lain yang bisa mengisinya belakangan,
+jadi kolom itu praktis mati. Dampaknya jejak audit, bukan uang. Diperbaiki.
+
+Enam kandidat lain semuanya pass-through yang lolos saringan (`data` diteruskan
+utuh ke Prisma atau ke service); rinciannya satu per satu ada di laporan.
+
+### Kesimpulan yang layak dipegang
+
+Pola `isFixedAllowance` **tidak** menyebar — dari seluruh modul hanya satu field
+lain yang benar-benar hilang, dan itu kolom catatan. Yang berulang bukan
+polanya, tapi **tempatnya**: tiga kehilangan field yang pernah terjadi
+(`salary_components` dua kali, `payroll_runs` sekali) semuanya di repository yang
+memetakan field satu per satu. Yang meneruskan `data` utuh tidak pernah
+kehilangan apa pun.
+
+### Status verifikasi
+
+`payroll-run-notes.test.ts` (baru): `createPayrollRun` benar-benar menulis
+`notes`. Skrip auditnya sendiri jadi verifikasi kedua — sesudah perbaikan,
+`payroll.repository.ts:createPayrollRun` hilang dari keluarannya (7 kandidat
+menjadi 6).
