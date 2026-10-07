@@ -237,7 +237,7 @@ Kolom **Permission** adalah yang diminta `authorize()` pada route tersebut. Koso
 | `POST /api/v1/work-calendars/{id}/generate` | `work-calendar:update` | bearer/cookie | — |
 | `GET /api/v1/work-calendars/{id}/working-days` | `work-calendar:read` | bearer/cookie | — |
 
-## `payroll` — 55 operasi
+## `payroll` — 57 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
@@ -293,9 +293,11 @@ Kolom **Permission** adalah yang diminta `authorize()` pada route tersebut. Koso
 | `PATCH /api/v1/payroll/runs/{id}/void` | `payroll:approve` | bearer/cookie | — |
 | `GET /api/v1/payroll/salary-components` | `payroll:read` | bearer/cookie | — |
 | `POST /api/v1/payroll/salary-components` | `payroll:create` | bearer/cookie | ya |
+| `GET /api/v1/payroll/salary-components/deleted` | `payroll:read` | bearer/cookie | — |
 | `GET /api/v1/payroll/salary-components/{id}` | `payroll:read` | bearer/cookie | — |
 | `PATCH /api/v1/payroll/salary-components/{id}` | `payroll:update` | bearer/cookie | ya |
 | `DELETE /api/v1/payroll/salary-components/{id}` | `payroll:delete` | bearer/cookie | — |
+| `POST /api/v1/payroll/salary-components/{id}/restore` | `payroll:update` | bearer/cookie | ya |
 
 ## `employee-loans` — 12 operasi
 

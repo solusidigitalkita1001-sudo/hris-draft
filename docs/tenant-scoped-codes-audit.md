@@ -148,3 +148,13 @@ ternyata menemukan masalah yang lebih besar di sekitarnya — dua belas helper
 `isFixedAllowance` yang diterima DTO tapi tidak pernah ditulis sehingga basis THR
 mengecil tanpa suara. Rinciannya di [PROGRESS.md](PROGRESS.md) ("audit soft delete
 pada komponen gaji") dan [DECISIONS.md](DECISIONS.md) D-007.
+
+**Dan satu koreksi lagi atas audit ini.** `LeaveType` dan `BenefitPlan` dicatat di
+sini sebagai "sudah benar, indeksnya sudah komposit" — itu benar untuk indeksnya,
+tapi auditnya berhenti di situ dan tidak pernah memeriksa jalur `create`-nya.
+Ternyata `LeaveType.create` tidak punya pemeriksaan konflik sama sekali (500 pada
+kode duplikat, di jalur yang disentuh setiap pelanggan baru), dan `BenefitPlan`
+menyaring `deletedAt` pada satu-satunya pemakaian keunikannya sekaligus membuang
+kode kiriman klien. Pelajaran metodenya: "indeksnya sudah komposit" bukan jawaban
+atas "jalur tulisnya sudah benar". Rinciannya di [PROGRESS.md](PROGRESS.md)
+("jenis cuti dan benefit plan").

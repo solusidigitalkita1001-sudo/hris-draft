@@ -555,6 +555,201 @@ beda" tidak bisa direproduksi di CI — itu sebabnya ia tidak pernah tertangkap.
 
 ---
 
+## Tugas — jenis cuti dan benefit plan: konflik kode yang tidak pernah diperiksa
+
+Dua model yang tidak tersentuh PR #96 karena indeks kompositnya sudah benar sejak
+`20261002100000`. Yang belum diperiksa adalah jalur `create`-nya, dan dua-duanya
+bermasalah.
+
+### `LeaveType.create` sama sekali tidak memeriksa konflik
+
+```ts
+async createLeaveType(data: CreateLeaveTypeDTO) {
+  const type = await leaveRepository.createLeaveType(data);   // langsung INSERT
+```
+
+Tidak ada pemeriksaan apa pun. DTO-nya **mewajibkan** `code` (dan itu benar —
+kode jenis cuti memang dipilih pelanggan), jadi `ANNUAL`, `SICK`, `UNPAID` adalah
+kode yang setiap tenant mau. Membuatnya dua kali, atau membuat ulang sesudah
+menghapus, berarti `INSERT` mati di indeks unik dan pemanggil melihat **500**,
+bukan 409. Ini jalur yang disentuh setiap pelanggan baru saat menyusun katalog
+cutinya.
+
+Sekarang ada `findLeaveTypeByCode(companyId, code)` yang **tidak** menyaring
+`deletedAt` — indeks uniknya juga tidak — dan `createLeaveType` menjawab 409.
+
+### `BenefitPlan` — dua hal
+
+1. `findPlanByCode` menyaring `deletedAt: null`, padahal satu-satunya pemakainya
+   adalah pemeriksaan keunikan di `createPlan`. Jadi filternya salah di
+   satu-satunya tempat ia dipakai: plan yang sudah dihapus masih memegang
+   kodenya, pemeriksaan lolos, lalu gagal di database. Filternya dihapus, bukan
+   ditambah method kedua, karena tidak ada pemakaian bisnis yang perlu dijaga.
+2. DTO-nya menerima `code` lalu membuangnya tanpa pemberitahuan — pola yang sama
+   yang ditutup untuk sepuluh model di PR #96. BenefitPlan terlewat di sana
+   karena auditnya menandai model ini "sudah komposit" dan berhenti di situ.
+   Sekarang kode kiriman klien dipakai kalau ada.
+
+### Yang diperiksa dan ternyata aman
+
+`company-bootstrap.service.ts` memakai pola cari-lalu-create untuk leave type dan
+komponen gaji default, tapi pencariannya `findUnique` pada kunci komposit — dan
+`findUnique` komposit tidak bisa menyaring `deletedAt`, jadi baris terhapus
+**ikut** ketemu dan bootstrap melewatinya alih-alih menabrak indeks. Tidak seperti
+dua belas helper `ensure*Component` di payroll, yang memakai `findFirst` dengan
+filter.
+
+Pemetaan field di `createLeaveType` (spread seluruh DTO) dan `createPlan`
+(dipetakan satu per satu) dua-duanya lengkap — tidak ada ulangan temuan
+`isFixedAllowance` di sini.
+
+### Status verifikasi
+
+`leave-type-code.test.ts` dan `benefit-plan-code.test.ts` (baru): kode bebas →
+tersimpan, kode terpakai → `ConflictError` tanpa pernah memanggil repository
+create, pencarian discoped per perusahaan, dan untuk benefit plan kode kiriman
+klien benar-benar dipakai sementara yang kosong/spasi tetap di-generate.
+## Tugas — memulihkan komponen gaji yang dihapus
+
+Menutup celah yang dicatat di D-007: sesudah pemeriksaan konflik diperbaiki,
+komponen gaji yang di-soft-delete menjawab 409 dan **tidak ada cara memulihkan
+barisnya**, jadi kodenya terkunci selamanya.
+
+### Yang ditambahkan
+
+| Endpoint | Izin | Catatan |
+|---|---|---|
+| `GET /payroll/salary-components/deleted` | `payroll:read` | daftar terpisah, bukan flag `includeDeleted` pada daftar normal — supaya tidak ada pemanggil lama yang tiba-tiba ikut menerima baris terhapus |
+| `POST /payroll/salary-components/:id/restore` | `payroll:update` | beraudit (`action: 'RESTORE'`) |
+
+`companyId` untuk restore diambil dari konteks permintaan, **bukan** dari
+pemanggil: endpointnya hanya punya `:id`, dan id milik tenant lain tidak boleh
+bisa dipulihkan dari sini. Pencariannya `{ id, companyId, deletedAt: { not: null } }`
+— jadi id yang bukan milik perusahaan itu, dan id yang tidak dalam keadaan
+terhapus, dua-duanya 404.
+
+Keunikan tidak diperiksa saat restore, dan itu disengaja:
+`@@unique([companyId, code])` mencakup baris terhapus juga, jadi selama baris itu
+ada, tidak mungkin ada baris lain di perusahaan yang sama dengan kode yang sama.
+
+### Yang ikut diperiksa, dan satu klaim yang dikoreksi
+
+`deleteSalaryComponent(id)` memanggil `findSalaryComponentById(id)` yang tidak
+menyebut `companyId` **di kodenya**. Itu sempat kucatat sebagai lubang tenant
+isolation — **dan itu salah.** `SalaryComponent` ada di `COMPANY_SCOPED_MODELS`
+(`shared/database/prisma.ts`), jadi middleware Prisma menyuntikkan `companyId`
+dari konteks permintaan ke setiap query model itu; id milik tenant lain resolve
+ke nol baris, bukan ke datanya. Backstop itulah yang dimaksud
+[tenant-isolation-audit.md](tenant-isolation-audit.md) dengan "double backstop".
+
+Endpoint restore yang baru tetap menulis filter `companyId` secara eksplisit.
+Bukan karena backstop-nya kurang, tapi karena jalur yang hanya punya `:id` dan
+mengubah data sebaiknya tidak bergantung pada satu lapisan saja — dan karena
+`deletedAt: { not: null }` memang harus eksplisit.
+
+### Status verifikasi
+
+Tiga kasus baru di `salary-component-code.test.ts`: daftar terhapus hanya memuat
+baris terhapus, pencarian sebelum restore memuat filter `companyId` **dan**
+`deletedAt: { not: null }`, dan restore mengosongkan `deletedAt` + mengaktifkan
+kembali sambil tetap discoped.
+
+`docs/api-reference.md` ikut diperbarui (dua baris, dan hitungan operasi payroll
+55 → 57).
+## Tugas — backfill `isFixedAllowance` dan keputusan soal email karyawan
+
+Dua sisa yang tidak butuh kode baru, dikerjakan bersama karena dua-duanya
+berakhir di dokumen — kecuali satu bug yang ikut ketemu.
+
+### `isFixedAllowance`: deteksi dan backfill
+
+PR #98 memperbaiki jalur tulisnya, tapi data yang sudah ada tetap `0` semua.
+`docs/fixed-allowance-backfill.sql` berisi empat bagian: apakah instalasi ini
+terkena, kandidat tunjangan tetap per perusahaan (dipersempit ke `ALLOWANCE` +
+`FIXED` + bukan komponen sistem, dengan jumlah karyawan yang memakainya),
+**apakah ada payroll run THR yang sudah menyentuh kandidat itu**, dan `UPDATE`
+bertarget id yang masih dikomentari.
+
+Bagian ketiga yang paling penting: kalau ia mengembalikan baris, berarti ada THR
+yang sudah dibayar dari basis yang kemungkinan lebih kecil dari seharusnya, dan
+backfill saja tidak menyelesaikannya.
+
+`UPDATE`-nya sengaja dibiarkan terkomentari dan tanpa daftar id. Mana yang
+tunjangan tetap adalah keputusan HR — tidak ada aturan otomatis yang bisa
+membedakan tunjangan jabatan (tetap) dari tunjangan transport harian (tidak
+tetap) hanya dari datanya. Nama tabel dan kolom di berkas itu diverifikasi
+terhadap `schema.prisma`, termasuk enum `PayrollRunType.THR`.
+
+### `Employee.email`: tetap global, dan satu bug yang ikut ketemu
+
+Keputusannya di D-008, beserta satu koreksi: dugaan bahwa memindahkannya
+menyentuh autentikasi **tidak benar** — login dan reset password memakai model
+`User`, bukan `Employee`. Alasan sebenarnya untuk tetap global adalah pengiriman
+payslip dan notifikasi, yang memegang asumsi satu email = satu orang.
+
+Yang ikut ketemu dan diperbaiki: `findByEmail` menyaring `deletedAt: null`
+sementara indeks unik `Employee.email` mencakup baris terhapus. Email milik
+karyawan yang sudah dihapus karena itu lolos pemeriksaan lalu gagal di indeks —
+500, bukan 409. Dua-duanya pemakai method itu adalah pemeriksaan keunikan, jadi
+filternya dihapus, bukan ditambah method kedua.
+
+Ini instansi keempat dari pola yang sama (`employeeNumber`, komponen gaji,
+benefit plan, sekarang email karyawan). Polanya layak disebut sekali lagi dengan
+jelas: **indeks unik tidak tahu soal soft delete, jadi pemeriksaan keunikan tidak
+boleh menyaring `deletedAt` — sementara pembacaan bisnis harus.**
+
+### Status verifikasi
+
+`employee-email-conflict.test.ts` (level service): email bebas tersimpan,
+karyawan soft-deleted tetap dihitung memegang emailnya sehingga jawabannya 409.
+`employee-email-lookup.test.ts` (level repository): `findByEmail` benar-benar
+tidak menyaring `deletedAt`.
+
+Berkas SQL-nya tidak dijalankan di mana pun — tidak ada database untuk
+menjalankannya di mesin ini, dan isinya memang untuk dijalankan tangan.
+## Tugas — audit: field yang diterima DTO tapi tidak pernah ditulis
+
+Laporannya: [dto-vs-repository-audit.md](dto-vs-repository-audit.md). Lahir dari
+`isFixedAllowance`, yang ketemu tanpa dicari dan dampaknya THR kurang bayar.
+Pertanyaannya: di mana lagi?
+
+### Caranya mekanis, dan alatnya disimpan
+
+`backend/scripts/dto-vs-repository-audit.py` membandingkan field top-level setiap
+schema zod `Create*`/`Update*` dengan nama yang muncul di body method yang
+menerima DTO itu. Field yang tidak muncul sama sekali dilaporkan; method yang
+meneruskan `data` utuh dilewati.
+
+Skripnya disimpan, bukan dibuang sesudah dipakai, karena ia mengubah audit
+sekali-pakai jadi pemeriksaan yang bisa diulang tiap kali ada kolom baru. Tidak
+dimasukkan ke CI: heuristiknya meleset ke arah lapor-lebih, jadi keluarannya
+daftar untuk ditriase, bukan daftar bug.
+
+### Hasilnya: satu temuan nyata
+
+`PayrollRun.notes` — diterima `createPayrollRunSchema`, ada kolomnya di model,
+tidak pernah ditulis `createPayrollRun`. Catatan kenapa sebuah payroll run dibuat
+hilang tanpa suara, dan tidak ada endpoint lain yang bisa mengisinya belakangan,
+jadi kolom itu praktis mati. Dampaknya jejak audit, bukan uang. Diperbaiki.
+
+Enam kandidat lain semuanya pass-through yang lolos saringan (`data` diteruskan
+utuh ke Prisma atau ke service); rinciannya satu per satu ada di laporan.
+
+### Kesimpulan yang layak dipegang
+
+Pola `isFixedAllowance` **tidak** menyebar — dari seluruh modul hanya satu field
+lain yang benar-benar hilang, dan itu kolom catatan. Yang berulang bukan
+polanya, tapi **tempatnya**: tiga kehilangan field yang pernah terjadi
+(`salary_components` dua kali, `payroll_runs` sekali) semuanya di repository yang
+memetakan field satu per satu. Yang meneruskan `data` utuh tidak pernah
+kehilangan apa pun.
+
+### Status verifikasi
+
+`payroll-run-notes.test.ts` (baru): `createPayrollRun` benar-benar menulis
+`notes`. Skrip auditnya sendiri jadi verifikasi kedua — sesudah perbaikan,
+`payroll.repository.ts:createPayrollRun` hilang dari keluarannya (7 kandidat
+menjadi 6).
 ## Tugas — re-audit allowlist tenant middleware
 
 Dipicu oleh kesalahanku sendiri: catatan di tugas endpoint restore menyebut
