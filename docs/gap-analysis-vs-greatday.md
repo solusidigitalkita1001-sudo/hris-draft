@@ -1492,3 +1492,108 @@ Pola yang muncul lima kali dan pantas dicurigai lebih lanjut:
 - **GAP-32 / GAP-33** — satu contoh berkas 1721-A1 dan ekspor BPJS asli.
 - **GAP-35** dan **GAP-39** — keputusan dilewati-atau-dibangun belum pernah
   diambil; yang tercatat baru rekomendasi.
+
+
+---
+
+## Audit 7 Oktober 2026 — pengukuran keempat, dan satu angka persen
+
+Dua hari sesudah audit 5 Oktober, `main` menerima ~50 commit yang sebagian besar
+menyentuh daftar ini langsung (TER, THR, pesangon, 1721-A1, SIPP, jurnal,
+generator surat, plafon klaim). Jadi angka 5 Oktober sudah kedaluwarsa sebelum
+dibaca orang.
+
+**Metodenya sama seperti 5 Oktober:** deskripsi gap dipakai sebagai pertanyaan,
+verdict diturunkan dari kode. Bedanya, yang diverifikasi ulang di sini adalah
+(a) setiap gap yang 5 Oktober berstatus PARTIAL atau OPEN, dan (b) setiap gap
+yang disentuh commit sesudahnya. Untuk 27 gap yang 5 Oktober sudah CLOSED dengan
+sitasi `file:LINE`, verdict itu dipakai apa adanya — audit ini tidak
+memverifikasi ulang yang sudah terverifikasi dua hari sebelumnya.
+
+### Yang berubah jadi tertutup sejak 5 Oktober
+
+| Gap | Bukti di kode | PR |
+|---|---|---|
+| GAP-06 — expiry & cap carry-over | `leave_carryover_max_days` di `company-settings.service.ts` + `leave.scheduler.ts` | #66 |
+| GAP-20 — keputusan review probasi | `probationDecision`, `probationDecidedBy/At`, `probationNotes` (`schema.prisma:5902-5905`) — bentuknya kolom, bukan model `ProbationReview` yang dicari audit lama | #57 |
+| GAP-23 — approve payroll izin datar | `payroll.routes.ts:334,342` `action: 'approve'` vs `:350` `action: 'disburse'` — dua izin berbeda | #68, #74, #76 |
+| GAP-25 — rekap efektivitas per kursus | modul training | #58 |
+| GAP-26 — konsumen frontend goal cascade | halaman performance | #62 |
+| GAP-27 — reminder e-signature | pengingat penanda tangan yang jatuh tempo | #54 |
+| GAP-30 — koreksi absensi tanpa UI | UI permintaan koreksi absensi | #56 |
+| GAP-32 — bukti potong 1721-A1 | `shared/payroll/form-1721-a1.ts` + route | #92 |
+| GAP-40 — PPh21 bulanan belum TER | `shared/payroll/ter.ts`, `ter-tables.ts`, setting `pph21_method` ANNUALIZED/TER dibaca di tiga jalur payroll | #85, #86 |
+| GAP-41 — THR hanya bisa dihitung | `payroll.service.ts:796` `run.runType === 'THR'` → `calculateThrPayroll`: satu bulan upah dengan PPh 21-nya, tanpa mesin absensi/lembur/BPJS | #91 |
+| GAP-45 — plafon klaim tidak ditegakkan | `travel-expense/claim-limit.service.ts` + `claim-limit.enforcement.test.ts` | #64 |
+| GAP-46 — generator surat dari template | modul `letter` (substitusi, bukan evaluasi ekspresi) | #63 |
+| GAP-47 — ekspor jurnal gaji | `shared/payroll/journal.ts` + `POST /runs/:id/journal` | #59 |
+
+### Yang masih sebagian
+
+| Gap | Yang ada | Yang belum |
+|---|---|---|
+| GAP-14 / GAP-21b — correction run | rapel masuk run reguler | run bertipe `CORRECTION` **ditolak eksplisit** (`payroll.service.ts:799-805`): mesinnya tidak tahu periode mana yang dikoreksi dan apa yang sudah dibayar |
+| GAP-33 — pelaporan BPJS / e-Bupot | ekspor upah SIPP (`sipp-wage-export.ts` + route), laporan BPJS memakai tarif saat run dibayar (#79) | e-Bupot: nol jejak di `backend/src` |
+| GAP-42 — pesangon | dihitung (`severance.ts`, UU 13/2003 + PP 35/2021) **dan** dipajaki (`severance-tax.ts`, PP 68/2009) di jalur exit | run bertipe `SEVERANCE` juga ditolak; pembayarannya lewat `onboarding.calculateFinalPayroll`, bukan payroll run |
+| GAP-44 — migrasi data | master karyawan + **master gaji** lewat CSV dengan dry run (#60) | histori absensi dan saldo cuti awal masih manual |
+
+### Yang masih terbuka — tujuh, dan empat di antaranya keputusan produk
+
+Diperiksa dengan pencarian simbol di seluruh `backend/src`; semuanya nol jejak:
+
+| Gap | Simbol yang dicari |
+|---|---|
+| GAP-35 — timesheet per proyek | `timesheet` |
+| GAP-36 — pencairan lewat API bank | keputusan dilewati-atau-bangun belum pernah diambil |
+| GAP-39 — custom field per perusahaan | `customField`, `custom_field` |
+| GAP-48 — halaman karier publik | `careerPage`, `publicApplication` |
+| GAP-49 — dasar upah harian/jam | `dailyWage`, `daily_wage` |
+| GAP-50 — HR helpdesk / tiket | `helpdesk`, `HrTicket` |
+| GAP-51 — pilar engagement (feed, kudos) | `kudos`, `feedPost` |
+
+GAP-35, 48, 50, dan 51 adalah **keputusan produk**, bukan utang teknis: empat
+pilar yang benchmark punya dan produk ini belum pernah memutuskan akan punya atau
+tidak. GAP-36 dan GAP-39 keputusannya juga belum pernah diambil (yang tercatat
+baru rekomendasi — lihat audit 5 Oktober). Hanya GAP-49 yang murni pekerjaan
+kode.
+
+### Angkanya, dan apa artinya
+
+| | Jumlah | |
+|---|---|---|
+| Tertutup | **40** | 78,4% dari 51 |
+| Sebagian | 4 | 7,8% |
+| Terbuka | 7 | 13,7% |
+| **Total gap tercatat** | **51** | GAP-01…51 |
+
+Dengan 36 kapabilitas benchmark yang diperiksa 5 Oktober dan **ternyata sudah
+ada** sejak sebelum daftar ini dibuat, denominator yang lebih jujur adalah
+seluruh kapabilitas yang pernah diperiksa:
+
+| | Jumlah |
+|---|---|
+| Kapabilitas benchmark yang diperiksa | 36 + 51 = **87** |
+| Yang sekarang ada di produk ini | 36 + 40 = **76** |
+| **Paritas** | **87,4%** |
+
+Dihitung dengan memberi nilai separuh untuk empat gap sebagian: **89,7%**.
+
+### Batas klaim angka ini — baca sebelum memakainya di mana pun
+
+1. **Denominatornya daftar kami sendiri.** 87 kapabilitas itu disusun dari
+   halaman fitur publik dan indeks help centre GreatDay HR, Mekari Talenta, dan
+   Gadjian (lihat `gap-analysis-greatday-completeness-5-oct.md` Bagian 1). Itu
+   bukan daftar fitur sebenarnya dari produk mana pun — halaman pemasaran tidak
+   menyebut semua yang ada, dan menyebut hal yang belum tentu ada. **"87,4%
+   paritas GreatDay" bukan klaim yang boleh dibuat dari angka ini**; yang boleh:
+   "87,4% dari kapabilitas yang kami daftarkan dan periksa".
+2. **"Tertutup" berarti jalurnya ada dan diverifikasi di kode**, bukan berarti
+   sudah dipakai pelanggan sungguhan atau lolos audit kepatuhan. Tarif dan
+   format resmi (TER, 1721-A1, SIPP) ditranskripsi dari peraturan; yang
+   memverifikasi angkanya benar adalah akuntan, bukan test.
+3. **Bobotnya tidak sama.** GAP-40 (TER) sendirian lebih menentukan apakah
+   produk ini bisa dijual untuk payroll Indonesia daripada GAP-50 (helpdesk) dan
+   GAP-51 (engagement) digabung. Persentase memperlakukan keduanya sebagai satu.
+4. **27 dari 40 yang tertutup memakai verdict 5 Oktober**, bukan pembacaan hari
+   ini. Kalau ada satu yang regresi dalam dua hari, angka ini tidak akan
+   menangkapnya — yang menangkapnya CI, dan CI hijau.
