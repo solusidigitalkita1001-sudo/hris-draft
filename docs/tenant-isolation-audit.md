@@ -133,3 +133,81 @@ append coverage pass in GitHub Actions run `35846232651` (**110 suites / 979 tes
   set an arbitrary employeeId. This employee-level check is a no-op for SUPER_ADMIN/system and
   for ALL/COMPANY_ONLY scopes — only already-restricted users are tightened. The SUPER_ADMIN
   exemption never bypasses the selected-company database boundary. Verified green in CI.
+
+---
+
+## Re-audit Oktober 2026 — apakah allowlist-nya masih lengkap?
+
+Audit di atas berasal dari Sprint 2. Sejak itu puluhan model baru masuk
+`schema.prisma`, dan allowlist tenant middleware adalah jenis daftar yang
+membusuk diam-diam: model baru tidak pernah *gagal* karena absen di sana, ia
+hanya kehilangan jaringnya.
+
+Pemicu re-audit ini: sebuah catatan di PROGRESS.md sempat menyebut
+`deleteSalaryComponent` "tidak discoped per perusahaan" karena kodenya tidak
+menyebut `companyId`. **Itu salah** — `SalaryComponent` ada di allowlist, jadi
+middleware yang menyuntikkan filternya. Tapi pertanyaan di belakang kesalahan itu
+sah: untuk model mana klaim seperti itu *benar*?
+
+### Caranya
+
+Mekanis, terhadap `schema.prisma`, `shared/database/prisma.ts`, dan
+`shared/database/tenant-scope.ts`:
+
+1. setiap model yang punya kolom `companyId` → harus ada di
+   `COMPANY_SCOPED_MODELS`
+2. setiap model **tanpa** `companyId` yang punya relasi ke model ber-`companyId`
+   → harus ada di `PARENT_SCOPES`, atau pemanggilnya harus memvalidasi induknya
+
+### Hasil 1 — allowlist model ber-`companyId`: lengkap
+
+**130 model punya `companyId`; 128 ada di allowlist.** Dua yang tidak, dan
+dua-duanya memang **tidak boleh** ada di sana:
+
+| Model | Kenapa dikecualikan |
+|---|---|
+| `UserCompanyAccess` | tabel yang menentukan perusahaan mana yang boleh dipilih seorang user. Men-scope-nya dengan perusahaan aktif adalah ayam-telur: tidak akan ada perusahaan aktif untuk dipilih. |
+| `UserRole` | `companyId` nullable — role tingkat-platform dilampirkan tanpa perusahaan. Scoping ketat akan menghapus role platform dari setiap user. |
+
+Keempat temuan Tier 1 dan Tier 2 di atas juga diverifikasi **masih tertutup**:
+`BranchAttendancePolicy`, `RoleDataScope`, `RoleMenuAccess`, dan
+`ApprovalDelegation` semuanya ada di allowlist, dan 13 tabel anak T2.3 ada di
+`PARENT_SCOPES`.
+
+### Hasil 2 — satu model anak tanpa jaring: `RolePermission`
+
+`RolePermission` tidak punya `companyId`, induknya `Role` ada di allowlist, tapi
+ia sendiri tidak ada di `PARENT_SCOPES`. Kelasnya sama dengan T2.3: aman **hanya
+selama** pemanggilnya memvalidasi induk.
+
+Dan di sini pemanggilnya memang memvalidasi: `getPermissions(roleId)` dan
+`assignPermissions(roleId, …)` dua-duanya memanggil `this.findById(roleId)` lebih
+dulu, yang query `Role` — model ber-allowlist — jadi role milik tenant lain
+menjadi `NotFoundError` sebelum `RolePermission` tersentuh. Tidak ada pemanggil
+ketiga.
+
+**Tidak ditambahkan ke `PARENT_SCOPES`, dan ini sengaja.** Constraint-nya akan
+menjadi `{ role: { companyId } }`, sementara `Role.companyId` **nullable** dan
+setiap role bawaan (`SUPER_ADMIN`, `HR_MANAGER`, …) adalah role platform dengan
+`companyId: null`. `Role` sendiri tidak ada di `PLATFORM_FALLBACK_MODELS`, jadi
+pola "baca juga baris platform" tidak berlaku untuknya — artinya menambahkan
+`RolePermission` akan membuat permission role platform tak terbaca oleh query
+mana pun yang berjalan dalam konteks tenant. Jalur yang paling mungkin terdampak
+adalah pembentukan token saat login, yang perlu diperiksa lebih dulu apakah benar
+berjalan tanpa konteks perusahaan.
+
+Menukar satu lapisan defense-in-depth untuk model konfigurasi (bukan PII, dan
+pemanggilnya sudah memvalidasi) dengan risiko memecahkan autorisasi seluruh
+aplikasi bukan pertukaran yang masuk akal tanpa pemeriksaan jalur auth itu lebih
+dulu. Dicatat sebagai **Tier 2 terbuka**, bukan dikerjakan setengah.
+
+`User` juga muncul di keluaran skrip, dan itu benar: user memang entitas
+lintas-perusahaan (lihat `UserCompanyAccess`), bukan anak dari satu tenant.
+
+### Kesimpulan
+
+Backstop middleware-nya sehat dan tidak membusuk sejak Sprint 2. Yang berubah
+sejak audit itu bukan kelengkapannya, melainkan satu kebiasaan membaca kode:
+**"service-nya tidak menyebut `companyId`" bukan berarti "query-nya lintas
+tenant"** — untuk 128 model, filternya disuntikkan di lapisan di bawahnya. Yang
+perlu diperiksa justru sebaliknya: model yang **tidak** ada di kedua daftar itu.
