@@ -247,14 +247,23 @@ export class EmployeeService {
     this.validateEmployeeDates(data);
     await this.assertOrgUnitsInCompany(data.companyId, data);
 
-    const employeeNumber = await generateSystemCode({
+    // A company moving off another payroll keeps its own numbering. The DTO has
+    // always accepted employeeNumber; create() used to drop the value without
+    // telling anyone, while the CSV import honoured it. Now both agree.
+    const requested = data.employeeNumber?.trim();
+    const employeeNumber = requested || await generateSystemCode({
       prefix: 'EMP',
       label: `${data.firstName} ${data.lastName}`,
       exists: async (candidate) => Boolean(await employeeRepository.findByEmployeeNumber(data.companyId, candidate)),
     });
 
-    const existing = await employeeRepository.findByEmployeeNumber(data.companyId, employeeNumber);
-    if (existing) throw new ConflictError('Employee number already exists');
+    // Soft-deleted employees keep their number in the unique index, so the
+    // conflict check has to see them — findByEmployeeNumber filters them out.
+    const taken = await prisma.employee.findFirst({
+      where: { companyId: data.companyId, employeeNumber },
+      select: { id: true },
+    });
+    if (taken) throw new ConflictError('Employee number already exists');
 
     // Check unique email if provided
     if (data.email) {
