@@ -578,13 +578,20 @@ Keunikan tidak diperiksa saat restore, dan itu disengaja:
 `@@unique([companyId, code])` mencakup baris terhapus juga, jadi selama baris itu
 ada, tidak mungkin ada baris lain di perusahaan yang sama dengan kode yang sama.
 
-### Yang ikut diperiksa
+### Yang ikut diperiksa, dan satu klaim yang dikoreksi
 
-`deleteSalaryComponent(id)` yang sudah ada memanggil `findSalaryComponentById(id)`
-yang **tidak** discoped per perusahaan. Endpoint restore yang baru tidak meniru
-pola itu — ia discoped. Jalur delete-nya sendiri tidak diubah di tugas ini:
-memperbaikinya berarti mengubah perilaku endpoint yang sudah dipakai, dan itu
-pekerjaan tersendiri. Dicatat di sini supaya tidak hilang.
+`deleteSalaryComponent(id)` memanggil `findSalaryComponentById(id)` yang tidak
+menyebut `companyId` **di kodenya**. Itu sempat kucatat sebagai lubang tenant
+isolation — **dan itu salah.** `SalaryComponent` ada di `COMPANY_SCOPED_MODELS`
+(`shared/database/prisma.ts`), jadi middleware Prisma menyuntikkan `companyId`
+dari konteks permintaan ke setiap query model itu; id milik tenant lain resolve
+ke nol baris, bukan ke datanya. Backstop itulah yang dimaksud
+[tenant-isolation-audit.md](tenant-isolation-audit.md) dengan "double backstop".
+
+Endpoint restore yang baru tetap menulis filter `companyId` secara eksplisit.
+Bukan karena backstop-nya kurang, tapi karena jalur yang hanya punya `:id` dan
+mengubah data sebaiknya tidak bergantung pada satu lapisan saja — dan karena
+`deletedAt: { not: null }` memang harus eksplisit.
 
 ### Status verifikasi
 
