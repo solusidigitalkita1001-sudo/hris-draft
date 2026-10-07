@@ -431,6 +431,10 @@ export class PayrollRepository {
         name: data.name,
         runNumber,
         runType: data.runType ?? 'REGULAR',
+        // Diterima createPayrollRunSchema dan ada kolomnya di PayrollRun, tapi
+        // tidak pernah ditulis: catatan kenapa sebuah run dibuat hilang tanpa
+        // suara, dan tidak ada endpoint lain yang bisa mengisinya.
+        notes: data.notes,
         createdBy,
       },
     });
