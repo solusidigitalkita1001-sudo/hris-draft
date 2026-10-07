@@ -39,7 +39,11 @@ export class RoleRepository {
     return prisma.role.findUnique({ where: { code } });
   }
 
-  async create(data: CreateRoleDTO & { code: string }) {
+  // `code` is absent from CreateRoleDTO on purpose -- the DTO refuses a
+  // client-sent one (DECISIONS.md D-006) -- so it is Omit-ed before the server's
+  // generated code is intersected in. A plain intersection would make the field
+  // `undefined & string`, i.e. `never`.
+  async create(data: Omit<CreateRoleDTO, 'code'> & { code: string }) {
     return prisma.role.create({ data });
   }
 

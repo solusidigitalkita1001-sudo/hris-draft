@@ -135,9 +135,13 @@ export class AssetRepository {
     };
   }
 
-  async findByAssetCode(assetCode: string) {
-    return prisma.asset.findUnique({
-      where: { assetCode },
+  // An asset tag belongs to one company's register, so the lookup is scoped by
+  // company. deletedAt is deliberately not filtered: the unique index keeps
+  // counting a soft-deleted asset's code, so a conflict check that ignored
+  // those rows would pass here and then fail on the database.
+  async findByAssetCode(companyId: string, assetCode: string) {
+    return prisma.asset.findFirst({
+      where: { companyId, assetCode },
     });
   }
 

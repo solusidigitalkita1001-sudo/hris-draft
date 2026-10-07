@@ -35,8 +35,12 @@ export class PositionRepository {
     });
   }
 
-  async findByCode(code: string) {
-    return prisma.position.findUnique({ where: { code } });
+  // A code belongs to one company's structure, so the lookup is scoped by
+  // company. deletedAt is deliberately not filtered: the unique index keeps
+  // counting a soft-deleted row's code, so a conflict check that ignored those
+  // rows would pass here and then fail on the database.
+  async findByCode(companyId: string, code: string) {
+    return prisma.position.findFirst({ where: { companyId, code } });
   }
 
   async create(data: CreatePositionDTO & { code: string }) {

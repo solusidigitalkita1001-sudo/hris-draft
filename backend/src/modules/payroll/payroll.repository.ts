@@ -261,6 +261,13 @@ export class PayrollRepository {
     });
   }
 
+  // deletedAt is deliberately not filtered: the unique index keeps counting a
+  // soft-deleted period's code, so a conflict check that ignored those rows
+  // would pass in the application and then fail on the database.
+  async findPayrollPeriodByCode(companyId: string, code: string) {
+    return prisma.payrollPeriod.findFirst({ where: { companyId, code } });
+  }
+
   async findPayrollPeriodById(id: string, database: Prisma.TransactionClient = prisma, companyId?: string) {
     return database.payrollPeriod.findFirst({
       where: { id, companyId, deletedAt: null },
