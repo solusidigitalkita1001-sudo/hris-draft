@@ -395,4 +395,13 @@ with code -> false [{"code":"invalid_type","expected":"undefined",...,
 zod 3.25.76
 ```
 
-Sisanya tetap mengikuti hasil CI pada branch ini.
+Sisanya mengikuti hasil CI pada branch ini: **hijau di commit `e40c919`**,
+kesepuluh job.
+
+Commit pertama tugas ini (`62f6366`) merah, dan penyebabnya layak dicatat karena
+bukan kebetulan: begitu DTO menolak `code`, tipe `CreateRoleDTO['code']` menjadi
+`undefined`, dan `CreateRoleDTO & { code: string }` di repository membuat field
+itu `undefined & string` — yaitu `never`. Satu error TS2322 menjatuhkan dua job
+sekaligus (type-check, dan `administration-access.test.ts` yang mengimpor service
+itu). Pelajarannya: menyempitkan tipe sebuah field di DTO **mengubah aljabar
+setiap intersection yang memakainya**; `Omit` dulu, baru intersect.
