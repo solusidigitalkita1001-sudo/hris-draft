@@ -609,3 +609,50 @@ Pemetaan field di `createLeaveType` (spread seluruh DTO) dan `createPlan`
 tersimpan, kode terpakai → `ConflictError` tanpa pernah memanggil repository
 create, pencarian discoped per perusahaan, dan untuk benefit plan kode kiriman
 klien benar-benar dipakai sementara yang kosong/spasi tetap di-generate.
+## Tugas — memulihkan komponen gaji yang dihapus
+
+Menutup celah yang dicatat di D-007: sesudah pemeriksaan konflik diperbaiki,
+komponen gaji yang di-soft-delete menjawab 409 dan **tidak ada cara memulihkan
+barisnya**, jadi kodenya terkunci selamanya.
+
+### Yang ditambahkan
+
+| Endpoint | Izin | Catatan |
+|---|---|---|
+| `GET /payroll/salary-components/deleted` | `payroll:read` | daftar terpisah, bukan flag `includeDeleted` pada daftar normal — supaya tidak ada pemanggil lama yang tiba-tiba ikut menerima baris terhapus |
+| `POST /payroll/salary-components/:id/restore` | `payroll:update` | beraudit (`action: 'RESTORE'`) |
+
+`companyId` untuk restore diambil dari konteks permintaan, **bukan** dari
+pemanggil: endpointnya hanya punya `:id`, dan id milik tenant lain tidak boleh
+bisa dipulihkan dari sini. Pencariannya `{ id, companyId, deletedAt: { not: null } }`
+— jadi id yang bukan milik perusahaan itu, dan id yang tidak dalam keadaan
+terhapus, dua-duanya 404.
+
+Keunikan tidak diperiksa saat restore, dan itu disengaja:
+`@@unique([companyId, code])` mencakup baris terhapus juga, jadi selama baris itu
+ada, tidak mungkin ada baris lain di perusahaan yang sama dengan kode yang sama.
+
+### Yang ikut diperiksa, dan satu klaim yang dikoreksi
+
+`deleteSalaryComponent(id)` memanggil `findSalaryComponentById(id)` yang tidak
+menyebut `companyId` **di kodenya**. Itu sempat kucatat sebagai lubang tenant
+isolation — **dan itu salah.** `SalaryComponent` ada di `COMPANY_SCOPED_MODELS`
+(`shared/database/prisma.ts`), jadi middleware Prisma menyuntikkan `companyId`
+dari konteks permintaan ke setiap query model itu; id milik tenant lain resolve
+ke nol baris, bukan ke datanya. Backstop itulah yang dimaksud
+[tenant-isolation-audit.md](tenant-isolation-audit.md) dengan "double backstop".
+
+Endpoint restore yang baru tetap menulis filter `companyId` secara eksplisit.
+Bukan karena backstop-nya kurang, tapi karena jalur yang hanya punya `:id` dan
+mengubah data sebaiknya tidak bergantung pada satu lapisan saja — dan karena
+`deletedAt: { not: null }` memang harus eksplisit.
+
+### Status verifikasi
+
+Tiga kasus baru di `salary-component-code.test.ts`: daftar terhapus hanya memuat
+baris terhapus, pencarian sebelum restore memuat filter `companyId` **dan**
+`deletedAt: { not: null }`, dan restore mengosongkan `deletedAt` + mengaktifkan
+kembali sambil tetap discoped.
+
+`docs/api-reference.md` ikut diperbarui (dua baris, dan hitungan operasi payroll
+55 → 57).
