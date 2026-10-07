@@ -203,3 +203,40 @@ komponen dengan kode yang masih dipegang komponen terhapus sekarang menjawab
 **409**, bukan 500 seperti sebelumnya. Itu perbaikan, tapi menyisakan satu celah
 UX: belum ada cara memulihkan komponen yang di-soft-delete, jadi kodenya terkunci.
 Menambah endpoint restore adalah pekerjaan tersendiri, bukan tempelan di sini.
+
+---
+
+## D-008 — `Employee.email` unik se-instalasi: dibiarkan atau dipindah per perusahaan?
+
+**Konteks.** Ini satu-satunya field unik global yang lolos audit
+[tenant-scoped-codes-audit.md](tenant-scoped-codes-audit.md) **dengan sengaja**:
+di sana kode dan database sepakat, karena `findByEmail(email)` juga tidak
+discoped. Pertanyaannya tetap perlu dijawab eksplisit, karena konsekuensinya
+nyata: satu orang tidak bisa jadi karyawan di dua tenant dengan email yang sama.
+
+**Satu koreksi atas dugaan awal.** Sempat diduga memindahkannya akan menyentuh
+autentikasi. Ternyata tidak: login, reset password, dan sesi semuanya memakai
+model **`User`** (`auth.repository.ts` hanya menyentuh `prisma.user`), yang punya
+kolom email sendiri. `Employee.email` murni data master karyawan, dan satu-satunya
+pemakainya adalah dua pemeriksaan keunikan di `create` dan `update`. Jadi alasan
+"ini jalur login" tidak berlaku, dan keputusan di bawah berdiri di atas alasan
+lain.
+
+| Opsi | Akibat |
+|---|---|
+| **A. Tetap unik global** | Satu email = satu orang di seluruh instalasi. Itu asumsi yang dipegang notifikasi dan pengiriman payslip: alamat tujuan dicari dari data karyawan, dan dua profil beremail sama membuat "payslip siapa yang dikirim ke alamat ini" jadi ambigu. Yang hilang: orang yang bekerja di dua tenant pelanggan harus memakai dua alamat. |
+| B. `@@unique([companyId, email])` | Satu orang bisa punya profil di dua tenant. Tapi setiap pembaca email karyawan harus memutuskan tenant mana yang dimaksud, dan jalur pengiriman payslip/notifikasi adalah tempat keputusan itu paling mudah salah — ke-salahannya mengirim data gaji orang ke alamat yang benar tapi tenant yang salah. |
+| C. Biarkan global, tapi bolehkan email kosong rangkap | Sudah berlaku: kolomnya nullable, jadi karyawan tanpa email tidak pernah bertabrakan. |
+
+**Dipilih: A, dan dicatat sebagai keputusan, bukan sebagai temuan yang
+tertinggal.** Kalau nanti ada pelanggan yang benar-benar perlu satu orang di dua
+tenant, yang berubah bukan hanya indeksnya: setiap pembaca `Employee.email` harus
+ikut discoped lebih dulu, terutama pengiriman payslip. Itu pekerjaan yang jauh
+lebih besar dari sepuluh kode di PR #96, dan tidak boleh diambil hanya karena
+polanya kelihatan mirip.
+
+**Yang ikut diperbaiki saat memutuskan ini:** `findByEmail` menyaring
+`deletedAt: null` padahal indeks uniknya mencakup baris terhapus — jadi email
+milik karyawan yang sudah dihapus lolos pemeriksaan lalu gagal di indeks. 500,
+bukan 409. Filternya dihapus; lubang yang sama persis dengan komponen gaji
+(D-007) dan benefit plan.

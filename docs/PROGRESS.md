@@ -552,3 +552,57 @@ replay-safety-nya: job `Migration rehearsal` dan `Migration validation`
 menjalankan seluruh rantai migrasi dari database kosong, jadi blok guard-nya harus
 melewati keadaan "indeksnya sudah tidak ada" tanpa error. Skenario "nama indeksnya
 beda" tidak bisa direproduksi di CI — itu sebabnya ia tidak pernah tertangkap.
+
+---
+
+## Tugas — backfill `isFixedAllowance` dan keputusan soal email karyawan
+
+Dua sisa yang tidak butuh kode baru, dikerjakan bersama karena dua-duanya
+berakhir di dokumen — kecuali satu bug yang ikut ketemu.
+
+### `isFixedAllowance`: deteksi dan backfill
+
+PR #98 memperbaiki jalur tulisnya, tapi data yang sudah ada tetap `0` semua.
+`docs/fixed-allowance-backfill.sql` berisi empat bagian: apakah instalasi ini
+terkena, kandidat tunjangan tetap per perusahaan (dipersempit ke `ALLOWANCE` +
+`FIXED` + bukan komponen sistem, dengan jumlah karyawan yang memakainya),
+**apakah ada payroll run THR yang sudah menyentuh kandidat itu**, dan `UPDATE`
+bertarget id yang masih dikomentari.
+
+Bagian ketiga yang paling penting: kalau ia mengembalikan baris, berarti ada THR
+yang sudah dibayar dari basis yang kemungkinan lebih kecil dari seharusnya, dan
+backfill saja tidak menyelesaikannya.
+
+`UPDATE`-nya sengaja dibiarkan terkomentari dan tanpa daftar id. Mana yang
+tunjangan tetap adalah keputusan HR — tidak ada aturan otomatis yang bisa
+membedakan tunjangan jabatan (tetap) dari tunjangan transport harian (tidak
+tetap) hanya dari datanya. Nama tabel dan kolom di berkas itu diverifikasi
+terhadap `schema.prisma`, termasuk enum `PayrollRunType.THR`.
+
+### `Employee.email`: tetap global, dan satu bug yang ikut ketemu
+
+Keputusannya di D-008, beserta satu koreksi: dugaan bahwa memindahkannya
+menyentuh autentikasi **tidak benar** — login dan reset password memakai model
+`User`, bukan `Employee`. Alasan sebenarnya untuk tetap global adalah pengiriman
+payslip dan notifikasi, yang memegang asumsi satu email = satu orang.
+
+Yang ikut ketemu dan diperbaiki: `findByEmail` menyaring `deletedAt: null`
+sementara indeks unik `Employee.email` mencakup baris terhapus. Email milik
+karyawan yang sudah dihapus karena itu lolos pemeriksaan lalu gagal di indeks —
+500, bukan 409. Dua-duanya pemakai method itu adalah pemeriksaan keunikan, jadi
+filternya dihapus, bukan ditambah method kedua.
+
+Ini instansi keempat dari pola yang sama (`employeeNumber`, komponen gaji,
+benefit plan, sekarang email karyawan). Polanya layak disebut sekali lagi dengan
+jelas: **indeks unik tidak tahu soal soft delete, jadi pemeriksaan keunikan tidak
+boleh menyaring `deletedAt` — sementara pembacaan bisnis harus.**
+
+### Status verifikasi
+
+`employee-email-conflict.test.ts` (level service): email bebas tersimpan,
+karyawan soft-deleted tetap dihitung memegang emailnya sehingga jawabannya 409.
+`employee-email-lookup.test.ts` (level repository): `findByEmail` benar-benar
+tidak menyaring `deletedAt`.
+
+Berkas SQL-nya tidak dijalankan di mana pun — tidak ada database untuk
+menjalankannya di mesin ini, dan isinya memang untuk dijalankan tangan.
