@@ -750,3 +750,41 @@ kehilangan apa pun.
 `notes`. Skrip auditnya sendiri jadi verifikasi kedua — sesudah perbaikan,
 `payroll.repository.ts:createPayrollRun` hilang dari keluarannya (7 kandidat
 menjadi 6).
+## Tugas — re-audit allowlist tenant middleware
+
+Dipicu oleh kesalahanku sendiri: catatan di tugas endpoint restore menyebut
+`deleteSalaryComponent` "tidak discoped per perusahaan" karena kodenya tidak
+menyebut `companyId`. `SalaryComponent` ada di `COMPANY_SCOPED_MODELS`, jadi
+middleware-lah yang menyuntikkan filternya — klaim itu salah dan sudah dikoreksi.
+Tapi pertanyaan di belakangnya sah: untuk model mana klaim seperti itu benar?
+
+Hasilnya ada di [tenant-isolation-audit.md](tenant-isolation-audit.md) bagian
+"Re-audit Oktober 2026". Ringkasnya:
+
+- **130 model punya `companyId`, 128 ada di allowlist.** Dua yang tidak
+  (`UserCompanyAccess`, `UserRole`) memang tidak boleh ada di sana — yang pertama
+  ayam-telur dengan pemilihan perusahaan, yang kedua `companyId`-nya nullable
+  untuk role platform.
+- Keempat temuan Tier 1/Tier 2 dari audit Sprint 2 diverifikasi **masih
+  tertutup**, termasuk 13 tabel anak di `PARENT_SCOPES`.
+- Satu model anak tanpa jaring: **`RolePermission`**. Aman karena dua-duanya
+  pemanggilnya memvalidasi induk lewat `findById(roleId)` yang discoped, dan
+  tidak ada pemanggil ketiga. **Tidak ditambahkan** ke `PARENT_SCOPES`: constraint
+  `{ role: { companyId } }` akan membuat permission role platform
+  (`companyId: null`, yaitu semua role bawaan) tak terbaca dalam konteks tenant.
+  Menukar satu lapisan untuk model konfigurasi dengan risiko memecahkan
+  autorisasi bukan pertukaran yang masuk akal sebelum jalur pembentukan token
+  diperiksa. Dicatat sebagai Tier 2 terbuka.
+
+### Tidak ada kode yang berubah
+
+Itu hasilnya, bukan kemalasannya: yang dicari tidak ada. Satu-satunya kandidat
+sudah aman lewat validasi induk, dan memperbaikinya "biar rapi" justru yang
+berisiko.
+
+### Status verifikasi
+
+Tidak ada kode yang berubah, jadi tidak ada yang perlu dijalankan. Yang bisa
+diperiksa adalah angkanya, dan tiap angka di laporan itu berasal dari
+perbandingan mekanis `schema.prisma` terhadap kedua daftar di
+`shared/database/`.
