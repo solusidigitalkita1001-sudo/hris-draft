@@ -2015,7 +2015,7 @@ export async function seedTestData(): Promise<void> {
   ];
   for (const asset of assets) {
     await prisma.asset.upsert({
-      where: { assetCode: asset.code },
+      where: { companyId_assetCode: { companyId: company.id, assetCode: asset.code } },
       update: {},
       create: {
         companyId: company.id,
@@ -2032,8 +2032,8 @@ export async function seedTestData(): Promise<void> {
     });
   }
 
-  const macbook = await prisma.asset.findUnique({ where: { assetCode: 'AST-LAP-001' } });
-  const iphone = await prisma.asset.findUnique({ where: { assetCode: 'AST-PHN-001' } });
+  const macbook = await prisma.asset.findUnique({ where: { companyId_assetCode: { companyId: company.id, assetCode: 'AST-LAP-001' } } });
+  const iphone = await prisma.asset.findUnique({ where: { companyId_assetCode: { companyId: company.id, assetCode: 'AST-PHN-001' } } });
   if (macbook && siti && dewiUser) {
     await prisma.assetAssignment.upsert({
       where: { id: 'assign-asset-001' },

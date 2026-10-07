@@ -3169,7 +3169,7 @@ model Asset {
   id            String    @id @default(uuid()) @db.VarChar(36)
   companyId     String    @map("company_id") @db.VarChar(36)
   categoryId    String?   @map("category_id") @db.VarChar(36)
-  assetCode     String    @unique @map("asset_code") @db.VarChar(50)
+  assetCode     String    @map("asset_code") @db.VarChar(50)
   name          String    @db.VarChar(150)
   serialNumber  String?   @map("serial_number") @db.VarChar(100)
   purchaseDate  DateTime? @map("purchase_date")
@@ -3187,6 +3187,7 @@ model Asset {
   /// C.7 Patrol Logs for this asset
   patrolLogs  AssetPatrolLog[]
 
+  @@unique([companyId, assetCode])
   @@index([companyId])
   @@index([assetCode])
   @@index([status])

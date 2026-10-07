@@ -109,3 +109,33 @@ dipakai lagi tanpa membatalkan apa pun yang sudah dikerjakan.
 
 **Konsekuensi yang harus dipegang:** tugas tidak boleh disebut selesai
 berdasarkan pembacaan kode. Statusnya mengikuti hasil CI di branch tugas itu.
+
+---
+
+## D-005 — Sepuluh model membuang kode pelanggan: perbaiki sekaligus atau satu dulu?
+
+**Konteks.** [tenant-scoped-codes-audit.md](tenant-scoped-codes-audit.md)
+menemukan sepuluh model yang menerima `code` dari klien lalu membuangnya tanpa
+pemberitahuan, dan kodenya unik di seluruh instalasi padahal modelnya
+per-perusahaan. Tidak ada bug data di sana — `generateSystemCode` menempel
+tanggal dan empat digit acak — yang rusak adalah pelanggan tidak bisa memakai
+kodenya sendiri. Test tidak bisa dijalankan di mesin ini (lihat D-004).
+
+| Opsi | Akibat |
+|---|---|
+| A. Sepuluh model dalam satu migrasi | Satu kali kerja, satu kali review. Tapi sepuluh jalur tulis berubah sekaligus sementara verifier satu-satunya adalah CI yang baru menjawab setelah push — kalau merah, sepuluh perubahan harus dibongkar untuk mencari yang mana. |
+| **B. Satu model dulu sebagai pola** | `Asset.assetCode`: paling kecil, paling jelas milik pelanggan (nomor aset dicetak di stiker sebelum masuk sistem), dan tidak punya jalur masuk kedua seperti import CSV-nya karyawan. Polanya terbukti di CI, sembilan sisanya menyusul sebagai pekerjaan mekanis. |
+| C. Biarkan, cukup didokumentasikan | Audit berhenti jadi laporan yang tidak pernah ditindaklanjuti. |
+
+**Dipilih: B.** Dengan satu model, diff-nya cukup kecil untuk dibaca utuh, dan
+kalau CI merah penyebabnya cuma bisa satu. Pelajaran dari tugas sebelumnya
+membuat ini bukan kehati-hatian kosong: `@unique` yang dilepas memutus `upsert`
+di seed yang lewat `(prisma as any)`, dan itu baru kelihatan di CI. Sepuluh model
+berarti sepuluh kali kesempatan seperti itu dalam satu push.
+
+**Yang ikut diputuskan:** `Asset.assetCode` tetap punya `@@index([assetCode])`
+sesudah indeks unik globalnya dilepas, karena pencarian lintas-perusahaan di
+layar admin platform memakai kode saja. `Role.code` **tidak** masuk daftar
+sembilan sisanya — `companyId`-nya nullable, dan di MySQL beberapa baris dengan
+`company_id IS NULL` tetap lolos indeks unik komposit, jadi keunikan role
+platform justru hilang. Model itu butuh keputusan sendiri.

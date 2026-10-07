@@ -59,14 +59,27 @@ Seed-nya sendiri memperlihatkan kode yang diharapkan manusia:
 meng-`upsert` dengan `where: { code }` **tanpa `companyId`**, pola yang sama yang
 membuat seed `LeaveType` hanya pernah benar untuk satu perusahaan.
 
-### Kenapa belum diperbaiki di sini
+### Satu sudah diperbaiki, sembilan menyusul
 
-Memperbaikinya berarti enam model, satu migrasi, dan perubahan perilaku di enam
-endpoint — sementara **test tidak bisa dijalankan di mesin ini** (lihat
-[PROGRESS.md](PROGRESS.md)). Mengubah enam jalur tulis sekaligus tanpa bisa
-menjalankan satu test pun bukan keberanian, itu kelalaian. Urutan yang masuk akal:
-satu model dulu sebagai pola (`Asset.assetCode`, paling kecil dan paling jelas
-milik pelanggan), buktikan di CI, baru sisanya menyusul.
+Memperbaiki sepuluh model sekaligus berarti satu migrasi dan perubahan perilaku
+di sepuluh endpoint — sementara **test tidak bisa dijalankan di mesin ini**
+(lihat [PROGRESS.md](PROGRESS.md)). Mengubah sepuluh jalur tulis sekaligus tanpa
+bisa menjalankan satu test pun bukan keberanian, itu kelalaian.
+
+Jadi **`Asset.assetCode` dikerjakan lebih dulu sebagai pola** — paling kecil dan
+paling jelas milik pelanggan. Hasilnya ada di
+[PROGRESS.md](PROGRESS.md) ("nomor aset"), keputusannya di
+[DECISIONS.md](DECISIONS.md) D-005, dan bentuknya:
+
+- `@unique` tingkat-field dilepas, `@@unique([companyId, code])` ditambahkan
+- migrasi mencari indeks lama **berdasarkan kolom, bukan nama**
+- lookup-nya jadi `findFirst` yang discoped perusahaan dan **tidak** menyaring
+  `deletedAt` (indeks unik tidak tahu soal soft delete)
+- `create()` memakai kode kiriman klien kalau ada
+- setiap `upsert`/`findUnique` di seed yang memakai kode itu ikut pindah ke kunci
+  komposit — ini yang terlewat di tugas `employeeNumber` dan baru tertangkap CI
+
+Sembilan sisanya pekerjaan mekanis dengan bentuk yang sama.
 
 ## `Role.code` — sempat terlihat lebih buruk, ternyata tidak
 

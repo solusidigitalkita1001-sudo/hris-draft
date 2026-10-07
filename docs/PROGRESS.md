@@ -225,3 +225,63 @@ di CI, baru sisanya menyusul.
 Tidak ada kode yang berubah, jadi tidak ada yang perlu dijalankan. Yang bisa
 diperiksa adalah klaim-klaimnya, dan setiap klaim di dokumen itu menyebut berkas
 dan nomor barisnya.
+
+---
+
+## Tugas — nomor aset: per perusahaan, dan boleh dibawa pelanggan
+
+Butir pertama dari [tenant-scoped-codes-audit.md](tenant-scoped-codes-audit.md),
+dipilih sebagai pola untuk sembilan model sisanya. Alasan pemilihannya ada di
+D-005.
+
+### Masalahnya
+
+`assets.asset_code` unik di seluruh instalasi, padahal setiap pencarian aset di
+aplikasi sudah difilter `companyId` dan nomor aset adalah hal yang dicetak
+pelanggan di stikernya sendiri. Dua tenant yang sama-sama menamai laptop
+pertamanya `AST-LAP-001` bukan konflik; itu dua perusahaan dengan daftar aset
+masing-masing.
+
+Dan seperti `employeeNumber`: `asset.dto.ts:6` menerima `assetCode` dari klien,
+`asset.service.ts:33` membuangnya tanpa pemberitahuan lalu memakai
+`generateSystemCode`. Nomor yang sudah tertempel di barangnya hilang tanpa 400,
+tanpa peringatan.
+
+### Yang berubah
+
+| Berkas | Perubahan |
+|---|---|
+| `schema.prisma` | `assetCode` tidak lagi `@unique`; ditambah `@@unique([companyId, assetCode])` |
+| `migrations/20261007110000_tenant_scoped_asset_code/` | drop indeks unik single-column (dicari berdasarkan kolom, bukan nama), buat indeks komposit, pastikan `@@index([assetCode])` ada |
+| `asset.repository.ts` | `findByAssetCode(companyId, assetCode)` — `findUnique` jadi `findFirst` yang discoped perusahaan dan tidak menyaring `deletedAt` |
+| `asset.service.ts` | `create()` memakai kode kiriman klien kalau ada |
+| `05-test-data.seed.ts` | `upsert` dan dua `findUnique` aset pindah ke kunci komposit |
+| `asset-code.test.ts` | baru |
+
+Seed-nya **sengaja diperiksa lebih dulu kali ini** — pelajaran dari tugas
+sebelumnya. Bedanya: tiga pemanggil aset di seed semuanya bertipe (bukan
+`prisma as any`), jadi type-check CI akan menangkapnya kalau ada yang terlewat.
+
+`deletedAt` tidak disaring di `findByAssetCode` dengan sengaja: indeks unik tidak
+tahu soal soft delete, jadi aset yang sudah dihapus tetap memegang kodenya.
+Menyaringnya berarti pemeriksaan lolos di aplikasi lalu gagal di database — 500,
+bukan 409. Sama seperti `employeeNumber`.
+
+### Yang tidak diubah
+
+Sembilan model sisanya dari audit (`Branch.code`, `Division.code`,
+`Department.code`, `SubDepartment.code`, `Position.code`, `PayrollPeriod.code`,
+`SalaryComponent.code`, `TrainingCategory.code`, `TrainingCourse.code`). Pola di
+atas sekarang jadi contohnya. `Role.code` tetap di luar daftar — alasannya di
+D-005.
+
+`update()` aset tidak disentuh; tugas ini hanya tentang jalur `create`.
+
+### Status verifikasi
+
+`asset-code.test.ts` berisi 5 kasus; yang paling berarti dua: perusahaan kedua
+boleh memakai kode yang dipegang perusahaan pertama (ini **gagal pada skema
+sebelum migrasi di atas**), dan kode kiriman klien benar-benar tersimpan.
+
+**Belum dijalankan di mesin ini** — lihat hambatan lingkungan di atas. Yang
+berlaku adalah hasil CI pada branch ini.

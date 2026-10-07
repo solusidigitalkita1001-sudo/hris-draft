@@ -30,12 +30,16 @@ export class AssetService {
   }
 
   async create(data: CreateAssetDTO) {
-    const assetCode = await generateSystemCode({
+    // Asset tags are printed on stickers before the asset is ever entered here,
+    // so the code the client sends is the real one. The DTO has always accepted
+    // assetCode; create() used to drop it without telling anyone.
+    const requested = data.assetCode?.trim();
+    const assetCode = requested || await generateSystemCode({
       prefix: 'AST',
       label: data.name,
-      exists: async (candidate) => Boolean(await assetRepository.findByAssetCode(candidate)),
+      exists: async (candidate) => Boolean(await assetRepository.findByAssetCode(data.companyId, candidate)),
     });
-    const existing = await assetRepository.findByAssetCode(assetCode);
+    const existing = await assetRepository.findByAssetCode(data.companyId, assetCode);
     if (existing) throw new ConflictError('Asset code already exists');
     return assetRepository.create({
       ...data,
