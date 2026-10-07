@@ -353,4 +353,6 @@ dijaga `*.mysql.test.ts` yang jalan di job `Real-database integration suites
 (blocking)`.
 
 **Belum dijalankan di mesin ini** — lihat hambatan lingkungan di atas. Yang
-berlaku adalah hasil CI pada branch ini.
+berlaku adalah hasil CI pada branch ini: run pada commit `d4ed5be` lulus
+kesepuluh job, termasuk `Real-database integration suites (blocking)`,
+`Migration validation`, dan `Migration rehearsal` yang menjalankan seed.
