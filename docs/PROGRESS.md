@@ -4,6 +4,15 @@ Satu bagian per tugas. Yang dicatat: apa yang berubah, apa yang membuktikannya
 benar, dan apa yang sengaja dilewati. Keputusan beserta opsinya ada di
 [DECISIONS.md](DECISIONS.md).
 
+**Soal SHA di dokumen ini.** Setiap commit yang disebut di bawah (`77c6206`,
+`d4ed5be`, `62f6366`, `e40c919`, dan seterusnya) adalah commit di
+[PR #96](https://github.com/solusidigitalkita1001-sudo/hris-draft/pull/96), bukan
+commit di `main`. PR itu di-squash saat merge — jadi di `main` semuanya menjadi
+satu commit, `487021e`. SHA-nya tetap ditulis apa adanya karena justru itu yang
+bisa diperiksa: tiap angka merujuk ke satu run CI yang berdiri sendiri, dan
+daftar commit beserta run-nya tetap ada di PR tersebut. Run hijau terakhir
+sebelum merge adalah `4a7e536`, commit merge `origin/main` ke dalam branch itu.
+
 ---
 
 ## Hambatan lingkungan yang berlaku untuk semua tugas
