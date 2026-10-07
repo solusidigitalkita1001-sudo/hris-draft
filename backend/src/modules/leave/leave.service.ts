@@ -23,6 +23,13 @@ export class LeaveService {
   }
 
   async createLeaveType(data: CreateLeaveTypeDTO) {
+    // Kode jenis cuti dipilih pelanggan -- ANNUAL, SICK, UNPAID -- jadi tabrakan
+    // adalah kejadian sehari-hari, bukan kasus langka. Sebelum ini tidak ada
+    // pemeriksaan apa pun: INSERT langsung mati di indeks unik dan pemanggil
+    // melihat 500.
+    const taken = await leaveRepository.findLeaveTypeByCode(data.companyId, data.code);
+    if (taken) throw new ConflictError(`Leave type code "${data.code}" already exists`);
+
     const type = await leaveRepository.createLeaveType(data);
     logger.info('Leave type created', { typeId: type.id, code: type.code });
     return type;
