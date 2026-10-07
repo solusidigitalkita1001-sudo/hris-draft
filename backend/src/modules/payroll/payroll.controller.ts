@@ -89,6 +89,26 @@ export class PayrollController {
     }
   }
 
+  async findDeletedSalaryComponents(req: Request, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.query.companyId as string;
+      const data = await payrollService.findDeletedSalaryComponents(companyId);
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async restoreSalaryComponent(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const data = await payrollService.restoreSalaryComponent(id);
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async findSalaryComponentById(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;

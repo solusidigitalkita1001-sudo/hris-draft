@@ -123,6 +123,28 @@ export class PayrollService {
     return component;
   }
 
+  async findDeletedSalaryComponents(companyId: string) {
+    return payrollRepository.findDeletedSalaryComponents(companyId);
+  }
+
+  // Tanpa ini, kode komponen yang dihapus terkunci: indeks unik masih
+  // memegangnya, jadi create menjawab 409 dan tidak ada jalan memulihkan
+  // barisnya. Lihat DECISIONS.md D-007.
+  async restoreSalaryComponent(id: string) {
+    // companyId diambil dari konteks, bukan dari pemanggil: endpoint ini hanya
+    // punya :id, dan sebuah id milik tenant lain tidak boleh bisa dipulihkan
+    // dari sini.
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new ForbiddenError('Restoring a salary component requires an active company context');
+
+    const component = await payrollRepository.findDeletedSalaryComponent(id, companyId);
+    if (!component) throw new NotFoundError('Deleted salary component not found');
+
+    const restored = await payrollRepository.restoreSalaryComponent(id, companyId);
+    logger.info('Salary component restored', { componentId: id, code: restored.code });
+    return restored;
+  }
+
   async deleteSalaryComponent(id: string) {
     await this.findSalaryComponentById(id);
     await payrollRepository.softDeleteSalaryComponent(id);

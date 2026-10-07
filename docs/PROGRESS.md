@@ -555,6 +555,107 @@ beda" tidak bisa direproduksi di CI — itu sebabnya ia tidak pernah tertangkap.
 
 ---
 
+## Tugas — jenis cuti dan benefit plan: konflik kode yang tidak pernah diperiksa
+
+Dua model yang tidak tersentuh PR #96 karena indeks kompositnya sudah benar sejak
+`20261002100000`. Yang belum diperiksa adalah jalur `create`-nya, dan dua-duanya
+bermasalah.
+
+### `LeaveType.create` sama sekali tidak memeriksa konflik
+
+```ts
+async createLeaveType(data: CreateLeaveTypeDTO) {
+  const type = await leaveRepository.createLeaveType(data);   // langsung INSERT
+```
+
+Tidak ada pemeriksaan apa pun. DTO-nya **mewajibkan** `code` (dan itu benar —
+kode jenis cuti memang dipilih pelanggan), jadi `ANNUAL`, `SICK`, `UNPAID` adalah
+kode yang setiap tenant mau. Membuatnya dua kali, atau membuat ulang sesudah
+menghapus, berarti `INSERT` mati di indeks unik dan pemanggil melihat **500**,
+bukan 409. Ini jalur yang disentuh setiap pelanggan baru saat menyusun katalog
+cutinya.
+
+Sekarang ada `findLeaveTypeByCode(companyId, code)` yang **tidak** menyaring
+`deletedAt` — indeks uniknya juga tidak — dan `createLeaveType` menjawab 409.
+
+### `BenefitPlan` — dua hal
+
+1. `findPlanByCode` menyaring `deletedAt: null`, padahal satu-satunya pemakainya
+   adalah pemeriksaan keunikan di `createPlan`. Jadi filternya salah di
+   satu-satunya tempat ia dipakai: plan yang sudah dihapus masih memegang
+   kodenya, pemeriksaan lolos, lalu gagal di database. Filternya dihapus, bukan
+   ditambah method kedua, karena tidak ada pemakaian bisnis yang perlu dijaga.
+2. DTO-nya menerima `code` lalu membuangnya tanpa pemberitahuan — pola yang sama
+   yang ditutup untuk sepuluh model di PR #96. BenefitPlan terlewat di sana
+   karena auditnya menandai model ini "sudah komposit" dan berhenti di situ.
+   Sekarang kode kiriman klien dipakai kalau ada.
+
+### Yang diperiksa dan ternyata aman
+
+`company-bootstrap.service.ts` memakai pola cari-lalu-create untuk leave type dan
+komponen gaji default, tapi pencariannya `findUnique` pada kunci komposit — dan
+`findUnique` komposit tidak bisa menyaring `deletedAt`, jadi baris terhapus
+**ikut** ketemu dan bootstrap melewatinya alih-alih menabrak indeks. Tidak seperti
+dua belas helper `ensure*Component` di payroll, yang memakai `findFirst` dengan
+filter.
+
+Pemetaan field di `createLeaveType` (spread seluruh DTO) dan `createPlan`
+(dipetakan satu per satu) dua-duanya lengkap — tidak ada ulangan temuan
+`isFixedAllowance` di sini.
+
+### Status verifikasi
+
+`leave-type-code.test.ts` dan `benefit-plan-code.test.ts` (baru): kode bebas →
+tersimpan, kode terpakai → `ConflictError` tanpa pernah memanggil repository
+create, pencarian discoped per perusahaan, dan untuk benefit plan kode kiriman
+klien benar-benar dipakai sementara yang kosong/spasi tetap di-generate.
+## Tugas — memulihkan komponen gaji yang dihapus
+
+Menutup celah yang dicatat di D-007: sesudah pemeriksaan konflik diperbaiki,
+komponen gaji yang di-soft-delete menjawab 409 dan **tidak ada cara memulihkan
+barisnya**, jadi kodenya terkunci selamanya.
+
+### Yang ditambahkan
+
+| Endpoint | Izin | Catatan |
+|---|---|---|
+| `GET /payroll/salary-components/deleted` | `payroll:read` | daftar terpisah, bukan flag `includeDeleted` pada daftar normal — supaya tidak ada pemanggil lama yang tiba-tiba ikut menerima baris terhapus |
+| `POST /payroll/salary-components/:id/restore` | `payroll:update` | beraudit (`action: 'RESTORE'`) |
+
+`companyId` untuk restore diambil dari konteks permintaan, **bukan** dari
+pemanggil: endpointnya hanya punya `:id`, dan id milik tenant lain tidak boleh
+bisa dipulihkan dari sini. Pencariannya `{ id, companyId, deletedAt: { not: null } }`
+— jadi id yang bukan milik perusahaan itu, dan id yang tidak dalam keadaan
+terhapus, dua-duanya 404.
+
+Keunikan tidak diperiksa saat restore, dan itu disengaja:
+`@@unique([companyId, code])` mencakup baris terhapus juga, jadi selama baris itu
+ada, tidak mungkin ada baris lain di perusahaan yang sama dengan kode yang sama.
+
+### Yang ikut diperiksa, dan satu klaim yang dikoreksi
+
+`deleteSalaryComponent(id)` memanggil `findSalaryComponentById(id)` yang tidak
+menyebut `companyId` **di kodenya**. Itu sempat kucatat sebagai lubang tenant
+isolation — **dan itu salah.** `SalaryComponent` ada di `COMPANY_SCOPED_MODELS`
+(`shared/database/prisma.ts`), jadi middleware Prisma menyuntikkan `companyId`
+dari konteks permintaan ke setiap query model itu; id milik tenant lain resolve
+ke nol baris, bukan ke datanya. Backstop itulah yang dimaksud
+[tenant-isolation-audit.md](tenant-isolation-audit.md) dengan "double backstop".
+
+Endpoint restore yang baru tetap menulis filter `companyId` secara eksplisit.
+Bukan karena backstop-nya kurang, tapi karena jalur yang hanya punya `:id` dan
+mengubah data sebaiknya tidak bergantung pada satu lapisan saja — dan karena
+`deletedAt: { not: null }` memang harus eksplisit.
+
+### Status verifikasi
+
+Tiga kasus baru di `salary-component-code.test.ts`: daftar terhapus hanya memuat
+baris terhapus, pencarian sebelum restore memuat filter `companyId` **dan**
+`deletedAt: { not: null }`, dan restore mengosongkan `deletedAt` + mengaktifkan
+kembali sambil tetap discoped.
+
+`docs/api-reference.md` ikut diperbarui (dua baris, dan hitungan operasi payroll
+55 → 57).
 ## Tugas — backfill `isFixedAllowance` dan keputusan soal email karyawan
 
 Dua sisa yang tidak butuh kode baru, dikerjakan bersama karena dua-duanya

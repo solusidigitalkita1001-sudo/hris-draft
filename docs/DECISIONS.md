@@ -204,6 +204,16 @@ komponen dengan kode yang masih dipegang komponen terhapus sekarang menjawab
 UX: belum ada cara memulihkan komponen yang di-soft-delete, jadi kodenya terkunci.
 Menambah endpoint restore adalah pekerjaan tersendiri, bukan tempelan di sini.
 
+**Sudah ditutup.** Celah itu kini punya jalurnya sendiri:
+`GET /payroll/salary-components/deleted` untuk melihat apa yang bisa dipulihkan,
+dan `POST /payroll/salary-components/:id/restore` untuk memulihkannya —
+`payroll:update`, beraudit, dan `companyId`-nya diambil dari konteks karena
+endpoint itu hanya punya `:id`. Keunikan tidak perlu diperiksa saat restore:
+`@@unique([companyId, code])` mencakup baris terhapus, jadi selama baris itu ada,
+tidak mungkin ada baris lain di perusahaan yang sama dengan kode yang sama.
+Dipilih dibanding "revive otomatis saat create" karena yang itu akan menghidupkan
+baris lama dengan `id` yang sama secara diam-diam — payslip historis yang
+mereferensikan id itu ikut berubah arti.
 ---
 
 ## D-008 — `Employee.email` unik se-instalasi: dibiarkan atau dipindah per perusahaan?

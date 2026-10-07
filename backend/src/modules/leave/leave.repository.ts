@@ -10,6 +10,14 @@ export class LeaveRepository {
     return prisma.leaveType.findMany({ where: { companyId, deletedAt: null }, orderBy: { sortOrder: 'asc' } });
   }
 
+  // Pertanyaan keunikan, bukan pertanyaan bisnis: @@unique([companyId, code])
+  // tidak tahu soal soft delete, jadi jenis cuti yang sudah dihapus masih
+  // memegang kodenya. Tanpa menyertakan baris terhapus, create menjawab 500
+  // (constraint mentah) alih-alih 409.
+  async findLeaveTypeByCode(companyId: string, code: string) {
+    return prisma.leaveType.findFirst({ where: { companyId, code } });
+  }
+
   async createLeaveType(data: CreateLeaveTypeDTO) {
     return prisma.leaveType.create({ data });
   }
