@@ -153,6 +153,11 @@ perusahaan utama, satu untuk tenant kedua (`companyDigi`). Pelajarannya bukan
 skema dari compiler, jadi setiap perubahan `@unique` harus diperiksa langsung di
 seed, bukan diserahkan ke type-check.
 
+**Hasilnya: hijau.** Run CI pada commit `77c6206` lulus kesepuluh job, termasuk
+dua yang tadi gagal (`Migration rehearsal`, `Browser E2E`) dan dua yang blocking
+(`Backend type-check + build`, `Real-database integration suites`). Syarat
+"jangan anggap selesai sebelum CI hijau" di atas sudah terpenuhi.
+
 ### Dilewati, tanpa ditebak
 
 Tidak ada format atau tarif resmi yang tersentuh tugas ini, jadi tidak ada yang
