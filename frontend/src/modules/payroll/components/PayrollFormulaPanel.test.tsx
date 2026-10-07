@@ -4,13 +4,19 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { PayrollFormulaPanel } from './PayrollFormulaPanel';
 import { payrollFormulaService as service, type PayrollFormulaVersion } from '@/services/payroll-formula.service';
 import type { SalaryComponent } from '@/services/payroll.service';
+import { I18nProvider } from '@/i18n/provider';
 vi.mock('@/services/payroll-formula.service', () => ({ payrollFormulaService: { list: vi.fn(), create: vi.fn(), preview: vi.fn(), publish: vi.fn() } }));
 const auth = vi.hoisted(() => ({ user: { id: 'reviewer' }, hasPermission: (_resource: string, action: string) => ['update', 'approve'].includes(action) }));
 vi.mock('@/stores/auth.store', () => ({ useAuthStore: (selector: (state: typeof auth) => unknown) => selector(auth) }));
 const component: SalaryComponent = { id: 'bonus', companyId: 'company', name: 'Bonus', code: 'BONUS', type: 'ALLOWANCE', calculationMethod: 'FIXED', amount: 100,
-  isTaxable: true, isProrated: false, isActive: true, sortOrder: 0, createdAt: '' };
+  isTaxable: true, isProrated: false, isFixedAllowance: false, isActive: true, sortOrder: 0, createdAt: '' };
 const version: PayrollFormulaVersion = { id: 'v1', componentId: 'bonus', version: 1, expression: 'BASE_SALARY / 10', effectiveFrom: '2026-10-01', status: 'DRAFT', createdBy: 'maker', previewedAt: '2026-09-08T00:00:00Z', publishedAt: null, publishedBy: null, engineVersion: 1 };
-function renderPanel() { return render(<PayrollFormulaPanel component={component} components={[component]} onClose={vi.fn()} onChanged={vi.fn()} />); }
+function renderPanel() {
+  // The panel reads copy through useI18n, which throws outside the provider.
+  // Every case in this file failed on that, and nothing noticed because the
+  // frontend suite is not wired into CI.
+  return render(<I18nProvider><PayrollFormulaPanel component={component} components={[component]} onClose={vi.fn()} onChanged={vi.fn()} /></I18nProvider>);
+}
 async function simulate() {
   fireEvent.change(await screen.findByLabelText('Gaji pokok (IDR)'), { target: { value: '1000' } });
   fireEvent.click(screen.getByRole('button', { name: 'Jalankan simulasi' }));

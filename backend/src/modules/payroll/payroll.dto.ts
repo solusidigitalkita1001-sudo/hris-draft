@@ -12,6 +12,10 @@ export const createSalaryComponentSchema = z.object({
   ratePercent: z.number().min(0).max(100).optional(),
   isTaxable: z.boolean().default(true),
   isProrated: z.boolean().default(false),
+  // Tunjangan tetap: enters the statutory "upah sebulan" used for THR and the
+  // leave-encashment daily rate. Default false so a new component is only a
+  // fixed allowance when somebody says so.
+  isFixedAllowance: z.boolean().default(false),
   description: z.string().optional(),
   sortOrder: z.number().int().default(0),
 });
@@ -77,6 +81,11 @@ export const createPayrollRunSchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1).max(255),
   notes: z.string().optional(),
+  /**
+   * Jenis run. Default REGULAR supaya klien yang sudah ada tidak berubah
+   * perilakunya; satu periode boleh punya satu run per jenis.
+   */
+  runType: z.enum(['REGULAR', 'THR', 'SEVERANCE', 'CORRECTION']).optional(),
 });
 
 export const approvePayrollRunSchema = z.object({
@@ -97,6 +106,15 @@ export const calculateThrStandaloneSchema = z.object({
   monthlyWage: z.number().min(0).max(1_000_000_000_000),
   joinDate: z.string().datetime(),
   referenceDate: z.string().datetime().optional(),
+  // PTKP status, so the endpoint can also say what will be withheld. All
+  // optional: this is a pure calculator and the caller may not know the
+  // employee's status. Omit them and the response reports no tax rather than
+  // quietly assuming TK/0, which would understate it for everybody else.
+  married: z.boolean().optional(),
+  dependents: z.number().int().min(0).max(3).optional(),
+  hasNpwp: z.boolean().optional(),
+  monthlyPensionContribution: z.number().min(0).optional(),
+  method: z.enum(['ANNUALIZED', 'TER']).optional(),
 });
 
 export const calculateBpjsSchema = z.object({

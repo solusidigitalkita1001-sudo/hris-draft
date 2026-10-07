@@ -47,6 +47,14 @@ export async function seedRoles(): Promise<void> {
       priority: 5,
     },
     {
+      name: 'Finance',
+      code: 'FINANCE',
+      description: 'Releases payroll payments; separate from the HR staff who prepare them',
+      scope: 'COMPANY' as const,
+      isSystem: true,
+      priority: 6,
+    },
+    {
       name: 'Manager',
       code: 'MANAGER',
       description: 'Department manager with approval authority',

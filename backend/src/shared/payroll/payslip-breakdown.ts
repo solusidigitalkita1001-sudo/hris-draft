@@ -22,13 +22,37 @@ export interface PayslipComponentRow {
 
 export interface PayslipBreakdown {
   baseSalary: number;
-  /** Earnings: basic + allowances */
+  /** Earnings, exactly as the payslip recorded them. */
   earnings: PayslipComponentRow[];
   totalEarnings: number;
   /** Deductions: statutory + loans etc */
   deductions: PayslipComponentRow[];
   totalDeductions: number;
   takeHomePay: number;
+  /**
+   * Whether the rows account for the money, and what is missing if they do not.
+   *
+   * The stored totals are what moved; the rows are what the payslip can show.
+   * They should agree, and when they do not the reason is almost always a
+   * salary allocation with no component for base pay — so the figures say so
+   * instead of being quietly reconciled by an invented row.
+   */
+  reconciliation: {
+    /** Summed from the rows alone. */
+    rowsEarnings: number;
+    rowsDeductions: number;
+    rowsTakeHomePay: number;
+    /** False when the rows do not account for the stored totals. */
+    matchesStored: boolean;
+    /** Stored earnings minus the rows' earnings; 0 when they agree. */
+    unaccountedEarnings: number;
+    /**
+     * Base salary that no component represents. Not added to anything: it was
+     * not paid, and showing it as income would make the payslip disagree with
+     * the transfer.
+     */
+    unallocatedBaseSalary: number;
+  };
   /** Summary potongan statutory (ringkasan cepat) */
   statutorySummary: {
     bpjsTK: number;       // JHT employee + JP employee
@@ -123,24 +147,42 @@ export function buildPayslipBreakdown(input: {
   const base = Number(input.baseSalary) || 0;
   const rows = (input.components ?? []).map((c) => buildRow(c));
 
-  // Inject BASE SALARY jika tidak ada component BASIC explicit (umumnya employee base salary
-  // ada di field Payslip.baseSalary, bukan di PayslipComponent):
-  const hasBasicComponent = rows.some((r) => r.code === 'BASIC');
-  if (!hasBasicComponent && base > 0) {
-    rows.unshift({
-      name: LABEL_MAP.BASIC.label,
-      code: 'BASIC',
-      description: LABEL_MAP.BASIC.description,
-      amount: base,
-      type: 'ALLOWANCE',
-      isTaxable: true,
-    });
-  }
-
+  // A base-salary row is NO LONGER INVENTED when the allocation has none.
+  //
+  // It used to be, with a comment saying base pay "umumnya ada di field
+  // Payslip.baseSalary, bukan di PayslipComponent" — and the stored
+  // totalEarnings and netPay passed into this function were then ignored and
+  // recomputed from the rows. So for an allocation without a base-pay
+  // component the payslip showed base salary as income while the bank transfer
+  // paid netPay, which does not include it: the slip and the money disagreed,
+  // and the two stored figures that would have revealed it were discarded.
+  //
+  // The rows now show what was recorded, the stored totals are believed, and
+  // any gap is reported rather than filled in.
   const earnings = rows.filter((r) => r.type === 'ALLOWANCE');
   const deductions = rows.filter((r) => r.type === 'DEDUCTION');
-  const totalEarnings = earnings.reduce((s, r) => s + r.amount, 0);
-  const totalDeductions = deductions.reduce((s, r) => s + r.amount, 0);
+  const rowsEarnings = earnings.reduce((s, r) => s + r.amount, 0);
+  const rowsDeductions = deductions.reduce((s, r) => s + r.amount, 0);
+
+  const hasStored = input.totalEarnings !== undefined || input.netPay !== undefined;
+  const storedEarnings = Number(input.totalEarnings ?? NaN);
+  const storedDeductions = Number(input.totalDeductions ?? NaN);
+  const storedNet = Number(input.netPay ?? NaN);
+  const totalEarnings = Number.isFinite(storedEarnings) ? storedEarnings : rowsEarnings;
+  const totalDeductions = Number.isFinite(storedDeductions) ? storedDeductions : rowsDeductions;
+  const takeHomePay = Number.isFinite(storedNet) ? storedNet : rowsEarnings - rowsDeductions;
+
+  const unaccountedEarnings = Number((totalEarnings - rowsEarnings).toFixed(2));
+  const hasBasicComponent = rows.some((r) => r.code === 'BASIC');
+  const reconciliation = {
+    rowsEarnings,
+    rowsDeductions,
+    rowsTakeHomePay: rowsEarnings - rowsDeductions,
+    matchesStored: !hasStored
+      || (unaccountedEarnings === 0 && Number((totalDeductions - rowsDeductions).toFixed(2)) === 0),
+    unaccountedEarnings,
+    unallocatedBaseSalary: hasBasicComponent || base <= 0 ? 0 : base,
+  };
 
   // Statutory summary (potongan wajib dari employee)
   const sumCode = (code: string) => deductions.filter((r) => r.code === code).reduce((s, r) => s + r.amount, 0);
@@ -156,7 +198,8 @@ export function buildPayslipBreakdown(input: {
     totalEarnings,
     deductions,
     totalDeductions,
-    takeHomePay: totalEarnings - totalDeductions,
+    takeHomePay,
+    reconciliation,
     statutorySummary: {
       bpjsTK,
       bpjsKesehatan,

@@ -59,7 +59,7 @@ describe('tenant constraint enforcement', () => {
       announcement: { OR: [{ companyId: 'A' }, { companyId: null }] },
     }]);
   });
-  it.each(['TaxBracket', 'PtkpTable', 'BpjsReference'] as const)(
+  it.each(['TaxBracket', 'PtkpTable', 'BpjsReference', 'TerBracket'] as const)(
     'lets %s fall back to platform rows while hiding another tenant override', async model => {
       const read = params('findMany', { where: { year: { lte: 2026 } } }, model);
       await enforceTenantScope(read, 'A');

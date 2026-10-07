@@ -78,3 +78,9 @@ export const submitTrainingFeedbackSchema = z.object({
 
 export type RecordTrainingScoreDTO = z.infer<typeof recordTrainingScoreSchema>;
 export type SubmitTrainingFeedbackDTO = z.infer<typeof submitTrainingFeedbackSchema>;
+
+/** Rekap efektivitas; tanpa courseId berarti seluruh kursus perusahaan. */
+export const courseEffectivenessQuerySchema = z.object({
+  companyId: z.string().uuid().optional(),
+  courseId: z.string().uuid().optional(),
+});

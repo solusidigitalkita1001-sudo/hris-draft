@@ -4,7 +4,12 @@ import { ForbiddenError } from '@/shared/exceptions/AppError';
 import type { Prisma } from '@prisma/client';
 
 export const EWA_HR_ROLES = ['HR_STAFF', 'HR_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
-export const EWA_FINANCE_ROLES = ['FINANCE_STAFF', 'FINANCE_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
+// FINANCE is the seeded role that releases money (03-role-permissions.seed.ts);
+// it was missing here, so the one role defined for disbursement could not mark
+// an EWA payout paid while the payroll approver could. FINANCE_STAFF and
+// FINANCE_MANAGER are not seeded by this product and stay only because a
+// tenant may have defined them.
+export const EWA_FINANCE_ROLES = ['FINANCE', 'FINANCE_STAFF', 'FINANCE_MANAGER', 'COMPANY_ADMIN', 'GROUP_ADMIN', 'SUPER_ADMIN'];
 
 export async function ewaAccess(options: { companyId?: string; actorId?: string; self?: boolean } = {}) {
   const actor = getCurrentUser(), companyId = getCurrentCompanyId();

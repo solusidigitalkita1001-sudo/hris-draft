@@ -39,6 +39,18 @@ export const leaveReportQuerySchema = withOrderedDateRange({
 export const payrollReportQuerySchema = z.object({
   companyId: z.string().uuid().optional(),
   periodId: z.string().uuid().optional(),
+  /// Adds a per-department breakdown of the runs in scope.
+  byDepartment: z.enum(['true', 'false']).optional(),
+});
+
+/**
+ * Leave balance is a position at a moment, not a sum over a range, so this
+ * takes a year rather than a date window like the other reports.
+ */
+export const leaveBalanceReportQuerySchema = z.object({
+  companyId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
 });
 
 export const turnoverReportQuerySchema = withOrderedDateRange({

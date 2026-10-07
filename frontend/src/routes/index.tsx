@@ -93,6 +93,7 @@ import { RoleListPage } from '@/modules/rbac/pages/RoleListPage';
 
 // Self Service Pages
 const SelfServicePage = lazy(() => import('@/modules/self-service/pages/SelfServicePage').then((m) => ({ default: m.SelfServicePage })));
+const AttendanceCorrectionPage = lazy(() => import('@/modules/attendance-correction/pages/AttendanceCorrectionPage').then((m) => ({ default: m.AttendanceCorrectionPage })));
 
 // Employee Loan Pages
 import { EmployeeLoanPage } from '@/modules/employee-loan/pages/EmployeeLoanPage';
@@ -123,6 +124,7 @@ import { AdminAuditLogDetailPage } from '@/modules/admin/pages/AdminAuditLogDeta
 import { AdminSettingsPage } from '@/modules/admin/pages/AdminSettingsPage';
 import { AdminMenuAccessPage } from '@/modules/admin/pages/AdminMenuAccessPage';
 import { AdminDataScopePage } from '@/modules/admin/pages/AdminDataScopePage';
+import { CompanySettingsPage } from '@/modules/settings/pages/CompanySettingsPage';
 const WorkflowAdminPage = lazy(() => import('@/modules/workflow-engine/pages/WorkflowAdminPage').then((m) => ({ default: m.WorkflowAdminPage })));
 import { EMPLOYEE_SELF_SERVICE_ROLES, OPERATIONAL_ROLES } from '@/lib/access-control';
 
@@ -642,6 +644,15 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // Attendance Correction (self-service, GAP-30)
+      {
+        path: 'attendance-corrections',
+        element: (
+          <ProtectedRoute requiredRoles={EMPLOYEE_SELF_SERVICE_ROLES}>
+            <AttendanceCorrectionPage />
+          </ProtectedRoute>
+        ),
+      },
       // My Payslips (self-service)
       {
         path: 'my-payslips',
@@ -876,6 +887,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'rbac', action: 'update' }]}>
             <AdminDataScopePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/company-settings',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'settings', action: 'read' }]}>
+            <CompanySettingsPage />
           </ProtectedRoute>
         ),
       },

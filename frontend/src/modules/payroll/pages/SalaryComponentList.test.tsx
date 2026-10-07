@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SalaryComponentList } from './SalaryComponentList';
 import { payrollService, type SalaryComponent } from '@/services/payroll.service';
+import { I18nProvider } from '@/i18n/provider';
 vi.mock('@/services/payroll.service', () => ({ payrollService: { getSalaryComponents: vi.fn() } }));
 vi.mock('../components/PayrollFormulaPanel', () => ({ PayrollFormulaPanel: ({ component }: { component: SalaryComponent }) => <div role="region" aria-label="Formula editor">Formula {component.companyId}</div> }));
 const companies = vi.hoisted(() => ({ activeCompanyId: 'company-a' }));
@@ -14,12 +15,12 @@ describe('salary component company switch', () => {
     companies.activeCompanyId = 'company-a';
     vi.mocked(payrollService.getSalaryComponents).mockImplementation(async companyId => [{
       id: `${companyId}-bonus`, companyId, code: 'BONUS', name: `Bonus ${companyId}`, type: 'ALLOWANCE', calculationMethod: 'FIXED', amount: 100,
-      isTaxable: true, isProrated: false, isActive: true, sortOrder: 0, createdAt: '',
+      isTaxable: true, isProrated: false, isFixedAllowance: false, isActive: true, sortOrder: 0, createdAt: '',
     }]);
-    const view = render(<SalaryComponentList />);
+    const view = render(<I18nProvider><SalaryComponentList /></I18nProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'Kelola formula Bonus company-a' }));
     expect(screen.getByRole('region', { name: 'Formula editor' }).textContent).toBe('Formula company-a');
-    companies.activeCompanyId = 'company-b'; view.rerender(<SalaryComponentList />);
+    companies.activeCompanyId = 'company-b'; view.rerender(<I18nProvider><SalaryComponentList /></I18nProvider>);
     expect(screen.queryByRole('region', { name: 'Formula editor' })).toBeNull();
     await screen.findByRole('button', { name: 'Kelola formula Bonus company-b' });
     await waitFor(() => expect(payrollService.getSalaryComponents).toHaveBeenLastCalledWith('company-b'));

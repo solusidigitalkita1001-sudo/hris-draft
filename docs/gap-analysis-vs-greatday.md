@@ -11,18 +11,48 @@ Legenda:
 
 ---
 
+> **Status diukur ulang 1 Oktober 2026.** Dokumen ini sempat salah ke arah yang
+> jarang terjadi: ia **meremehkan** kemajuan. Empat belas gap yang masih
+> tercatat terbuka ternyata punya implementasi yang berjalan, dan satu lagi
+> (GAP-06) sudah berjalan separuh. Penyebabnya bisa dilacak: beberapa gap
+> ditutup lewat modul dengan nama lain dari yang dicari dokumen ini —
+> GAP-29 misalnya ada di `modules/reports`, bukan `modules/report`, sehingga
+> pencarian sebelumnya tidak menemukannya.
+>
+> Status yang ketinggalan berbahaya di dua arah: orang mengerjakan ulang hal
+> yang sudah selesai, atau berhenti mempercayai dokumennya. Karena itu setiap
+> penutupan di bawah menyebut **berkas dan simbol** yang jadi buktinya, supaya
+> pembaca berikutnya bisa memeriksa ulang alih-alih percaya pada suntingan ini
+> — persis seperti suntingan ini tidak bisa percaya pada dokumen sebelumnya.
+>
+> Paragraf "Kondisi saat ini" di setiap gap **sengaja dibiarkan** sebagai
+> catatan analisis awal; yang berlaku adalah blok DITUTUP/SEBAGIAN di bawahnya.
+
 ## Ringkasan Eksekutif
 
-Sistem ini sudah punya **fondasi domain yang solid** — 22 modul, 150+ model Prisma, perhitungan payroll sesuai regulasi Indonesia. Tapi ada **dua jenis gap** yang berbeda:
+Sistem ini sudah punya **fondasi domain yang solid** — 22 modul, 150+ model Prisma, perhitungan payroll sesuai regulasi Indonesia.
 
-1. **Alur yang ada tapi tidak berjalan** — implementasi parsial, titik sambung antar-modul putus (overtime tidak masuk payslip, attendance summary tidak ada review stage, self-approval tidak dicegah, formula tidak diimplementasi).
-2. **Alur yang sama sekali belum ada** — fitur yang diekspektasikan di HRIS enterprise level tapi tidak ada model maupun flow-nya (bank transfer file, attendance correction, contract monitoring, carry-over otomatis, PPh21 annual reconciliation).
+Hitungan per 1 Oktober 2026, dari 39 gap:
+
+| Status | Jumlah | Keterangan |
+|---|---|---|
+| Ditutup | **30** | diverifikasi ke berkas dan simbolnya, bukan dari ingatan |
+| Sebagian | **3** | GAP-06 (carry-over jalan, expiry belum), GAP-32 dan GAP-33 (angkanya siap, berkas resminya menunggu satu contoh asli) |
+| Terbuka | **1** | GAP-17 gross-up — tidak ada jejaknya sama sekali di `backend/src` |
+| Sengaja dilewati | **5** | GAP-07, GAP-30, GAP-35, GAP-36, GAP-39 |
+
+Dua jenis gap yang semula dibedakan dokumen ini sudah tidak lagi membagi
+daftarnya: contoh untuk keduanya — overtime yang tidak masuk payslip, berkas
+transfer bank, attendance correction, carry-over — semuanya sudah ditutup.
+Yang tersisa bukan lagi "alur yang putus", melainkan satu metode perhitungan
+yang belum dibuat (gross-up), satu kedaluwarsa saldo yang menunggu keputusan
+kebijakan, dan dua berkas pelaporan resmi yang menunggu contoh dokumen asli.
 
 ---
 
 ## Domain 1: Attendance (Absensi)
 
-### 🔴 GAP-01 — Attendance Correction/Regularization Flow
+### 🟢 GAP-01 — Attendance Correction/Regularization Flow — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** karyawan yang lupa check-in, check-in di luar zona GPS, atau ada error sistem bisa mengajukan **koreksi absensi** (regularization request) ke supervisor untuk diapprove. Setelah approve, record absensi diperbarui dan deduction tidak berlaku.
 
@@ -30,9 +60,16 @@ Sistem ini sudah punya **fondasi domain yang solid** — 22 modul, 150+ model Pr
 
 **Dampak:** absensi error → potong gaji tanpa bisa dikoreksi → complaint operasional tinggi.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Model dan alurnya ada:
+`attendance_corrections` menyimpan snapshot sebelum perubahan
+(`before_check_in`/`before_check_out`, schema.prisma:3288),
+`attendance-correction.service.ts:159` mengisinya dan menghitung ulang
+`workDuration` (:134), dan persetujuannya lewat workflow engine
+(`startInstance` di :64, endpoint `/:id/workflow-action`).
 ---
 
-### 🟠 GAP-02 — Attendance Summary Review Stage Sebelum Payroll
+### 🟢 GAP-02 — Attendance Summary Review Stage Sebelum Payroll — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** sebelum payroll run dikunci, HR bisa review **summary absensi per karyawan per periode** (hadir, tidak hadir, terlambat, lembur, cuti) dalam satu tampilan — bisa edit jika ada koreksi manual — baru kemudian lock dan proses payroll.
 
@@ -40,9 +77,14 @@ Sistem ini sudah punya **fondasi domain yang solid** — 22 modul, 150+ model Pr
 
 **Dampak:** payroll tidak akurat, HR tidak punya visibility sebelum commit → kesalahan baru ketahuan setelah gaji keluar.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Tahap review ada sebagai data,
+bukan sebagai konvensi: `payroll_periods.attendance_reviewed_at`
+(schema.prisma:451) menandai absensi sudah ditinjau, dan periode tidak bisa
+ditutup selama run belum APPROVED/DISBURSED.
 ---
 
-### 🟠 GAP-03 — Default Attendance Policy di Level Company
+### 🟢 GAP-03 — Default Attendance Policy di Level Company — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** kalau `BranchAttendancePolicy` tidak diset untuk sebuah branch, sistem **fallback ke policy level company**. Tidak boleh ada branch yang tidak punya policy sama sekali.
 
@@ -50,19 +92,32 @@ Sistem ini sudah punya **fondasi domain yang solid** — 22 modul, 150+ model Pr
 
 **Dampak:** friction operasional untuk company kecil/menengah, kemungkinan branch tanpa policy → behavior undefined.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Kebijakan absensi punya model
+sendiri dengan `late_tolerance_minutes` (schema.prisma:3320), diselesaikan per
+konteks di `attendance-context.service.ts:74`, dipakai saat menilai
+keterlambatan di `attendance.service.ts:375`, dan bisa diatur lewat
+`organization.dto.ts:66`.
 ---
 
-### 🟡 GAP-04 — Shift Scheduling Per Karyawan
+### 🟢 GAP-04 — Shift Scheduling Per Karyawan — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** HR bisa assign shift spesifik ke karyawan tertentu untuk tanggal/rentang tertentu, berbeda dari ShiftFormula default departemennya.
 
 **Kondisi saat ini:** `EmployeeShiftOverride` sudah ada di schema tapi service/controller belum ada. Endpoint `work-calendar` tidak expose override management.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). `assignEmployeeShift`
+(`work-calendar.service.ts`) menulis `EmployeeShiftOverride` dengan
+`source: 'HR_ASSIGNMENT'`, yang dibaca payroll di
+`shared/payroll/attendance-calendar.ts:76`. Tanggal di periode payroll yang
+sudah tertutup ditolak, dan swap yang sudah disetujui pada tanggal yang sama
+tidak ditimpa diam-diam.
 ---
 
 ## Domain 2: Leave (Cuti)
 
-### 🔴 GAP-05 — Perhitungan Hari Cuti Pakai Hari Kalender, Bukan Hari Kerja
+### 🟢 GAP-05 — Perhitungan Hari Cuti Pakai Hari Kalender, Bukan Hari Kerja — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** saat karyawan ajukan cuti 5 hari Senin–Jumat, sistem hitung 5 hari kerja. Kalau ada libur nasional di tengahnya, potong saldo cuti 4 hari saja.
 
@@ -74,14 +129,27 @@ Modul `work-calendar` (termasuk `NationalHoliday`) sudah ada tapi **tidak dipaka
 
 **Dampak:** potong saldo cuti lebih dari seharusnya → complaint langsung dari karyawan.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Perhitungan hari cuti membaca
+`national_holidays` (`leave.repository.ts:63`), jadi hari libur tidak lagi
+dihitung sebagai hari cuti.
 ---
 
-### 🟠 GAP-06 — Leave Carry-Over & Expiry Otomatis
+### 🟡 GAP-06 — Leave Carry-Over & Expiry Otomatis — SEBAGIAN (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** tiap pergantian tahun/periode, saldo cuti yang tidak terpakai di-carry-over ke tahun berikutnya (dengan batas maksimal) atau expired. Proses ini berjalan otomatis via cron job.
 
 **Kondisi saat ini:** field `expiredAt` ada di `LeaveBalance` tapi tidak ada scheduler/cron yang menjalankan carry-over atau expire otomatis. Infrastruktur BullMQ sudah ada, tinggal implementasinya.
 
+
+**SEBAGIAN** (diukur ulang 1 Okt 2026). Carry-over **ada dan
+terpakai**: `shared/leave/accrual.ts` menghitungnya lewat `calculateCarryOver`
+dan dipakai `modules/leave/leave.service.ts`. Yang **belum ada** adalah
+kedaluwarsanya — tidak ada satu pun simbol expiry carry-over di seluruh
+`backend/src`, jadi saldo bawaan tidak pernah hangus. Itu sisa pekerjaan yang
+sebenarnya di gap ini, dan ukurannya kecil; yang perlu diputuskan lebih dulu
+adalah kapan hangusnya (akhir tahun berikutnya, atau N bulan setelah
+carry-over) karena itu kebijakan HR, bukan pilihan teknis.
 ---
 
 ### 🟠 GAP-07 — Self-Approval Tidak Dicegah di Leave (dan modul lain)
@@ -159,7 +227,7 @@ Verifikasi: 32 test. Detail: `docs/leave-encashment.md`.
 
 ## Domain 3: Payroll
 
-### 🔴 GAP-10 — Overtime & Attendance Tidak Masuk ke Payslip
+### 🟢 GAP-10 — Overtime & Attendance Tidak Masuk ke Payslip — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** saat payroll run dieksekusi, engine otomatis query overtime approved + data kehadiran dalam periode → hitung upah lembur + potongan absen/terlambat → masukkan ke komponen payslip.
 
@@ -171,17 +239,28 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 **Dampak:** payslip tidak akurat, ini fitur utama HRIS yang diharapkan HR.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). `payroll-attendance.ts`
+memisahkan `overtimeWorkday` dan `overtimeHoliday`, dan nilainya masuk ke slip
+sebagai komponen lewat `createPayslipComponents`
+(`payroll.service.ts:1025`).
 ---
 
-### 🔴 GAP-11 — Potongan Gaji Otomatis untuk Telat/Tidak Masuk
+### 🟢 GAP-11 — Potongan Gaji Otomatis untuk Telat/Tidak Masuk — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** policy potongan gaji per menit terlambat (atau per hari absen) dikonfigurasi di company/branch settings, lalu otomatis dihitung saat payroll run.
 
 **Kondisi saat ini:** `SalaryComponent.calculationMethod: 'FORMULA'` dideklarasikan di schema tapi **tidak diimplementasi** — kalau dipilih di UI, tidak ada yang terjadi. `BranchAttendancePolicy` hanya atur toleransi & GPS, bukan deduction.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Komponen
+`LATE_DEDUCTION_AUTO` dan `ABSENCE_DEDUCTION_AUTO` terdaftar di
+`shared/payroll/formula.ts:11`, dikendalikan per perusahaan oleh
+`late_deduction_enabled` dengan tarif `late_deduction_default_rate_per_minute`
+(`company-settings.service.ts:47`).
 ---
 
-### 🟠 GAP-12 — Tidak Ada Bank Transfer File Generation
+### 🟢 GAP-12 — Tidak Ada Bank Transfer File Generation — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** setelah payroll diapprove, HR bisa export **file transfer bank** (format BCA KlikBizz, BNI Payroll, Mandiri Cash Management, dll.) yang langsung bisa di-upload ke internet banking perusahaan.
 
@@ -189,6 +268,12 @@ Engine `calculateOvertimePay()` sudah benar secara hukum (Permenaker 6/2016) tap
 
 **Dampak:** HR masih harus input manual di internet banking → error prone, tidak efisien.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). `POST
+/payroll-payments/:id/export` memanggil `exportBatch`
+(`payroll-payment.service.ts:248`), yang membangun berkas transfer lewat
+`generateBankCsv(bankCode, …)` dengan header, delimiter dan nama berkas per
+bank (:257).
 ---
 
 ### 🟢 GAP-13 — Payslip Distribution Otomatis — DITUTUP 30 Sep
@@ -258,12 +343,18 @@ yang salah adalah masalah berbeda dan endpoint rapel menolaknya secara eksplisit
 
 ---
 
-### 🟠 GAP-15 — Payroll Maker-Checker (Approve ≠ Disburse)
+### 🟢 GAP-15 — Payroll Maker-Checker (Approve ≠ Disburse) — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** prinsip four-eyes — satu orang yang approve payroll tidak boleh juga yang disburse. Minimal permission berbeda atau flag audit.
 
 **Kondisi saat ini (`payroll.routes.ts`):** approve dan disburse pakai permission identik `payroll:approve`. Satu orang bisa approve lalu langsung disburse tanpa oversight.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Pencairan adalah transisi
+tersendiri: `payroll-payment-settlement.ts:34` menulis `status: 'DISBURSED'`
+beserta `disbursedBy`/`disbursedAt`, dan mencatat transaksi menuntut permission
+**`payroll:disburse`** yang berbeda dari `payroll:process`
+(`payroll-payment.routes.ts:92`).
 ---
 
 ### 🟢 GAP-16 — PPh21 Annual Reconciliation — DITUTUP 30 Sep
@@ -310,12 +401,18 @@ Verifikasi: 13 + 6 + 1 test. Detail: `docs/pph21-december-reconciliation.md`.
 
 ## Domain 4: Organization & Employee
 
-### 🟠 GAP-18 — Employee Transfer/Mutation Flow
+### 🟢 GAP-18 — Employee Transfer/Mutation Flow — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** alur formal mutasi karyawan — HR/atasan ajukan → approval → effective date — setelah approved, data employee (department, position, branch, atasan) otomatis berubah di tanggal efektif. History terjaga di `EmployeeCareerTransaction`.
 
 **Kondisi saat ini:** `EmployeeCareerTransaction` ada di schema, tapi tidak ada service/controller untuk alur mutasi dengan approval. Perubahan posisi/department dilakukan langsung edit employee tanpa approval flow.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Mutasi memakai
+`EmployeeCareerTransaction` dengan tujuan eksplisit (`to_branch_id`,
+`to_department_id`, `to_position_id`, schema.prisma:2506-2510) dan berlaku
+sesuai tanggal: `career-transaction.scheduler.ts` menerapkan yang jatuh tempo
+**tepat sekali** lewat klaim bersyarat atas `appliedAt`.
 ---
 
 ### 🟢 GAP-19 — Contract/PKWT Renewal Monitoring — DITUTUP 30 Sep
@@ -427,7 +524,7 @@ Verifikasi: 33 test. Detail: `docs/job-requisition.md`.
 
 ## Domain 5: Workflow & Approval
 
-### 🟠 GAP-23 — Workflow Engine Tidak Dipakai Konsisten
+### 🟢 GAP-23 — Workflow Engine Tidak Dipakai Konsisten — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** semua alur yang butuh approval (leave, overtime, travel expense, loan, mutation, salary revision, payroll) menggunakan `WorkflowEngine` yang sudah dibangun — bukan hardcode permission flat.
 
@@ -439,14 +536,29 @@ Verifikasi: 33 test. Detail: `docs/job-requisition.md`.
 
 `WorkflowEngine` (fondasi sudah solid) hanya dipakai di performance review — belum diadopsi modul lain.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Domain mengirim ke engine
+lewat `startInstance` (mis. `attendance-correction.service.ts:64`,
+`attendance.service.ts:1060`) dan tiap modul punya `/workflow-action` sendiri.
+Engine-nya menolak aktor yang bukan approver yang ditugaskan, pemohonnya
+sendiri, subjek permintaannya, dan siapa pun yang sudah bertindak di level
+sebelumnya.
 ---
 
-### 🟠 GAP-24 — Company Settings & Policy Tidak Dipakai
+### 🟢 GAP-24 — Company Settings & Policy Tidak Dipakai — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** setiap company bisa konfigurasi policy mereka sendiri — cut-off date payroll, metode PPh21, default leave policy, fitur yang diaktifkan/dinonaktifkan.
 
 **Kondisi saat ini:** tabel `CompanySetting`, `GroupSetting`, `GroupPolicy` sudah ada di schema Prisma tapi **0% dipakai** di service/controller manapun. Semua setting masih hardcoded atau tidak ada.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Setting per perusahaan
+benar-benar mengubah perilaku, dibaca lewat kunci komposit `companyId_key` di
+delapan tempat di luar seed — antara lain
+`loan_max_installment_percent_of_salary` (`employee-loan.service.ts:111`),
+`payslip_email_notification_enabled` (`payroll.service.ts:425`),
+`pph21_december_reconciliation_enabled` (:595) dan
+`recruitment_requisition_required` (`job-requisition.service.ts:37`).
 ---
 
 ## Domain 6: Training & Performance
@@ -552,20 +664,30 @@ Verifikasi: 23 test.
 
 ## Domain 8: System & Infrastructure
 
-### 🟠 GAP-28 — Notification Event Mapping Tidak Lengkap
+### 🟢 GAP-28 — Notification Event Mapping Tidak Lengkap — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** setiap event penting (leave approved/rejected, payslip published, overtime approved, contract akan expired, probation deadline) otomatis trigger notifikasi ke user yang relevan.
 
 **Kondisi saat ini:** notification module securitynya sudah benar, tapi tidak ada mapping komprehensif event → notifikasi. Hanya beberapa event yang trigger notifikasi — sebagian besar tidak.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Event domain punya antrean
+sendiri (`QueueNames.DOMAIN_EVENTS`, `worker.ts:114`) dengan konsumer yang
+men-fan-out ke notifikasi dan webhook (`worker.ts:149`), plus sweep berkala
+untuk push dan webhook delivery.
 ---
 
-### 🟡 GAP-29 — Report Module Belum Diimplementasi
+### 🟢 GAP-29 — Report Module Belum Diimplementasi — DITUTUP (diukur ulang 1 Okt 2026)
 
 **Yang seharusnya ada:** minimal report standar HRIS: headcount per department/status, turnover rate, absenteeism rate, payroll summary per department, leave balance per karyawan, overtime per periode.
 
 **Kondisi saat ini:** modul `reports` ada strukturnya (routes/controller/service) tapi implementation-nya tidak ada — semua endpoint placeholder.
 
+
+**DITUTUP** (diukur ulang 1 Okt 2026). Modulnya ada di
+`modules/reports` — bukan `modules/report`, yang membuat pencarian sebelumnya
+tidak menemukannya — lengkap dengan `reports.routes.ts`,
+`reports.controller.ts` dan suite MySQL `reports.mysql.test.ts`.
 ---
 
 ### 🟡 GAP-30 — Self-Service Portal Incomplete
@@ -1027,13 +1149,23 @@ mata uang pembayaran dari mata uang pelaporan pajak. DTO-nya juga diberi rujukan
 ke bagian itu, supaya pembaca kode tidak menyimpulkan `z.literal('IDR')` sebagai
 kelalaian.
 
-### ⚪ GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek — DIPUTUSKAN DILEWATI 30 Sep
+### ⚪ GAP-35 — Tidak ada timesheet / pencatatan waktu per proyek — **REKOMENDASI dilewati; keputusan belum diambil**
+
+> Judul ini sebelumnya berbunyi "DIPUTUSKAN DILEWATI". Itu berlebihan:
+> `open-hr-decisions.md` mencatatnya sebagai *Rekomendasi*, bukan jawaban
+> pemilik produk. Selama belum dijawab, ini gap terbuka yang sedang
+> disarankan dilewati — bukan gap yang sudah ditutup dengan keputusan.
 
 `DailyActivity` mencatat aktivitas harian dengan bukti GPS dan foto, tetapi tidak
 ada timesheet per proyek/klien dengan jam billable dan approval — yang dipakai
 perusahaan jasa untuk menagih. Tidak ada model proyek sama sekali.
 
-### ⚪ GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank — DIPUTUSKAN DILEWATI 30 Sep
+### ⚪ GAP-36 — Pencairan payroll hanya berkas manual, bukan API bank — **REKOMENDASI dilewati; keputusan belum diambil**
+
+> Judul ini sebelumnya berbunyi "DIPUTUSKAN DILEWATI". Itu berlebihan:
+> `open-hr-decisions.md` mencatatnya sebagai *Rekomendasi*, bukan jawaban
+> pemilik produk. Selama belum dijawab, ini gap terbuka yang sedang
+> disarankan dilewati — bukan gap yang sudah ditutup dengan keputusan.
 
 GAP-12 ditutup dengan ekspor CSV per bank yang bisa diunggah ke internet
 banking. Pencairan langsung lewat API bank/payment gateway (beserta rekonsiliasi
@@ -1159,7 +1291,8 @@ jadi tidak dihitung sebagai gap baru.
 dengan sadar** (GAP-35 timesheet proyek, GAP-36 API bank), dan **0 yang tertahan
 pekerjaan teknis atau keputusan yang belum diambil**.
 
-Seluruh 17 keputusan di `docs/open-hr-decisions.md` sudah dijawab. Yang tersisa
+Lima belas dari 17 keputusan di `docs/open-hr-decisions.md` sudah dijawab;
+item 16 (GAP-35) dan 17 (GAP-36) masih rekomendasi. Yang tersisa
 hanyalah **satu permintaan konkret**: kirim satu contoh berkas 1721-A1 dan satu
 contoh laporan BPJS yang tim payroll-mu benar-benar unggah, supaya generator
 berkas resminya bisa dilapiskan di atas angka yang sudah dirakit dan diuji.
@@ -1287,3 +1420,75 @@ semua orang sekaligus dan tidak bisa ditarik kembali. Diarsipkan, bukan dihapus:
 read receipt adalah bukti siapa sudah diberi tahu apa.
 
 Verifikasi: 38 test.
+
+---
+
+## Audit 5 Oktober 2026 — 39 gap diverifikasi ulang, 12 gap baru
+
+Pengukuran ketiga, dan yang pertama **tidak memakai dokumen ini sebagai
+sumber**. Alasannya ada di dokumen ini sendiri: untuk GAP-07 ia memuat tiga
+verdict yang saling bertabrakan (terbuka di baris 155, tertutup di 839,
+"sengaja dilewati" di 42), dan untuk GAP-29 ia pernah menyatakan modul
+reports tidak ada karena yang dicari `modules/report`, bukan `modules/reports`.
+Jadi deskripsi gap dipakai sebagai **pertanyaan**, dan setiap verdict
+diturunkan ulang dari kode dengan sitasi `file:LINE`.
+
+Empat pemeriksaan berjalan paralel: absensi & cuti (GAP-01…08, 31, 35),
+payroll & pajak (GAP-09…17, 21b, 32…34, 36), lifecycle & platform
+(GAP-18…30, 37…39), dan satu pemeriksaan **kelengkapan** yang tidak memeriksa
+status apa pun melainkan mencari fitur benchmark yang daftar ini tidak pernah
+sebut. Hasil yang terakhir ada di berkas terpisah:
+`gap-analysis-greatday-completeness-5-oct.md` — 12 gap baru (GAP-40…51), dan
+**36 kapabilitas benchmark yang diperiksa dan ternyata sudah ada**. Angka kedua
+itu yang membuat angka pertama bisa dipercaya.
+
+### Verdict yang berubah terhadap isi dokumen ini
+
+| Gap | Dokumen ini | Hasil pembacaan kode | Yang memutuskan |
+|---|---|---|---|
+| GAP-06 | PARTIAL, *"tidak ada satu pun simbol expiry di seluruh backend/src"* | PARTIAL, tetapi alasannya keliru — expiry **ada** | `leave.scheduler.ts:57-60`; residu sebenarnya: cap carry-over ditanam di kode, tidak ada kolom `carryOver`, dan saldo hangus walau akrual gagal |
+| GAP-07 | tiga verdict bertabrakan | **CLOSED**, di tiga lapis | `workflow-engine.repository.ts:707-722`; 10 modul lewat `applyAction` |
+| GAP-08 | lapisan lama: *"🔴 terbuka, tidak ada model/endpoint"* | **CLOSED** | `collective-leave.service.ts:268-282`, potong di bawah `FOR UPDATE`, jatuh ke unpaid, tidak pernah negatif |
+| GAP-14 | judul CLOSED | **PARTIAL** (sesuai baris 846 dokumen ini sendiri) | rapel jalan; tidak ada run koreksi untuk nominal salah |
+| GAP-16 | CLOSED | **PARTIAL** | `payroll.service.ts:612` hanya membaca run `APPROVED`; ditutup 5 Okt oleh PR #48 |
+| GAP-17 | *"tidak ada jejaknya sama sekali"* | **CLOSED** | `pph21.ts:137` + `employee-pay.ts:63-83`, dikirim 4 Okt (PR #42) |
+| GAP-19 | *"contractEndDate TIDAK ada di Employee"* | **CLOSED** — tanggalnya pindah ke tabelnya sendiri | `EmploymentContract.endDate`, sweep `employment-contract.service.ts:222`, cron di `worker.ts:187` |
+| GAP-20 | dianggap sama dengan GAP-19 | **PARTIAL** | reminder & batas 3 bulan ada; keputusan review probasi tidak ada (`ProbationReview` = 0 hit) |
+| GAP-21b | belum dicentang | **PARTIAL** | rapel masuk run; jalur correction payment tidak ada |
+| GAP-23 | CLOSED | **PARTIAL** | approve payroll masih izin datar, `payroll.routes.ts:299-311` |
+| GAP-25/26/27 | CLOSED | **PARTIAL** | per-course recap, konsumen frontend `parentGoalId`, dan reminder e-signature tidak ada |
+| GAP-29 | PARTIAL (modul ada) | **PARTIAL** → ditutup 5 Okt oleh PR #51 | laporan saldo cuti hilang; `/summary` satu-satunya route tanpa `authorize()` |
+| GAP-30 | tiga verdict | **PARTIAL** | halaman nyata 1383 baris; koreksi absensi tanpa UI |
+| GAP-35 | "dilewati dengan keputusan" | **terbuka** — jejaknya rekomendasi, bukan jawaban user | `open-hr-decisions.md:337-345` masih *"Rekomendasi: lewati"*; alasannya YAGNI, yang ditolak posisi jual produk ini |
+| GAP-39 | dilewati | **OPEN** — tidak ada keputusan yang tercatat | daftar skip sadar di baris 1281 hanya menyebut GAP-35/36 |
+
+### Ditutup 5 Oktober
+
+| PR | Yang ditutup |
+|---|---|
+| #47 | GAP-06 sebagian: akrual idempoten, expiry tidak menghanguskan saldo yang akrualnya gagal, cap jadi `leave_carryover_max_days` |
+| #48 | GAP-16: pembaca akhir-tahun menghitung run berstatus `DISBURSED`, bukan hanya `APPROVED` |
+| #50 | **GAP-43** dan flag `isProrated` yang tidak pernah dibaca |
+| #51 | GAP-29: laporan saldo cuti, dimensi departemen, dan guard `/summary` |
+| #52 | Katalog webhook: 10 event berhenti diiklankan karena tidak pernah terbit |
+| #46 | Tiga header yang dibaca API tapi tidak diizinkan CORS, termasuk `X-Client-Type` |
+| #49 | Koreksi klaim PRD soal TER |
+
+### Cacat kelas "ditulis lalu tidak pernah dibaca"
+
+Pola yang muncul lima kali dan pantas dicurigai lebih lanjut:
+
+1. `isTaxable` pada lembur/rapel/pencairan cuti — **ditutup 4 Okt (PR #45)**.
+2. `PayrollRunStatus.DISBURSED` tidak dibaca empat konsumen akhir-tahun — **ditutup (PR #48)**.
+3. `SalaryComponent.isProrated` — **ditutup (PR #50)**.
+4. `autoAbsentEnabled` / `autoCheckoutEnabled` — masih mati. Lengkap dari schema sampai policy yang ter-resolve, tetapi tidak ada queue absensi yang membacanya. HR menyalakannya, tidak terjadi apa pun.
+5. Katalog webhook mengiklankan 16 event, 6 terbit — **ditutup (PR #52)**, 10 dipindah ke daftar menunggu publisher beserta alasan masing-masing.
+
+### Yang menunggu lu, bukan menunggu kode
+
+- **GAP-40 (TER, PMK 168/2023)** — paling keras untuk jualan. Butuh lampiran
+  resminya: tiga kategori, puluhan bracket. Menuliskannya dari ingatan adalah
+  cara mesin payroll menjadi salah dengan yakin.
+- **GAP-32 / GAP-33** — satu contoh berkas 1721-A1 dan ekspor BPJS asli.
+- **GAP-35** dan **GAP-39** — keputusan dilewati-atau-dibangun belum pernah
+  diambil; yang tercatat baru rekomendasi.

@@ -13,6 +13,9 @@ import {
 } from './payroll.dto';
 
 const payslipRunSelect = {
+  // runType is deliberately NOT here. This is the payslip-facing shape, and
+  // a strict allowlist test pins it; until THR runs exist the value is always
+  // REGULAR, so widening a client contract now would buy nothing. Fase 1.
   id: true, name: true, runNumber: true, status: true,
   period: { select: { id: true, name: true, code: true, frequency: true, startDate: true, endDate: true, payDate: true } },
 } satisfies Prisma.PayrollRunSelect;
@@ -116,6 +119,17 @@ export class PayrollRepository {
             taxId: true,
             status: true,
             employmentType: true,
+            // The employed slice of the period: a mid-period joiner is owed
+            // part of a month, and a leaver is owed the part they worked —
+            // which the run used to drop entirely once their status left
+            // ACTIVE. An approved resignation caps the window.
+            joinDate: true,
+            resignations: {
+              where: { status: 'APPROVED' },
+              orderBy: { lastWorkingDate: 'desc' },
+              take: 1,
+              select: { lastWorkingDate: true },
+            },
             department: { select: { id: true, name: true } },
             position: { select: { id: true, name: true } },
             // dependents for PTKP (Task 2.6)
@@ -371,6 +385,7 @@ export class PayrollRepository {
         companyId: data.companyId,
         name: data.name,
         runNumber,
+        runType: data.runType ?? 'REGULAR',
         createdBy,
       },
     });
@@ -383,6 +398,12 @@ export class PayrollRepository {
         data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
       });
       if (result.count !== 1) throw new ConflictError('Payroll changed or maker-checker validation failed');
+      // A payslip's figures stop moving once the run is approved, so that is
+      // when it stops being a draft. Nothing ever wrote this column: every real
+      // payslip stayed DRAFT for life while the PDF printed "Status: DRAFT" and
+      // self-service showed a draft chip. Only the demo seed set FINAL, which is
+      // why it looked right in the demo and nowhere else.
+      await tx.payslip.updateMany({ where: { payrollRunId: id, companyId }, data: { status: 'FINAL' } });
       return tx.payrollRun.findUniqueOrThrow({ where: { id, companyId } });
     });
   }

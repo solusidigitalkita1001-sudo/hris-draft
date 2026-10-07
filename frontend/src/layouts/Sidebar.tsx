@@ -45,11 +45,12 @@ import {
   Workflow,
   MapPin,
   Repeat,
+  CalendarClock,
   Menu as MenuIcon,
   ShieldCheck,
   Wallet,
   Receipt,
-  X,
+  X, SlidersHorizontal,
 } from 'lucide-react';
 import { administrationService } from '@/services/administration.service';
 import { SidebarAttendanceCard } from './SidebarAttendanceCard';
@@ -96,6 +97,12 @@ const navItems: NavItem[] = [
     labelKey: 'sidebar.selfService',
     icon: <UserCheck size={17} />,
     path: '/self-service',
+    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+  },
+  {
+    labelKey: 'sidebar.attendanceCorrection',
+    icon: <CalendarClock size={17} />,
+    path: '/attendance-corrections',
     access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
@@ -303,6 +310,12 @@ const navItems: NavItem[] = [
         icon: <ShieldCheck size={16} />,
         path: '/admin/data-scope',
         access: { requireAuth: true, requiredPermissions: [{ resource: 'rbac', action: 'update' }] },
+      },
+      {
+        labelKey: 'sidebar.administration.companySettings',
+        icon: <SlidersHorizontal size={16} />,
+        path: '/admin/company-settings',
+        access: { requireAuth: true, requiredPermissions: [{ resource: 'settings', action: 'read' }] },
       },
       {
         labelKey: 'sidebar.administration.ewaApproval',

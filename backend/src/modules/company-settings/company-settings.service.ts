@@ -4,9 +4,33 @@ import { ForbiddenError, BadRequestError } from '@/shared/exceptions/AppError';
 import type { CompanySetting, Prisma } from '@prisma/client';
 import type { BulkUpsertSettingsDTO } from './company-settings.dto';
 
+/**
+ * Setiap kunci di sini adalah janji: menampilkannya berarti menyatakan sistem
+ * akan bertindak sesuai nilainya. `company-settings.unread.test.ts` menolak
+ * kunci yang tidak dibaca siapa pun, karena setting yang tidak dibaca lebih
+ * buruk daripada setting yang tidak ada — yang menyetelnya menyimpulkan
+ * kemampuan yang tidak dimiliki sistem.
+ *
+ * Dua kunci dihapus dari daftar ini karena justru begitu:
+ *
+ * - `currency_code: 'IDR'` tidak pernah dibaca, dan bahkan tidak divalidasi,
+ *   sementara mesin payroll menolak alokasi non-IDR secara keras
+ *   (`employee-pay.ts`). Menyetelnya ke 'USD' tidak mengubah apa pun, tetapi
+ *   membuat implementer menyimpulkan ada dukungan multi-mata-uang. Keputusan
+ *   mono-mata-uang itu sendiri sudah dicatat sebagai GAP-34.
+ *
+ * - `fiscal_year_start_month` divalidasi 1-12 dan tidak pernah dibaca. Rekap
+ *   pajak tahunan menanam Januari secara literal (`Date.UTC(year, 0, 1)`) dan
+ *   tahun akrual cuti memakai `getUTCFullYear()`. Lebih dari itu: PPh 21
+ *   adalah pajak tahun kalender, jadi tahun fiskal Juli TIDAK BISA menggeser
+ *   tahun pajaknya — setting ini paling jauh hanya bisa memengaruhi periode
+ *   pelaporan, bukan perhitungan. Menampilkannya menjanjikan lebih dari itu.
+ *
+ * Keduanya tetap bisa disimpan: store ini sengaja terbuka terhadap kunci yang
+ * belum pernah didengarnya. Yang berhenti adalah mengiklankannya sebagai
+ * sesuatu yang sistem ini hormati.
+ */
 export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
-  fiscal_year_start_month: '1',
-  currency_code: 'IDR',
   late_deduction_enabled: 'true',
   late_deduction_default_rate_per_minute: '500',
   late_deduction_daily_cap_percent: '10',
@@ -27,10 +51,37 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   // take-home pay in the last month of the year; switching it on is a tenant
   // decision. Only the period that actually ends in December is settled.
   pph21_december_reconciliation_enabled: 'false',
+  // Batas hari cuti tahun lalu yang boleh dibawa (GAP-06). Dulu nilai ini
+  // ditanam di kode sebagai 1 hari dan tidak ada pemanggil yang bisa
+  // mengubahnya, padahal batas carry-over berbeda antar perusahaan — dan di
+  // produk yang dijual, itu berarti permintaan ubah kode per pelanggan.
+  leave_carryover_max_days: '1',
+  // Bulan hangusnya hari cuti bawaan (sisa GAP-06). 0 = tanpa tenggat, yang
+  // merupakan perilaku sebelum fitur ini ada sehingga tidak ada tenant yang
+  // kehilangan hari karena rilis. 3 berarti "pakai sebelum akhir Maret".
+  leave_carryover_expiry_month: '0',
+  // Gross-up PPh21 (GAP-17). Off by default: switching it on makes the
+  // company bear its employees' income tax, which raises employer cost and
+  // changes every payslip — a tenant decision, never a deploy's side effect.
+  pph21_gross_up_enabled: 'false',
   // Man power planning (GAP-22). Off by default: a company without a central
   // headcount budget would otherwise gain a mandatory extra step for every
   // replacement hire, which is bureaucracy with nothing behind it.
   recruitment_requisition_required: 'false',
+  // These three were validated as booleans but never advertised here, so
+  // `getAllSettings` — the only way a client can discover what is
+  // configurable — did not mention them at all. Three switches that move money
+  // or send mail existed and were reachable only by someone who already knew
+  // the key. 'false' is what the readers already saw when the row was absent
+  // (`?.value === 'true'`), so publishing them changes nothing but visibility.
+  benefit_payroll_deduction_enabled: 'false',
+  unpaid_leave_deduction_enabled: 'false',
+  payslip_email_notification_enabled: 'false',
+  // Metode pemotongan PPh 21 (GAP-40). TER (PP 58/2023) wajib sejak Januari
+  // 2024, tetapi menyalakannya mengubah take-home pay setiap karyawan ke dua
+  // arah — jadi defaultnya tetap metode lama sampai tenant memutuskan.
+  // Menyalakan TER otomatis mewajibkan rekonsiliasi Desember.
+  pph21_method: 'ANNUALIZED',
 };
 
 const WORKWEEK_DAYS_KEY = 'attendance_workweek_days';
@@ -80,7 +131,19 @@ const BOOLEAN_SETTINGS = new Set([
   'leave_encashment_enabled',
   'leave_encashment_include_allowances',
   'recruitment_requisition_required',
+  'pph21_gross_up_enabled',
 ]);
+
+/**
+ * Settings whose value is one of a fixed set.
+ *
+ * Same reason as BOOLEAN_SETTINGS, only sharper: storing 'ter' instead of
+ * 'TER' would leave the old withholding method silently in force while the
+ * setting read as configured. A free-text key would have accepted it.
+ */
+const ENUM_SETTINGS: Record<string, readonly string[]> = {
+  pph21_method: ['ANNUALIZED', 'TER'],
+};
 
 const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boolean }> = {
   leave_encashment_max_days_per_year: { min: 0, max: 365, integer: true },
@@ -89,8 +152,50 @@ const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boo
   late_deduction_daily_cap_percent: { min: 0, max: 100 },
   absence_deduction_daily_basic_percent: { min: 0, max: 100 },
   attendance_default_working_days_per_month: { min: 1, max: 31, integer: true },
-  fiscal_year_start_month: { min: 1, max: 12, integer: true },
+  leave_carryover_max_days: { min: 0, max: 365, integer: true },
+  leave_carryover_expiry_month: { min: 0, max: 12, integer: true },
+  // PP 35/2021 only recognises a 5- or 6-day workweek for the holiday overtime
+  // band, and `resolveWorkweekDays` already silently falls back to 5 for
+  // anything else. Unvalidated, saving 7 looked accepted and quietly meant 5;
+  // now the boundary says so, and the catalog can offer the real choice.
+  attendance_workweek_days: { min: 5, max: 6, integer: true },
 };
+
+/** What a client needs to render one setting without guessing its type. */
+export type SettingDescriptor = {
+  key: string;
+  type: 'boolean' | 'number' | 'enum' | 'text';
+  defaultValue: string;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+  /** The permitted values, for `type: 'enum'` only. */
+  options?: readonly string[];
+};
+
+/**
+ * The boolean and numeric lists above are the only place that knows a setting's
+ * shape, and `getAllSettings` returns bare strings. Without this, any client
+ * offering an editor has to keep its own copy of which key is a switch and
+ * which is a number — and the two copies drift the moment a key is added,
+ * which is how a tenant ends up storing `TRUE` in a field the validator then
+ * rejects, or a free-text key rendered as a checkbox.
+ */
+export function describeSettings(): SettingDescriptor[] {
+  return Object.entries(DEFAULT_COMPANY_SETTINGS).map(([key, defaultValue]) => {
+    if (BOOLEAN_SETTINGS.has(key)) return { key, type: 'boolean' as const, defaultValue };
+    const options = ENUM_SETTINGS[key];
+    if (options) return { key, type: 'enum' as const, defaultValue, options };
+    const numeric = NUMERIC_SETTINGS[key];
+    if (numeric) {
+      return {
+        key, type: 'number' as const, defaultValue,
+        min: numeric.min, max: numeric.max, integer: numeric.integer ?? false,
+      };
+    }
+    return { key, type: 'text' as const, defaultValue };
+  });
+}
 
 export function validateSettingValue(key: string, value: string): void {
   if (BOOLEAN_SETTINGS.has(key)) {
@@ -98,6 +203,16 @@ export function validateSettingValue(key: string, value: string): void {
       throw new BadRequestError(
         `Setting ${key} accepts only 'true' or 'false' (lowercase); received '${value}'. ` +
         'A near-miss here would leave the feature off while looking enabled.',
+      );
+    }
+    return;
+  }
+
+  const allowed = ENUM_SETTINGS[key];
+  if (allowed) {
+    if (!allowed.includes(value)) {
+      throw new BadRequestError(
+        `Setting ${key} accepts only ${allowed.map((option) => `'${option}'`).join(' or ')}; received '${value}'`,
       );
     }
     return;

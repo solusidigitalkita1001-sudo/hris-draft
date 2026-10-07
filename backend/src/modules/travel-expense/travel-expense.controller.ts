@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { Result } from '@/shared/core/Result';
 import { travelExpenseService } from './travel-expense.service';
+import { listCategoryLimits, upsertCategoryLimit } from './claim-limit.service';
 import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
 import config from '@/config';
@@ -203,6 +204,22 @@ export class TravelExpenseController {
     } catch (error) {
       next(error);
     }
+  }
+
+  /** Plafon klaim per kategori — tanpa ini, batasnya tidak bisa diatur. */
+  async listClaimLimits(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { companyId } = await this.getEmployeeContext(req);
+      res.json(Result.success(await listCategoryLimits(companyId)));
+    } catch (error) { next(error); }
+  }
+
+  async upsertClaimLimit(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { companyId } = await this.getEmployeeContext(req);
+      const saved = await upsertCategoryLimit(companyId, req.body);
+      res.json(Result.success(saved, 'Plafon klaim disimpan'));
+    } catch (error) { next(error); }
   }
 
   async createClaim(req: AuthenticatedRequest, res: Response, next: NextFunction) {

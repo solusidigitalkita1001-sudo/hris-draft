@@ -1,7 +1,11 @@
 import 'reflect-metadata';
 import { errorDetail } from '@/shared/logger/error-detail';
 import { webhookService } from '@/modules/webhook/webhook.service';
+import { AUTO_CHECKOUT_JOB, runAutoCheckout, scheduleAutoCheckout } from '@/modules/attendance/auto-checkout.scheduler';
+import { AUTO_ABSENT_JOB, runAutoAbsent, scheduleAutoAbsent } from '@/modules/attendance/auto-absent.scheduler';
+import { CARRYOVER_EXPIRY_JOB, runCarryOverExpiry, scheduleCarryOverExpiry } from '@/modules/leave/carryover-expiry.scheduler';
 import { CONTRACT_EXPIRY_REMINDER_JOB, runContractExpiryReminders, scheduleContractExpiryReminders } from '@/modules/employee/employment-contract.scheduler';
+import { SIGNING_REMINDER_JOB, runSigningReminders, scheduleSigningReminders } from '@/modules/document-management/document-signing-reminder.scheduler';
 import { runWebhookSweep, scheduleWebhookSweep } from '@/modules/webhook/webhook.scheduler';
 import config from '@/config';
 import { redisCache } from '@/infrastructure/cache/RedisCache';
@@ -183,6 +187,18 @@ async function bootstrapWorker(): Promise<void> {
       if (job.name === RETENTION_SWEEP_JOB) {
         return runInSystemContext('retention-worker', () => runRetentionSweep());
       }
+      if (job.name === AUTO_CHECKOUT_JOB) {
+        return runAutoCheckout();
+      }
+      if (job.name === AUTO_ABSENT_JOB) {
+        return runAutoAbsent();
+      }
+      if (job.name === SIGNING_REMINDER_JOB) {
+        return runSigningReminders();
+      }
+      if (job.name === CARRYOVER_EXPIRY_JOB) {
+        return runCarryOverExpiry();
+      }
       if (job.name === CONTRACT_EXPIRY_REMINDER_JOB) {
         return runContractExpiryReminders();
       }
@@ -206,6 +222,10 @@ async function bootstrapWorker(): Promise<void> {
   await runInSystemContext('push-scheduler-bootstrap', () => schedulePushDeliverySweep());
   await runInSystemContext('webhook-scheduler-bootstrap', () => scheduleWebhookSweep());
   await runInSystemContext('contract-reminder-bootstrap', () => scheduleContractExpiryReminders());
+  await runInSystemContext('carryover-expiry-bootstrap', () => scheduleCarryOverExpiry());
+  await runInSystemContext('auto-absent-bootstrap', () => scheduleAutoAbsent());
+  await runInSystemContext('auto-checkout-bootstrap', () => scheduleAutoCheckout());
+  await runInSystemContext('signing-reminder-bootstrap', () => scheduleSigningReminders());
 
   await rabbitMQBroker.subscribe<DomainEvent>(
     `${config.rabbitmq.queuePrefix}.domain-events.worker`,

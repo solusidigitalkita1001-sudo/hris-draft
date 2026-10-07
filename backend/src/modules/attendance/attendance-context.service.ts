@@ -127,6 +127,17 @@ export class AttendanceContextService {
           employeeId,
           deletedAt: null,
           effectiveDate: { lte: effectiveEnd },
+          // Only an APPROVED movement is in force. Without this, a movement
+          // still awaiting approval — or one that was rejected — decided which
+          // branch an employee belongs to for attendance, and attendance
+          // policy follows the branch: allowed check-in methods, the geofence,
+          // the shift. Somebody could be moved, or refused a move, and still
+          // have their clock-in rules change. The apply sweep has always
+          // filtered on APPROVED (career-transaction.scheduler.ts:19); this
+          // read did not, so the two disagreed about the same row.
+          // The column defaults to 'APPROVED', so rows that predate the status
+          // field keep deciding exactly as they did.
+          status: 'APPROVED',
         },
         orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
         select: {

@@ -71,7 +71,10 @@ export async function seedRolePermissions(): Promise<void> {
         'work-calendar:create', 'work-calendar:read', 'work-calendar:update',
         'permission-request:read', 'permission-request:update',
         'employee-loan:read', 'employee-loan:update',
-        'payroll:read', 'payroll:export',
+        // HR management prepares the run; approval and release belong to
+        // other roles so the separation of duties payroll already enforces
+        // (creator != approver != disburser) can actually be satisfied.
+        'payroll:read', 'payroll:export', 'payroll:process',
         'benefit:read',
         'performance:create', 'performance:read', 'performance:update',
         'training:create', 'training:read', 'training:update',
@@ -156,6 +159,24 @@ export async function seedRolePermissions(): Promise<void> {
     )
     .map((p) => p.id);
   await assignPermissionsToRole(employeeId, employeePerms);
+
+  // FINANCE — releases money, and nothing else about payroll. It deliberately
+  // does NOT hold payroll:process or payroll:approve: the point of the role is
+  // that the person who releases a payment is not the person who prepared or
+  // approved it.
+  const financeId = roleMap.get('FINANCE');
+  if (financeId) {
+    const financePerms = permissions
+      .filter((p) =>
+        [
+          'payroll:read', 'payroll:export', 'payroll:disburse',
+          'report:read', 'report:export',
+          'dash:read',
+        ].includes(p.code)
+      )
+      .map((p) => p.id);
+    await assignPermissionsToRole(financeId, financePerms);
+  }
 
   console.log('  ✓ Role-permission assignments completed');
 }

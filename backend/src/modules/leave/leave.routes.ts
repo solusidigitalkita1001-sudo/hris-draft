@@ -12,7 +12,7 @@ import { validate } from '@/shared/middleware/RequestValidator';
 import { discardUploadOnFailure, validateFileMagicBytes } from '@/shared/middleware/FileValidation';
 import { auditLog } from '@/shared/middleware/AuditLog';
 import { leaveController } from './leave.controller';
-import { createLeaveTypeSchema, createLeaveRequestSchema, createLeaveBalanceSchema } from './leave.dto';
+import { createLeaveTypeSchema, createLeaveRequestSchema, createLeaveBalanceSchema, triggerYearlyAccrualSchema } from './leave.dto';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 import { idempotency } from '@/shared/middleware/Idempotency';
 import { leaveAttachmentOwnerDirectory } from '@/shared/storage/leave-attachment-reference';
@@ -136,7 +136,7 @@ router.get('/', authorize({ resource: 'leave', action: 'read' }), leaveControlle
 // Static balance routes must be declared before /:id.
 router.get('/balances/employee', authorize({ resource: 'leave', action: 'read' }), leaveController.getBalances.bind(leaveController));
 router.post('/balances', authorize({ resource: 'leave', action: 'create' }), auditLog({ action: 'SET_BALANCE', entity: 'LeaveBalance' }), validate(createLeaveBalanceSchema), leaveController.setBalance.bind(leaveController));
-router.post('/balances/accrue', authorize({ resource: 'leave', action: 'create' }), auditLog({ action: 'YEARLY_ACCRUE', entity: 'LeaveBalance' }), leaveController.triggerYearlyAccrual.bind(leaveController));
+router.post('/balances/accrue', authorize({ resource: 'leave', action: 'create' }), auditLog({ action: 'YEARLY_ACCRUE', entity: 'LeaveBalance' }), validate(triggerYearlyAccrualSchema), leaveController.triggerYearlyAccrual.bind(leaveController));
 router.get('/:id', authorize({ resource: 'leave', action: 'read' }), leaveController.findById.bind(leaveController));
 router.post('/', authorize({ resource: 'leave', action: 'create' }), validate(createLeaveRequestSchema), idempotency(), leaveController.create.bind(leaveController));
 // Upload lampiran cuti (wajib untuk pengajuan < H-7 atau tipe cuti tertentu).

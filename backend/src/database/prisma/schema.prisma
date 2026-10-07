@@ -173,6 +173,7 @@ model Company {
   loanTypes                             LoanType[]
   loans                                 Loan[]
   workflowTemplates                     WorkflowTemplate[]
+  letterTemplates                       LetterTemplate[]
   workflowInstances                     WorkflowInstance[]
   businessTrips                         BusinessTrip[]
   travelAdvances                        TravelAdvance[]
@@ -191,6 +192,7 @@ model Company {
   taxBrackets                           TaxBracket[]
   ptkpTables                            PtkpTable[]
   bpjsReferences                        BpjsReference[]
+  terBrackets                           TerBracket[]
   employeeFamilies                      EmployeeFamily[]
   employeeEducations                    EmployeeEducation[]
   employeeEmergencyContacts             EmployeeEmergencyContact[]
@@ -388,6 +390,11 @@ model SalaryComponent {
   ratePercent         Decimal?                    @map("rate_percent") @db.Decimal(5, 2)
   isTaxable           Boolean                     @default(true) @map("is_taxable")
   isProrated          Boolean                     @default(false) @map("is_prorated")
+  /// Tunjangan tetap: paid every month regardless of attendance or output.
+  /// Separates it from tunjangan tidak tetap (transport per day, meal per
+  /// shift), which the statutory "upah sebulan" excludes — the base for THR
+  /// (Permenaker 6/2016) and for the leave-encashment daily rate.
+  isFixedAllowance    Boolean                     @default(false) @map("is_fixed_allowance")
   isActive            Boolean                     @default(true) @map("is_active")
   description         String?                     @db.Text
   sortOrder           Int                         @default(0) @map("sort_order")
@@ -493,6 +500,7 @@ model PayrollRun {
   totalDeductions     Decimal                     @default(0) @map("total_deductions") @db.Decimal(15, 2)
   totalNetPay         Decimal                     @default(0) @map("total_net_pay") @db.Decimal(15, 2)
   status              PayrollRunStatus            @default(DRAFT)
+  runType             PayrollRunType              @default(REGULAR) @map("run_type")
   createdBy           String?                     @map("created_by") @db.VarChar(36)
   approvedBy          String?                     @map("approved_by") @db.VarChar(36)
   approvedAt          DateTime?                   @map("approved_at")
@@ -518,6 +526,7 @@ model PayrollRun {
   @@index([periodId])
   @@index([companyId])
   @@index([status])
+  @@index([companyId, periodId, runType])
   @@map("payroll_runs")
 }
 
@@ -781,6 +790,37 @@ model TaxBracket {
   @@map("tax_brackets")
 }
 
+/// Tarif Efektif Rata-rata (TER) bulanan — PP 58/2023 Lampiran huruf A, B dan C.
+///
+/// Reference data, not constants: the same reason TaxBracket is a table. The
+/// annex is 125 rows across three categories and a later regulation replaces
+/// it wholesale, so it is loaded per year and may be overridden per company.
+model TerBracket {
+  id          String      @id @default(uuid()) @db.VarChar(36)
+  companyId   String?     @map("company_id") @db.VarChar(36)
+  year        Int
+  category    TerCategory /// A, B or C, chosen by the employee's PTKP status
+  level       Int /// 1 = lowest bracket
+  upperBound  Decimal?    @map("upper_bound") @db.Decimal(18, 2) /// NULL = the open-ended top bracket
+  ratePercent Decimal     @map("rate_percent") @db.Decimal(6, 3)
+  isActive    Boolean     @default(true) @map("is_active")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, year, category, level])
+  @@index([year, category])
+  @@map("ter_brackets")
+}
+
+/// Kategori TER per PP 58/2023 Pasal 2 ayat (4): decided by PTKP status.
+enum TerCategory {
+  A
+  B
+  C
+}
+
 /// PTKP = Penghasilan Tidak Kena Pajak per status pernikahan & jumlah tanggungan.
 /// (TK/0 = single no dependents, K/1 = married +1 child, capped MAX 3 tanggungan).
 model PtkpTable {
@@ -879,7 +919,7 @@ model BenefitPlan {
   id                   String    @id @default(uuid()) @db.VarChar(36)
   companyId            String    @map("company_id") @db.VarChar(36)
   name                 String    @db.VarChar(255)
-  code                 String     @db.VarChar(50)
+  code                 String    @db.VarChar(50)
   type                 String    @db.VarChar(50)
   description          String?   @db.Text
   provider             String?   @db.VarChar(255)
@@ -3449,7 +3489,7 @@ model LeaveType {
   id                 String    @id @default(uuid()) @db.VarChar(36)
   companyId          String    @map("company_id") @db.VarChar(36)
   name               String    @db.VarChar(255)
-  code               String     @db.VarChar(50)
+  code               String    @db.VarChar(50)
   description        String?   @db.Text
   isPaid             Boolean   @default(true) @map("is_paid")
   isAnnual           Boolean   @default(false) @map("is_annual")
@@ -3476,17 +3516,24 @@ model LeaveType {
 
 /// Employee leave balance per year
 model LeaveBalance {
-  id            String    @id @default(uuid()) @db.VarChar(36)
-  employeeId    String    @map("employee_id") @db.VarChar(36)
-  companyId     String    @map("company_id") @db.VarChar(36)
-  leaveTypeId   String    @map("leave_type_id") @db.VarChar(36)
-  year          Int       @default(2026)
-  totalDays     Int       @default(0) @map("total_days")
-  usedDays      Int       @default(0) @map("used_days")
-  remainingDays Int       @default(0) @map("remaining_days")
-  expiredAt     DateTime? @map("expired_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid()) @db.VarChar(36)
+  employeeId         String    @map("employee_id") @db.VarChar(36)
+  companyId          String    @map("company_id") @db.VarChar(36)
+  leaveTypeId        String    @map("leave_type_id") @db.VarChar(36)
+  year               Int       @default(2026)
+  totalDays          Int       @default(0) @map("total_days")
+  usedDays           Int       @default(0) @map("used_days")
+  remainingDays      Int       @default(0) @map("remaining_days")
+  /// Hari yang dibawa dari tahun lalu. Disimpan karena expiry me-nol-kan
+  /// saldo tahun lalu, sehingga angka ini tidak bisa diturunkan ulang.
+  carryOverDays      Int       @default(0) @map("carry_over_days")
+  /// Saat hari bawaan yang tidak terpakai dihanguskan, bila perusahaan
+  /// memasang tenggat (`leave_carryover_expiry_month`). Terpisah dari
+  /// `expiredAt`, yang menandai seluruh saldo tahun lalu habis masa.
+  carryOverExpiredAt DateTime? @map("carry_over_expired_at")
+  expiredAt          DateTime? @map("expired_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
@@ -3661,6 +3708,17 @@ enum PayrollRunStatus {
   APPROVED
   DISBURSED
   VOIDED
+}
+
+/// Jenis run. Satu periode boleh punya satu run per jenis — gaji bulanan dan
+/// THR hidup bersama, dan koreksi tidak menuntut run lama dibuka ulang.
+/// Hanya REGULAR yang bergantung pada rekap absensi; THR, pesangon dan
+/// koreksi tidak, sehingga gate `attendanceReviewedAt` hanya berlaku di sana.
+enum PayrollRunType {
+  REGULAR
+  THR
+  SEVERANCE
+  CORRECTION
 }
 
 /// Payslip status
@@ -4192,6 +4250,31 @@ enum RequestStatus {
 // ============================================================
 // WORKFLOW ENGINE
 // ============================================================
+
+/// Template surat dengan placeholder (GAP-46): surat keterangan kerja, SK,
+/// dan sejenisnya. Badan surat diisi tenant, jadi penyusunnya SENGAJA bukan
+/// template engine melainkan daftar placeholder tertutup — merender input
+/// tenant lewat engine umum adalah permukaan eksekusi kode.
+model LetterTemplate {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  companyId   String    @map("company_id") @db.VarChar(36)
+  code        String    @db.VarChar(50)
+  name        String    @db.VarChar(255)
+  /// Teks surat. Placeholder berbentuk {{employee.fullName}}; yang tidak
+  /// dikenal ditolak saat disimpan, bukan dibiarkan kosong saat dirender.
+  body        String    @db.Text
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+  @@map("letter_templates")
+}
 
 model WorkflowTemplate {
   id                String    @id @default(uuid()) @db.VarChar(36)
@@ -5795,27 +5878,35 @@ enum LeaveEncashmentStatus {
 /// sistem tidak bisa memperingatkan saat batas itu terlampaui, dan itu risiko
 /// kepatuhan yang paling mahal. Perpanjangan kedua akan menimpa yang pertama.
 model EmploymentContract {
-  id               String                   @id @default(uuid()) @db.VarChar(36)
-  companyId        String                   @map("company_id") @db.VarChar(36)
-  employeeId       String                   @map("employee_id") @db.VarChar(36)
+  id                 String                   @id @default(uuid()) @db.VarChar(36)
+  companyId          String                   @map("company_id") @db.VarChar(36)
+  employeeId         String                   @map("employee_id") @db.VarChar(36)
   /// Nomor kontrak sebagaimana tertulis di dokumennya.
-  contractNumber   String?                  @map("contract_number") @db.VarChar(100)
-  type             EmploymentContractType
-  startDate        DateTime                 @map("start_date") @db.Date
+  contractNumber     String?                  @map("contract_number") @db.VarChar(100)
+  type               EmploymentContractType
+  startDate          DateTime                 @map("start_date") @db.Date
   /// Wajib untuk PKWT dan probasi; harus kosong untuk PKWTT yang tidak berbatas
   /// waktu.
-  endDate          DateTime?                @map("end_date") @db.Date
-  status           EmploymentContractStatus @default(ACTIVE)
-  notes            String?                  @db.Text
+  endDate            DateTime?                @map("end_date") @db.Date
+  status             EmploymentContractStatus @default(ACTIVE)
+  notes              String?                  @db.Text
   /// Kapan pengingat terakhir dikirim, supaya sweep harian tidak mengirim
   /// pemberitahuan yang sama berulang kali.
-  lastReminderAt   DateTime?                @map("last_reminder_at")
+  lastReminderAt     DateTime?                @map("last_reminder_at")
   /// Offset pengingat terakhir yang sudah terkirim (30, 14, atau 7 hari).
-  lastReminderDays Int?                     @map("last_reminder_days")
-  createdBy        String?                  @map("created_by") @db.VarChar(36)
-  createdAt        DateTime                 @default(now()) @map("created_at")
-  updatedAt        DateTime                 @updatedAt @map("updated_at")
-  deletedAt        DateTime?                @map("deleted_at")
+  lastReminderDays   Int?                     @map("last_reminder_days")
+  /// Keputusan review masa percobaan, bila kontrak ini PROBATION (GAP-20).
+  /// Riwayat keputusan hidup di audit log; kolom ini menyimpan yang berlaku.
+  /// ponytail: satu keputusan terakhir. Kalau kelak perlu rangkaian review,
+  /// pindahkan ke tabel sendiri — audit log sudah menyimpan jejaknya.
+  probationDecision  ProbationDecision?       @map("probation_decision")
+  probationDecidedBy String?                  @map("probation_decided_by") @db.VarChar(36)
+  probationDecidedAt DateTime?                @map("probation_decided_at")
+  probationNotes     String?                  @map("probation_notes") @db.Text
+  createdBy          String?                  @map("created_by") @db.VarChar(36)
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  deletedAt          DateTime?                @map("deleted_at")
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
@@ -5846,6 +5937,15 @@ enum EmploymentContractStatus {
   RENEWED
 }
 
+/// Hasil review masa percobaan. ENDED/TERMINATED/RENEWED pada status kontrak
+/// tidak bisa membedakan "lulus lalu jadi permanen" dari "kontraknya sekadar
+/// berakhir", dan itu justru perbedaan yang ditanyakan orang setahun kemudian.
+enum ProbationDecision {
+  PASS
+  EXTEND
+  FAIL
+}
+
 /// Penanda tangan yang **diharapkan** untuk sebuah dokumen, beserta urutannya
 /// bila memang berurutan (GAP-27).
 ///
@@ -5854,19 +5954,24 @@ enum EmploymentContractStatus {
 /// urutan yang mengikat, tetapi memaksakan urutan ke semua dokumen akan
 /// memperlambat yang sederhana tanpa menambah kepastian apa pun.
 model DocumentSigner {
-  id             String               @id @default(uuid()) @db.VarChar(36)
-  documentId     String               @map("document_id") @db.VarChar(36)
-  userId         String               @map("user_id") @db.VarChar(36)
+  id               String               @id @default(uuid()) @db.VarChar(36)
+  documentId       String               @map("document_id") @db.VarChar(36)
+  userId           String               @map("user_id") @db.VarChar(36)
   /// Langkah urutan. Nilai sama = satu langkah (boleh menandatangani paralel).
   /// Seluruh dokumen memakai 1 bila urutan tidak dipakai.
-  order          Int                  @default(1)
+  order            Int                  @default(1)
   /// Tenggat per penanda tangan, kalau ada.
-  dueAt          DateTime?            @map("due_at")
-  status         DocumentSignerStatus @default(PENDING)
-  signedAt       DateTime?            @map("signed_at")
-  declinedReason String?              @map("declined_reason") @db.VarChar(255)
-  createdAt      DateTime             @default(now()) @map("created_at")
-  updatedAt      DateTime             @updatedAt @map("updated_at")
+  dueAt            DateTime?            @map("due_at")
+  status           DocumentSignerStatus @default(PENDING)
+  signedAt         DateTime?            @map("signed_at")
+  declinedReason   String?              @map("declined_reason") @db.VarChar(255)
+  /// Tenggat terdekat yang remindernya sudah dikirim. Sweep harian memakai ini
+  /// supaya satu tenggat diingatkan sekali, bukan tiga puluh kali — reminder
+  /// yang datang tiap hari adalah reminder yang orang belajar abaikan.
+  /// 0 berarti reminder "sudah terlewat" sudah dikirim.
+  lastReminderDays Int?                 @map("last_reminder_days")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)

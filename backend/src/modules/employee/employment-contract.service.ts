@@ -1,3 +1,4 @@
+import { PROBATION_MAX_MONTHS } from '@/shared/employment/probation';
 import { EmploymentContractStatus, EmploymentContractType } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
@@ -8,7 +9,7 @@ import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 /** PP 35/2021: PKWT and its renewals may not exceed five years in total. */
 export const PKWT_MAX_TOTAL_MONTHS = 60;
 /** UU 13/2003 art. 60: probation is capped at three months. */
-export const PROBATION_MAX_MONTHS = 3;
+export { PROBATION_MAX_MONTHS } from '@/shared/employment/probation';
 /** When a reminder goes out before the contract ends. */
 export const REMINDER_OFFSETS_DAYS = [30, 14, 7];
 
@@ -188,6 +189,68 @@ export class EmploymentContractService {
       ...row,
       daysRemaining: row.endDate ? daysUntil(row.endDate, now) : null,
     }));
+  }
+
+  /**
+   * The decision at the end of a probation (GAP-20). The reminders and the
+   * three-month cap already existed; what was missing was any way to record
+   * the outcome, because the only move available was the generic status change
+   * — and ENDED/TERMINATED/RENEWED cannot tell "passed, now permanent" apart
+   * from "the contract simply ran out".
+   *
+   * PASS renews, FAIL terminates, EXTEND moves the end date — and EXTEND is
+   * re-checked against the same statutory cap as creation, because a probation
+   * extended past three months is a void clause (UU 13/2003 art. 60) and
+   * dismissing on it is unlawful termination. Extending through a side door
+   * would be the easiest way to lose that protection.
+   */
+  async decideProbation(companyId: string, id: string, input: {
+    decision: 'PASS' | 'EXTEND' | 'FAIL';
+    notes?: string;
+    extendToDate?: string;
+  }, decidedBy?: string) {
+    const contract = await prisma.employmentContract.findFirst({
+      where: { id, companyId, deletedAt: null },
+      select: { id: true, status: true, type: true, startDate: true, endDate: true },
+    });
+    if (!contract) throw new NotFoundError('Employment contract not found');
+    if (contract.type !== EmploymentContractType.PROBATION) {
+      throw new BadRequestError('Hanya kontrak masa percobaan yang punya keputusan review probasi');
+    }
+    if (contract.status !== EmploymentContractStatus.ACTIVE) {
+      throw new BadRequestError(`Keputusan probasi hanya untuk kontrak aktif; kontrak ini ${contract.status}`);
+    }
+
+    const data: Record<string, unknown> = {
+      probationDecision: input.decision,
+      probationDecidedBy: decidedBy ?? null,
+      probationDecidedAt: new Date(),
+      probationNotes: input.notes ?? null,
+    };
+
+    if (input.decision === 'EXTEND') {
+      if (!input.extendToDate) throw new BadRequestError('EXTEND membutuhkan extendToDate');
+      const to = new Date(input.extendToDate);
+      if (Number.isNaN(to.getTime())) throw new BadRequestError('extendToDate tidak valid');
+      if (contract.endDate && to <= contract.endDate) {
+        throw new BadRequestError('extendToDate harus setelah tanggal akhir yang berlaku');
+      }
+      const months = monthsBetween(contract.startDate, to);
+      if (months > PROBATION_MAX_MONTHS) {
+        throw new BadRequestError(
+          `Masa percobaan maksimal ${PROBATION_MAX_MONTHS} bulan (UU 13/2003 pasal 60); perpanjangan ini ${months} bulan`,
+        );
+      }
+      data.endDate = to;
+      // A new deadline deserves a fresh reminder cycle.
+      data.lastReminderDays = null;
+    } else {
+      data.status = input.decision === 'PASS'
+        ? EmploymentContractStatus.RENEWED
+        : EmploymentContractStatus.TERMINATED;
+    }
+
+    return prisma.employmentContract.update({ where: { id: contract.id }, data });
   }
 
   async updateStatus(companyId: string, id: string, status: EmploymentContractStatus) {

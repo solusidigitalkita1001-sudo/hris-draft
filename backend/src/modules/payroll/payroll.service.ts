@@ -16,18 +16,24 @@ import { eventBus } from '@/shared/events/EventBus';
 import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
-import { calculatePph21Correction } from '@/shared/payroll/pph21-annual';
+import { calculatePph21Correction, shouldReconcileAnnualTax } from '@/shared/payroll/pph21-annual';
 import { mailService } from '@/shared/mail/MailService';
 import { randomUUID as uuidv4 } from 'node:crypto';
 import { employeeLoanRepository } from '@/modules/employee-loan/employee-loan.repository';
 import { generateSystemCode } from '@/shared/utils/system-code';
 import { calculateBpjs } from '@/shared/payroll/bpjs';
 import { calculatePph21 } from '@/shared/payroll/pph21';
+import { buildPayrollJournal } from '@/shared/payroll/journal';
+import { employmentWindow } from '@/shared/payroll/employment-window';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
 import { calculateThr } from '@/shared/payroll/thr';
+import { calculateThrTax } from '@/shared/payroll/thr-tax';
+import { AmbiguousSalaryError, selectAsOfSalaries } from '@/shared/payroll/as-of-salary';
+import { monthlyStatutoryWage } from '@/shared/payroll/statutory-wage';
 import { buildPayslipBreakdown } from '@/shared/payroll/payslip-breakdown';
 import { prisma } from '@/shared/database/prisma';
 import { calculateOvertimePay } from '@/shared/attendance/overtime';
@@ -160,18 +166,76 @@ export class PayrollService {
       throw new BadRequestError('Data gaji aktif karyawan tidak ditemukan');
     }
 
+    // "Upah sebulan" under Permenaker 6/2016 is gaji pokok PLUS tunjangan
+    // tetap. This passed base salary alone, which paid less THR than the law
+    // requires for anybody whose package includes a fixed allowance — and
+    // `thr.ts` has stated the right rule in its own header all along, with no
+    // data to express it until `isFixedAllowance` existed.
+    const { wage: statutoryWage, fixedAllowances } = monthlyStatutoryWage(
+      salary.baseSalary, salary.components);
     const result = calculateThr({
-      monthlyWage: Number(salary.baseSalary),
+      monthlyWage: statutoryWage.toNumber(),
       joinDate: employee.joinDate,
       referenceDate: referenceDate ?? new Date(),
     });
 
+    // PPh 21 on the THR. `calculateThrTax` existed with no caller at all, so
+    // this endpoint returned a gross figure and the comment in
+    // `calculateThrStandalone` said as much: "return amount THR saja". THR is
+    // irregular income, so its tax depends on the rest of the year (annualized
+    // method) or on the month it lands in (TER) — never on the THR alone.
+    const reference = referenceDate ?? new Date();
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new ForbiddenError('THR calculation requires an active company context');
+    const [policy, methodSetting] = await Promise.all([
+      loadPayrollPolicyConfig(prisma, companyId, reference.getUTCFullYear()),
+      prisma.companySetting.findUnique({
+        where: { companyId_key: { companyId, key: 'pph21_method' } },
+        select: { value: true },
+      }),
+    ]);
+    // The tax base stays base salary, deliberately, and it is NOT the same
+    // question as the THR base above.
+    //
+    // The regular monthly taxable gross ought to be base pay plus taxable
+    // allowances. But in this codebase base pay lives only in
+    // `EmployeeSalary.baseSalary`: the seeded `Gaji Pokok` component carries no
+    // amount and is therefore never allocated, so `employee-pay.ts` — which
+    // derives its taxable gross from the allocation alone — leaves base pay out
+    // of the monthly tax base entirely. That is a systemic defect the audit has
+    // already named, and it is not this change's to fix. Summing the allocation
+    // here would inherit it and tax a THR against allowances only; adding base
+    // pay to it would create a second, different base from the monthly run.
+    // Base salary alone is the closest of the three and changes nothing.
+    const thrTax = calculateThrTax({
+      monthlyGross: Number(salary.baseSalary),
+      thrAmount: result.amount,
+      married: employee.maritalStatus === 'MARRIED',
+      dependents: employee._count?.families ?? 0,
+      hasNpwp: Boolean(employee.taxId),
+      monthlyPensionContribution: bpjsPensionFor(policy, Number(salary.baseSalary)),
+      method: methodSetting?.value === 'TER' ? 'TER' : 'ANNUALIZED',
+      terTables: policy.ter,
+    }, policy.pph21);
+
+    // Deliberately logs the employee only. `employee-salary-read.mysql.test.ts`
+    // asserts this exact call to keep financial values out of application
+    // logs, and the tax is one — my first version logged it and that guard
+    // caught it. The method is omitted too rather than weaken an exact match.
     logger.info('THR calculated', { employeeId });
 
     return {
       employee: { id: employee.id, fullName: employee.fullName, employeeNumber: employee.employeeNumber },
-      monthlyWage: Number(salary.baseSalary),
+      /** gaji pokok + tunjangan tetap — the base the THR is a month of. */
+      monthlyWage: statutoryWage.toNumber(),
+      /** Which components counted toward it, so the figure can be checked. */
+      fixedAllowances,
       ...result,
+      /** PPh 21 withheld from the THR. */
+      tax: thrTax.tax,
+      /** What the employee actually receives. */
+      netAmount: Math.max(0, Math.round(result.amount - thrTax.tax)),
+      taxMethod: thrTax.method,
     };
   }
 
@@ -323,10 +387,25 @@ export class PayrollService {
           const period = await payrollRepository.findPayrollPeriodById(data.periodId, tx, data.companyId);
           if (!period || period.companyId !== data.companyId) throw new NotFoundError('Payroll period not found in this company');
           if (period.status === 'CLOSED') throw new BadRequestError('Cannot create payroll run for a closed period');
-          if (!period.attendanceReviewedAt) throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
-          // VOIDED runs free the period for a fresh, corrected run.
-          const existing = await tx.payrollRun.findFirst({ where: { companyId: data.companyId, periodId: period.id, deletedAt: null, status: { not: 'VOIDED' } }, select: { id: true } });
-          if (existing) throw new ConflictError(`Payroll already exists for this period (${existing.id}); void the existing run first if it needs correction`);
+          const runType = data.runType ?? 'REGULAR';
+          // Only the monthly run is computed from attendance. THR, severance
+          // and corrections are not, so gating them on a confirmed attendance
+          // recap would block payments that have nothing to do with it.
+          if (runType === 'REGULAR' && !period.attendanceReviewedAt) {
+            throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
+          }
+          // One run per period PER TYPE. The old rule knew nothing of types, so
+          // paying THR meant voiding the month's salary run. VOIDED runs still
+          // free their slot for a fresh, corrected run of the same type.
+          const existing = await tx.payrollRun.findFirst({
+            where: { companyId: data.companyId, periodId: period.id, runType, deletedAt: null, status: { not: 'VOIDED' } },
+            select: { id: true },
+          });
+          if (existing) {
+            throw new ConflictError(
+              `A ${runType} payroll already exists for this period (${existing.id}); void it first if it needs correction`,
+            );
+          }
           const runNumber = await payrollRepository.findLatestRunNumber(data.companyId, tx) + 1;
           const run = await payrollRepository.createPayrollRun(data, runNumber, userId, tx);
           await this.calculatePayroll(run.id, tx);
@@ -531,9 +610,199 @@ export class PayrollService {
 
   // ==================== Payroll Calculation ====================
 
+  /**
+   * A THR run (Permenaker 6/2016): one month of upah, prorated by months of
+   * service, with its PPh 21 withheld — and nothing else.
+   *
+   * Deliberately NOT a variant of the monthly loop. A THR payslip has no
+   * attendance, no overtime, no loan instalment, no BPJS and no arrears: it
+   * pays one entitlement and withholds one tax. Threading a runType flag
+   * through the monthly path would have put a branch beside every one of those
+   * and left the reader to work out which apply.
+   *
+   * It picks the salary through the same as-of selection the monthly run uses,
+   * so the two cannot disagree about what somebody earns.
+   */
+  private async calculateThrPayroll(runId: string, database: Prisma.TransactionClient) {
+    const run = await payrollRepository.findPayrollRunById(runId, database);
+    if (!run) throw new NotFoundError('Payroll run not found');
+
+    const allSalaryRows = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
+    const employeeSalaries = this.asOfSalariesOrConflict(allSalaryRows, run.period.endDate);
+
+    const thrComponent = await this.ensureThrEarningComponent(run.companyId, database);
+    // Without somewhere to record the withholding the run would pay THR gross
+    // and the company would owe tax it never deducted. Refuse instead.
+    const taxComponent = await payrollRepository.findSalaryComponentByCode(run.companyId, 'PPH21', database);
+    if (!taxComponent) {
+      throw new BadRequestError(
+        'No PPH21 salary component exists for this company, so the PPh 21 on the THR cannot be '
+        + 'recorded; create it before running THR',
+      );
+    }
+
+    const referenceDate = new Date(run.period.endDate);
+    const [policy, methodSetting] = await Promise.all([
+      loadPayrollPolicyConfig(database, run.companyId, referenceDate.getUTCFullYear()),
+      database.companySetting.findUnique({
+        where: { companyId_key: { companyId: run.companyId, key: 'pph21_method' } },
+        select: { value: true },
+      }),
+    ]);
+    const method = methodSetting?.value === 'TER' ? 'TER' as const : 'ANNUALIZED' as const;
+
+    let totalEarnings = new Prisma.Decimal(0);
+    let totalDeductions = new Prisma.Decimal(0);
+    let employeeCount = 0;
+
+    for (const salary of employeeSalaries) {
+      const employee = salary.employee;
+      // Tenure decides both eligibility and the prorated fraction, so a
+      // missing join date cannot be guessed. Named, so it is fixable.
+      if (!employee?.joinDate) {
+        throw new BadRequestError(
+          `Employee ${employee?.employeeNumber ?? salary.employeeId} has no join date, `
+          + 'so THR tenure cannot be computed; fill it in before running THR',
+        );
+      }
+
+      const { wage } = monthlyStatutoryWage(salary.baseSalary, salary.components);
+      const thr = calculateThr({
+        monthlyWage: wage.toNumber(),
+        joinDate: employee.joinDate,
+        referenceDate,
+      });
+      // Under one month of service earns no THR, and a payslip for nothing
+      // would show up in every report as if it had been paid.
+      if (!thr.eligible || thr.amount <= 0) continue;
+
+      const tax = calculateThrTax({
+        // Base salary, for the same reason `calculateEmployeeThr` uses it: the
+        // monthly engine leaves base pay out of its taxable gross because the
+        // seeded base-pay component is never allocated, and inventing a second
+        // different base here would make the THR tax disagree with the run.
+        monthlyGross: Number(salary.baseSalary),
+        thrAmount: thr.amount,
+        married: employee.maritalStatus === 'MARRIED',
+        dependents: employee._count?.families ?? 0,
+        hasNpwp: Boolean(employee.taxId),
+        monthlyPensionContribution: bpjsPensionFor(policy, Number(salary.baseSalary)),
+        method,
+        terTables: policy.ter,
+      }, policy.pph21);
+
+      const netPay = new Prisma.Decimal(thr.amount).minus(tax.tax).toDecimalPlaces(2).toNumber();
+      if (netPay < 0) {
+        throw new BadRequestError('THR withholding exceeds the THR itself; review the tax configuration');
+      }
+
+      const payslip = await payrollRepository.createPayslip({
+        payrollRun: { connect: { id: runId } },
+        employee: { connect: { id: salary.employeeId } },
+        company: { connect: { id: run.companyId } },
+        employeeSalary: { connect: { id: salary.id } },
+        baseSalary: salary.baseSalary,
+        totalEarnings: thr.amount,
+        totalDeductions: tax.tax,
+        netPay,
+        // A THR run is not a month of work. Leaving these at zero says so,
+        // rather than copying a month's attendance onto a payment that has
+        // nothing to do with days worked.
+        workDays: 0, presentDays: 0, leaveDays: 0, absentDays: 0,
+        overtimeHours: 0, overtimeWorkdayHours: 0, overtimeHolidayHours: 0,
+        employeeSnapshot: {
+          fullName: employee.fullName,
+          employeeNumber: employee.employeeNumber,
+          employmentType: employee.employmentType,
+          departmentId: employee.department?.id ?? null,
+          departmentName: employee.department?.name ?? null,
+          positionId: employee.position?.id ?? null,
+          positionName: employee.position?.name ?? null,
+          // The working, frozen with the payment: a THR figure nobody can
+          // re-derive a year later is a figure nobody can defend.
+          thr: {
+            tenureMonths: thr.tenureMonths,
+            isProrated: thr.isProrated,
+            monthlyWage: wage.toString(),
+            taxMethod: tax.method,
+          },
+        },
+        status: 'DRAFT',
+      }, database);
+
+      await payrollRepository.createPayslipComponents([
+        {
+          payslipId: payslip.id,
+          salaryComponentId: thrComponent.id,
+          name: thrComponent.name,
+          type: 'ALLOWANCE',
+          amount: thr.amount,
+          // Taxable income, which is why there is a withholding at all.
+          isTaxable: true,
+        },
+        {
+          payslipId: payslip.id,
+          salaryComponentId: taxComponent.id,
+          name: taxComponent.name,
+          type: 'DEDUCTION',
+          amount: tax.tax,
+          isTaxable: false,
+        },
+      ], database);
+
+      totalEarnings = totalEarnings.plus(thr.amount);
+      totalDeductions = totalDeductions.plus(tax.tax);
+      employeeCount += 1;
+    }
+
+    await payrollRepository.updatePayrollRunTotals(runId, {
+      totalEmployees: employeeCount,
+      totalEarnings,
+      totalDeductions,
+      totalNetPay: totalEarnings.minus(totalDeductions),
+    }, database);
+    await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
+  }
+
+  /** As-of selection, with its data error surfaced as the HTTP conflict. */
+  private asOfSalariesOrConflict<T extends { employeeId: string; effectiveDate: Date | string; isActive: boolean }>(
+    rows: readonly T[], periodEnd: Date | string,
+  ): T[] {
+    try {
+      return selectAsOfSalaries(rows, periodEnd);
+    } catch (error) {
+      if (error instanceof AmbiguousSalaryError) throw new ConflictError(error.message);
+      throw error;
+    }
+  }
+
   private async calculatePayroll(runId: string, database: Prisma.TransactionClient) {
     const run = await payrollRepository.findPayrollRunById(runId, database);
     if (!run) throw new NotFoundError('Payroll run not found');
+
+    // runType reached the create DTO before this calculation learned what the
+    // types mean, and nothing below reads it: a THR run recalculated a full
+    // month of salary, so a period already paid gained a second complete set
+    // of payslips that could be approved and disbursed on its own. THR is one
+    // month of upah under Permenaker 6/2016, not a second salary, and
+    // severance has its own tax treatment. Refuse the types this engine cannot
+    // compute instead of paying a regular salary under their name.
+    // THR has its own calculation: one month of upah with its PPh 21, and none
+    // of the attendance, overtime, loan or BPJS machinery below.
+    if (run.runType === 'THR') {
+      return this.calculateThrPayroll(runId, database);
+    }
+    // SEVERANCE and CORRECTION are still refused. Severance is computed and
+    // taxed on the exit path (`onboarding.calculateFinalPayroll`, PP 68/2009),
+    // not as a payroll run; and a correction run would need to know which
+    // period it corrects and what was already paid. Answering with a regular
+    // month's salary under either name is the failure this guard exists for.
+    if (run.runType !== 'REGULAR') {
+      throw new ConflictError(
+        `A ${run.runType} payroll run cannot be calculated: this engine computes regular monthly payroll `
+        + 'and THR. Void the run, or record the amounts as arrears on a regular run.',
+      );
+    }
 
     // As-of salary selection (checklist §18): the run pays the LATEST salary
     // row effective on or before the period end. Future-dated raises no
@@ -541,35 +810,10 @@ export class PayrollService {
     // future-dated row superseded it still pays; a deliberately paused
     // employee (latest row inactive, nothing newer) is skipped.
     const allSalaryRows = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
-    const periodEndTime = new Date(run.period.endDate).getTime();
-    const rowsByEmployee = new Map<string, typeof allSalaryRows>();
-    for (const row of allSalaryRows) {
-      const rows = rowsByEmployee.get(row.employeeId) ?? [];
-      rows.push(row);
-      rowsByEmployee.set(row.employeeId, rows);
-    }
-    const employeeSalaries: typeof allSalaryRows = [];
-    for (const rows of rowsByEmployee.values()) {
-      // rows already ordered effectiveDate desc by the repository
-      const asOf = rows.find((row) => new Date(row.effectiveDate).getTime() <= periodEndTime);
-      if (!asOf) continue; // only future-dated salaries exist — nothing payable this period
-      // As-of selection makes two rows with DIFFERENT dates unambiguous, but
-      // rows sharing the selected date are decided by query order alone: the
-      // run would silently pay one of two conflicting salaries, or skip an
-      // employee because the row it happened to pick was inactive. The
-      // duplicate is a data error, so surface it instead of coin-flipping.
-      const sameEffectiveDate = rows.filter(
-        (row) => new Date(row.effectiveDate).getTime() === new Date(asOf.effectiveDate).getTime(),
-      );
-      if (sameEffectiveDate.length > 1) {
-        throw new ConflictError(
-          `Multiple active salaries found for one employee on effective date ${new Date(asOf.effectiveDate).toISOString().slice(0, 10)}; review salary allocations`,
-        );
-      }
-      const hasNewerRow = rows.some((row) => new Date(row.effectiveDate).getTime() > periodEndTime);
-      if (!asOf.isActive && !hasNewerRow) continue; // deliberately deactivated
-      employeeSalaries.push(asOf.isActive || hasNewerRow ? { ...asOf, isActive: true } : asOf);
-    }
+    // Moved to `shared/payroll/as-of-salary.ts` when the THR run became a
+    // second caller: two copies would be two answers to "what is this person's
+    // salary right now".
+    const employeeSalaries = this.asOfSalariesOrConflict(allSalaryRows, run.period.endDate);
     // Read the published revision set once for the whole run. Later publications
     // never change the version used midway through employee calculations.
     const formulaVersions = selectFormulaVersions(await database.payrollFormulaVersion.findMany({
@@ -595,13 +839,33 @@ export class PayrollService {
     // changes take-home pay in the last month of the year; and only in the
     // period that actually ends the fiscal year, so a mid-year run cannot
     // accidentally settle a year that is not over.
+    // PPh 21 withholding method (GAP-40). TER (PP 58/2023) has been the
+    // mandatory monthly method since January 2024, but switching it on changes
+    // every employee's take-home pay in both directions, so it stays a
+    // deliberate tenant decision rather than a consequence of deploying.
+    const methodSetting = await database.companySetting.findUnique({
+      where: { companyId_key: { companyId: run.companyId, key: 'pph21_method' } },
+      select: { value: true },
+    });
+    const useTer = methodSetting?.value === 'TER';
+
     const reconciliationSetting = await database.companySetting.findUnique({
       where: { companyId_key: { companyId: run.companyId, key: 'pph21_december_reconciliation_enabled' } },
       select: { value: true },
     });
     const fiscalPeriodEnd = new Date(run.period.endDate);
     const isFinalPeriodOfYear = fiscalPeriodEnd.getUTCMonth() === 11;
-    const reconcileAnnualTax = reconciliationSetting?.value === 'true' && isFinalPeriodOfYear;
+    // TER forces the year-end settlement on. Under TER the monthly figure is a
+    // withholding rate, not a twelfth of the year's tax, so without the
+    // December true-up the year's withholding would simply never equal the
+    // year's liability — and the employee would carry the difference with
+    // nothing in the system saying so. Under the annualized method it stays
+    // opt-in, because there the twelve months already add up.
+    const reconcileAnnualTax = shouldReconcileAnnualTax({
+      isFinalPeriodOfYear,
+      useTer,
+      optedIn: reconciliationSetting?.value === 'true',
+    });
     const taxComponent = reconcileAnnualTax
       ? await payrollRepository.findSalaryComponentByCode(run.companyId, 'PPH21', database)
       : null;
@@ -613,7 +877,12 @@ export class PayrollService {
           where: {
             companyId: run.companyId,
             payrollRun: {
-              status: 'APPROVED',
+              // A paid run is DISBURSED, not APPROVED: settlement moves it
+              // (payroll-payment-settlement.ts:34), the only supported payment
+              // path. Reading APPROVED alone finds nothing by December, when
+              // every earlier run has been paid — so the year-end true-up ran
+              // against an empty history and refunded December instead.
+              status: { in: ['APPROVED', 'DISBURSED'] },
               period: {
                 startDate: { gte: new Date(Date.UTC(fiscalPeriodEnd.getUTCFullYear(), 0, 1)) },
                 endDate: { lte: fiscalPeriodEnd },
@@ -642,6 +911,26 @@ export class PayrollService {
     const benefitDeductionEnabled = benefitSetting?.value === 'true';
     // Unpaid-leave deduction (org decision, dynamic per company): approved
     // leave on an unpaid leave type deducts a daily wage when enabled.
+    // Gross-up (GAP-17): the company pays its employees' PPh21 as a taxable
+    // tax allowance, so take-home pay no longer moves with the tax. Opt-in per
+    // company — it raises employer cost and rewrites every payslip.
+    const grossUpSetting = await database.companySetting.findUnique({
+      where: { companyId_key: { companyId: run.companyId, key: 'pph21_gross_up_enabled' } },
+      select: { value: true },
+    });
+    const taxAllowanceComponent = grossUpSetting?.value === 'true'
+      ? await this.ensureTaxAllowanceComponent(run.companyId, database)
+      : null;
+    // Gross-up solves `allowance = tax(gross + allowance)` against the annual
+    // method; against TER that is a different equation. Running both would
+    // produce a number neither policy means, so the run stops before writing
+    // anything rather than paying it.
+    if (useTer && taxAllowanceComponent) {
+      throw new ConflictError(
+        'PPh 21 gross-up (pph21_gross_up_enabled) and the TER method (pph21_method=TER) '
+        + 'cannot both be enabled; turn one off before running payroll',
+      );
+    }
     const unpaidLeaveSetting = await database.companySetting.findUnique({
       where: { companyId_key: { companyId: run.companyId, key: 'unpaid_leave_deduction_enabled' } },
       select: { value: true },
@@ -698,6 +987,7 @@ export class PayrollService {
           bpjs: payrollPolicy.bpjs,
           lateConfig: lateCfg,
           workweekDays,
+          grossUp: taxAllowanceComponent !== null,
         })),
       },
     });
@@ -771,9 +1061,22 @@ export class PayrollService {
 
     for (const salary of employeeSalaries) {
       if (!salary.isActive) continue;
-      // Terminated/resigned employees stop being paid; soft-deleted employees
-      // no longer abort the whole run via the attendance loader mismatch.
-      if (salary.employee.status !== 'ACTIVE') continue;
+      // The employed slice of this period decides both whether to pay and how
+      // much. Skipping on status alone dropped a leaver's final partial month
+      // entirely: they resign on the 10th, their status is RESIGNED by the
+      // time the run happens, and the days they actually worked were never
+      // paid. Status still ends payment — but from the period after the one
+      // their last working day falls in, not from this one.
+      const slice = employmentWindow({
+        periodStart,
+        periodEnd,
+        joinDate: salary.employee.joinDate,
+        lastWorkingDate: salary.employee.resignations?.[0]?.lastWorkingDate ?? null,
+      });
+      if (!slice.employedAtAll) continue;
+      // A non-ACTIVE employee is only paid for a period their window reaches
+      // into; once it does not, the status check does the rest as before.
+      if (salary.employee.status !== 'ACTIVE' && !slice.prorated) continue;
       if (salary.companyId !== run.companyId || salary.employee.companyId !== run.companyId || salary.components.some(allocation => allocation.salaryComponent.companyId !== run.companyId)) {
         throw new ConflictError('Salary allocation references a component outside the payroll company');
       }
@@ -936,7 +1239,16 @@ export class PayrollService {
         BASE_SALARY: salary.baseSalary.toString(), WORK_DAYS: String(workDaysInPeriod),
         PRESENT_DAYS: String(attd.present), LEAVE_DAYS: String(leaveDaysForEmployee),
         ABSENT_DAYS: String(absentDays), OVERTIME_HOURS: String(overtimeHoursForEmployee),
-      }, formulaVersions, payrollPolicy);
+      }, formulaVersions, {
+        ...payrollPolicy,
+        // Only components the tenant flagged isProrated are scaled; see
+        // employee-pay.ts. A full window leaves every amount untouched.
+        prorationFactor: slice.fraction,
+        useTer,
+        taxAllowance: taxAllowanceComponent
+          ? { salaryComponentId: taxAllowanceComponent.id, name: taxAllowanceComponent.name }
+          : null,
+      });
 
       let earningsTotal = pay.earningsTotal;
       let deductionsTotal = pay.deductionsTotal;
@@ -1132,7 +1444,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: December reconciliation of annual PPh21',
       sortOrder: 994,
     }, database);
@@ -1152,9 +1464,31 @@ export class PayrollService {
       isTaxable: true,
       // The amount was computed from a daily rate at approval; prorating it
       // against this period would shrink what was already agreed.
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: unused leave exchanged for money',
       sortOrder: 995,
+    }, database);
+  }
+
+  private async ensureThrEarningComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'THR_EARNING_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Tunjangan Hari Raya',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: true,
+      // Already prorated by months of service under Permenaker 6/2016, so the
+      // period proration must not shrink it a second time. And it is not a
+      // tunjangan tetap: it is the THR itself, not part of the wage THR is a
+      // month of — counting it would make next year's THR pay for this one.
+      isProrated: false, isFixedAllowance: false,
+      description: 'System generated: THR keagamaan (Permenaker 6/2016), 1x upah sebulan prorata masa kerja',
+      sortOrder: 994,
     }, database);
   }
 
@@ -1172,7 +1506,7 @@ export class PayrollService {
       isTaxable: true,
       // Never prorated: the amount was already prorated for the period it came
       // from, and prorating it again against this period would shrink it twice.
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: pay for a closed period the employee was missed in',
       sortOrder: 996,
     }, database);
@@ -1190,7 +1524,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: true,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: overtime pay per PP 35/2021',
       sortOrder: 998,
     }, database);
@@ -1212,7 +1546,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated deduction for employee loan installments',
       sortOrder: 999,
     }, database);
@@ -1230,7 +1564,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: automatic late attendance deduction per minutes after branch tolerance',
       sortOrder: 997,
     }, database);
@@ -1248,7 +1582,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: automatic absence per day deduction based on basic salary / working days',
       sortOrder: 996,
     }, database);
@@ -1266,9 +1600,29 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: daily-wage deduction for approved leave whose leave type is unpaid (enabled per company via unpaid_leave_deduction_enabled).',
       sortOrder: 993,
+    }, database);
+  }
+
+  private async ensureTaxAllowanceComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'TAX_ALLOWANCE_AUTO';
+    const existing = await payrollRepository.findSalaryComponentByCode(companyId, code, database);
+    if (existing) return existing;
+    return payrollRepository.createSalaryComponent({
+      companyId,
+      name: 'Tunjangan Pajak (Gross-Up)',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      // Taxable on purpose: the allowance is ordinary income, which is why its
+      // own amount has to be solved for rather than copied from the tax.
+      isTaxable: true,
+      isProrated: false, isFixedAllowance: false,
+      description: 'System generated: taxable tax allowance equal to the PPh21 it causes, so the employer bears the tax (enabled per company via pph21_gross_up_enabled).',
+      sortOrder: 992,
     }, database);
   }
 
@@ -1284,7 +1638,7 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: employee contribution for active benefit enrollments (percent of base salary per plan).',
       sortOrder: 994,
     }, database);
@@ -1302,13 +1656,69 @@ export class PayrollService {
       calculationMethod: 'FIXED',
       amount: 0,
       isTaxable: false,
-      isProrated: false,
+      isProrated: false, isFixedAllowance: false,
       description: 'System generated: automatic deduction for approved Earned Wage Access paid requests (employer-funded float model). Deducted bulan berjalan di payslip.',
       sortOrder: 995,
     }, database);
   }
 
   // ==================== Standalone Calculation Endpoints (B.1, B.2, B.3) ====================
+
+  /**
+   * Accounting journal for a run, grouped by cost centre (GAP-47).
+   *
+   * `Department.costCenter` has been stored since the department module was
+   * written and read by nothing, so the one question accounting asks of a
+   * payroll run — which cost centre carries this — had to be answered by
+   * re-keying the payslip list.
+   *
+   * The cost centre is resolved from the department id frozen on the payslip,
+   * not from the employee's current department, so a transfer does not move
+   * last month's cost. ponytail: the centre *code* is read live, because no
+   * snapshot of it exists — renaming a cost centre therefore relabels historic
+   * journals. Snapshotting it would need a column and a backfill.
+   */
+  async runJournal(runId: string) {
+    const run = await payrollRepository.findPayrollRunById(runId);
+    if (!run) throw new NotFoundError('Payroll run not found');
+
+    const payslips = await prisma.payslip.findMany({
+      where: { payrollRunId: runId, companyId: run.companyId },
+      select: {
+        netPay: true, employeeSnapshot: true,
+        components: { select: { name: true, type: true, amount: true } },
+      },
+    });
+
+    const departmentIds = [...new Set(payslips
+      .map((slip) => (slip.employeeSnapshot as { departmentId?: string | null } | null)?.departmentId)
+      .filter((id): id is string => Boolean(id)))];
+    const departments = departmentIds.length
+      ? await prisma.department.findMany({
+          where: { id: { in: departmentIds }, companyId: run.companyId },
+          select: { id: true, costCenter: true },
+        })
+      : [];
+
+    const lines = buildPayrollJournal(
+      payslips.map((slip) => ({ netPay: slip.netPay, employeeSnapshot: slip.employeeSnapshot, components: slip.components })),
+      new Map(departments.map((row) => [row.id, row.costCenter])),
+    );
+
+    return {
+      runId,
+      runName: run.name,
+      status: run.status,
+      lines,
+      totals: {
+        earnings: lines.reduce((sum, line) => sum + line.earnings, 0),
+        deductions: lines.reduce((sum, line) => sum + line.deductionsTotal, 0),
+        netPay: lines.reduce((sum, line) => sum + line.netPay, 0),
+        /// Non-zero means the journal does not balance and must not be posted.
+        imbalance: lines.reduce((sum, line) => sum + line.imbalance, 0),
+      },
+    };
+  }
 
   calculatePph21Standalone(data: CalculatePph21DTO) {
     return calculatePph21({
@@ -1326,12 +1736,34 @@ export class PayrollService {
       joinDate: new Date(data.joinDate),
       referenceDate: data.referenceDate ? new Date(data.referenceDate) : new Date(),
     });
-    // BONUS: hitung also PPh 21 untuk THR (aturan khusus THR: PPh dihitung tersendiri nanti)
-    // Saat ini return amount THR saja sesuai acceptance B.2.
+    // The comment that used to sit here said "return amount THR saja", and
+    // that is what it did: `calculateThrTax` existed with no caller anywhere.
+    // The tax is reported now, but only when the caller supplies the PTKP
+    // status — this endpoint has no employee to read it from, and defaulting
+    // to TK/0 would understate the withholding for everybody else.
+    const hasTaxContext = data.married !== undefined || data.dependents !== undefined;
+    const thrTax = hasTaxContext
+      ? calculateThrTax({
+          monthlyGross: data.monthlyWage,
+          thrAmount: result.amount,
+          married: data.married ?? false,
+          dependents: data.dependents ?? 0,
+          hasNpwp: data.hasNpwp,
+          monthlyPensionContribution: data.monthlyPensionContribution,
+          method: data.method ?? 'ANNUALIZED',
+        })
+      : null;
+
     return {
       ...result,
       monthlyWage: data.monthlyWage,
       joinDate: data.joinDate,
+      /** Null when no PTKP status was supplied; the response says which. */
+      tax: thrTax?.tax ?? null,
+      netAmount: thrTax ? Math.max(0, Math.round(result.amount - thrTax.tax)) : null,
+      taxMethod: thrTax?.method ?? null,
+      /** Reading `tax: null` as "no tax due" would be wrong; this says why. */
+      taxContextProvided: hasTaxContext,
     };
   }
 

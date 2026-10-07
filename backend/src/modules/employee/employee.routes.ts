@@ -3,6 +3,7 @@ import {
   contractQuerySchema,
   createContractSchema,
   expiringContractQuerySchema,
+  probationDecisionSchema,
   updateContractStatusSchema,
 } from './employment-contract.dto';
 import multer from 'multer';
@@ -72,6 +73,13 @@ router.post(
   auditLog({ action: 'CREATE_CONTRACT', entity: 'EmploymentContract' }),
   validate(createContractSchema),
   employeeController.createContract.bind(employeeController),
+);
+router.post(
+  '/contracts/:id/probation-decision',
+  authorize({ resource: 'employee', action: 'update' }),
+  auditLog({ action: 'DECIDE_PROBATION', entity: 'EmploymentContract', model: 'employmentContract' }),
+  validate(probationDecisionSchema),
+  employeeController.decideProbation.bind(employeeController),
 );
 router.patch(
   '/contracts/:id/status',

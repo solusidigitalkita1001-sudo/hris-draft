@@ -982,6 +982,12 @@ export async function seedTestData(): Promise<void> {
   await ensureUserRole({ email: 'dewi@tech.com', roleCode: 'HR_MANAGER', companyId: company.id });
   await ensureUserRole({ email: 'rina@tech.com', roleCode: 'HR_STAFF', companyId: company.id });
   await ensureUserRole({ email: 'rudi@tech.com', roleCode: 'COMPANY_ADMIN', companyId: company.id });
+  // The money path needs three distinct people, not three permissions on one
+  // account: creator != approver (payroll.service.ts) and approver !=
+  // disburser (payroll-payment-settlement.ts). dewi prepares, rudi approves,
+  // and this one releases — so the separation can be walked without using the
+  // platform super-admin as an operator.
+  await ensureUserRole({ email: 'siti@tech.com', roleCode: 'FINANCE', companyId: company.id });
   // Direktur Utama bertindak sebagai approver puncak untuk request para manager.
   await ensureUserRole({ email: 'direktur@tech.com', roleCode: 'MANAGER', companyId: company.id });
   console.log('  ✓ Role simulation assigned');

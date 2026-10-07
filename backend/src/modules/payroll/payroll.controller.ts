@@ -1,10 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { payrollService } from './payroll.service';
+import { importSalaryMaster } from './salary-import.service';
+import { journalToCsv } from '@/shared/payroll/journal';
 import { Result } from '@/shared/core/Result';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
 import { bpjsReportService, bpjsReportToCsv } from './bpjs-report.service';
+import { sippWageExportToCsv } from '@/shared/payroll/sipp-wage-export';
 import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
@@ -267,6 +270,50 @@ export class PayrollController {
     }
   }
 
+  /** Jurnal akuntansi per cost centre; `?format=csv` untuk diimpor. */
+  async payrollRunJournal(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await payrollService.runJournal(req.params.id as string);
+      if (req.query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="journal-${data.runId}.csv"`);
+        res.send(journalToCsv(data.lines));
+        return;
+      }
+      res.json(Result.success(data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Impor master gaji (GAP-44). `?dryRun=true` memeriksa seluruh berkas dan
+   * melaporkan semua masalahnya tanpa menulis apa pun — itu yang dipakai
+   * implementer sebelum menekan impor sungguhan.
+   */
+  async importSalaryMaster(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      if (!req.file) throw new BadRequestError('Berkas CSV wajib diunggah pada field "file"');
+      const result = await importSalaryMaster(companyId, req.file, { dryRun: req.query.dryRun === 'true' });
+      // The import ran and reported; it simply wrote nothing. Result.error
+      // carries no payload, and the per-row errors ARE the value here — so
+      // this stays a success envelope with the findings in `data.errors`,
+      // matching the employee importer rather than inventing a second shape.
+      res.json(Result.success(
+        result,
+        result.errors.length
+          ? 'Impor dibatalkan; tidak ada baris yang ditulis — periksa errors'
+          : result.dryRun
+            ? 'Berkas valid; belum ada yang ditulis'
+            : 'Master gaji diimpor',
+      ));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async createPayrollRun(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const data = await payrollService.createPayrollRun(req.body, req.user?.id);
@@ -515,6 +562,23 @@ export class PayrollController {
   }
 
   // ==================== Rekap PPh21 tahunan (bahan 1721-A1) ====================
+  /**
+   * The bukti potong 1721-A1 figures, laid out by PER-2/PJ/2024's line
+   * numbers. The response carries `verified: false` until somebody has
+   * compared it with a form a tax office accepted — see
+   * `shared/payroll/form-1721-a1.ts`.
+   */
+  async buktiPotong1721A1(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const year = Number(req.query.year);
+      const form = await annualTaxRecapService.buildBuktiPotong(
+        companyId, String(req.params.employeeId), year);
+      res.json(Result.success(form));
+    } catch (error) { next(error); }
+  }
+
   async annualTaxRecap(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = req.user?.companyId;
@@ -546,6 +610,28 @@ export class PayrollController {
   }
 
   // ==================== Laporan iuran BPJS bulanan ====================
+  /**
+   * The wage figures shaped for SIPP Online's Upload Upah. The payload says
+   * `verified: false` and carries a warning that the template itself must be
+   * downloaded from SIPP — see `shared/payroll/sipp-wage-export.ts`.
+   */
+  async sippWageExport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const data = await bpjsReportService.buildSippWages(companyId, String(req.query.periodId));
+
+      if (req.query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="upah-sipp-${data.payrollPeriod.code}.csv"`);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(sippWageExportToCsv(data));
+        return;
+      }
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
   async bpjsReport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = req.user?.companyId;

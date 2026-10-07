@@ -36,7 +36,10 @@ export const DEFAULT_LEAVE_TYPES = [
  * a number nobody chose quietly becoming the default.
  */
 export const DEFAULT_SALARY_COMPONENTS = [
-  { code: 'GP', name: 'Gaji Pokok', type: 'ALLOWANCE', calculationMethod: 'FIXED', isTaxable: true },
+  // Prorated: paying a whole month to someone who joined on the 20th, or
+  // nothing at all to someone who left on the 10th, is not a sensible
+  // default for a new customer. Existing tenants are untouched.
+  { code: 'GP', name: 'Gaji Pokok', type: 'ALLOWANCE', calculationMethod: 'FIXED', isTaxable: true, isProrated: true },
   { code: 'BPJS-KES', name: 'BPJS Kesehatan', type: 'DEDUCTION', calculationMethod: 'FIXED', isTaxable: false },
   { code: 'BPJS-TK', name: 'BPJS Ketenagakerjaan', type: 'DEDUCTION', calculationMethod: 'FIXED', isTaxable: false },
   { code: 'PPH21', name: 'PPh 21', type: 'DEDUCTION', calculationMethod: 'FIXED', isTaxable: false },
@@ -101,6 +104,7 @@ export async function bootstrapCompany(
         type: component.type as SalaryType,
         calculationMethod: component.calculationMethod,
         isTaxable: component.isTaxable,
+        isProrated: 'isProrated' in component ? component.isProrated : false,
         isActive: true,
         sortOrder: index,
       },

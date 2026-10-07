@@ -1,3 +1,4 @@
+import multer from 'multer';
 import { Router } from 'express';
 import payrollPaymentRoutes from './payroll-payment.routes';
 import payrollFormulaRoutes from './payroll-formula.routes';
@@ -26,11 +27,14 @@ import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
 import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
 
+// Memory storage: the importer parses the buffer and never needs a path.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
 const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bpjs-report'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -161,6 +165,17 @@ router.get(
   payrollController.bpjsReport.bind(payrollController)
 );
 
+// The same wages, shaped to fill SIPP Online's Upload Upah template. Not an
+// upload file: SIPP issues the template per company and defines its structure.
+router.get(
+  '/sipp-wage-export',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(bpjsReportQuerySchema, 'query'),
+  auditView({ action: 'VIEW_SIPP_WAGE_EXPORT', entity: 'PayrollPeriod' }),
+  payrollController.sippWageExport.bind(payrollController)
+);
+
 // ==================== Rekap PPh21 tahunan (bahan 1721-A1) ====================
 // Figures only, and no-store: an annual recap is a year of one person's income
 // in a single response.
@@ -179,6 +194,17 @@ router.get(
   validate(annualTaxRecapQuerySchema, 'query'),
   auditView({ action: 'VIEW_ANNUAL_TAX_RECAP', entity: 'Payslip' }),
   payrollController.annualTaxRecap.bind(payrollController)
+);
+
+// The same figures laid out as Formulir 1721-A1. Registered after
+// '/annual-tax-recap/:employeeId' would have swallowed it, so it comes first.
+router.get(
+  '/bukti-potong-1721-a1/:employeeId',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(annualTaxRecapQuerySchema, 'query'),
+  auditView({ action: 'VIEW_BUKTI_POTONG_1721_A1', entity: 'Payslip' }),
+  payrollController.buktiPotong1721A1.bind(payrollController)
 );
 
 // ==================== Arrears (rapel periode tertutup) ====================
@@ -277,6 +303,22 @@ router.get(
   authorize({ resource: 'payroll', action: 'read' }),
   validate(payrollRunIdParamSchema, 'params'),
   payrollController.findPayrollRunById.bind(payrollController)
+);
+
+router.get(
+  '/runs/:id/journal',
+  authorize({ resource: 'payroll', action: 'read' }),
+  validate(payrollRunIdParamSchema, 'params'),
+  auditView({ action: 'VIEW_PAYROLL_JOURNAL', entity: 'PayrollRun' }),
+  payrollController.payrollRunJournal.bind(payrollController)
+);
+
+router.post(
+  '/salaries/import',
+  authorize({ resource: 'payroll', action: 'process' }),
+  auditLog({ action: 'IMPORT_SALARY_MASTER', entity: 'EmployeeSalary' }),
+  upload.single('file'),
+  payrollController.importSalaryMaster.bind(payrollController)
 );
 
 router.post(

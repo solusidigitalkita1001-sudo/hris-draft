@@ -129,6 +129,16 @@ export class TrainingController {
     } catch (error) { next(error); }
   }
 
+  /** Rekap efektivitas per kursus — satu-satunya pertanyaan yang rating itu dikumpulkan untuk menjawabnya. */
+  async courseEffectiveness(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const data = await trainingEvaluationService.courseEffectiveness(companyId, req.query.courseId as string | undefined);
+      res.json(Result.success(data));
+    } catch (error) { next(error); }
+  }
+
   async findEvaluation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const companyId = req.user?.companyId;

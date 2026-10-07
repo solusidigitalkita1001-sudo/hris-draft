@@ -53,6 +53,7 @@ import employeeLoanRoutes from '@/modules/employee-loan/employee-loan.routes';
 import travelExpenseRoutes from '@/modules/travel-expense/travel-expense.routes';
 import workflowEngineRoutes from '@/modules/workflow-engine/workflow-engine.routes';
 import documentManagementRoutes from '@/modules/document-management/document-management.routes';
+import letterRoutes from '@/modules/letter/letter.routes';
 import administrationRoutes from '@/modules/administration/administration.routes';
 import companySettingsRoutes from '@/modules/company-settings/company-settings.routes';
 import ewaRoutes from '@/modules/ewa/ewa.routes';
@@ -105,7 +106,10 @@ app.use(
     origin: config.cors.origins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Idempotency-Key', 'X-Payroll-Unlock-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Idempotency-Key', 'X-Payroll-Unlock-Token', 'X-Payslip-Unlock',
+      // X-Client-Type switches the auth response to body tokens; the two
+      // trace headers are read by ErrorHandler to correlate a client's logs.
+      'X-Client-Type', 'X-Request-Id', 'X-Correlation-Id'],
     exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-Office-Timezone', 'X-Server-Date', 'Idempotency-Replayed'],
     maxAge: 86400, // 24 hours
   })
@@ -236,6 +240,7 @@ app.use(`${apiPrefix}/employee-loans`, employeeLoanRoutes);
 app.use(`${apiPrefix}/travel-expenses`, travelExpenseRoutes);
 app.use(`${apiPrefix}/workflow-engine`, workflowEngineRoutes);
 app.use(`${apiPrefix}/documents`, documentManagementRoutes);
+app.use(`${apiPrefix}/letters`, letterRoutes);
 app.use(`${apiPrefix}/administration`, administrationRoutes);
 app.use(`${apiPrefix}/company-settings`, companySettingsRoutes);
 app.use(`${apiPrefix}/ewa`, ewaRoutes);

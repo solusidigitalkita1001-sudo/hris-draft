@@ -28,7 +28,14 @@ router.use((_req, res, next) => {
 });
 router.use(authenticate);
 router.use(requireCompanyAccess());
-router.use(authorize({ resource: 'payroll', action: 'process' }));
+// payroll:read is the floor for touching payment batches at all; each route
+// below demands the authority its own step needs. This guard used to be
+// payroll:process for the whole router, which made every route unreachable for
+// FINANCE — the role whose only payroll authority is payroll:disburse, and the
+// role this module's approver != disburser rule exists to serve. The effect was
+// that releasing money required the platform super-admin, collapsing the
+// separation of duties back into one identity.
+router.use(authorize({ resource: 'payroll', action: 'read' }));
 router.use(requireCompanyPayrollAccess);
 
 function paymentContext(req: AuthenticatedRequest): PayrollPaymentContext {
@@ -62,6 +69,7 @@ function respond(operation: (req: AuthenticatedRequest) => Promise<unknown>) {
 
 router.post(
   '/',
+  authorize({ resource: 'payroll', action: 'process' }),
   auditLog({ action: 'CREATE_PAYMENT_BATCH', entity: 'PayrollPaymentBatch' }),
   validate(createPaymentBatchSchema),
   respond((req) => payrollPaymentService.createBatch(paymentContext(req), req.body, idempotencyKey(req)))
@@ -81,6 +89,7 @@ router.get(
 
 router.post(
   '/:id/export',
+  authorize({ resource: 'payroll', action: 'export' }),
   auditLog({ action: 'EXPORT_PAYMENT_BATCH', entity: 'PayrollPaymentBatch' }),
   validate(paymentBatchParamsSchema, 'params'),
   validate(emptyPaymentActionSchema),
@@ -115,6 +124,7 @@ router.post(
 
 router.post(
   '/:id/cancel',
+  authorize({ resource: 'payroll', action: 'process' }),
   auditLog({ action: 'CANCEL_PAYMENT_BATCH', entity: 'PayrollPaymentBatch' }),
   validate(paymentBatchParamsSchema, 'params'),
   validate(emptyPaymentActionSchema),

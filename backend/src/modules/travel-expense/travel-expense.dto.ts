@@ -54,3 +54,23 @@ export type CreateExpenseClaimRequestDTO = z.infer<typeof createExpenseClaimSche
 export type CreateExpenseClaimDTO = CreateExpenseClaimRequestDTO & { employeeId: string };
 export type ApproveExpenseClaimDTO = z.infer<typeof approveExpenseClaimSchema>;
 export type ReimburseExpenseClaimDTO = z.infer<typeof reimburseExpenseClaimSchema>;
+
+
+/**
+ * Plafon klaim per kategori (GAP-45). Beberapa periode boleh hidup bersama
+ * untuk satu kategori — dua juta sebulan sekaligus dua puluh juta setahun
+ * adalah kebijakan yang biasa — karena kuncinya `[companyId, category,
+ * periodType]`.
+ */
+export const upsertClaimCategoryLimitSchema = z.object({
+  category: z.enum(['TRANSPORTATION', 'HOTEL', 'MEAL', 'ENTERTAINMENT', 'OPERATIONAL']),
+  periodType: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY', 'ONCE']),
+  /// 0 berarti tanpa batas, sesuai pembacaan checker-nya.
+  limitAmount: z.number().min(0),
+  violationAction: z.enum(['WARN', 'BLOCK']).default('WARN'),
+  description: z.string().max(500).optional(),
+  isActive: z.boolean().default(true),
+  validFrom: z.string().datetime().optional(),
+  validUntil: z.string().datetime().optional(),
+});
+export type UpsertClaimCategoryLimitDTO = z.infer<typeof upsertClaimCategoryLimitSchema>;

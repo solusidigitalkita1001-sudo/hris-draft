@@ -29,6 +29,11 @@ export const finalPayrollSchema = z.object({
   upmkFactor: z.number().min(0).max(3).optional(),
   compensationOfRights: z.number().min(0).optional(),
   monthlyWorkingDays: z.number().int().min(1).max(31).optional(),
+  // PP 68/2009 pasal 2 ayat (2): severance paid across at most two calendar
+  // years is still one payment, and its brackets climb across the instalments.
+  // Without these two the second instalment would restart at 0%.
+  previouslyPaidGross: z.number().min(0).optional(),
+  calendarYearIndex: z.number().int().min(1).max(10).optional(),
 });
 
 export const createClearanceSchema = z.object({

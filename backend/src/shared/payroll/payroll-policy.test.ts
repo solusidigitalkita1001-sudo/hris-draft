@@ -1,6 +1,8 @@
 import { loadPayrollPolicyConfig } from './payroll-policy';
 import { calculatePph21, DEFAULT_PPH21_CONFIG } from './pph21';
 import { calculateBpjs, DEFAULT_BPJS_CONFIG } from './bpjs';
+import { DEFAULT_TER_BRACKETS } from './ter-tables';
+import { terRatePercent } from './ter';
 
 // Mirrors database/seeds/modules/07-payroll-reference-tables.seed.ts.
 const seededBrackets = [
@@ -24,11 +26,18 @@ const seededBpjs = [{
   jknEmployerPercent: 4, jknEmployeePercent: 1, jknWageCap: 12_000_000,
 }];
 
-function fakeDb(rows: { tax?: unknown[]; ptkp?: unknown[]; bpjs?: unknown[] }) {
+/** Mirrors the TER rows the same seed writes, for kategori A only. */
+const seededTerA = DEFAULT_TER_BRACKETS.A.map(([upperBound, ratePercent], index) => ({
+  companyId: null, year: 2024, category: 'A' as const,
+  level: index + 1, upperBound, ratePercent,
+}));
+
+function fakeDb(rows: { tax?: unknown[]; ptkp?: unknown[]; bpjs?: unknown[]; ter?: unknown[] }) {
   return {
     taxBracket: { findMany: jest.fn().mockResolvedValue(rows.tax ?? []) },
     ptkpTable: { findMany: jest.fn().mockResolvedValue(rows.ptkp ?? []) },
     bpjsReference: { findMany: jest.fn().mockResolvedValue(rows.bpjs ?? []) },
+    terBracket: { findMany: jest.fn().mockResolvedValue(rows.ter ?? []) },
   } as never;
 }
 
@@ -83,5 +92,49 @@ describe('payroll policy wiring (behavior-preserving against seeds)', () => {
   it('defaults still match the statutory constants (guards seed drift)', () => {
     expect(DEFAULT_PPH21_CONFIG.brackets.map(([bound]) => bound)).toEqual([60e6, 250e6, 500e6, 5e9, Infinity]);
     expect(DEFAULT_BPJS_CONFIG.jpWageCap).toBe(10_547_400);
+  });
+});
+
+/**
+ * TER is loaded per category on purpose. A company that overrides only
+ * kategori A must keep the statutory B and C — resolving the whole table at
+ * once would have dropped them, which is the quiet kind of wrong: withholding
+ * would silently fall back to the annex for some employees and the override
+ * for others, with nothing to show which.
+ */
+describe('TER bracket loading', () => {
+  it('returns nothing when the table is empty, so the annex applies', async () => {
+    const config = await loadPayrollPolicyConfig(fakeDb({}), 'company-A', 2026);
+    expect(config.ter).toEqual({});
+    // And the calculator still answers, from its own copy of the annex.
+    expect(terRatePercent('A', 10_000_000, config.ter)).toBe(2);
+  });
+
+  it('reproduces the annex exactly when loaded from seeded rows', async () => {
+    const config = await loadPayrollPolicyConfig(fakeDb({ ter: seededTerA }), 'company-A', 2026);
+    expect(config.ter.A).toEqual(DEFAULT_TER_BRACKETS.A);
+    expect(config.ter.B).toBeUndefined();
+    expect(config.ter.C).toBeUndefined();
+  });
+
+  it('keeps the statutory categories a company did not override', async () => {
+    const override = [
+      { companyId: 'company-A', year: 2025, category: 'A' as const, level: 1, upperBound: 9_000_000, ratePercent: 1 },
+      { companyId: 'company-A', year: 2025, category: 'A' as const, level: 2, upperBound: null, ratePercent: 20 },
+    ];
+    const config = await loadPayrollPolicyConfig(
+      fakeDb({ ter: [...seededTerA, ...override] }), 'company-A', 2026);
+    expect(config.ter.A).toEqual([[9_000_000, 1], [null, 20]]);
+    expect(terRatePercent('A', 5_000_000, config.ter)).toBe(1);
+    // B was never overridden, so it must still come from the annex.
+    expect(config.ter.B).toBeUndefined();
+    expect(terRatePercent('B', 6_800_000, config.ter)).toBe(0.5);
+  });
+
+  it('carries the open-ended top bracket through as null, not a sentinel', async () => {
+    const config = await loadPayrollPolicyConfig(fakeDb({ ter: seededTerA }), 'company-A', 2026);
+    const rows = config.ter.A as ReadonlyArray<readonly [number | null, number]>;
+    expect(rows[rows.length - 1][0]).toBeNull();
+    expect(rows[rows.length - 1][1]).toBe(34);
   });
 });

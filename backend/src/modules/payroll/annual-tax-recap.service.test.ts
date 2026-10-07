@@ -93,7 +93,9 @@ describe('annual PPh21 recap', () => {
     await service.build(COMPANY, EMPLOYEE, 2026);
 
     const where = state.queries[0] as { payrollRun: { status: string; period: Row } };
-    expect(where.payrollRun.status).toBe('APPROVED');
+    // A run that has been paid is DISBURSED. Asserting the literal 'APPROVED'
+    // is what kept the year-end reader blind to every month already paid.
+    expect(where.payrollRun.status).toEqual({ in: ['APPROVED', 'DISBURSED'] });
     expect(where.payrollRun.period).toMatchObject({
       startDate: { gte: new Date(Date.UTC(2026, 0, 1)) },
     });

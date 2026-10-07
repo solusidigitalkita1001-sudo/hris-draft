@@ -4,6 +4,7 @@ import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { getCurrentUser } from '@/shared/context/RequestContext';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
+import { monthlyStatutoryWage } from '@/shared/payroll/statutory-wage';
 import { withConcurrencyRetry } from '@/shared/database/concurrency';
 
 export interface RequestEncashmentInput {
@@ -84,10 +85,12 @@ export class LeaveEncashmentService {
     if (!salary) throw new BadRequestError('Employee has no active salary; set the salary before encashing leave');
     if (salary.currency !== 'IDR') throw new BadRequestError('Leave encashment currently supports IDR salary allocations');
 
-    const allowances = policy.includeAllowances
-      ? salary.components.filter((row) => row.salaryComponent.type === 'ALLOWANCE')
-      : [];
-    const monthlyWage = allowances.reduce((sum, row) => sum.plus(row.amount), new Prisma.Decimal(salary.baseSalary));
+    // Only tunjangan TETAP counts. This used to take every ALLOWANCE row,
+    // which swept in transport-per-day and meal-per-shift and inflated the
+    // daily rate. `isFixedAllowance` is backfilled true for components that
+    // existed before it, so the figure for current data is unchanged.
+    const { wage: monthlyWage, fixedAllowances } = monthlyStatutoryWage(
+      salary.baseSalary, salary.components, { includeFixedAllowances: policy.includeAllowances });
     const dailyRate = monthlyWage.dividedBy(policy.divisor).toDecimalPlaces(2);
     const gross = dailyRate.times(days).toDecimalPlaces(2);
 
@@ -101,7 +104,7 @@ export class LeaveEncashmentService {
         salaryId: salary.id,
         baseSalary: salary.baseSalary.toString(),
         includeAllowances: policy.includeAllowances,
-        allowances: allowances.map((row) => ({ name: row.salaryComponent.name, amount: row.amount.toString() })),
+        allowances: fixedAllowances,
         monthlyWage: monthlyWage.toString(),
         divisor: policy.divisor,
         dailyRate: dailyRate.toString(),

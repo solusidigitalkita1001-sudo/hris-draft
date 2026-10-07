@@ -1,4 +1,4 @@
-import { DocumentSignerStatus } from '@prisma/client';
+import { DocumentSignerStatus, DocumentStatus } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { BadRequestError, ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
 import { logger } from '@/shared/logger/WinstonLogger';
@@ -133,6 +133,11 @@ export class DocumentSigningService {
     if (!actor?.id) throw new ForbiddenError('A signed-in user is required to sign');
 
     const document = await this.loadDocument(companyId, documentId);
+    // `loadDocument` has always selected the status and nobody read it, so a
+    // document already marked REJECTED still accepted signatures.
+    if (document.status === DocumentStatus.REJECTED) {
+      throw new BadRequestError('This document was declined and can no longer be signed; issue a new one');
+    }
 
     return prisma.$transaction(async (tx) => {
       const signers = await tx.documentSigner.findMany({
@@ -145,6 +150,17 @@ export class DocumentSigningService {
         if (!mine) throw new ForbiddenError('You are not on the signer list for this document');
         if (mine.status !== DocumentSignerStatus.PENDING) {
           throw new BadRequestError(`You have already ${mine.status.toLowerCase()} this document`);
+        }
+
+        // A refusal ends the sequence for everyone, not just the refuser. The
+        // blocking filter below looks for PENDING, and a declined signer is
+        // DECLINED — so a document somebody had refused went on collecting
+        // signatures from the later steps, and to every reader looked like it
+        // had simply progressed. This also covers rows declined before the
+        // document status began recording it.
+        const declined = signers.filter((signer) => signer.status === DocumentSignerStatus.DECLINED);
+        if (declined.length) {
+          throw new BadRequestError('This document was declined and can no longer be signed; issue a new one');
         }
 
         const blocking = signers.filter(
@@ -179,14 +195,24 @@ export class DocumentSigningService {
     if (!actor?.id) throw new ForbiddenError('A signed-in user is required');
     await this.loadDocument(companyId, documentId);
 
-    const result = await prisma.documentSigner.updateMany({
-      where: { documentId, userId: actor.id, status: DocumentSignerStatus.PENDING },
-      data: { status: DocumentSignerStatus.DECLINED, declinedReason: reason.slice(0, 255) },
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.documentSigner.updateMany({
+        where: { documentId, userId: actor.id, status: DocumentSignerStatus.PENDING },
+        data: { status: DocumentSignerStatus.DECLINED, declinedReason: reason.slice(0, 255) },
+      });
+      if (result.count === 0) {
+        throw new BadRequestError('You have no pending signature on this document');
+      }
+      // DocumentStatus.REJECTED existed and nothing ever set it, so a refusal
+      // was visible only to whoever went looking at the signer rows. Recorded
+      // here, in the same transaction, so the refusal and its consequence
+      // cannot disagree.
+      await tx.document.updateMany({
+        where: { id: documentId, companyId, status: DocumentStatus.ACTIVE },
+        data: { status: DocumentStatus.REJECTED },
+      });
+      return { documentId, status: DocumentSignerStatus.DECLINED };
     });
-    if (result.count === 0) {
-      throw new BadRequestError('You have no pending signature on this document');
-    }
-    return { documentId, status: DocumentSignerStatus.DECLINED };
   }
 
   /** Documents waiting on the signed-in user, with whose turn it is respected. */
@@ -198,7 +224,16 @@ export class DocumentSigningService {
       where: {
         userId: actor.id,
         status: DocumentSignerStatus.PENDING,
-        document: { companyId, deletedAt: null },
+        // Nobody's turn is ever next on a document that was refused: it kept
+        // appearing as work to do, which is how it kept being signed. Both
+        // conditions are needed — the status covers refusals recorded from now
+        // on, the signer condition covers rows declined before that.
+        document: {
+          companyId,
+          deletedAt: null,
+          status: { not: DocumentStatus.REJECTED },
+          signers: { none: { status: DocumentSignerStatus.DECLINED } },
+        },
       },
       orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }],
       include: {
