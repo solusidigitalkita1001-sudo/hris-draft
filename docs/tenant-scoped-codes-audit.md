@@ -79,7 +79,19 @@ paling jelas milik pelanggan. Hasilnya ada di
 - setiap `upsert`/`findUnique` di seed yang memakai kode itu ikut pindah ke kunci
   komposit — ini yang terlewat di tugas `employeeNumber` dan baru tertangkap CI
 
-Sembilan sisanya pekerjaan mekanis dengan bentuk yang sama.
+Sembilan sisanya menyusul dengan bentuk yang sama, di migrasi
+`20261007120000_tenant_scoped_org_payroll_training_codes` — rinciannya di
+[PROGRESS.md](PROGRESS.md) ("sembilan model sisanya").
+
+Dua koreksi atas audit ini yang muncul saat mengerjakannya:
+
+- **`SalaryComponent` sudah punya `@@unique([companyId, code])`** sejak sebelum
+  ini, jadi ia tidak pernah termasuk kelas "unik global". Yang benar untuk model
+  itu hanya keluhan kedua: kode kiriman klien dibuang.
+- **`SubDepartment` tidak punya `companyId` di DTO-nya.** Nilainya diturunkan
+  dari departemen induk di dalam `repository.create()`, jadi pemeriksaan kode
+  per perusahaan harus menyelesaikan induknya lebih dulu. Model-model lain tidak
+  punya langkah ini.
 
 ## `Role.code` — sempat terlihat lebih buruk, ternyata tidak
 

@@ -285,3 +285,72 @@ sebelum migrasi di atas**), dan kode kiriman klien benar-benar tersimpan.
 
 **Belum dijalankan di mesin ini** — lihat hambatan lingkungan di atas. Yang
 berlaku adalah hasil CI pada branch ini.
+
+---
+
+## Tugas — sembilan model sisanya: kode per perusahaan, dan boleh dibawa pelanggan
+
+Sisa daftar di [tenant-scoped-codes-audit.md](tenant-scoped-codes-audit.md),
+dikerjakan sesudah polanya hijau di CI pada `Asset.assetCode` (D-005).
+
+### Yang berubah
+
+Delapan model kehilangan `@unique` tingkat-field dan mendapat
+`@@unique([companyId, code])`: `Branch`, `Division`, `Department`,
+`SubDepartment`, `Position`, `PayrollPeriod`, `TrainingCategory`,
+`TrainingCourse`. Satu migrasi,
+`20261007120000_tenant_scoped_org_payroll_training_codes`, delapan blok dengan
+bentuk yang sama seperti dua migrasi sebelumnya: cari indeks lama **berdasarkan
+kolom, bukan nama**, buat indeks komposit, pastikan `@@index([code])` ada.
+
+**`SalaryComponent` ternyata sudah punya `@@unique([companyId, code])`** —
+audit mencatatnya di daftar yang salah. Yang tersisa untuk model itu hanya
+perilaku `create`, dan itu yang diperbaiki.
+
+Sembilan jalur `create` sekarang memakai kode kiriman klien kalau ada, dan
+pemeriksaan konfliknya discoped per perusahaan:
+
+| Service | Lookup |
+|---|---|
+| `branch`, `division`, `department`, `position` | `findByCode(companyId, code)` — `findUnique` jadi `findFirst` |
+| `sub-department` | sama, tapi `companyId`-nya diambil dari departemen induk: DTO-nya tidak punya `companyId`, dan `repository.create()` yang biasanya menurunkannya baru jalan sesudah pemeriksaan kode |
+| `training` kategori + kursus | `findCategoryByCode/findCourseByCode(companyId, code)`, plus pemeriksaan konflik yang sebelumnya **tidak ada sama sekali** |
+| `payroll` periode | `findPayrollPeriodByCode(companyId, code)` baru, menggantikan pemindaian `findAllPayrollPeriods().some(...)` |
+| `payroll` komponen gaji | sudah discoped; hanya kode kiriman klien yang dihormati |
+
+36 pemanggil di `05-test-data.seed.ts` pindah ke kunci komposit — diperiksa
+lebih dulu, bukan menunggu CI seperti pada tugas `employeeNumber`.
+
+Pesan `update()` yang menolak penggantian kode ikut dikoreksi dari "is generated
+by system and cannot be changed" menjadi "cannot be changed after creation" di
+sembilan model itu dan di `employeeNumber`. Kodenya tidak lagi selalu dibuat
+sistem, jadi kalimat lamanya sudah bohong. Perilakunya tidak berubah: kode tetap
+tidak boleh diganti sesudah dibuat, karena dipakai sebagai rujukan di data
+historis.
+
+### Yang tidak diubah, dan satu sisa yang diketahui
+
+`findSalaryComponentByCode` menyaring `deletedAt: null`, sementara indeks unik
+tidak tahu soal soft delete — jadi komponen gaji yang sudah dihapus tetap
+memegang kodenya dan `create` bisa gagal di database, 500 bukan 409. Itu bukan
+dibuat oleh tugas ini. Lookup itu dipakai 12 tempat lain (termasuk jalur
+bootstrap yang memang perlu mengabaikan baris terhapus), jadi mengubahnya adalah
+perubahan tersendiri dengan risikonya sendiri, bukan tempelan di tugas ini.
+
+`Role.code` tetap di luar — alasannya di D-005 dan di audit.
+
+### Status verifikasi
+
+- `org-unit-codes.test.ts` — 5 service × 5 kasus, satu tabel, supaya satu
+  service yang keluar dari pola langsung gagal
+- `training-code.test.ts` — kategori dan kursus
+- `payroll-period-code.test.ts` — lookup periode: discoped per perusahaan dan
+  **tidak** menyaring `deletedAt`
+
+`createPayrollPeriod` dan `createSalaryComponent` tidak dapat test unit baru:
+graf impor `payroll.service` terlalu besar untuk dimock dengan jujur. Jalur itu
+dijaga `*.mysql.test.ts` yang jalan di job `Real-database integration suites
+(blocking)`.
+
+**Belum dijalankan di mesin ini** — lihat hambatan lingkungan di atas. Yang
+berlaku adalah hasil CI pada branch ini.

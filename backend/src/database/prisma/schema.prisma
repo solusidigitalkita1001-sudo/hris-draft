@@ -212,7 +212,7 @@ model Branch {
   id        String    @id @default(uuid()) @db.VarChar(36)
   companyId String    @map("company_id") @db.VarChar(36)
   name      String    @db.VarChar(255)
-  code      String    @unique @db.VarChar(50)
+  code      String    @db.VarChar(50)
   address   String?   @db.Text
   phone     String?   @db.VarChar(50)
   email     String?   @db.VarChar(255)
@@ -236,6 +236,8 @@ model Branch {
   dailyActivities           DailyActivity[]
   taskAssignments           TaskAssignment[]
 
+  @@unique([companyId, code])
+
   @@index([companyId])
   @@index([code])
   @@map("branches")
@@ -246,7 +248,7 @@ model Division {
   id          String    @id @default(uuid()) @db.VarChar(36)
   companyId   String    @map("company_id") @db.VarChar(36)
   name        String    @db.VarChar(255)
-  code        String    @unique @db.VarChar(50)
+  code        String    @db.VarChar(50)
   headId      String?   @map("head_id") @db.VarChar(36)
   description String?   @db.Text
   status      Status    @default(ACTIVE)
@@ -257,6 +259,8 @@ model Division {
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
   head        Employee?    @relation("DivisionHead", fields: [headId], references: [id], onDelete: SetNull)
   departments Department[]
+
+  @@unique([companyId, code])
 
   @@index([companyId])
   @@index([code])
@@ -270,7 +274,7 @@ model Department {
   companyId   String    @map("company_id") @db.VarChar(36)
   parentId    String?   @map("parent_id") @db.VarChar(36)
   name        String    @db.VarChar(255)
-  code        String    @unique @db.VarChar(50)
+  code        String    @db.VarChar(50)
   headId      String?   @map("head_id") @db.VarChar(36)
   description String?   @db.Text
   costCenter  String?   @map("cost_center") @db.VarChar(50)
@@ -293,6 +297,8 @@ model Department {
 
   jobRequisitions JobRequisition[]
 
+  @@unique([companyId, code])
+
   @@index([divisionId])
   @@index([companyId])
   @@index([parentId])
@@ -306,7 +312,7 @@ model SubDepartment {
   departmentId String    @map("department_id") @db.VarChar(36)
   companyId    String    @map("company_id") @db.VarChar(36)
   name         String    @db.VarChar(255)
-  code         String    @unique @db.VarChar(50)
+  code         String    @db.VarChar(50)
   headId       String?   @map("head_id") @db.VarChar(36)
   description  String?   @db.Text
   status       Status    @default(ACTIVE)
@@ -318,6 +324,8 @@ model SubDepartment {
   company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   head       Employee?  @relation("SubDepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
   employees  Employee[]
+
+  @@unique([companyId, code])
 
   @@index([departmentId])
   @@index([companyId])
@@ -331,7 +339,7 @@ model Position {
   departmentId String?   @map("department_id") @db.VarChar(36)
   companyId    String    @map("company_id") @db.VarChar(36)
   name         String    @db.VarChar(255)
-  code         String    @unique @db.VarChar(50)
+  code         String    @db.VarChar(50)
   gradeLevel   Int?      @map("grade_level")
   minSalary    Decimal?  @map("min_salary") @db.Decimal(15, 2)
   maxSalary    Decimal?  @map("max_salary") @db.Decimal(15, 2)
@@ -353,6 +361,8 @@ model Position {
   careerTransactionsTo   EmployeeCareerTransaction[] @relation("CareerToPosition")
 
   jobRequisitions JobRequisition[]
+
+  @@unique([companyId, code])
 
   @@index([departmentId])
   @@index([companyId])
@@ -442,7 +452,7 @@ model PayrollPeriod {
   id                   String           @id @default(uuid()) @db.VarChar(36)
   companyId            String           @map("company_id") @db.VarChar(36)
   name                 String           @db.VarChar(255)
-  code                 String           @unique @db.VarChar(50)
+  code                 String           @db.VarChar(50)
   frequency            PayrollFrequency @default(MONTHLY)
   startDate            DateTime         @map("start_date")
   endDate              DateTime         @map("end_date")
@@ -461,6 +471,8 @@ model PayrollPeriod {
   earnedWageAccesses EarnedWageAccess[]
   /// Rapel yang berasal dari periode ini (karyawan terlewat saat periode ditutup).
   arrears            PayrollArrears[]
+
+  @@unique([companyId, code])
 
   @@index([companyId])
   @@index([code])
@@ -1785,7 +1797,7 @@ model TrainingCategory {
   id          String    @id @default(uuid()) @db.VarChar(36)
   companyId   String    @map("company_id") @db.VarChar(36)
   name        String    @db.VarChar(255)
-  code        String    @unique @db.VarChar(50)
+  code        String    @db.VarChar(50)
   description String?   @db.Text
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -1794,6 +1806,8 @@ model TrainingCategory {
 
   company Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
   courses TrainingCourse[]
+
+  @@unique([companyId, code])
 
   @@index([companyId])
   @@index([code])
@@ -1806,7 +1820,7 @@ model TrainingCourse {
   categoryId   String?   @map("category_id") @db.VarChar(36)
   companyId    String    @map("company_id") @db.VarChar(36)
   title        String    @db.VarChar(255)
-  code         String    @unique @db.VarChar(50)
+  code         String    @db.VarChar(50)
   description  String?   @db.Text
   duration     Int?      @default(0)
   durationUnit String?   @map("duration_unit") @db.VarChar(20)
@@ -1823,6 +1837,8 @@ model TrainingCourse {
   materials                             TrainingMaterial[]
   enrollments                           TrainingEnrollment[]
   performanceDevelopmentRecommendations PerformanceDevelopmentRecommendation[]
+
+  @@unique([companyId, code])
 
   @@index([categoryId])
   @@index([companyId])

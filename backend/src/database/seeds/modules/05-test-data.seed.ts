@@ -176,7 +176,7 @@ export async function seedTestData(): Promise<void> {
   // 2. BRANCHES & DIVISIONS
   // ===================================================
   const branch = await prisma.branch.upsert({
-    where: { code: 'HQ' },
+    where: { companyId_code: { companyId: company.id, code: 'HQ' } },
     update: {
       companyId: company.id,
       name: 'Head Office Jakarta',
@@ -206,7 +206,7 @@ export async function seedTestData(): Promise<void> {
   });
 
   const branch2 = await prisma.branch.upsert({
-    where: { code: 'BDG' },
+    where: { companyId_code: { companyId: company.id, code: 'BDG' } },
     update: {
       companyId: company.id,
       name: 'Bandung Branch',
@@ -236,7 +236,7 @@ export async function seedTestData(): Promise<void> {
   });
 
   const branch3 = await prisma.branch.upsert({
-    where: { code: 'SBY' },
+    where: { companyId_code: { companyId: company.id, code: 'SBY' } },
     update: {
       companyId: company.id,
       name: 'Surabaya Branch',
@@ -266,7 +266,7 @@ export async function seedTestData(): Promise<void> {
   });
 
   const division = await prisma.division.upsert({
-    where: { code: 'OPS' },
+    where: { companyId_code: { companyId: company.id, code: 'OPS' } },
     update: {},
     create: {
       companyId: company.id,
@@ -281,27 +281,27 @@ export async function seedTestData(): Promise<void> {
   // 3. DEPARTMENTS & POSITIONS
   // ===================================================
   const deptIT = await prisma.department.upsert({
-    where: { code: 'IT' },
+    where: { companyId_code: { companyId: company.id, code: 'IT' } },
     update: {}, create: { companyId: company.id, divisionId: division.id, name: 'Information Technology', code: 'IT', status: 'ACTIVE' },
   });
 
   const deptHR = await prisma.department.upsert({
-    where: { code: 'HR' },
+    where: { companyId_code: { companyId: company.id, code: 'HR' } },
     update: {}, create: { companyId: company.id, name: 'Human Resources', code: 'HR', status: 'ACTIVE' },
   });
 
   const deptFinance = await prisma.department.upsert({
-    where: { code: 'FIN' },
+    where: { companyId_code: { companyId: company.id, code: 'FIN' } },
     update: {}, create: { companyId: company.id, name: 'Finance & Accounting', code: 'FIN', status: 'ACTIVE' },
   });
 
   const deptMarketing = await prisma.department.upsert({
-    where: { code: 'MKT' },
+    where: { companyId_code: { companyId: company.id, code: 'MKT' } },
     update: {}, create: { companyId: company.id, name: 'Marketing', code: 'MKT', status: 'ACTIVE' },
   });
 
   const deptOps = await prisma.department.upsert({
-    where: { code: 'OPSD' },
+    where: { companyId_code: { companyId: company.id, code: 'OPSD' } },
     update: {},
     create: {
       companyId: company.id,
@@ -313,7 +313,7 @@ export async function seedTestData(): Promise<void> {
   });
 
   const deptExec = await prisma.department.upsert({
-    where: { code: 'EXEC' },
+    where: { companyId_code: { companyId: company.id, code: 'EXEC' } },
     update: {},
     create: { companyId: company.id, name: 'Executive Office', code: 'EXEC', status: 'ACTIVE' },
   });
@@ -330,37 +330,37 @@ export async function seedTestData(): Promise<void> {
   // "Tim Saya" / reporting-line / resolusi approver MANAGER berfungsi.
   // -----------------------------------------------------------------
   const posDirektur = await prisma.position.upsert({
-    where: { code: 'DIRUT' },
+    where: { companyId_code: { companyId: company.id, code: 'DIRUT' } },
     update: { departmentId: deptExec.id, name: 'Direktur Utama', gradeLevel: 7, reportsToId: null, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptExec.id, name: 'Direktur Utama', code: 'DIRUT', gradeLevel: 7, status: 'ACTIVE' },
   });
 
   const posManager = await prisma.position.upsert({
-    where: { code: 'MGR' },
+    where: { companyId_code: { companyId: company.id, code: 'MGR' } },
     update: { departmentId: deptIT.id, name: 'IT Manager', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptIT.id, name: 'IT Manager', code: 'MGR', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE' },
   });
 
   const posHRMgr = await prisma.position.upsert({
-    where: { code: 'HR-MGR' },
+    where: { companyId_code: { companyId: company.id, code: 'HR-MGR' } },
     update: { departmentId: deptHR.id, name: 'HR Manager', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptHR.id, name: 'HR Manager', code: 'HR-MGR', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE' },
   });
 
   const posFinMgr = await prisma.position.upsert({
-    where: { code: 'FIN-MGR' },
+    where: { companyId_code: { companyId: company.id, code: 'FIN-MGR' } },
     update: { departmentId: deptFinance.id, name: 'Finance Manager', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptFinance.id, name: 'Finance Manager', code: 'FIN-MGR', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE' },
   });
 
   const posMktMgr = await prisma.position.upsert({
-    where: { code: 'MKT-MGR' },
+    where: { companyId_code: { companyId: company.id, code: 'MKT-MGR' } },
     update: { departmentId: deptMarketing.id, name: 'Marketing Manager', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptMarketing.id, name: 'Marketing Manager', code: 'MKT-MGR', gradeLevel: 5, reportsToId: posDirektur.id, status: 'ACTIVE' },
   });
 
   const posOpsLead = await prisma.position.upsert({
-    where: { code: 'OPSL' },
+    where: { companyId_code: { companyId: company.id, code: 'OPSL' } },
     update: { departmentId: deptOps.id, name: 'Branch Operations Lead', gradeLevel: 4, reportsToId: posDirektur.id, status: 'ACTIVE', deletedAt: null },
     create: {
       companyId: company.id,
@@ -374,31 +374,31 @@ export async function seedTestData(): Promise<void> {
   });
 
   const posDev = await prisma.position.upsert({
-    where: { code: 'DEV' },
+    where: { companyId_code: { companyId: company.id, code: 'DEV' } },
     update: { departmentId: deptIT.id, name: 'Software Developer', gradeLevel: 3, reportsToId: posManager.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptIT.id, name: 'Software Developer', code: 'DEV', gradeLevel: 3, reportsToId: posManager.id, status: 'ACTIVE' },
   });
 
   const posHR = await prisma.position.upsert({
-    where: { code: 'HRSP' },
+    where: { companyId_code: { companyId: company.id, code: 'HRSP' } },
     update: { departmentId: deptHR.id, name: 'HR Specialist', gradeLevel: 3, reportsToId: posHRMgr.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptHR.id, name: 'HR Specialist', code: 'HRSP', gradeLevel: 3, reportsToId: posHRMgr.id, status: 'ACTIVE' },
   });
 
   const posAcc = await prisma.position.upsert({
-    where: { code: 'ACC' },
+    where: { companyId_code: { companyId: company.id, code: 'ACC' } },
     update: { departmentId: deptFinance.id, name: 'Accountant', gradeLevel: 3, reportsToId: posFinMgr.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptFinance.id, name: 'Accountant', code: 'ACC', gradeLevel: 3, reportsToId: posFinMgr.id, status: 'ACTIVE' },
   });
 
   const posMkt = await prisma.position.upsert({
-    where: { code: 'MKTS' },
+    where: { companyId_code: { companyId: company.id, code: 'MKTS' } },
     update: { departmentId: deptMarketing.id, name: 'Marketing Staff', gradeLevel: 2, reportsToId: posMktMgr.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: company.id, departmentId: deptMarketing.id, name: 'Marketing Staff', code: 'MKTS', gradeLevel: 2, reportsToId: posMktMgr.id, status: 'ACTIVE' },
   });
 
   const posOps = await prisma.position.upsert({
-    where: { code: 'OPSF' },
+    where: { companyId_code: { companyId: company.id, code: 'OPSF' } },
     update: { departmentId: deptOps.id, name: 'Branch Operations Staff', gradeLevel: 2, reportsToId: posOpsLead.id, status: 'ACTIVE', deletedAt: null },
     create: {
       companyId: company.id,
@@ -1387,10 +1387,10 @@ export async function seedTestData(): Promise<void> {
   // ===================================================
   console.log('  Creating training data...');
   const trainingCat = await prisma.trainingCategory.upsert({
-    where: { code: 'TECH' }, update: {}, create: { companyId: company.id, name: 'Technical Skills', code: 'TECH' },
+    where: { companyId_code: { companyId: company.id, code: 'TECH' } }, update: {}, create: { companyId: company.id, name: 'Technical Skills', code: 'TECH' },
   });
   const trainingCat2 = await prisma.trainingCategory.upsert({
-    where: { code: 'SOFT' }, update: {}, create: { companyId: company.id, name: 'Soft Skills', code: 'SOFT' },
+    where: { companyId_code: { companyId: company.id, code: 'SOFT' } }, update: {}, create: { companyId: company.id, name: 'Soft Skills', code: 'SOFT' },
   });
 
   const courses = [
@@ -1402,13 +1402,13 @@ export async function seedTestData(): Promise<void> {
 
   for (const course of courses) {
     await prisma.trainingCourse.upsert({
-      where: { code: course.code }, update: {}, create: { ...course, companyId: company.id },
+      where: { companyId_code: { companyId: company.id, code: course.code } }, update: {}, create: { ...course, companyId: company.id },
     });
   }
   console.log(`  ✓ ${courses.length} courses created`);
 
-  const tsCourse = await prisma.trainingCourse.findUnique({ where: { code: 'TS-101' } });
-  const leadershipCourse = await prisma.trainingCourse.findUnique({ where: { code: 'LEAD-101' } });
+  const tsCourse = await prisma.trainingCourse.findUnique({ where: { companyId_code: { companyId: company.id, code: 'TS-101' } } });
+  const leadershipCourse = await prisma.trainingCourse.findUnique({ where: { companyId_code: { companyId: company.id, code: 'LEAD-101' } } });
   if (tsCourse && leadershipCourse) {
     const leadershipSession = await prisma.trainingSession.upsert({
       where: { id: 'session-lead-2026-01' },
@@ -1467,7 +1467,7 @@ export async function seedTestData(): Promise<void> {
   // ===================================================
   console.log('  Creating payroll period...');
   await prisma.payrollPeriod.upsert({
-    where: { code: 'P202606' },
+    where: { companyId_code: { companyId: company.id, code: 'P202606' } },
     update: {},
     create: {
       companyId: company.id, name: 'June 2026', code: 'P202606', frequency: 'MONTHLY',
@@ -1475,7 +1475,7 @@ export async function seedTestData(): Promise<void> {
     },
   });
 
-  const payrollPeriod = await prisma.payrollPeriod.findUnique({ where: { code: 'P202606' } });
+  const payrollPeriod = await prisma.payrollPeriod.findUnique({ where: { companyId_code: { companyId: company.id, code: 'P202606' } } });
   if (payrollPeriod) {
     const employeeSalaries = await prisma.employeeSalary.findMany({
       where: { companyId: company.id, isActive: true },
@@ -2641,7 +2641,7 @@ export async function seedTestData(): Promise<void> {
   });
 
   const digiBranch = await prisma.branch.upsert({
-    where: { code: 'DIGI-HQ' },
+    where: { companyId_code: { companyId: companyDigi.id, code: 'DIGI-HQ' } },
     update: {
       companyId: companyDigi.id,
       name: 'HQ Digital Jakarta',
@@ -2671,44 +2671,44 @@ export async function seedTestData(): Promise<void> {
   });
 
   const digiDeptProduct = await prisma.department.upsert({
-    where: { code: 'DIGI-PRD' },
+    where: { companyId_code: { companyId: companyDigi.id, code: 'DIGI-PRD' } },
     update: { companyId: companyDigi.id, name: 'Product', status: 'ACTIVE', deletedAt: null },
     create: { companyId: companyDigi.id, name: 'Product', code: 'DIGI-PRD', status: 'ACTIVE' },
   });
 
   const digiDeptSales = await prisma.department.upsert({
-    where: { code: 'DIGI-SLS' },
+    where: { companyId_code: { companyId: companyDigi.id, code: 'DIGI-SLS' } },
     update: { companyId: companyDigi.id, name: 'Sales', status: 'ACTIVE', deletedAt: null },
     create: { companyId: companyDigi.id, name: 'Sales', code: 'DIGI-SLS', status: 'ACTIVE' },
   });
 
   // Hierarki posisi DIGI: Direktur (puncak) → Manager departemen → Staff.
   const digiPosDirektur = await prisma.position.upsert({
-    where: { code: 'DIGI-DIR' },
+    where: { companyId_code: { companyId: companyDigi.id, code: 'DIGI-DIR' } },
     update: { companyId: companyDigi.id, departmentId: null, name: 'Direktur', gradeLevel: 7, reportsToId: null, status: 'ACTIVE', deletedAt: null },
     create: { companyId: companyDigi.id, name: 'Direktur', code: 'DIGI-DIR', gradeLevel: 7, status: 'ACTIVE' },
   });
 
   const digiPosPM = await prisma.position.upsert({
-    where: { code: 'DIGI-PM' },
+    where: { companyId_code: { companyId: companyDigi.id, code: 'DIGI-PM' } },
     update: { companyId: companyDigi.id, departmentId: digiDeptProduct.id, name: 'Product Manager', gradeLevel: 5, reportsToId: digiPosDirektur.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: companyDigi.id, departmentId: digiDeptProduct.id, name: 'Product Manager', code: 'DIGI-PM', gradeLevel: 5, reportsToId: digiPosDirektur.id, status: 'ACTIVE' },
   });
 
   const digiPosSM = await prisma.position.upsert({
-    where: { code: 'DIGI-SM' },
+    where: { companyId_code: { companyId: companyDigi.id, code: 'DIGI-SM' } },
     update: { companyId: companyDigi.id, departmentId: digiDeptSales.id, name: 'Sales Manager', gradeLevel: 5, reportsToId: digiPosDirektur.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: companyDigi.id, departmentId: digiDeptSales.id, name: 'Sales Manager', code: 'DIGI-SM', gradeLevel: 5, reportsToId: digiPosDirektur.id, status: 'ACTIVE' },
   });
 
   const digiPosProductSpecialist = await prisma.position.upsert({
-    where: { code: 'DIGI-PDS' },
+    where: { companyId_code: { companyId: companyDigi.id, code: 'DIGI-PDS' } },
     update: { companyId: companyDigi.id, departmentId: digiDeptProduct.id, name: 'Product Specialist', gradeLevel: 3, reportsToId: digiPosPM.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: companyDigi.id, departmentId: digiDeptProduct.id, name: 'Product Specialist', code: 'DIGI-PDS', gradeLevel: 3, reportsToId: digiPosPM.id, status: 'ACTIVE' },
   });
 
   const digiPosSalesExecutive = await prisma.position.upsert({
-    where: { code: 'DIGI-SLE' },
+    where: { companyId_code: { companyId: companyDigi.id, code: 'DIGI-SLE' } },
     update: { companyId: companyDigi.id, departmentId: digiDeptSales.id, name: 'Sales Executive', gradeLevel: 3, reportsToId: digiPosSM.id, status: 'ACTIVE', deletedAt: null },
     create: { companyId: companyDigi.id, departmentId: digiDeptSales.id, name: 'Sales Executive', code: 'DIGI-SLE', gradeLevel: 3, reportsToId: digiPosSM.id, status: 'ACTIVE' },
   });

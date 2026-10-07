@@ -10,11 +10,16 @@ export class TrainingService {
   }
 
   async createCategory(data: CreateCategoryDTO) {
-    const code = await generateSystemCode({
+    // The DTO has always accepted a code; createCategory() used to drop it
+    // without telling anyone.
+    const requested = data.code?.trim();
+    const code = requested || await generateSystemCode({
       prefix: 'TRN-CAT',
       label: data.name,
-      exists: async (candidate) => Boolean(await trainingRepository.findCategoryByCode(candidate)),
+      exists: async (candidate) => Boolean(await trainingRepository.findCategoryByCode(data.companyId, candidate)),
     });
+    const existing = await trainingRepository.findCategoryByCode(data.companyId, code);
+    if (existing) throw new ConflictError(`Training category code "${code}" already exists`);
 
     return trainingRepository.createCategory({
       ...data,
@@ -33,11 +38,14 @@ export class TrainingService {
   }
 
   async createCourse(data: CreateCourseDTO) {
-    const code = await generateSystemCode({
+    const requested = data.code?.trim();
+    const code = requested || await generateSystemCode({
       prefix: 'TRN-CRS',
       label: data.title,
-      exists: async (candidate) => Boolean(await trainingRepository.findCourseByCode(candidate)),
+      exists: async (candidate) => Boolean(await trainingRepository.findCourseByCode(data.companyId, candidate)),
     });
+    const existing = await trainingRepository.findCourseByCode(data.companyId, code);
+    if (existing) throw new ConflictError(`Training course code "${code}" already exists`);
 
     return trainingRepository.createCourse({
       ...data,
