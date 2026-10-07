@@ -128,5 +128,15 @@ Satu catatan yang tersisa untuk `Role`: karena `companyId` nullable dan role
 platform hidup di tabel yang sama, membuat `code` jadi
 `@@unique([companyId, code])` **tidak** bisa langsung menyalin pola model lain —
 di MySQL beberapa baris dengan `company_id IS NULL` tetap lolos indeks unik
-komposit, jadi keunikan role platform justru hilang. Model ini butuh
-pertimbangan sendiri, bukan perlakuan yang sama.
+komposit, jadi keunikan role platform justru hilang.
+
+**Sudah diputuskan: `roles.code` tetap unik global** ([DECISIONS.md](DECISIONS.md)
+D-006). Kode role adalah mesin internal, bukan data pelanggan — form role di
+frontend menampilkannya sebagai field terisi-otomatis yang `disabled`, dan
+payload-nya tidak pernah memuat `code`. Yang diperbaiki hanya keluhan keduanya:
+`createRoleSchema` berhenti menerima `code` dan menolaknya dengan 400, alih-alih
+membuangnya tanpa suara. Tidak ada migrasi untuk model ini, dan itu memang
+jawabannya.
+
+Dengan itu audit ini selesai: sebelas model, sepuluh dipindah ke kunci komposit,
+satu diputuskan tetap global dengan alasan yang tercatat.

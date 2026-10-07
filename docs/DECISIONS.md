@@ -139,3 +139,38 @@ layar admin platform memakai kode saja. `Role.code` **tidak** masuk daftar
 sembilan sisanya — `companyId`-nya nullable, dan di MySQL beberapa baris dengan
 `company_id IS NULL` tetap lolos indeks unik komposit, jadi keunikan role
 platform justru hilang. Model itu butuh keputusan sendiri.
+
+---
+
+## D-006 — `Role.code`: ikut dibuat per perusahaan, atau tetap milik server?
+
+**Konteks.** `Role` adalah satu-satunya sisa dari
+[tenant-scoped-codes-audit.md](tenant-scoped-codes-audit.md). Modelnya berbeda
+dari sepuluh model lain: `companyId` **nullable**, dan tujuh role tingkat-platform
+(`companyId: null`, `isSystem: true`, kode `SUPER_ADMIN` … `EMPLOYEE` dari
+`02-roles.seed.ts`) hidup di tabel yang sama dengan role milik tenant. Seed-nya
+meng-`upsert` role itu dengan `where: { code }`.
+
+| Opsi | Akibat |
+|---|---|
+| **A. Tetap unik global; tolak kode kiriman klien secara terang-terangan** | Keunikan role platform tetap dijaga database, seed tetap bisa `upsert` lewat `code`, dan `POST /rbac` berhenti menerima field yang diam-diam dibuang. Yang tidak didapat: pelanggan tidak bisa memilih kode role sendiri. |
+| B. `@@unique([companyId, code])` seperti sepuluh model lain | Di MySQL beberapa baris dengan `company_id IS NULL` **semuanya lolos** indeks unik komposit, jadi keunikan role platform hilang dari database. Prisma juga tidak menerima `null` di dalam composite unique `where`, jadi `upsert` di seed dan setiap pencarian role platform lewat kode harus dibongkar. |
+| C. Kolom generated `COALESCE(company_id, 'PLATFORM')` + indeks unik di `(kolom itu, code)` | Dua-duanya terjaga di database — ini jawaban paling benar secara SQL. Tapi Prisma tidak bisa memodelkan generated column, jadi `prisma migrate diff` akan selalu melaporkan drift (job-nya soft, jadi ia akan mengomel selamanya), dan tetap tidak ada composite key untuk `upsert`. |
+| D. Pisahkan role platform ke tabelnya sendiri | Pemodelan yang paling jujur, tapi menyentuh setiap query RBAC dan setiap baris `user_roles`. Tidak sepadan untuk masalah yang belum pernah terjadi. |
+
+**Dipilih: A.** Bukti bahwa kode role bukan data pelanggan ada di produknya
+sendiri: form role di `RoleListPage.tsx` menampilkan field kode sebagai
+`disabled` dengan placeholder "otomatis", dan payload yang dikirimnya memang tidak
+pernah memuat `code`. Kode role adalah mesin internal — yang dipakai seed,
+dipegang role platform, dan dirujuk RBAC — bukan sesuatu yang dibawa pelanggan
+dari sistem lama seperti nomor karyawan atau nomor aset.
+
+B ditolak karena menukar jaminan database dengan jaminan aplikasi; itu justru
+jenis ketidaksepakatan kode-vs-database yang dibereskan tugas-tugas sebelumnya.
+C disimpan sebagai jalan keluar **kalau** suatu hari pelanggan benar-benar perlu
+memilih kode role sendiri; saat itu drift Prisma jadi harga yang masuk akal.
+
+**Yang dikerjakan karena A:** `code` tidak lagi diterima
+`createRoleSchema`/`updateRoleSchema` — dikirim pun ditolak 400 dengan alasannya,
+bukan dibuang tanpa suara. Indeks unik global `roles.code` tidak disentuh, jadi
+tugas ini tidak punya migrasi.
