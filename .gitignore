@@ -71,3 +71,7 @@ docker-compose*.yaml
 frontend/test-results/
 frontend/playwright-report/
 .playwright-mcp/
+
+# Pre-migration database dumps written by scripts/server-deploy.sh.
+# These contain live employee and payroll data and must never be committed.
+backups/
