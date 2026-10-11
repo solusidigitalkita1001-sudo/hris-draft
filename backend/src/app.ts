@@ -58,6 +58,7 @@ import administrationRoutes from '@/modules/administration/administration.routes
 import companySettingsRoutes from '@/modules/company-settings/company-settings.routes';
 import customFieldRoutes from '@/modules/custom-field/custom-field.routes';
 import helpdeskRoutes from '@/modules/helpdesk/helpdesk.routes';
+import engagementRoutes from '@/modules/engagement/engagement.routes';
 import ewaRoutes from '@/modules/ewa/ewa.routes';
 import dailyActivityRoutes from '@/modules/daily-activity/daily-activity.routes';
 import announcementRoutes from '@/modules/announcement/announcement.routes';
@@ -247,6 +248,7 @@ app.use(`${apiPrefix}/administration`, administrationRoutes);
 app.use(`${apiPrefix}/company-settings`, companySettingsRoutes);
 app.use(`${apiPrefix}/custom-fields`, customFieldRoutes);
 app.use(`${apiPrefix}/helpdesk`, helpdeskRoutes);
+app.use(`${apiPrefix}/engagement`, engagementRoutes);
 app.use(`${apiPrefix}/ewa`, ewaRoutes);
 app.use(`${apiPrefix}/daily-activities`, dailyActivityRoutes);
 app.use(`${apiPrefix}/announcements`, announcementRoutes);

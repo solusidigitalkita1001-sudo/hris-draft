@@ -130,6 +130,8 @@ model Company {
   customFieldDefinitions                CustomFieldDefinition[]
   employeeCustomFieldValues             EmployeeCustomFieldValue[]
   hrTickets                             HrTicket[]
+  feedPosts                             FeedPost[]
+  kudos                                 Kudos[]
   collectiveLeaves                      CollectiveLeave[]
   webhookSubscriptions                  WebhookSubscription[]
   webhookDeliveries                     WebhookDelivery[]
@@ -2466,6 +2468,9 @@ model Employee {
   severancePayments                             SeverancePayment[]
   customFieldValues                             EmployeeCustomFieldValue[]
   hrTickets                                     HrTicket[]
+  feedPosts                                     FeedPost[]
+  kudosGiven                                    Kudos[]    @relation("KudosFrom")
+  kudosReceived                                 Kudos[]    @relation("KudosTo")
   leaveEncashments                              LeaveEncashment[]
   employmentContracts                           EmploymentContract[]
   attendanceCorrections                         AttendanceCorrection[]
@@ -5705,6 +5710,45 @@ enum SeverancePaymentStatus {
   PENDING
   APPLIED
   CANCELLED
+}
+
+/// Engagement (GAP-51): feed perusahaan dan kudos antar karyawan. Sengaja
+/// kecil — sebuah tempat menulis dan sebuah cara berterima kasih; reaksi,
+/// lampiran, dan moderasi berjenjang menunggu dipakainya yang ini dulu.
+model FeedPost {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  companyId        String    @map("company_id") @db.VarChar(36)
+  authorEmployeeId String    @map("author_employee_id") @db.VarChar(36)
+  content          String    @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  /// Soft delete: penulisnya menarik, atau moderator menurunkan. Jejaknya tinggal.
+  deletedAt        DateTime? @map("deleted_at")
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  author  Employee @relation(fields: [authorEmployeeId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, createdAt])
+  @@map("feed_posts")
+}
+
+model Kudos {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  companyId      String   @map("company_id") @db.VarChar(36)
+  fromEmployeeId String   @map("from_employee_id") @db.VarChar(36)
+  toEmployeeId   String   @map("to_employee_id") @db.VarChar(36)
+  /// Label bebas v1 ("Teamwork", "Going Extra Mile") — katalog menyusul bila perlu.
+  badge          String   @db.VarChar(50)
+  message        String   @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  from    Employee @relation("KudosFrom", fields: [fromEmployeeId], references: [id], onDelete: Restrict)
+  to      Employee @relation("KudosTo", fields: [toEmployeeId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, createdAt])
+  @@index([toEmployeeId])
+  @@map("kudos")
 }
 
 /// HR helpdesk (GAP-50): satu pintu untuk pertanyaan/permintaan karyawan ke HR

@@ -33,6 +33,8 @@ const COMPANY_SCOPED_MODELS = new Set([
   'EmployeeCustomFieldValue',
   'HrTicket',
   'HrTicketComment',
+  'FeedPost',
+  'Kudos',
   'CollectiveLeave',
   'LeaveEncashment',
   'EmploymentContract',
