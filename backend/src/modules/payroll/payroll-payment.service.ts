@@ -8,7 +8,7 @@ import { generateBankCsv, resolveEmployeeBankInfo } from '@/shared/payroll/disbu
 import { createPaymentBatchSchema, paymentIdempotencyKeySchema, recordPaymentTransactionSchema } from './payroll-payment.dto';
 import type { CreatePaymentBatchDTO, RecordPaymentTransactionDTO } from './payroll-payment.dto';
 import { settlePayrollPaymentBatch } from './payroll-payment-settlement';
-import { resolveDisbursementProvider } from '@/shared/payroll/disbursement-provider';
+import { fallbackBankReference, resolveDisbursementProvider } from '@/shared/payroll/disbursement-provider';
 
 export interface PayrollPaymentContext { companyId: string; actorId: string }
 
@@ -324,7 +324,7 @@ export class PayrollPaymentService {
         const updated = await tx.payrollPaymentTransaction.updateMany({
           where: { id: transaction.id, batchId: id, companyId: context.companyId, status: { in: ['PENDING', 'FAILED'] } },
           data: result.status === 'PAID'
-            ? { status: 'PAID', paidAmount: transaction.expectedAmount, bankReference: result.providerRef ?? `${provider.name}:${submission.providerBatchRef}`, failureReason: null, recordedBy: context.actorId, recordedAt: new Date() }
+            ? { status: 'PAID', paidAmount: transaction.expectedAmount, bankReference: result.providerRef ?? fallbackBankReference(provider.name, submission.providerBatchRef, transaction.referenceNo), failureReason: null, recordedBy: context.actorId, recordedAt: new Date() }
             : { status: 'FAILED', failureReason: result.failureReason ?? `${provider.name}: failed`, recordedBy: context.actorId, recordedAt: new Date() },
         });
         if (updated.count !== 1) throw new ConflictError('A payment transaction changed while the provider was disbursing; reload before retrying');

@@ -17,6 +17,14 @@ describe('registerCorrectionSchema', () => {
     }).success).toBe(false);
   });
 
+  it('rejects a sub-cent amount that would round to 0.00 and jam the payslip', () => {
+    for (const amount of [0.004, -0.004]) {
+      expect(registerCorrectionSchema.safeParse({
+        sourcePayslipId: PAYSLIP, amount, reason: 'Selisih pembulatan tidak berarti',
+      }).success).toBe(false);
+    }
+  });
+
   it('rejects a reason the length of "typo"', () => {
     expect(registerCorrectionSchema.safeParse({
       sourcePayslipId: PAYSLIP, amount: 100000, reason: 'typo',

@@ -422,10 +422,13 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       companyId: f.companyId, employeeId: worker.id, baseSalary: '200.00', payBasis: 'DAILY', effectiveDate: new Date('2026-09-01'),
     } });
     // Present on one of the calendar's two working days; the other is absent
-    // and must cost nothing beyond not being paid.
-    await mockDatabase.attendance.create({ data: {
-      companyId: f.companyId, employeeId: worker.id, date: new Date('2026-10-01'), status: 'PRESENT',
-    } });
+    // and must cost nothing beyond not being paid. ALSO present on the 4th —
+    // a non-working date in the calendar: for a daily worker that day is
+    // still wage (tarif × hari HADIR, bukan hari kalender).
+    await mockDatabase.attendance.createMany({ data: [
+      { companyId: f.companyId, employeeId: worker.id, date: new Date('2026-10-01'), status: 'PRESENT' },
+      { companyId: f.companyId, employeeId: worker.id, date: new Date('2026-10-04'), status: 'PRESENT' },
+    ] });
 
     const ghost = await mockDatabase.employee.create({ data: {
       companyId: f.companyId, employeeNumber: randomUUID(), firstName: 'Harian', lastName: 'Absen', fullName: 'Harian Absen',
@@ -437,23 +440,35 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     const completed = await run(f);
 
     const slip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: completed.id, employeeId: worker.id } });
-    expect(Number(slip.totalEarnings)).toBe(200);
+    // Dua hari hadir × 200 — termasuk hari di luar tanggal kerja kalender.
+    expect(Number(slip.totalEarnings)).toBe(400);
     // payslip.baseSalary carries the month's EARNED base, not the per-day rate.
-    expect(Number(slip.baseSalary)).toBe(200);
-    expect(slip.presentDays).toBe(1);
+    expect(Number(slip.baseSalary)).toBe(400);
+    expect(slip.presentDays).toBe(2);
     expect(Number(slip.netPay)).toBe(Number(slip.totalEarnings) - Number(slip.totalDeductions));
     expect((slip.employeeSnapshot as { wage?: { payBasis?: string; dailyRate?: string; paidDays?: number } }).wage)
-      .toMatchObject({ payBasis: 'DAILY', dailyRate: '200', paidDays: 1 });
+      .toMatchObject({ payBasis: 'DAILY', dailyRate: '200', paidDays: 2 });
 
     const components = await mockDatabase.payslipComponent.findMany({
       where: { payslipId: slip.id }, include: { salaryComponent: true },
     });
     const earning = components.find((row) => row.type === 'ALLOWANCE');
     expect(earning?.salaryComponent.code).toBe('DAILY_WAGE_AUTO');
-    expect(earning?.amount.toString()).toBe('200');
+    expect(earning?.amount.toString()).toBe('400');
     // Absence must not be deducted on top of the unpaid day.
     expect(components.some((row) => row.name.includes('Alpha'))).toBe(false);
 
     expect(await mockDatabase.payslip.count({ where: { payrollRunId: completed.id, employeeId: ghost.id } })).toBe(0);
+
+    // THR run over a daily-only population: nobody is paid, but the skip is
+    // WRITTEN — THR pekerja harian tetap hak, HR harus melihat siapa yang
+    // belum dibayar lewat jalur run ini.
+    await mockDatabase.salaryComponent.create({ data: {
+      companyId: f.companyId, code: 'PPH21', name: 'PPh 21', type: 'DEDUCTION', amount: '0', isTaxable: false,
+    } });
+    const thr = await runOfType(f, 'THR');
+    expect(thr.payslips).toHaveLength(0);
+    expect(thr.notes).toContain('THR pekerja harian dilewati');
+    expect(thr.notes).toContain(worker.employeeNumber);
   });
 });

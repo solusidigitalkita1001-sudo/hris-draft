@@ -46,20 +46,35 @@ export class HelpdeskService {
     return prisma.hrTicket.findMany({
       where: { companyId, employeeId },
       orderBy: { createdAt: 'desc' },
+      // Tiket milik sendiri jarang banyak; komentar ikut, tapi tetap dibatasi.
+      take: 100,
       include: { comments: { orderBy: { createdAt: 'asc' } } },
     });
   }
 
+  /**
+   * Antrian adalah DAFTAR, bukan arsip: berpaginasi, default tanpa CLOSED,
+   * dan tanpa isi thread komentar — dua tahun tiket perusahaan 2.000 orang
+   * tidak boleh terkirim utuh demi layar 25 baris. Detail (termasuk komentar)
+   * ada di `getForActor`.
+   */
   async listQueue(companyId: string, filters: TicketQueryDTO) {
     return prisma.hrTicket.findMany({
       where: {
         companyId,
-        ...(filters.status ? { status: filters.status } : {}),
+        ...(filters.status
+          ? { status: filters.status }
+          : filters.includeClosed === 'true' ? {} : { status: { not: 'CLOSED' } }),
         ...(filters.category ? { category: filters.category } : {}),
         ...(filters.assigneeUserId ? { assigneeUserId: filters.assigneeUserId } : {}),
       },
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
-      include: TICKET_INCLUDE,
+      take: filters.limit ?? 50,
+      ...(filters.cursor ? { skip: 1, cursor: { id: filters.cursor } } : {}),
+      include: {
+        employee: { select: { id: true, fullName: true, employeeNumber: true } },
+        _count: { select: { comments: true } },
+      },
     });
   }
 
@@ -90,6 +105,11 @@ export class HelpdeskService {
         ...(input.assigneeUserId !== undefined ? { assigneeUserId: input.assigneeUserId } : {}),
         ...(input.status === 'RESOLVED' ? { resolvedAt: new Date() } : {}),
         ...(input.status === 'CLOSED' ? { closedAt: new Date() } : {}),
+        // Dibuka lagi = belum selesai: stempel penyelesaian lama harus ikut
+        // hilang, atau metrik SLA menghitung tiket terbuka sebagai selesai.
+        ...(input.status === 'OPEN' || input.status === 'IN_PROGRESS'
+          ? { resolvedAt: null, closedAt: null }
+          : {}),
       },
       include: TICKET_INCLUDE,
     });

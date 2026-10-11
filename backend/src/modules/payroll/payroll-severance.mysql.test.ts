@@ -114,5 +114,20 @@ withDatabase('severance payment run (isolated real MySQL)', () => {
     await expect(asUser(() => service.createPayrollRun(
       { companyId, periodId: nextPeriod.id, name: 'Synthetic severance 2', runType: 'SEVERANCE' }, maker)))
       .rejects.toThrow(/No pending severance payments/);
+
+    // Void returns the claim: the payment is PENDING again (not stranded as
+    // APPLIED pointing at a voided run) and the next run can pay it.
+    await asUser(() => service.voidPayrollRun(run.id, maker));
+    const reverted = await mockDatabase.severancePayment.findUniqueOrThrow({ where: { id: registered.id } });
+    expect(reverted.status).toBe('PENDING');
+    expect(reverted.appliedRunId).toBeNull();
+    expect(reverted.payslipId).toBeNull();
+
+    const retryRun = await asUser(() => service.createPayrollRun(
+      { companyId, periodId: nextPeriod.id, name: 'Synthetic severance retry', runType: 'SEVERANCE' }, maker));
+    expect(retryRun.payslips).toHaveLength(1);
+    const reApplied = await mockDatabase.severancePayment.findUniqueOrThrow({ where: { id: registered.id } });
+    expect(reApplied.status).toBe('APPLIED');
+    expect(reApplied.appliedRunId).toBe(retryRun.id);
   });
 });

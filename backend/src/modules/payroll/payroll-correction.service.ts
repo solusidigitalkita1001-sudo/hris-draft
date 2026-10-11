@@ -23,7 +23,21 @@ export interface RegisterCorrectionInput {
  */
 export class PayrollCorrectionService {
   async register(companyId: string, input: RegisterCorrectionInput) {
-    const payslip = await prisma.payslip.findFirst({
+    // Satu transaksi dengan kunci baris payslip: cek "hanya satu PENDING per
+    // payslip" di bawah adalah findFirst-lalu-create, dan tanpa kunci dua
+    // permintaan serentak lolos dua-duanya — koreksi yang sama dibayar dua
+    // kali oleh run berikutnya. FOR UPDATE menserikan pendaftaran per payslip.
+    return prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM payslips WHERE id = ${input.sourcePayslipId} AND company_id = ${companyId} FOR UPDATE`;
+      if (!locked.length) throw new NotFoundError('Payslip not found in the active company');
+
+      return this.registerLocked(tx, companyId, input);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, maxWait: 10000, timeout: 15000 });
+  }
+
+  private async registerLocked(tx: Prisma.TransactionClient, companyId: string, input: RegisterCorrectionInput) {
+    const payslip = await tx.payslip.findFirst({
       where: { id: input.sourcePayslipId, companyId },
       select: {
         id: true,
@@ -50,7 +64,7 @@ export class PayrollCorrectionService {
 
     // One live correction per payslip. A second correction of the same payslip
     // is allowed — AFTER the first is APPLIED — so the trail stays sequential.
-    const pending = await prisma.payrollCorrection.findFirst({
+    const pending = await tx.payrollCorrection.findFirst({
       where: { sourcePayslipId: payslip.id, status: PayrollCorrectionStatus.PENDING },
       select: { id: true },
     });
@@ -59,7 +73,12 @@ export class PayrollCorrectionService {
     }
 
     const amount = new Prisma.Decimal(input.amount).toDecimalPlaces(2);
-    const row = await prisma.payrollCorrection.create({
+    // Pertahanan kedua di belakang DTO: baris 0.00 tidak akan pernah diklaim
+    // run mana pun (filter klaimnya >0 / <0) dan memblokir koreksi berikutnya.
+    if (amount.isZero()) {
+      throw new BadRequestError('amount membulat ke nol pada dua desimal; tidak ada yang dikoreksi');
+    }
+    const row = await tx.payrollCorrection.create({
       data: {
         companyId,
         employeeId: payslip.employeeId,

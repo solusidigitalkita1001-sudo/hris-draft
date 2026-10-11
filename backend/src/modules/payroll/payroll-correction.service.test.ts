@@ -11,7 +11,9 @@ const state: {
 } = { payslip: null, corrections: [], created: [], updates: [], updateCount: 1 };
 
 jest.mock('@/shared/database/prisma', () => {
-  const client = {
+  const client: Record<string, unknown> = {
+    // Kunci baris payslip di register: ada payslip → [{id}], tidak → [].
+    $queryRaw: jest.fn(async () => (state.payslip ? [{ id: (state.payslip as Row).id }] : [])),
     payslip: { findFirst: jest.fn(async () => state.payslip) },
     payrollCorrection: {
       findFirst: jest.fn(async () => state.corrections[0] ?? null),
@@ -27,6 +29,7 @@ jest.mock('@/shared/database/prisma', () => {
       }),
     },
   };
+  client.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) => fn(client));
   return { __esModule: true, default: client, prisma: client };
 });
 jest.mock('@/shared/logger/WinstonLogger', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
@@ -105,6 +108,13 @@ describe('registering a correction', () => {
     await expect(payrollCorrectionService.register(COMPANY, {
       sourcePayslipId: 'payslip-paid', amount: 100000, reason: 'Kurang bayar lembur Agustus',
     })).rejects.toThrow(/not found/i);
+  });
+
+  it('refuses an amount that rounds to zero at two decimals', async () => {
+    await expect(payrollCorrectionService.register(COMPANY, {
+      sourcePayslipId: 'payslip-paid', amount: 0.004, reason: 'Selisih pembulatan yang tidak berarti',
+    })).rejects.toThrow(/membulat ke nol/);
+    expect(state.created).toHaveLength(0);
   });
 
   /** A second correction of the same payslip waits until the first is APPLIED. */

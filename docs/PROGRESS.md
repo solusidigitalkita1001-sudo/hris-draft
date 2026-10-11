@@ -909,3 +909,37 @@ bulanan per periode (JSON/CSV) dan 1721-VII final pesangon dari
 ### Status verifikasi
 
 - 35 test hijau (builder + service + A1 lama); `npx tsc --noEmit` bersih.
+
+## Tugas — audit /code-review high atas seluruh branch, 10 temuan diperbaiki
+
+Review multi-angle (6 angle selesai; cross-file tracer mati kena session
+limit — cakupannya tidak tuntas, dicatat). 10 temuan terverifikasi, semua
+diperbaiki di commit yang sama:
+
+1. Race register koreksi (duplikat PENDING dibayar dua kali) → transaksi +
+   kunci baris payslip FOR UPDATE.
+2. Void run menelantarkan klaim APPLIED → void kini mengembalikan klaim
+   pesangon utuh dan koreksi kurang-bayar; run koreksi yang memotong
+   kelebihan bayar MENOLAK void (sisa parsial tak terekonstruksi; jalannya
+   koreksi lawan).
+3. Netto run koreksi bisa negatif di tepi bracket TER → pagar tolak bernama.
+4. bankReference fallback disburse-api sama untuk semua baris (tabrak unik,
+   rollback setelah uang pindah) → `fallbackBankReference` per referenceNo.
+5. THR run melewati pekerja harian diam-diam → tercatat di notes run.
+6. Upah harian hanya menghitung tanggal kerja kalender → kini semua hari
+   HADIR dibayar (populasi ini yang kerja akhir pekan).
+7. Amount sub-sen membulat ke 0.00 dan macet selamanya → ditolak DTO+service.
+8. Reopen tiket helpdesk menyisakan resolvedAt basi → distel null.
+9. Kalkulasi koreksi memuat seluruh tabel gaji → difilter employeeIds.
+10. Antrian helpdesk tanpa batas + seret semua komentar → paginasi, default
+    tanpa CLOSED, _count komentar.
+
+Plus: `formatBuktiPotongNumber` A1 kini mendelegasi ke formatter bersama.
+Cleanup yang SENGAJA ditunda (tercatat, bukan lupa): ekstraksi scaffold
+importer CSV (3 salinan) dan siklus registry PENDING (3 salinan) — refactor
+lintas-modul yang pantas PR-nya sendiri; `timesheet.list` tanpa batas.
+
+### Status verifikasi
+
+- Sweep serial penuh + MySQL nyata: 2.096 test hijau, 0 gagal; tsc bersih.
+- Drift schema↔migrasi: nol (prisma migrate diff kosong).

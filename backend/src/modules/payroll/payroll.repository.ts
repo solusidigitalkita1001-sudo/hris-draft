@@ -175,9 +175,10 @@ export class PayrollRepository {
 
   // ==================== Employee Salaries ====================
 
-  async findAllEmployeeSalaries(companyId: string, employeeId?: string, database: Prisma.TransactionClient = prisma) {
+  async findAllEmployeeSalaries(companyId: string, employeeId?: string, database: Prisma.TransactionClient = prisma, employeeIds?: readonly string[]) {
     const where: Prisma.EmployeeSalaryWhereInput = { companyId, deletedAt: null };
     if (employeeId) where.employeeId = employeeId;
+    else if (employeeIds) where.employeeId = { in: [...employeeIds] };
 
     return database.employeeSalary.findMany({
       where,

@@ -466,17 +466,60 @@ export class PayrollService {
     const run = await this.findPayrollRunById(id);
     if (run.companyId !== companyId) throw new NotFoundError('Payroll run not found');
 
-    const voided = await prisma.payrollRun.updateMany({
-      where: { id, companyId, status: 'COMPLETED' },
-      data: {
-        status: 'VOIDED',
-        notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${run.notes ?? ''}`.trim(),
-      },
+    await prisma.$transaction(async (tx) => {
+      const voided = await tx.payrollRun.updateMany({
+        where: { id, companyId, status: 'COMPLETED' },
+        data: {
+          status: 'VOIDED',
+          notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${run.notes ?? ''}`.trim(),
+        },
+      });
+      if (voided.count !== 1) {
+        throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
+      }
+
+      // Void harus MENGEMBALIKAN klaim yang run ini pegang, atau uangnya
+      // terdampar: baris APPLIED yang menunjuk run VOIDED tidak bisa didaftar
+      // ulang (register menolak selain CANCELLED) dan tidak bisa dibatalkan
+      // (cancel menuntut PENDING).
+      if (run.runType === 'SEVERANCE') {
+        // Pesangon tidak pernah parsial: kembalikan utuh.
+        await tx.severancePayment.updateMany({
+          where: { companyId, appliedRunId: id },
+          data: { status: 'PENDING', appliedRunId: null, payslipId: null, appliedAt: null },
+        });
+      }
+      if (run.runType === 'CORRECTION') {
+        // Potongan parsial tidak meninggalkan jejak per baris, jadi sisa
+        // (`remainingAmount`) baris yang terlibat tidak bisa direkonstruksi
+        // dengan pasti. Run yang menyentuh kelebihan bayar menolak void;
+        // jalannya adalah koreksi lawan. Run kurang-bayar murni — kasus yang
+        // umum — di-void bersih.
+        const touchedNegative = run.payslips.some((payslip) => {
+          const correction = (payslip.employeeSnapshot as { correction?: { deductionRequested?: string } } | null)?.correction;
+          return correction ? Number(correction.deductionRequested ?? 0) > 0 : false;
+        });
+        if (touchedNegative) {
+          throw new ConflictError(
+            'Run koreksi ini memotong kelebihan bayar; void tidak bisa mengembalikan sisa potongan dengan pasti. '
+            + 'Daftarkan koreksi lawan alih-alih void.',
+          );
+        }
+        // Kurang bayar selalu diklaim utuh, jadi sisa kembali = nominal penuh.
+        const claimed = await tx.payrollCorrection.findMany({
+          where: { companyId, appliedRunId: id },
+          select: { id: true, amount: true },
+        });
+        for (const row of claimed) {
+          await tx.payrollCorrection.update({
+            where: { id: row.id },
+            data: { status: 'PENDING', appliedRunId: null, payslipId: null, appliedAt: null, remainingAmount: row.amount },
+          });
+        }
+      }
     });
-    if (voided.count !== 1) {
-      throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
-    }
-    logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason });
+
+    logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason, runType: run.runType });
     return this.findPayrollRunById(id);
   }
 
@@ -688,12 +731,18 @@ export class PayrollService {
     let totalEarnings = new Prisma.Decimal(0);
     let totalDeductions = new Prisma.Decimal(0);
     let employeeCount = 0;
+    const skippedDaily: string[] = [];
 
     for (const salary of employeeSalaries) {
       // GAP-49: THR pekerja harian (rata-rata upah 12 bulan terakhir, SE
       // Menaker) adalah kebijakan tersendiri; dilewati daripada membayar
-      // tarif sehari seolah-olah gaji sebulan.
-      if (salary.payBasis === 'DAILY') continue;
+      // tarif sehari seolah-olah gaji sebulan — tapi TIDAK diam-diam: THR
+      // pekerja harian tetap hak (Permenaker 6/2016), jadi run mencatat siapa
+      // yang dilewati supaya HR membayarnya lewat jalur lain.
+      if (salary.payBasis === 'DAILY') {
+        skippedDaily.push(salary.employee?.employeeNumber ?? salary.employeeId);
+        continue;
+      }
       const employee = salary.employee;
       // Tenure decides both eligibility and the prorated fraction, so a
       // missing join date cannot be guessed. Named, so it is fixable.
@@ -793,6 +842,15 @@ export class PayrollService {
       employeeCount += 1;
     }
 
+    if (skippedDaily.length) {
+      const existingRun = await database.payrollRun.findUnique({ where: { id: runId }, select: { notes: true } });
+      const summary = `THR pekerja harian dilewati (bayar lewat jalur tersendiri): ${skippedDaily.join(', ')}.`;
+      await database.payrollRun.update({
+        where: { id: runId },
+        data: { notes: existingRun?.notes ? `${existingRun.notes}\n${summary}` : summary },
+      });
+    }
+
     await payrollRepository.updatePayrollRunTotals(runId, {
       totalEmployees: employeeCount,
       totalEarnings,
@@ -869,9 +927,11 @@ export class PayrollService {
 
     // The regular monthly gross is only the BASE of the marginal tax — an
     // employee who already left (the usual overpayment case) simply has no
-    // base, and the correction is taxed as the month's only income.
+    // base, and the correction is taxed as the month's only income. Loaded
+    // for the corrected employees ONLY: a 10k-employee tenant with three
+    // corrections must not pull the whole salary table into this transaction.
     const employeeIds = [...correctionsByEmployee.keys()];
-    const salaryRows = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
+    const salaryRows = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database, employeeIds);
     const asOfSalaries = this.asOfSalariesOrConflict(
       salaryRows.filter((row) => correctionsByEmployee.has(row.employeeId)), run.period.endDate);
     const salaryByEmployee = new Map(asOfSalaries.map((salary) => [salary.employeeId, salary]));
@@ -940,6 +1000,17 @@ export class PayrollService {
       const room = Prisma.Decimal.max(earning.minus(taxAmount), zero);
       const appliedDeduction = Prisma.Decimal.min(deduction, room);
       const netPay = earning.minus(taxAmount).minus(appliedDeduction).toDecimalPlaces(2);
+      // Di tepi bracket TER, pajak marginal atas koreksi kecil bisa melebihi
+      // earning-nya sendiri (tarif baru berlaku atas SELURUH bruto bulan itu).
+      // Tanpa pagar ini payslip FINAL bernetto negatif lolos dan baru meledak
+      // di pembuatan payment batch — menolak di sini, dengan nama orangnya,
+      // seperti yang dilakukan jalur THR dan jalur reguler.
+      if (netPay.lessThan(0)) {
+        throw new BadRequestError(
+          `PPh 21 marginal (${taxAmount.toString()}) melebihi earning koreksi ${employee.employeeNumber} `
+          + `(${earning.toString()}); gabungkan dengan koreksi lain atau bayarkan lewat run reguler berikutnya`,
+        );
+      }
 
       const payslip = await payrollRepository.createPayslip({
         payrollRun: { connect: { id: runId } },
@@ -1634,9 +1705,22 @@ export class PayrollService {
           `Daily-wage salary for ${salary.employee.employeeNumber ?? salary.employeeId} must not carry monthly component allocations`,
         );
       }
-      if (isDaily && attd.present <= 0) continue;
+      // Hari bayar pekerja harian = SEMUA hari dia tercatat hadir, termasuk
+      // di luar tanggal kerja kalendernya — populasi inilah yang paling
+      // mungkin bekerja akhir pekan, dan `attd.present` hanya menghitung
+      // tanggal kerja. "Tarif × hari hadir" harus berarti hadir, titik.
+      const dailyPaidDays = isDaily
+        ? await database.attendance.count({
+            where: {
+              companyId: run.companyId, employeeId: salary.employeeId, deletedAt: null,
+              date: { gte: periodStart, lte: periodEnd },
+              status: { in: ['PRESENT', 'LATE'] },
+            },
+          })
+        : 0;
+      if (isDaily && dailyPaidDays <= 0) continue;
       const dailyEarnedBase = isDaily
-        ? new Prisma.Decimal(salary.baseSalary).times(attd.present).toDecimalPlaces(2)
+        ? new Prisma.Decimal(salary.baseSalary).times(dailyPaidDays).toDecimalPlaces(2)
         : null;
       // Kepmenaker 102/2004: dasar lembur pekerja harian adalah upah sebulan
       // ekuivalen — tarif × 21 (workweek 5 hari) atau × 25 (6 hari).
@@ -1688,7 +1772,7 @@ export class PayrollService {
       if (isDaily && dailyEarnedBase) {
         extraComponents.push({
           salaryComponentId: dailyWageComponent.id,
-          name: `Upah Harian (${attd.present} hari)`,
+          name: `Upah Harian (${dailyPaidDays} hari)`,
           type: 'ALLOWANCE',
           amount: dailyEarnedBase.toNumber(),
           isTaxable: true,
@@ -1870,7 +1954,7 @@ export class PayrollService {
         totalDeductions: deductionsTotal,
         netPay,
         workDays: workDaysInPeriod,
-        presentDays: attd.present,
+        presentDays: isDaily ? dailyPaidDays : attd.present,
         leaveDays: leaveDaysForEmployee,
         absentDays,
         overtimeHours: overtimeHoursForEmployee,
@@ -1886,7 +1970,7 @@ export class PayrollService {
           departmentName: salary.employee.department?.name ?? null,
           positionId: salary.employee.position?.id ?? null,
           positionName: salary.employee.position?.name ?? null,
-          ...(isDaily ? { wage: { payBasis: 'DAILY', dailyRate: salary.baseSalary.toString(), paidDays: attd.present } } : {}),
+          ...(isDaily ? { wage: { payBasis: 'DAILY', dailyRate: salary.baseSalary.toString(), paidDays: dailyPaidDays } } : {}),
         },
         status: 'DRAFT',
         ...(benefitDeductions.length

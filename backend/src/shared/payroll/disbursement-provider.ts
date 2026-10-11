@@ -60,6 +60,17 @@ const PROVIDERS: Record<string, DisbursementProvider> = {
   SANDBOX: new SandboxDisbursementProvider(),
 };
 
+/**
+ * Referensi bank cadangan saat penyedia tidak mengirim providerRef per baris.
+ * HARUS unik per transaksi: `PayrollPaymentTransaction` punya
+ * `@@unique([companyId, bankReference])`, dan dua baris PAID dengan referensi
+ * yang sama akan meledakkan transaksi ledger SETELAH penyedia memindahkan
+ * uang — maka referenceNo baris ikut di dalamnya.
+ */
+export function fallbackBankReference(providerName: string, providerBatchRef: string, referenceNo: string): string {
+  return `${providerName}:${providerBatchRef}:${referenceNo}`;
+}
+
 /** Nama dari setting `disbursement_provider` → penyedia, atau null bila tidak dikenal. */
 export function resolveDisbursementProvider(name: string | undefined | null): DisbursementProvider | null {
   if (!name) return null;

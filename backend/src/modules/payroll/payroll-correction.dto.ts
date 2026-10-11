@@ -10,8 +10,10 @@ import { z } from 'zod';
  */
 export const registerCorrectionSchema = z.object({
   sourcePayslipId: z.string().uuid(),
-  /// Positif = kurang bayar, negatif = kelebihan bayar.
-  amount: z.number().finite().refine((v) => v !== 0, 'amount tidak boleh nol'),
+  /// Positif = kurang bayar, negatif = kelebihan bayar. Dibanding terhadap
+  /// NOL SETELAH pembulatan dua desimal: 0.004 lolos cek !==0 tapi tersimpan
+  /// 0.00 — baris PENDING yang tidak pernah bisa diklaim run mana pun.
+  amount: z.number().finite().refine((v) => Math.round(v * 100) !== 0, 'amount tidak boleh nol (termasuk yang membulat ke nol)'),
   // A reason the length of "typo" explains nothing to the auditor.
   reason: z.string().trim().min(10),
 });

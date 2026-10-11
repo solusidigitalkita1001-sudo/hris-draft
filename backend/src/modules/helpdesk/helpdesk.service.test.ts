@@ -34,6 +34,7 @@ jest.mock('@/shared/database/prisma', () => {
 });
 jest.mock('@/shared/logger/WinstonLogger', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
+import prisma from '@/shared/database/prisma';
 import { helpdeskService } from './helpdesk.service';
 
 const COMPANY = 'company-a';
@@ -64,6 +65,12 @@ describe('status transitions', () => {
     const attempt = helpdeskService.update(COMPANY, 'ticket-1', { status: to as never });
     if (allowed) await expect(attempt).resolves.toBeDefined();
     else await expect(attempt).rejects.toThrow(/tidak bisa pindah/);
+  });
+
+  it('reopening clears the stale resolution stamps', async () => {
+    state.ticket = ticket({ status: 'RESOLVED' });
+    await helpdeskService.update(COMPANY, 'ticket-1', { status: 'OPEN' });
+    expect(state.updated[0].data).toMatchObject({ resolvedAt: null, closedAt: null });
   });
 
   it('stamps resolvedAt and closedAt with the transition', async () => {
@@ -116,5 +123,20 @@ describe('HR side', () => {
     await helpdeskService.update(COMPANY, 'ticket-1', { assigneeUserId: 'user-hr', priority: 'HIGH' });
     expect(state.updated[0].data).toMatchObject({ assigneeUserId: 'user-hr', priority: 'HIGH' });
     expect(state.updated[0].data.status).toBeUndefined();
+  });
+
+  it('the queue is a paginated LIST: default hides CLOSED, caps rows, and counts comments instead of shipping them', async () => {
+    const findMany = (prisma as unknown as { hrTicket: { findMany: jest.Mock } }).hrTicket.findMany;
+    await helpdeskService.listQueue(COMPANY, {});
+    const args = findMany.mock.calls[0][0];
+    expect(args.where.status).toEqual({ not: 'CLOSED' });
+    expect(args.take).toBe(50);
+    expect(args.include._count).toEqual({ select: { comments: true } });
+    expect(args.include.comments).toBeUndefined();
+
+    await helpdeskService.listQueue(COMPANY, { includeClosed: 'true', limit: 10 } as never);
+    const second = findMany.mock.calls[1][0];
+    expect(second.where.status).toBeUndefined();
+    expect(second.take).toBe(10);
   });
 });

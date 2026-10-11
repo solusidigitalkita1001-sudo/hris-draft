@@ -133,6 +133,23 @@ withDatabase('payroll correction run (isolated real MySQL)', () => {
     // The source payslip is reachable from the row, so the audit can walk
     // corrected ← correction in one join.
     expect(applied.sourcePayslipId).toBe(paidSlip.id);
+
+    // Void of an underpayment-only run RETURNS the claim whole: the row is
+    // PENDING again with its full remaining and a later run pays it — no
+    // stranded money, no DB surgery.
+    await asUser(f, () => service.voidPayrollRun(correctionRun.id, f.maker));
+    const reverted = await mockDatabase.payrollCorrection.findUniqueOrThrow({ where: { id: registered.id } });
+    expect(reverted.status).toBe('PENDING');
+    expect(reverted.remainingAmount.toString()).toBe(reverted.amount.toString());
+    expect(reverted.appliedRunId).toBeNull();
+    expect(reverted.payslipId).toBeNull();
+
+    const december = await createPeriod(f.companyId, '2026-12-01');
+    const secondRun = await createRun(f, december.id, 'CORRECTION');
+    expect(secondRun.payslips).toHaveLength(1);
+    const reApplied = await mockDatabase.payrollCorrection.findUniqueOrThrow({ where: { id: registered.id } });
+    expect(reApplied.status).toBe('APPLIED');
+    expect(reApplied.appliedRunId).toBe(secondRun.id);
   });
 
   it('an overpayment beyond the earning nets to zero and leaves the remainder PENDING', async () => {
@@ -166,5 +183,11 @@ withDatabase('payroll correction run (isolated real MySQL)', () => {
     const leftover = await mockDatabase.payrollCorrection.findUniqueOrThrow({ where: { id: minusSame.id } });
     expect(leftover.status).toBe('PENDING');
     expect(Number(leftover.remainingAmount)).toBe(-400);
+
+    // A run that recovered overpayment cannot be voided: the partially
+    // consumed remaining cannot be reconstructed with certainty, so the exit
+    // is a counter-correction, not a void.
+    await expect(asUser(f, () => service.voidPayrollRun(correctionRun.id, f.maker)))
+      .rejects.toThrow(/koreksi lawan/);
   });
 });

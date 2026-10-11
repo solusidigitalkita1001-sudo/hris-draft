@@ -11,11 +11,12 @@ jest.mock('@/shared/payroll/payroll-policy', () => ({
 // Here it is a visible 10% of whatever earning it was handed, so the test can
 // see WHICH figure was taxed — the correction earning, not the monthly salary.
 const taxCalls: Row[] = [];
+let taxRate = 0.1;
 jest.mock('@/shared/payroll/thr-tax', () => ({
   calculateThrTax: jest.fn((input: { thrAmount: number; method?: string }) => {
     taxCalls.push(input as Row);
     return {
-      tax: Math.round(input.thrAmount * 0.1), method: input.method ?? 'ANNUALIZED',
+      tax: Math.round(input.thrAmount * taxRate), method: input.method ?? 'ANNUALIZED',
       annualTaxWithoutThr: 0, annualTaxWithThr: 0, terRateWithoutThr: 0, terRateWithThr: 0,
     };
   }),
@@ -105,6 +106,7 @@ const service = new PayrollService() as unknown as {
 beforeEach(() => {
   jest.clearAllMocks();
   taxCalls.length = 0;
+  taxRate = 0.1;
   state.pending = new Map();
   state.salaries = [{ id: 'salary-1', employeeId: 'employee-1', effectiveDate: new Date('2026-01-01'), isActive: true, baseSalary: new Prisma.Decimal('8000000') }];
   state.employees = [employeeRow()];
@@ -207,6 +209,25 @@ describe('tax', () => {
     expect(taxCalls[0].monthlyGross).toBe(8000000);
     const taxLine = state.components.find((component) => component.salaryComponentId === 'component-pph21');
     expect(String(taxLine?.amount)).toBe('25000');
+  });
+
+  it('refuses the run when the marginal tax exceeds the earning instead of writing a negative net', async () => {
+    // Tepi bracket TER: tarif baru berlaku atas seluruh bruto, jadi pajak
+    // marginal koreksi kecil bisa lebih besar dari koreksinya sendiri.
+    taxRate = 3;
+    state.pending.set('employee-1', [correction({ remainingAmount: new Prisma.Decimal('100000') })]);
+
+    await expect(service.calculateCorrectionPayroll('run-corr', database)).rejects.toThrow(/melebihi earning/);
+    expect(state.payslips).toHaveLength(0);
+    expect(state.fullClaims).toHaveLength(0);
+  });
+
+  it('loads salaries for the corrected employees only, not the whole company', async () => {
+    state.pending.set('employee-1', [correction({ remainingAmount: new Prisma.Decimal('250000') })]);
+
+    await service.calculateCorrectionPayroll('run-corr', database);
+
+    expect(repo.findAllEmployeeSalaries).toHaveBeenCalledWith('company-a', undefined, database, ['employee-1']);
   });
 
   it('taxes with no monthly base when the employee no longer has a salary row', async () => {

@@ -11,6 +11,11 @@ export const ticketQuerySchema = z.object({
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
   category: z.string().trim().max(50).optional(),
   assigneeUserId: z.string().uuid().optional(),
+  /// Antrian default menyembunyikan CLOSED; arsip diminta eksplisit.
+  includeClosed: z.enum(['true', 'false']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  /// Kursor = id tiket terakhir dari halaman sebelumnya.
+  cursor: z.string().uuid().optional(),
 });
 
 export const updateTicketSchema = z.object({
