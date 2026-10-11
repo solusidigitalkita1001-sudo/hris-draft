@@ -151,6 +151,11 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'daily-activity', action: 'process', name: 'Process / Complete Daily Activity', module: 'daily-activity', code: 'da:process' },
     { resource: 'daily-activity', action: 'export', name: 'Export Daily Activity Report', module: 'daily-activity', code: 'da:export' },
 
+    // HR Helpdesk (GAP-50). Membuat tiket adalah self-service tanpa izin;
+    // yang berizin adalah melihat antrian seluruh perusahaan dan memprosesnya.
+    { resource: 'helpdesk', action: 'read', name: 'Read Helpdesk Queue', module: 'helpdesk', code: 'helpdesk:read' },
+    { resource: 'helpdesk', action: 'update', name: 'Process Helpdesk Tickets', module: 'helpdesk', code: 'helpdesk:update' },
+
     // Announcement (Engagement Portal). Reading is open to every signed-in
     // employee — the audience rules decide who sees what — so only the write
     // side needs permissions. Publishing is separated from creating on purpose:

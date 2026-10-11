@@ -75,6 +75,7 @@ export async function seedRolePermissions(): Promise<void> {
         // other roles so the separation of duties payroll already enforces
         // (creator != approver != disburser) can actually be satisfied.
         'payroll:read', 'payroll:export', 'payroll:process', 'payroll:correct',
+        'helpdesk:read', 'helpdesk:update',
         'benefit:read',
         'performance:create', 'performance:read', 'performance:update',
         'training:create', 'training:read', 'training:update',
@@ -112,6 +113,9 @@ export async function seedRolePermissions(): Promise<void> {
         'document:create', 'document:read',
         'ewa:read',
         'da:read', 'da:process',
+        // Helpdesk adalah pekerjaan harian staf HR: memegang antrian dan
+        // menjawab tiket.
+        'helpdesk:read', 'helpdesk:update',
       ].includes(p.code)
     )
     .map((p) => p.id);

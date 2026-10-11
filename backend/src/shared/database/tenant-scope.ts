@@ -35,6 +35,7 @@ const PARENT_SCOPES: Record<string, { relation: string; foreignKey: string }> = 
   ShiftFormulaDay: { relation: 'shiftFormula', foreignKey: 'shiftFormulaId' },
   PerformanceGradeRange: { relation: 'gradeRule', foreignKey: 'gradeRuleId' },
   AnnouncementRead: { relation: 'announcement', foreignKey: 'announcementId' },
+  HrTicketComment: { relation: 'ticket', foreignKey: 'ticketId' },
 };
 
 /**

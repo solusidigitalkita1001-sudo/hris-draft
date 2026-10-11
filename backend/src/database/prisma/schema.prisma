@@ -129,6 +129,7 @@ model Company {
   severancePayments                     SeverancePayment[]
   customFieldDefinitions                CustomFieldDefinition[]
   employeeCustomFieldValues             EmployeeCustomFieldValue[]
+  hrTickets                             HrTicket[]
   collectiveLeaves                      CollectiveLeave[]
   webhookSubscriptions                  WebhookSubscription[]
   webhookDeliveries                     WebhookDelivery[]
@@ -2464,6 +2465,7 @@ model Employee {
   payrollCorrections                            PayrollCorrection[]
   severancePayments                             SeverancePayment[]
   customFieldValues                             EmployeeCustomFieldValue[]
+  hrTickets                                     HrTicket[]
   leaveEncashments                              LeaveEncashment[]
   employmentContracts                           EmploymentContract[]
   attendanceCorrections                         AttendanceCorrection[]
@@ -5703,6 +5705,61 @@ enum SeverancePaymentStatus {
   PENDING
   APPLIED
   CANCELLED
+}
+
+/// HR helpdesk (GAP-50): satu pintu untuk pertanyaan/permintaan karyawan ke HR
+/// ("slip gaji saya beda", "minta surat keterangan") yang sekarang terjadi di
+/// WhatsApp — tiket berstatus, dengan penanggung jawab dan jejak komentar.
+model HrTicket {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  companyId      String   @map("company_id") @db.VarChar(36)
+  /// Karyawan yang mengajukan.
+  employeeId     String   @map("employee_id") @db.VarChar(36)
+  category       String   @db.VarChar(50)
+  subject        String   @db.VarChar(200)
+  description    String   @db.Text
+  status         HrTicketStatus   @default(OPEN)
+  priority       HrTicketPriority @default(MEDIUM)
+  /// User HR yang memegang tiket.
+  assigneeUserId String?  @map("assignee_user_id") @db.VarChar(36)
+  resolvedAt     DateTime? @map("resolved_at")
+  closedAt       DateTime? @map("closed_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  company  Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  comments HrTicketComment[]
+
+  @@index([companyId, status])
+  @@index([employeeId])
+  @@map("hr_tickets")
+}
+
+enum HrTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum HrTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model HrTicketComment {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  ticketId     String   @map("ticket_id") @db.VarChar(36)
+  authorUserId String   @map("author_user_id") @db.VarChar(36)
+  body         String   @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ticket HrTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("hr_ticket_comments")
 }
 
 /// Custom field per perusahaan (GAP-39). Definisi milik tenant; V1 hanya

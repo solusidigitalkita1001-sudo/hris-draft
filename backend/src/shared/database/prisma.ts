@@ -31,6 +31,8 @@ const COMPANY_SCOPED_MODELS = new Set([
   'SeverancePayment',
   'CustomFieldDefinition',
   'EmployeeCustomFieldValue',
+  'HrTicket',
+  'HrTicketComment',
   'CollectiveLeave',
   'LeaveEncashment',
   'EmploymentContract',
