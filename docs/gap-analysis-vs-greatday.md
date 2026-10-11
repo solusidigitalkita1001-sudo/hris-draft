@@ -1637,3 +1637,18 @@ Run bertipe `SEVERANCE` kini membayar pesangon, bukan ditolak:
 
 Kolom "sebagian" audit 7 Oktober tinggal 2 (GAP-33 e-Bupot, GAP-44 importer
 absensi/saldo cuti): tertutup **42/51**.
+
+## 11 Oktober 2026 — GAP-49 DITUTUP (DAILY; HOURLY sengaja ditunda)
+
+- `EmployeeSalary.payBasis` (`MONTHLY|DAILY`) + migrasi; DAILY = tarif sehari.
+- `payroll.service.ts` run reguler: komponen `DAILY_WAGE_AUTO` = tarif × hari
+  hadir; pajak/BPJS/potongan lewat mesin yang sama; alpha dan cuti-tidak-
+  dibayar dilewati; 0 hadir → tanpa payslip.
+- Jalur berasumsi bulanan menolak/melewati DAILY: THR (run + endpoint), rapel,
+  pesangon — pesan eksplisit, bukan angka salah 25×.
+- Terverifikasi sampai MySQL nyata (test upah harian di
+  `payroll-calculation.mysql.test.ts`). Rincian: docs/payroll-daily-wage.md.
+- HOURLY ditunda sadar: absensi belum mengukur jam kerja reguler.
+
+Terbuka tersisa 6 (35, 36, 39, 48, 50, 51 — semuanya keputusan produk);
+sebagian tersisa 2 (GAP-33 e-Bupot, GAP-44 importer): tertutup **43/51**.

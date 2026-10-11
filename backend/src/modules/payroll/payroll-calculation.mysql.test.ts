@@ -49,6 +49,7 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       await mockDatabase.salaryComponent.deleteMany({ where: { companyId } });
       await mockDatabase.workCalendar.deleteMany({ where: { companyId } });
       await mockDatabase.companySetting.deleteMany({ where: { companyId } });
+      await mockDatabase.attendance.deleteMany({ where: { companyId } });
       await mockDatabase.employee.deleteMany({ where: { companyId } });
       await mockDatabase.company.deleteMany({ where: { id: companyId } });
       await mockDatabase.companyGroup.deleteMany({ where: { id: { in: groups } } });
@@ -403,5 +404,56 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(await mockDatabase.salaryComponent.count({
       where: { companyId: f.companyId, code: 'PPH21_ANNUAL_CORRECTION_AUTO' },
     })).toBe(0);
+  });
+
+  /**
+   * GAP-49: a DAILY-basis salary pays tarif × hari hadir. The wage arrives as
+   * the DAILY_WAGE_AUTO component (the engine pays allocations, and a daily
+   * worker has none), absent days are simply unpaid (no alpha deduction on
+   * top), and a month with zero attendance writes no payslip at all.
+   */
+  it('pays a daily-wage employee tarif × hari hadir, and no payslip for zero days', async () => {
+    const f = await fixture();
+
+    const worker = await mockDatabase.employee.create({ data: {
+      companyId: f.companyId, employeeNumber: randomUUID(), firstName: 'Harian', lastName: 'Hadir', fullName: 'Harian Hadir',
+    } });
+    await mockDatabase.employeeSalary.create({ data: {
+      companyId: f.companyId, employeeId: worker.id, baseSalary: '200.00', payBasis: 'DAILY', effectiveDate: new Date('2026-09-01'),
+    } });
+    // Present on one of the calendar's two working days; the other is absent
+    // and must cost nothing beyond not being paid.
+    await mockDatabase.attendance.create({ data: {
+      companyId: f.companyId, employeeId: worker.id, date: new Date('2026-10-01'), status: 'PRESENT',
+    } });
+
+    const ghost = await mockDatabase.employee.create({ data: {
+      companyId: f.companyId, employeeNumber: randomUUID(), firstName: 'Harian', lastName: 'Absen', fullName: 'Harian Absen',
+    } });
+    await mockDatabase.employeeSalary.create({ data: {
+      companyId: f.companyId, employeeId: ghost.id, baseSalary: '200.00', payBasis: 'DAILY', effectiveDate: new Date('2026-09-01'),
+    } });
+
+    const completed = await run(f);
+
+    const slip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: completed.id, employeeId: worker.id } });
+    expect(Number(slip.totalEarnings)).toBe(200);
+    // payslip.baseSalary carries the month's EARNED base, not the per-day rate.
+    expect(Number(slip.baseSalary)).toBe(200);
+    expect(slip.presentDays).toBe(1);
+    expect(Number(slip.netPay)).toBe(Number(slip.totalEarnings) - Number(slip.totalDeductions));
+    expect((slip.employeeSnapshot as { wage?: { payBasis?: string; dailyRate?: string; paidDays?: number } }).wage)
+      .toMatchObject({ payBasis: 'DAILY', dailyRate: '200', paidDays: 1 });
+
+    const components = await mockDatabase.payslipComponent.findMany({
+      where: { payslipId: slip.id }, include: { salaryComponent: true },
+    });
+    const earning = components.find((row) => row.type === 'ALLOWANCE');
+    expect(earning?.salaryComponent.code).toBe('DAILY_WAGE_AUTO');
+    expect(earning?.amount.toString()).toBe('200');
+    // Absence must not be deducted on top of the unpaid day.
+    expect(components.some((row) => row.name.includes('Alpha'))).toBe(false);
+
+    expect(await mockDatabase.payslip.count({ where: { payrollRunId: completed.id, employeeId: ghost.id } })).toBe(0);
   });
 });

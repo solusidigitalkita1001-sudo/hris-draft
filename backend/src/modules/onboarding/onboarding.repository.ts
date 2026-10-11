@@ -109,7 +109,7 @@ export class OnboardingRepository {
     const activeSalary = await prisma.employeeSalary.findFirst({
       where: { employeeId: resignation.employeeId, isActive: true, deletedAt: null },
       orderBy: { effectiveDate: 'desc' },
-      select: { baseSalary: true },
+      select: { baseSalary: true, payBasis: true },
     });
 
     const year = new Date(resignation.lastWorkingDate).getFullYear();

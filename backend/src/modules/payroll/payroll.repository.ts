@@ -267,6 +267,7 @@ export class PayrollRepository {
         companyId: salaryData.companyId,
         effectiveDate: new Date(salaryData.effectiveDate),
         baseSalary: salaryData.baseSalary,
+        payBasis: salaryData.payBasis,
         currency: salaryData.currency,
         notes: salaryData.notes,
         components: components?.length

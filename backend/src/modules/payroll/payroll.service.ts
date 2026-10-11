@@ -193,6 +193,12 @@ export class PayrollService {
     if (!salary) {
       throw new BadRequestError('Data gaji aktif karyawan tidak ditemukan');
     }
+    // GAP-49: baseSalary pekerja harian adalah tarif sehari — memakainya
+    // sebagai "upah sebulan" membayar THR satu hari. THR pekerja harian
+    // (rata-rata upah 12 bulan) adalah kebijakan tersendiri.
+    if (salary.payBasis === 'DAILY') {
+      throw new BadRequestError('THR untuk pekerja harian belum didukung; dasar upahnya tarif per hari, bukan upah sebulan');
+    }
 
     // "Upah sebulan" under Permenaker 6/2016 is gaji pokok PLUS tunjangan
     // tetap. This passed base salary alone, which paid less THR than the law
@@ -684,6 +690,10 @@ export class PayrollService {
     let employeeCount = 0;
 
     for (const salary of employeeSalaries) {
+      // GAP-49: THR pekerja harian (rata-rata upah 12 bulan terakhir, SE
+      // Menaker) adalah kebijakan tersendiri; dilewati daripada membayar
+      // tarif sehari seolah-olah gaji sebulan.
+      if (salary.payBasis === 'DAILY') continue;
       const employee = salary.employee;
       // Tenure decides both eligibility and the prorated fraction, so a
       // missing join date cannot be guessed. Named, so it is fixable.
@@ -908,7 +918,9 @@ export class PayrollService {
       }
 
       const salary = salaryByEmployee.get(employeeId);
-      const monthlyGross = salary ? Number(salary.baseSalary) : 0;
+      // A DAILY-basis baseSalary is a per-day rate, not a monthly gross; the
+      // correction is then taxed as the month's only income.
+      const monthlyGross = salary && salary.payBasis !== 'DAILY' ? Number(salary.baseSalary) : 0;
       const tax = calculateThrTax({
         monthlyGross,
         thrAmount: earning.toNumber(),
@@ -1182,6 +1194,25 @@ export class PayrollService {
     await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
   }
 
+  private async ensureDailyWageComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'DAILY_WAGE_AUTO';
+    // Revive rather than look-then-insert: see D-007, as above.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
+      companyId,
+      name: 'Upah Harian',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: true,
+      // Already the product of rate × days present; the window factor must not
+      // shrink it a second time.
+      isProrated: false, isFixedAllowance: false,
+      description: 'System generated: upah pekerja harian, tarif × hari hadir (GAP-49)',
+      sortOrder: 1,
+    }, database);
+  }
+
   private async ensureSeveranceEarningComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'SEVERANCE_EARNING_AUTO';
     // Revive rather than look-then-insert: see D-007, as above.
@@ -1318,6 +1349,7 @@ export class PayrollService {
     }), new Date(run.period.startDate));
     const loanDeductionComponent = await this.ensureLoanDeductionComponent(run.companyId, database);
     const overtimeEarningComponent = await this.ensureOvertimeEarningComponent(run.companyId, database);
+    const dailyWageComponent = await this.ensureDailyWageComponent(run.companyId, database);
     const lateDeductionComponent = await this.ensureLateDeductionComponent(run.companyId, database);
     const absenceDeductionComponent = await this.ensureAbsenceDeductionComponent(run.companyId, database);
     const ewaDeductionComponent = await this.ensureEWADeductionComponent(run.companyId, database);
@@ -1589,18 +1621,41 @@ export class PayrollService {
       const overtimeHoursForEmployee = attd.overtime;
       const leaveDaysForEmployee = attd.leave;
       const absentDays = attd.absent;
+
+      // GAP-49: a DAILY-basis row pays tarif × hari hadir through this same
+      // machinery — the earning arrives as a DAILY_WAGE_AUTO component, so
+      // tax (TER bulanan per PMK 168/2023 for upah harian diterima bulanan),
+      // BPJS and loan/EWA deductions all apply to what was actually earned.
+      // Monthly allocations are refused (the DTO blocks new ones; this guards
+      // rows edited around it), and zero days present writes no payslip.
+      const isDaily = salary.payBasis === 'DAILY';
+      if (isDaily && salary.components.length > 0) {
+        throw new BadRequestError(
+          `Daily-wage salary for ${salary.employee.employeeNumber ?? salary.employeeId} must not carry monthly component allocations`,
+        );
+      }
+      if (isDaily && attd.present <= 0) continue;
+      const dailyEarnedBase = isDaily
+        ? new Prisma.Decimal(salary.baseSalary).times(attd.present).toDecimalPlaces(2)
+        : null;
+      // Kepmenaker 102/2004: dasar lembur pekerja harian adalah upah sebulan
+      // ekuivalen — tarif × 21 (workweek 5 hari) atau × 25 (6 hari).
+      const overtimeWageBasis = isDaily
+        ? Number(salary.baseSalary) * (workweekDays === 5 ? 21 : 25)
+        : Number(salary.baseSalary);
       // Overtime on non-working days (per the employee's resolved calendar)
       // is paid at the statutory holiday bands (2x/3x/4x), not workday bands.
       const overtimePayAmount =
         (attd.overtimeWorkday > 0
-          ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: attd.overtimeWorkday, dayType: 'WORKDAY', workweekDays }).amount
+          ? calculateOvertimePay({ monthlyWage: overtimeWageBasis, hours: attd.overtimeWorkday, dayType: 'WORKDAY', workweekDays }).amount
           : 0) +
         (attd.overtimeHoliday > 0
-          ? calculateOvertimePay({ monthlyWage: Number(salary.baseSalary), hours: attd.overtimeHoliday, dayType: 'HOLIDAY', workweekDays }).amount
+          ? calculateOvertimePay({ monthlyWage: overtimeWageBasis, hours: attd.overtimeHoliday, dayType: 'HOLIDAY', workweekDays }).amount
           : 0);
 
       // Task 4.2 — Hitung nominal potongan keterlambatan (dengan daily cap persentase gaji pokok)
-      const baseMonthlyWage = Number(salary.baseSalary);
+      // Untuk DAILY, "gaji pokok" bulan ini adalah upah yang benar-benar diperoleh.
+      const baseMonthlyWage = isDaily ? dailyEarnedBase!.toNumber() : Number(salary.baseSalary);
       let lateDeductionAmount = 0;
       if (lateCfg.enabled && perDayLateMinutesByEmployee[salary.employeeId]) {
         const dailyCapIdr = baseMonthlyWage * (lateCfg.dailyCapPercentOfBasic / 100);
@@ -1612,8 +1667,10 @@ export class PayrollService {
         lateDeductionAmount = Math.round(lateDeductionAmount);
       }
       // Task 4.2 — Hitung nominal potongan alpha tidak hadir (persen × gaji / hari kerja default)
+      // DAILY dilewati: hari tidak hadir memang tidak dibayar; memotong lagi
+      // adalah hukuman ganda.
       let absenceDeductionAmount = 0;
-      if (absentDays > 0 && lateCfg.absenceDailyPercentOfBasic > 0 && lateCfg.defaultWorkingDaysPerMonth > 0) {
+      if (!isDaily && absentDays > 0 && lateCfg.absenceDailyPercentOfBasic > 0 && lateCfg.defaultWorkingDaysPerMonth > 0) {
         const perDayWageRate = baseMonthlyWage / lateCfg.defaultWorkingDaysPerMonth;
         const perDayDeduction = perDayWageRate * (lateCfg.absenceDailyPercentOfBasic / 100);
         absenceDeductionAmount = Math.round(perDayDeduction * absentDays);
@@ -1628,7 +1685,18 @@ export class PayrollService {
       const benefitEmployeeTotal = benefitDeductions.reduce((sum, row) => sum + row.employeeAmount, 0);
 
       const extraComponents: PayComponent[] = [];
-      if (unpaidLeaveDeductionComponent && attd.unpaidLeave > 0 && lateCfg.defaultWorkingDaysPerMonth > 0) {
+      if (isDaily && dailyEarnedBase) {
+        extraComponents.push({
+          salaryComponentId: dailyWageComponent.id,
+          name: `Upah Harian (${attd.present} hari)`,
+          type: 'ALLOWANCE',
+          amount: dailyEarnedBase.toNumber(),
+          isTaxable: true,
+        });
+      }
+      // DAILY dilewati: hari cuti tidak dibayar bagi pekerja harian — tidak
+      // ada yang perlu dipotong dari upah yang tidak pernah masuk.
+      if (!isDaily && unpaidLeaveDeductionComponent && attd.unpaidLeave > 0 && lateCfg.defaultWorkingDaysPerMonth > 0) {
         extraComponents.push({
           salaryComponentId: unpaidLeaveDeductionComponent.id,
           name: 'Potongan Cuti Tidak Dibayar',
@@ -1732,15 +1800,22 @@ export class PayrollService {
         hasNpwp: Boolean(emp?.taxId),
       };
 
-      const pay = calculateEmployeePay(salary, extraComponents, taxContext, {
-        BASE_SALARY: salary.baseSalary.toString(), WORK_DAYS: String(workDaysInPeriod),
+      // DAILY: the engine sees the month's EARNED base (tarif × hadir) so BPJS
+      // and every percent-of-wage figure follow the real wage; the allocation
+      // list is empty by the guard above. Attendance already did the
+      // "proration", so the window factor must not shrink it again.
+      const salaryForPay = isDaily && dailyEarnedBase
+        ? { ...salary, baseSalary: dailyEarnedBase, components: [] }
+        : salary;
+      const pay = calculateEmployeePay(salaryForPay, extraComponents, taxContext, {
+        BASE_SALARY: (isDaily && dailyEarnedBase ? dailyEarnedBase : salary.baseSalary).toString(), WORK_DAYS: String(workDaysInPeriod),
         PRESENT_DAYS: String(attd.present), LEAVE_DAYS: String(leaveDaysForEmployee),
         ABSENT_DAYS: String(absentDays), OVERTIME_HOURS: String(overtimeHoursForEmployee),
       }, formulaVersions, {
         ...payrollPolicy,
         // Only components the tenant flagged isProrated are scaled; see
         // employee-pay.ts. A full window leaves every amount untouched.
-        prorationFactor: slice.fraction,
+        prorationFactor: isDaily ? 1 : slice.fraction,
         useTer,
         taxAllowance: taxAllowanceComponent
           ? { salaryComponentId: taxAllowanceComponent.id, name: taxAllowanceComponent.name }
@@ -1758,7 +1833,7 @@ export class PayrollService {
           thisPeriod: components,
           priorSlips: priorByEmployee.get(salary.employeeId) ?? [],
           taxContext,
-          pension: bpjsPensionFor(payrollPolicy, Number(salary.baseSalary)),
+          pension: bpjsPensionFor(payrollPolicy, baseMonthlyWage),
           policy: payrollPolicy,
         });
 
@@ -1787,7 +1862,10 @@ export class PayrollService {
         employee: { connect: { id: salary.employeeId } },
         company: { connect: { id: run.companyId } },
         employeeSalary: { connect: { id: salary.id } },
-        baseSalary: salary.baseSalary,
+        // DAILY: the month's earned base, so every consumer that reads this as
+        // a monthly figure (reports, statutory exports) stays correct; the
+        // rate itself is in the snapshot.
+        baseSalary: isDaily && dailyEarnedBase ? dailyEarnedBase : salary.baseSalary,
         totalEarnings: earningsTotal,
         totalDeductions: deductionsTotal,
         netPay,
@@ -1808,6 +1886,7 @@ export class PayrollService {
           departmentName: salary.employee.department?.name ?? null,
           positionId: salary.employee.position?.id ?? null,
           positionName: salary.employee.position?.name ?? null,
+          ...(isDaily ? { wage: { payBasis: 'DAILY', dailyRate: salary.baseSalary.toString(), paidDays: attd.present } } : {}),
         },
         status: 'DRAFT',
         ...(benefitDeductions.length

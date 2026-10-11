@@ -421,7 +421,9 @@ model EmployeeSalary {
   employeeId    String    @map("employee_id") @db.VarChar(36)
   companyId     String    @map("company_id") @db.VarChar(36)
   effectiveDate DateTime  @map("effective_date")
+  /// Untuk payBasis DAILY ini adalah TARIF SEHARI, bukan gaji sebulan.
   baseSalary    Decimal   @map("base_salary") @db.Decimal(15, 2)
+  payBasis      PayBasis  @default(MONTHLY) @map("pay_basis")
   currency      String    @default("IDR") @db.VarChar(10)
   isActive      Boolean   @default(true) @map("is_active")
   notes         String?   @db.Text
@@ -5698,6 +5700,14 @@ enum SeverancePaymentStatus {
   PENDING
   APPLIED
   CANCELLED
+}
+
+/// Dasar upah (GAP-49). MONTHLY: `baseSalary` = gaji sebulan. DAILY:
+/// `baseSalary` = TARIF SEHARI, dibayar run reguler sebesar tarif × hari hadir.
+/// HOURLY sengaja belum ada: absensi belum mengukur jam kerja reguler.
+enum PayBasis {
+  MONTHLY
+  DAILY
 }
 
 /// Cuti bersama: satu hari yang diumumkan perusahaan sebagai cuti kolektif.

@@ -827,3 +827,27 @@ isTaxable false). Satu pembayaran per resignation seumur hidup
 - Real MySQL: `payroll-severance.mysql.test.ts` (register TERMINATION → run →
   APPLIED + jejak + run kedua menolak) dan kedua suite payroll lain — hijau.
 - `npx tsc --noEmit` bersih.
+
+## Tugas — dasar upah harian (GAP-49)
+
+`payBasis MONTHLY|DAILY` di `EmployeeSalary`; DAILY berarti `baseSalary` =
+tarif sehari, dibayar run reguler sebagai `DAILY_WAGE_AUTO` = tarif × hari
+hadir lewat mesin yang ada (pajak TER bulanan per PMK 168/2023, BPJS dan
+potongan mengikuti upah riil). Alpha/cuti-tidak-dibayar dilewati (hukuman
+ganda), 0 hadir → tanpa payslip, alokasi bulanan ditolak, lembur memakai
+ekuivalen Kepmenaker 102/2004. Jalur berasumsi bulanan (THR, rapel, pesangon)
+menolak/melewati DAILY dengan pesan jelas — keputusan tercatat di
+docs/payroll-daily-wage.md dan plans/2026-10-11-daily-wage-basis.md.
+Ikut terbawa: union `authorize` kini memuat action `correct` (luput dari
+commit koreksi; tsc sebelumnya tidak menangkapnya karena node_modules berisi
+duplikat Finder `@types/* 2` yang mematahkan typecheck — sudah dibersihkan).
+
+### Status verifikasi
+
+- `npx tsc --noEmit` bersih (0 baris).
+- Unit: DTO pay-basis, guard rapel/THR/pesangon, pph21-method-wiring
+  (pola diperbarui) — hijau; sweep 788 test payroll/onboarding/seeds hijau
+  (2 kegagalan flaky async audit-log di run paralel, hijau saat diisolasi).
+- Real MySQL: payroll-calculation.mysql.test.ts + test baru upah harian
+  (1 hadir × tarif 200 → payslip 200, snapshot wage, tanpa potongan alpha;
+  0 hadir → tanpa payslip) — hijau.
