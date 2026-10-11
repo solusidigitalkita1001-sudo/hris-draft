@@ -80,6 +80,8 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   // Halaman karier publik (GAP-48): mati sampai tenant menyalakannya —
   // menyalakannya memaparkan lowongan PUBLISHED ke internet tanpa login.
   public_career_page_enabled: 'false',
+  // Pencairan via API (GAP-36): NONE sampai tenant memilih penyedia.
+  disbursement_provider: 'NONE',
   // Metode pemotongan PPh 21 (GAP-40). TER (PP 58/2023) wajib sejak Januari
   // 2024, tetapi menyalakannya mengubah take-home pay setiap karyawan ke dua
   // arah — jadi defaultnya tetap metode lama sampai tenant memutuskan.
@@ -147,6 +149,10 @@ const BOOLEAN_SETTINGS = new Set([
  */
 const ENUM_SETTINGS: Record<string, readonly string[]> = {
   pph21_method: ['ANNUALIZED', 'TER'],
+  // GAP-36: penyedia pencairan via API. NONE = hanya jalur manual/file bank.
+  // Adapter bank nyata menambahkan namanya di sini DAN di
+  // shared/payroll/disbursement-provider.ts.
+  disbursement_provider: ['NONE', 'SANDBOX'],
 };
 
 const NUMERIC_SETTINGS: Record<string, { min: number; max: number; integer?: boolean }> = {

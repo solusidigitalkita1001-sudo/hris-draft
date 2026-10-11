@@ -23,6 +23,7 @@ function setup() {
   let batch: Batch | null = null;
   let operations: Operation[] = [];
   let logs: unknown[] = [];
+  let providerSetting: { value: string } | null = { value: 'SANDBOX' };
   const run = { id: runId, companyId, name: 'September', createdBy: actorId, approvedBy: checkerId,
     status: 'APPROVED', totalEmployees: 2, totalNetPay: new Prisma.Decimal('30.30'),
     payslips: [1, 2].map(number => ({ id: `payslip-${number}`, employeeId: `employee-${number}`,
@@ -72,6 +73,7 @@ function setup() {
       }),
     },
     payrollPaymentLog: { create: jest.fn(async (data: unknown) => { logs.push(data); return data; }) },
+    companySetting: { findUnique: jest.fn(async () => providerSetting) },
   };
   const database = { ...tx, $transaction: jest.fn(async (work: (client: typeof tx) => Promise<unknown>) => {
     const before = clone({ batch, operations, logs });
@@ -85,7 +87,11 @@ function setup() {
       { status: 'PAID', amount: transaction.expectedAmount, bankReference: `bank-${transaction.id}` }, key(transaction.id));
     return service.getBatch(context, data.batch.id);
   }
-  return { service, tx, run, exported, paid, state: () => clone({ batch, operations, logs }) };
+  return {
+    service, tx, run, exported, paid,
+    state: () => clone({ batch, operations, logs }),
+    setProvider: (value: string | null) => { providerSetting = value ? { value } : null; },
+  };
 }
 
 describe('manual payroll payment ledger', () => {
@@ -171,5 +177,74 @@ describe('manual payroll payment ledger', () => {
     const fresh = setup(); const created = await fresh.service.createBatch(context, { runId }, key('create'));
     expect((await fresh.service.cancelBatch(context, created.id, key('cancel'))).status).toBe('CANCELLED');
     await expect(fresh.service.exportBatch(context, created.id)).rejects.toThrow('no exportable');
+  });
+});
+
+describe('disbursement via provider API (GAP-36)', () => {
+  it('pays every pending transaction through the sandbox and reconciles cleanly', async () => {
+    const fixture = setup();
+    const data = await fixture.exported();
+
+    const result = await fixture.service.disburseViaProvider(context, data.batch.id, key('disburse'));
+
+    expect(result.status).toBe('PAID');
+    for (const transaction of result.transactions) {
+      expect(transaction.status).toBe('PAID');
+      expect(transaction.bankReference).toMatch(/^SBX-/);
+      expect(String(transaction.paidAmount)).toBe(String(transaction.expectedAmount));
+    }
+    // The provider's outcomes satisfy the same reconciliation the manual path uses.
+    const reconciled = await fixture.service.reconcileBatch(context, data.batch.id, key('reconcile'));
+    expect(reconciled.status).toBe('RECONCILED');
+  });
+
+  it('marks a failed transfer FAILED with the provider reason and the batch PARTIALLY_FAILED', async () => {
+    const fixture = setup();
+    // Sandbox contract: an account ending in 13 fails on purpose.
+    fixture.run.payslips[1].employee.bankAccount = '9990000013';
+    const data = await fixture.exported();
+
+    const result = await fixture.service.disburseViaProvider(context, data.batch.id, key('disburse'));
+
+    expect(result.status).toBe('PARTIALLY_FAILED');
+    const failed = result.transactions.find((transaction) => transaction.status === 'FAILED');
+    expect(failed?.failureReason).toContain('SANDBOX');
+    expect(result.transactions.some((transaction) => transaction.status === 'PAID')).toBe(true);
+  });
+
+  it('refuses without a configured provider, and before export', async () => {
+    const fixture = setup();
+    const data = await fixture.exported();
+    fixture.setProvider(null);
+    await expect(fixture.service.disburseViaProvider(context, data.batch.id, key('disburse')))
+      .rejects.toThrow(/disbursement_provider/);
+
+    const second = setup();
+    const created = await second.service.createBatch(context, { runId }, key('create'));
+    await expect(second.service.disburseViaProvider(context, created.id, key('disburse')))
+      .rejects.toThrow(/Export this batch/);
+  });
+
+  it('an unknown provider name is refused, not silently skipped', async () => {
+    const fixture = setup();
+    const data = await fixture.exported();
+    fixture.setProvider('BANK_YANG_BELUM_ADA');
+    await expect(fixture.service.disburseViaProvider(context, data.batch.id, key('disburse')))
+      .rejects.toThrow(/disbursement_provider/);
+  });
+
+  it('replays the same idempotency key without paying twice', async () => {
+    const fixture = setup();
+    const data = await fixture.exported();
+    const first = await fixture.service.disburseViaProvider(context, data.batch.id, key('disburse'));
+    const replay = await fixture.service.disburseViaProvider(context, data.batch.id, key('disburse'));
+    expect(replay).toEqual(first);
+  });
+
+  it('keeps the disburser separate from the payroll approver', async () => {
+    const fixture = setup();
+    const data = await fixture.exported();
+    await expect(fixture.service.disburseViaProvider({ companyId, actorId: checkerId }, data.batch.id, key('disburse')))
+      .rejects.toThrow(/approver cannot/);
   });
 });

@@ -107,6 +107,7 @@ const STEP_OWNER: Record<string, string> = {
   'GET /run/:runId': 'FINANCE',
   'GET /:id': 'FINANCE',
   'POST /:id/export': 'FINANCE',
+  'POST /:id/disburse-api': 'FINANCE',
   'PATCH /:id/transactions/:transactionId': 'FINANCE',
   'POST /:id/reconcile': 'FINANCE',
   'POST /:id/cancel': 'HR_MANAGER',
@@ -128,7 +129,7 @@ describe('every payment-batch route is reachable by the role that owns its step'
   it('still keeps releasing money out of the preparer\'s hands', () => {
     const recording = paymentRouteTable.filter((entry) => entry.requires.includes('payroll:disburse'));
     expect(recording.map((entry) => entry.route).sort())
-      .toEqual(['PATCH /:id/transactions/:transactionId', 'POST /:id/reconcile']);
+      .toEqual(['PATCH /:id/transactions/:transactionId', 'POST /:id/disburse-api', 'POST /:id/reconcile']);
     const hrManager = seededPayrollPermissions('HR_MANAGER');
     expect(hrManager).not.toContain('payroll:disburse');
   });
