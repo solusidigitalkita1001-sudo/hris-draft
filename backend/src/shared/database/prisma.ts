@@ -29,6 +29,8 @@ const COMPANY_SCOPED_MODELS = new Set([
   'PayrollArrears',
   'PayrollCorrection',
   'SeverancePayment',
+  'CustomFieldDefinition',
+  'EmployeeCustomFieldValue',
   'CollectiveLeave',
   'LeaveEncashment',
   'EmploymentContract',

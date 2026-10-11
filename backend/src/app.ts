@@ -56,6 +56,7 @@ import documentManagementRoutes from '@/modules/document-management/document-man
 import letterRoutes from '@/modules/letter/letter.routes';
 import administrationRoutes from '@/modules/administration/administration.routes';
 import companySettingsRoutes from '@/modules/company-settings/company-settings.routes';
+import customFieldRoutes from '@/modules/custom-field/custom-field.routes';
 import ewaRoutes from '@/modules/ewa/ewa.routes';
 import dailyActivityRoutes from '@/modules/daily-activity/daily-activity.routes';
 import announcementRoutes from '@/modules/announcement/announcement.routes';
@@ -243,6 +244,7 @@ app.use(`${apiPrefix}/documents`, documentManagementRoutes);
 app.use(`${apiPrefix}/letters`, letterRoutes);
 app.use(`${apiPrefix}/administration`, administrationRoutes);
 app.use(`${apiPrefix}/company-settings`, companySettingsRoutes);
+app.use(`${apiPrefix}/custom-fields`, customFieldRoutes);
 app.use(`${apiPrefix}/ewa`, ewaRoutes);
 app.use(`${apiPrefix}/daily-activities`, dailyActivityRoutes);
 app.use(`${apiPrefix}/announcements`, announcementRoutes);

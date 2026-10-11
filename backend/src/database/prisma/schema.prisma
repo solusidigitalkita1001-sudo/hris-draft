@@ -127,6 +127,8 @@ model Company {
   payrollArrears                        PayrollArrears[]
   payrollCorrections                    PayrollCorrection[]
   severancePayments                     SeverancePayment[]
+  customFieldDefinitions                CustomFieldDefinition[]
+  employeeCustomFieldValues             EmployeeCustomFieldValue[]
   collectiveLeaves                      CollectiveLeave[]
   webhookSubscriptions                  WebhookSubscription[]
   webhookDeliveries                     WebhookDelivery[]
@@ -2461,6 +2463,7 @@ model Employee {
   payrollArrears                                PayrollArrears[]
   payrollCorrections                            PayrollCorrection[]
   severancePayments                             SeverancePayment[]
+  customFieldValues                             EmployeeCustomFieldValue[]
   leaveEncashments                              LeaveEncashment[]
   employmentContracts                           EmploymentContract[]
   attendanceCorrections                         AttendanceCorrection[]
@@ -5700,6 +5703,64 @@ enum SeverancePaymentStatus {
   PENDING
   APPLIED
   CANCELLED
+}
+
+/// Custom field per perusahaan (GAP-39). Definisi milik tenant; V1 hanya
+/// untuk entitas EMPLOYEE. Nilai disimpan sebagai teks dan divalidasi per
+/// tipe saat ditulis — satu kolom generik, bukan satu kolom per tipe.
+model CustomFieldDefinition {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  companyId String   @map("company_id") @db.VarChar(36)
+  entity    CustomFieldEntity @default(EMPLOYEE)
+  /// Kunci stabil snake_case; tidak pernah berubah setelah dibuat supaya
+  /// integrasi dan ekspor tidak pecah. Label yang boleh berganti.
+  key       String   @db.VarChar(64)
+  label     String   @db.VarChar(150)
+  type      CustomFieldType
+  /// Pilihan untuk tipe SELECT (array string).
+  options   Json?
+  required  Boolean  @default(false)
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  values  EmployeeCustomFieldValue[]
+
+  @@unique([companyId, entity, key])
+  @@index([companyId])
+  @@map("custom_field_definitions")
+}
+
+enum CustomFieldEntity {
+  EMPLOYEE
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+}
+
+model EmployeeCustomFieldValue {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  companyId    String   @map("company_id") @db.VarChar(36)
+  definitionId String   @map("definition_id") @db.VarChar(36)
+  employeeId   String   @map("employee_id") @db.VarChar(36)
+  value        String   @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  company    Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  definition CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  employee   Employee              @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([definitionId, employeeId])
+  @@index([companyId])
+  @@index([employeeId])
+  @@map("employee_custom_field_values")
 }
 
 /// Dasar upah (GAP-49). MONTHLY: `baseSalary` = gaji sebulan. DAILY:
