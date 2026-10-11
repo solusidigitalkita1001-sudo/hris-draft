@@ -77,6 +77,9 @@ export const DEFAULT_COMPANY_SETTINGS: Record<string, string> = {
   benefit_payroll_deduction_enabled: 'false',
   unpaid_leave_deduction_enabled: 'false',
   payslip_email_notification_enabled: 'false',
+  // Halaman karier publik (GAP-48): mati sampai tenant menyalakannya —
+  // menyalakannya memaparkan lowongan PUBLISHED ke internet tanpa login.
+  public_career_page_enabled: 'false',
   // Metode pemotongan PPh 21 (GAP-40). TER (PP 58/2023) wajib sejak Januari
   // 2024, tetapi menyalakannya mengubah take-home pay setiap karyawan ke dua
   // arah — jadi defaultnya tetap metode lama sampai tenant memutuskan.
@@ -132,6 +135,7 @@ const BOOLEAN_SETTINGS = new Set([
   'leave_encashment_include_allowances',
   'recruitment_requisition_required',
   'pph21_gross_up_enabled',
+  'public_career_page_enabled',
 ]);
 
 /**
