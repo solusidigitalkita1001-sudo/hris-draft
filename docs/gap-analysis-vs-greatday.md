@@ -1662,3 +1662,28 @@ dan saldo cuti awal (`leave-balance-import.service.ts`,
 
 Sisa: terbuka 6 (semuanya keputusan produk — 35, 36, 39, 48, 50, 51),
 sebagian 1 (GAP-33: SIPP sudah, e-Bupot belum): tertutup **44/51 (86%)**.
+
+---
+
+## 11 Oktober 2026 (sore) — enam gap "keputusan produk" DIPUTUSKAN: dibangun
+
+Keputusan produk yang audit 5–7 Oktober catat sebagai belum pernah diambil,
+hari ini diambil (dibangun, v1 minimal yang benar) dan dikerjakan:
+
+| Gap | Yang dibangun | Bukti di kode |
+|---|---|---|
+| GAP-39 custom field | definisi per tenant (TEXT/NUMBER/DATE/SELECT) + nilai per karyawan, validasi per tipe saat tulis | `modules/custom-field/` |
+| GAP-50 helpdesk | tiket karyawan→HR berstatus + komentar; self-service vs antrian HR (`helpdesk:read/update`) | `modules/helpdesk/` |
+| GAP-51 engagement | feed perusahaan (soft delete, moderasi via `announcement:approve`) + kudos | `modules/engagement/` |
+| GAP-35 timesheet | proyek + jam per proyek per hari, total hari ≤ 24 jam, approval atasan (`timesheet:approve`), rekap jam APPROVED | `modules/timesheet/` |
+| GAP-48 karier publik | endpoint publik ber-rate-limit, hidup hanya bila `public_career_page_enabled`, lamaran masuk ATS yang ada | `modules/careers/` |
+| GAP-36 API bank | abstraksi `DisbursementProvider` + SANDBOX deterministik, `POST /payment-batches/:id/disburse-api` ke ledger manual yang sama | `shared/payroll/disbursement-provider.ts`, `payroll-payment.service.ts` |
+
+Catatan jujur per batas v1: HOURLY (timesheet mengukur jam proyek, bukan dasar
+upah); adapter bank NYATA butuh kredensial + outbox (tertulis di kodenya);
+upload CV di halaman karier belum (resumeUrl); webhook asinkron penyedia
+menunggu adapter nyata pertama.
+
+**Daftar GAP-01..51: tidak ada lagi yang berstatus TERBUKA.** Sisa satu yang
+sebagian: GAP-33 (SIPP ada, e-Bupot menunggu contoh berkas resmi dari DJP).
+Tertutup **50/51**.

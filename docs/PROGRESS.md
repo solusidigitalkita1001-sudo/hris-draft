@@ -876,3 +876,23 @@ Dengan ini GAP-44 tertutup penuh: karyawan, gaji, riwayat absensi, saldo cuti.
 
 - `npx tsc --noEmit` bersih; 11 unit test importer hijau; suite
   attendance+leave+route-security 149 test hijau.
+
+## Tugas — enam gap keputusan-produk dibangun sekaligus (35, 36, 39, 48, 50, 51)
+
+Keputusannya sendiri (bangun, bukan lewati) diambil pemilik produk hari ini;
+masing-masing v1 minimal dengan pagar yang benar, satu commit per gap:
+custom field (6bd6260), helpdesk (5cc2cbc), engagement (1289b27), timesheet
+(1a7a7db), karier publik (34dda66), pencairan via API + SANDBOX (398e4c9).
+Pola yang dipakai konsisten dengan repo: model ber-companyId masuk allowlist
+tenant (anak lewat PARENT_SCOPES), izin baru hanya bila perlu
+(helpdesk:read/update, timesheet:read/approve) — sisanya memakai izin yang
+ada; route publik satu-satunya (careers) hidup per-tenant lewat setting dan
+berjalan dalam system context dengan filter companyId eksplisit.
+
+### Status verifikasi
+
+- `npx tsc --noEmit` bersih setelah tiap gap.
+- Unit test per modul hijau; money-path-roles diperbarui untuk route
+  disburse-api (FINANCE, bukan approver); katalog settings hijau.
+- Migrasi (custom_fields, hr_helpdesk, engagement_feed_kudos,
+  project_timesheets) terdeploy ke DB integrasi lokal.
