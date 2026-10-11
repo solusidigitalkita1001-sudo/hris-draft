@@ -20,6 +20,7 @@ import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { payrollCorrectionService } from './payroll-correction.service';
+import { payrollSeveranceService } from './payroll-severance.service';
 import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
 import { calculatePph21Correction, shouldReconcileAnnualTax } from '@/shared/payroll/pph21-annual';
 import { mailService } from '@/shared/mail/MailService';
@@ -1045,6 +1046,177 @@ export class PayrollService {
     await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
   }
 
+  /**
+   * A SEVERANCE run (GAP-42): pay the registered severance payments, and
+   * nothing else. The figures — UP+UPMK+UPH and the FINAL PPh 21 of
+   * PP 68/2009 — were computed and frozen at registration
+   * (`payroll-severance.service.ts`), with HR's choice of reason and factors
+   * in the row's `basis`. This loop only writes payslips: recomputing here
+   * would let the figure drift from what HR signed off, and final tax is
+   * never taxed again.
+   */
+  private async calculateSeverancePayroll(runId: string, database: Prisma.TransactionClient) {
+    const run = await payrollRepository.findPayrollRunById(runId, database);
+    if (!run) throw new NotFoundError('Payroll run not found');
+    if (run.period.status === 'CLOSED') {
+      throw new ConflictError(`A severance run cannot pay into CLOSED period ${run.period.code}`);
+    }
+
+    const paymentsByEmployee = await payrollSeveranceService.pendingByEmployee(run.companyId, database);
+    if (paymentsByEmployee.size === 0) {
+      throw new ConflictError('No pending severance payments exist; register them first (POST /payroll/severance-payments)');
+    }
+
+    const earningComponent = await this.ensureSeveranceEarningComponent(run.companyId, database);
+    const taxComponent = await this.ensureSeveranceTaxComponent(run.companyId, database);
+
+    const employees = await database.employee.findMany({
+      where: { id: { in: [...paymentsByEmployee.keys()] }, companyId: run.companyId },
+      select: {
+        id: true, fullName: true, employeeNumber: true, employmentType: true,
+        department: { select: { id: true, name: true } },
+        position: { select: { id: true, name: true } },
+      },
+    });
+    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+
+    const zero = new Prisma.Decimal(0);
+    let totalEarnings = new Prisma.Decimal(0);
+    let totalDeductions = new Prisma.Decimal(0);
+    let employeeCount = 0;
+    const skipped: string[] = [];
+
+    for (const [employeeId, rows] of paymentsByEmployee) {
+      const employee = employeeById.get(employeeId);
+      if (!employee) {
+        // A hard-deleted employee has nowhere to be paid; the rows stay
+        // PENDING and visible instead of vanishing with the run.
+        skipped.push(employeeId);
+        continue;
+      }
+
+      const gross = rows.reduce((sum, row) => sum.plus(row.grossAmount), zero);
+      const tax = rows.reduce((sum, row) => sum.plus(row.taxAmount), zero);
+      const netPay = Prisma.Decimal.max(gross.minus(tax), zero).toDecimalPlaces(2);
+
+      const payslip = await payrollRepository.createPayslip({
+        payrollRun: { connect: { id: runId } },
+        employee: { connect: { id: employeeId } },
+        company: { connect: { id: run.companyId } },
+        // An exit payment, not a month of work — the same statement the THR
+        // and correction payslips make.
+        baseSalary: 0,
+        totalEarnings: gross,
+        totalDeductions: tax,
+        netPay,
+        workDays: 0, presentDays: 0, leaveDays: 0, absentDays: 0,
+        overtimeHours: 0, overtimeWorkdayHours: 0, overtimeHolidayHours: 0,
+        employeeSnapshot: {
+          fullName: employee.fullName,
+          employeeNumber: employee.employeeNumber,
+          employmentType: employee.employmentType,
+          departmentId: employee.department?.id ?? null,
+          departmentName: employee.department?.name ?? null,
+          positionId: employee.position?.id ?? null,
+          positionName: employee.position?.name ?? null,
+          severance: {
+            severancePaymentIds: rows.map((row) => row.id),
+            resignationIds: rows.map((row) => row.resignationId),
+            taxIsFinal: true,
+          },
+        },
+        status: 'DRAFT',
+      }, database);
+
+      const components: Parameters<typeof payrollRepository.createPayslipComponents>[0] = [{
+        payslipId: payslip.id,
+        salaryComponentId: earningComponent.id,
+        name: earningComponent.name,
+        type: 'ALLOWANCE',
+        amount: gross,
+        // Final-taxed under PP 68/2009 at registration; it must never enter a
+        // monthly PPh 21 base again.
+        isTaxable: false,
+      }];
+      if (tax.greaterThan(0)) {
+        components.push({
+          payslipId: payslip.id,
+          salaryComponentId: taxComponent.id,
+          name: taxComponent.name,
+          type: 'DEDUCTION',
+          amount: tax,
+          isTaxable: false,
+        });
+      }
+      await payrollRepository.createPayslipComponents(components, database);
+
+      await payrollSeveranceService.markApplied(
+        run.companyId, runId,
+        rows.map((row) => ({ severancePaymentId: row.id, payslipId: payslip.id })),
+        database,
+      );
+
+      totalEarnings = totalEarnings.plus(gross);
+      totalDeductions = totalDeductions.plus(tax);
+      employeeCount += 1;
+    }
+
+    if (employeeCount === 0) {
+      throw new ConflictError('Every pending severance payment points at an employee this company no longer has; nothing can be paid in this run');
+    }
+
+    const summary = `Pesangon dibayar: ${employeeCount} karyawan.`
+      + (skipped.length ? ` Dilewati (karyawan tidak ditemukan): ${skipped.join(', ')}.` : '');
+    const existingRun = await database.payrollRun.findUnique({ where: { id: runId }, select: { notes: true } });
+    await database.payrollRun.update({
+      where: { id: runId },
+      data: { notes: existingRun?.notes ? `${existingRun.notes}\n${summary}` : summary },
+    });
+
+    await payrollRepository.updatePayrollRunTotals(runId, {
+      totalEmployees: employeeCount,
+      totalEarnings,
+      totalDeductions,
+      totalNetPay: totalEarnings.minus(totalDeductions),
+    }, database);
+    await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
+  }
+
+  private async ensureSeveranceEarningComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'SEVERANCE_EARNING_AUTO';
+    // Revive rather than look-then-insert: see D-007, as above.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
+      companyId,
+      name: 'Pesangon (UP+UPMK+UPH)',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      // Final-taxed (PP 68/2009): never part of a monthly taxable gross.
+      isTaxable: false,
+      isProrated: false, isFixedAllowance: false,
+      description: 'System generated: pesangon UU 13/2003, pajak final PP 68/2009 dipotong saat pendaftaran (GAP-42)',
+      sortOrder: 998,
+    }, database);
+  }
+
+  private async ensureSeveranceTaxComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'SEVERANCE_TAX_AUTO';
+    // Revive rather than look-then-insert: see D-007, as above.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
+      companyId,
+      name: 'PPh 21 Final Pesangon',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false, isFixedAllowance: false,
+      description: 'System generated: PPh 21 final atas pesangon (PP 68/2009), beku sejak pendaftaran',
+      sortOrder: 998,
+    }, database);
+  }
+
   private async ensureCorrectionEarningComponent(companyId: string, database: Prisma.TransactionClient) {
     const code = 'CORRECTION_EARNING_AUTO';
     // Revive rather than look-then-insert: a retired system component still holds
@@ -1116,14 +1288,16 @@ export class PayrollService {
     if (run.runType === 'CORRECTION') {
       return this.calculateCorrectionPayroll(runId, database);
     }
-    // SEVERANCE is still refused. Severance is computed and taxed on the exit
-    // path (`onboarding.calculateFinalPayroll`, PP 68/2009), not as a payroll
-    // run. Answering with a regular month's salary under its name is the
-    // failure this guard exists for.
+    // A severance run pays the registered severance payments (GAP-42), whose
+    // figures and FINAL tax were frozen at registration (PP 68/2009).
+    if (run.runType === 'SEVERANCE') {
+      return this.calculateSeverancePayroll(runId, database);
+    }
+    // All four types now have a calculation; this guard keeps any future type
+    // from silently receiving a regular month's salary under its name.
     if (run.runType !== 'REGULAR') {
       throw new ConflictError(
-        `A ${run.runType} payroll run cannot be calculated: this engine computes regular monthly payroll, `
-        + 'THR and corrections. Severance is paid on the exit path.',
+        `A ${run.runType} payroll run cannot be calculated: this engine knows REGULAR, THR, CORRECTION and SEVERANCE.`,
       );
     }
 

@@ -1622,3 +1622,18 @@ Run bertipe `CORRECTION` kini dihitung, bukan ditolak. Bukti di kode:
 Desain dan alasannya: `docs/superpowers/specs/2026-10-08-payroll-correction-run-design.md`.
 Dengan ini kolom "sebagian" audit 7 Oktober berkurang jadi 3 (GAP-33 e-Bupot,
 GAP-42 run SEVERANCE, GAP-44 importer absensi/saldo cuti): tertutup **41/51**.
+
+## 11 Oktober 2026 — GAP-42 DITUTUP
+
+Run bertipe `SEVERANCE` kini membayar pesangon, bukan ditolak:
+
+- `backend/src/modules/payroll/payroll-severance.service.ts` — pendaftaran
+  membekukan hasil `onboarding.calculateFinalPayroll` (UU 13/2003 + PPh 21
+  final PP 68/2009) per resignation APPROVED/COMPLETED.
+- `payroll.service.ts:calculateSeverancePayroll` — run membayar angka beku
+  lewat maker-checker biasa; tidak menghitung ulang, tidak memajaki ulang.
+- Model `SeverancePayment` (`severance_payments`), masuk `COMPANY_SCOPED_MODELS`.
+- Terverifikasi sampai MySQL nyata: `payroll-severance.mysql.test.ts`.
+
+Kolom "sebagian" audit 7 Oktober tinggal 2 (GAP-33 e-Bupot, GAP-44 importer
+absensi/saldo cuti): tertutup **42/51**.

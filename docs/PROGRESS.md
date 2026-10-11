@@ -808,3 +808,22 @@ periode memakai "bukan CLOSED" seperti run lain, bukan "harus ACTIVE".
   dan `payroll-calculation.mysql.test.ts` — 21 test hijau, termasuk register →
   run → APPLIED dan kelebihan-bayar-melebihi-earning.
 - `npx tsc --noEmit` bersih.
+
+## Tugas — SEVERANCE run (GAP-42, sisa separuh)
+
+`calculateFinalPayroll` hanya mengutip angka; sekarang HR mendaftarkannya
+(`POST /payroll/severance-payments`, izin `payroll:process` yang sudah ada —
+tanpa izin baru) dan angkanya DIBEKUKAN: UP+UPMK+UPH per UU 13/2003 dengan
+faktor pilihan HR, plus PPh 21 final PP 68/2009. Run bertipe `SEVERANCE`
+membayar baris PENDING lewat maker-checker payroll biasa — run tidak
+menghitung ulang dan tidak memajaki apa pun (earning `SEVERANCE_EARNING_AUTO`
+isTaxable false). Satu pembayaran per resignation seumur hidup
+(`@@unique([resignationId])`); baris CANCELLED dihidupkan kembali.
+
+### Status verifikasi
+
+- Unit: `payroll-severance.service.test.ts`, `payroll-severance-calc.test.ts`,
+  `run-type-guards.test.ts`, `tenant-scope-coverage.test.ts` — hijau.
+- Real MySQL: `payroll-severance.mysql.test.ts` (register TERMINATION → run →
+  APPLIED + jejak + run kedua menolak) dan kedua suite payroll lain — hijau.
+- `npx tsc --noEmit` bersih.

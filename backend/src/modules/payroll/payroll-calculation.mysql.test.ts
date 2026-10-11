@@ -100,7 +100,7 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(await mockDatabase.salaryComponent.count({ where: { companyId: f.companyId } })).toBe(1);
     expect(eventBus.publish).not.toHaveBeenCalled();
   }
-  it('refuses to calculate a SEVERANCE run instead of paying a second month of salary', async () => {
+  it('refuses a SEVERANCE run when nothing is registered, rolling the run back whole', async () => {
       // The period's REGULAR run already exists and carries the month's pay.
       // One run per period PER TYPE means this second run is created
       // legitimately — it is the calculation that must refuse. It read no
@@ -108,14 +108,13 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       // month of salary: a second complete set of payslips for a period
       // already paid, separately approvable and separately disbursable.
       //
-      // THR used to be in this list and is now calculated properly; CORRECTION
-      // too (see payroll-correction.mysql.test.ts); severance is computed and
-      // taxed on the exit path instead of as a run.
+      // All four types now calculate; a severance run pays the REGISTERED
+      // severance payments (payroll-severance.mysql.test.ts), so with nothing
+      // registered there is nothing it may pay.
       const f = await fixture(); await employee(f);
       const regular = await run(f);
       expect(regular.payslips).toHaveLength(1);
-      await expect(runOfType(f, 'SEVERANCE')).rejects.toThrow(
-        /A SEVERANCE payroll run cannot be calculated/);
+      await expect(runOfType(f, 'SEVERANCE')).rejects.toThrow(/No pending severance payments/);
       // The refusal rolls the second run back whole: no extra slip, no extra run.
       expect(await mockDatabase.payslip.count({ where: { companyId: f.companyId } })).toBe(1);
       expect(await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } })).toBe(1);

@@ -28,6 +28,7 @@ const COMPANY_SCOPED_MODELS = new Set([
   'AttendanceDevicePunch',
   'PayrollArrears',
   'PayrollCorrection',
+  'SeverancePayment',
   'CollectiveLeave',
   'LeaveEncashment',
   'EmploymentContract',

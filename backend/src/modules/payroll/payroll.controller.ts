@@ -11,6 +11,8 @@ import { sippWageExportToCsv } from '@/shared/payroll/sipp-wage-export';
 import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
 import { payrollCorrectionService } from './payroll-correction.service';
 import type { CorrectionQueryDTO, RegisterCorrectionDTO } from './payroll-correction.dto';
+import { payrollSeveranceService } from './payroll-severance.service';
+import type { RegisterSeveranceDTO, SeveranceQueryDTO } from './payroll-severance.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
 import { payslipPinService } from './payslip-pin.service';
@@ -612,6 +614,38 @@ export class PayrollController {
       const companyId = req.user?.companyId;
       if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
       res.json(Result.success(await payrollCorrectionService.cancel(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Severance payments (pesangon) ====================
+  async registerSeverancePayment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const row = await payrollSeveranceService.register(companyId, req.body as RegisterSeveranceDTO);
+      res.status(201).json(
+        Result.success(
+          { id: row.id, employeeId: row.employeeId, resignationId: row.resignationId, grossAmount: row.grossAmount, taxAmount: row.taxAmount, netAmount: row.netAmount, status: row.status },
+          'Pesangon terdaftar dan akan dibayarkan pada run SEVERANCE berikutnya',
+        ),
+      );
+    } catch (error) { next(error); }
+  }
+
+  async findAllSeverancePayments(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as SeveranceQueryDTO;
+      res.json(Result.success(await payrollSeveranceService.list(companyId, query)));
+    } catch (error) { next(error); }
+  }
+
+  async cancelSeverancePayment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await payrollSeveranceService.cancel(companyId, String(req.params.id))));
     } catch (error) { next(error); }
   }
 

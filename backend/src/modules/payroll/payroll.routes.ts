@@ -27,6 +27,7 @@ import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
 import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
 import { correctionQuerySchema, registerCorrectionSchema } from './payroll-correction.dto';
+import { registerSeveranceSchema, severanceQuerySchema } from './payroll-severance.dto';
 
 // Memory storage: the importer parses the buffer and never needs a path.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -35,7 +36,7 @@ const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/corrections', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/corrections', '/severance-payments', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -279,6 +280,36 @@ router.post(
   auditLog({ action: 'CANCEL', entity: 'PayrollCorrection', model: 'payrollCorrection' }),
   validate(idParamSchema, 'params'),
   payrollController.cancelCorrection.bind(payrollController)
+);
+
+// ==================== Severance payments (pesangon) ====================
+// The figures are frozen at registration (UU 13/2003 + PP 68/2009 final tax)
+// and paid by a SEVERANCE run. Registering is run preparation, so it sits
+// behind the same payroll:process the run creator holds.
+router.get(
+  '/severance-payments',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(severanceQuerySchema, 'query'),
+  payrollController.findAllSeverancePayments.bind(payrollController)
+);
+
+router.post(
+  '/severance-payments',
+  authorize({ resource: 'payroll', action: 'process' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CREATE', entity: 'SeverancePayment' }),
+  validate(registerSeveranceSchema, 'body'),
+  payrollController.registerSeverancePayment.bind(payrollController)
+);
+
+router.post(
+  '/severance-payments/:id/cancel',
+  authorize({ resource: 'payroll', action: 'process' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CANCEL', entity: 'SeverancePayment', model: 'severancePayment' }),
+  validate(idParamSchema, 'params'),
+  payrollController.cancelSeverancePayment.bind(payrollController)
 );
 
 // ==================== Payroll Periods ====================

@@ -126,6 +126,7 @@ model Company {
   attendanceDevicePunches               AttendanceDevicePunch[]
   payrollArrears                        PayrollArrears[]
   payrollCorrections                    PayrollCorrection[]
+  severancePayments                     SeverancePayment[]
   collectiveLeaves                      CollectiveLeave[]
   webhookSubscriptions                  WebhookSubscription[]
   webhookDeliveries                     WebhookDelivery[]
@@ -2457,6 +2458,7 @@ model Employee {
   attendanceDevicePunches                       AttendanceDevicePunch[]
   payrollArrears                                PayrollArrears[]
   payrollCorrections                            PayrollCorrection[]
+  severancePayments                             SeverancePayment[]
   leaveEncashments                              LeaveEncashment[]
   employmentContracts                           EmploymentContract[]
   attendanceCorrections                         AttendanceCorrection[]
@@ -3175,6 +3177,7 @@ model Resignation {
   company    Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
   employee   Employee        @relation("ResignationEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
   clearances ExitClearance[]
+  severancePayment SeverancePayment?
 
   @@index([companyId])
   @@index([employeeId])
@@ -5650,6 +5653,50 @@ enum PayrollCorrectionStatus {
   /// Sudah tertutup penuh oleh sebuah run; tidak akan dibayar lagi.
   APPLIED
   /// Dibatalkan HR sebelum diterapkan.
+  CANCELLED
+}
+
+/// Pembayaran pesangon (GAP-42). `calculateFinalPayroll` hanya MENGUTIP angka
+/// (UU 13/2003 + PP 68/2009) — baris ini membekukannya saat HR mendaftarkan
+/// pembayaran, lalu run bertipe SEVERANCE membayarnya lewat maker-checker
+/// payroll biasa. Pajaknya final: dihitung sekali di sini, run tidak
+/// menghitung pajak apa pun.
+model SeverancePayment {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  companyId     String   @map("company_id") @db.VarChar(36)
+  employeeId    String   @map("employee_id") @db.VarChar(36)
+  resignationId String   @map("resignation_id") @db.VarChar(36)
+  /// UP + UPMK + UPH (basis PP 68/2009 pasal 1 angka 4), beku saat pendaftaran.
+  grossAmount   Decimal  @map("gross_amount") @db.Decimal(15, 2)
+  /// PPh 21 final atas pesangon (PP 68/2009), beku saat pendaftaran.
+  taxAmount     Decimal  @map("tax_amount") @db.Decimal(15, 2)
+  netAmount     Decimal  @map("net_amount") @db.Decimal(15, 2)
+  /// Rincian perhitungan (faktor, alasan, masa kerja, komponen) supaya angka
+  /// bisa ditelusuri tanpa menghitung ulang.
+  basis         Json
+  status        SeverancePaymentStatus @default(PENDING)
+  registeredBy  String?  @map("registered_by") @db.VarChar(36)
+  appliedRunId  String?  @map("applied_run_id") @db.VarChar(36)
+  payslipId     String?  @map("payslip_id") @db.VarChar(36)
+  appliedAt     DateTime? @map("applied_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  resignation Resignation @relation(fields: [resignationId], references: [id], onDelete: Restrict)
+
+  /// Satu pembayaran pesangon per resignation seumur hidup; baris CANCELLED
+  /// dihidupkan kembali saat didaftar ulang, bukan diduplikasi.
+  @@unique([resignationId])
+  @@index([companyId, status])
+  @@index([employeeId])
+  @@map("severance_payments")
+}
+
+enum SeverancePaymentStatus {
+  PENDING
+  APPLIED
   CANCELLED
 }
 
