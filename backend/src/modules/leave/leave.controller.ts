@@ -8,6 +8,7 @@ import { leaveService } from './leave.service';
 import { Result } from '@/shared/core/Result';
 import { runYearlyLeaveAccrual } from './leave.scheduler';
 import { BadRequestError } from '@/shared/exceptions/AppError';
+import { importOpeningLeaveBalances } from './leave-balance-import.service';
 import { LEAVE_ATTACHMENT_URL_PREFIX, leaveAttachmentOwnerDirectory } from '@/shared/storage/leave-attachment-reference';
 import config from '@/config';
 
@@ -216,6 +217,24 @@ export class LeaveController {
     try {
       const { reason } = req.body as RejectEncashmentDTO;
       res.json(Result.success(await leaveEncashmentService.reject(activeCompanyId(req), String(req.params.id), reason)));
+    } catch (error) { next(error); }
+  }
+
+  // GAP-44: opening balances from CSV, same contract as the salary importer.
+  async importBalances(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      if (!req.file) throw new BadRequestError('Berkas CSV wajib diunggah pada field "file"');
+      const result = await importOpeningLeaveBalances(companyId, req.file, { dryRun: req.query.dryRun === 'true' });
+      res.json(Result.success(
+        result,
+        result.errors.length
+          ? 'Impor dibatalkan; tidak ada baris yang ditulis — periksa errors'
+          : result.dryRun
+            ? 'Berkas valid; belum ada yang ditulis'
+            : 'Saldo cuti awal diimpor',
+      ));
     } catch (error) { next(error); }
   }
 }

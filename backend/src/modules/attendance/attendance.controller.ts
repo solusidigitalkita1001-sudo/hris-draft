@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '@/shared/middleware/Authenticate';
 import { attendanceService } from './attendance.service';
 import { Result } from '@/shared/core/Result';
 import { BadRequestError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { importAttendanceHistory } from './attendance-import.service';
 
 export class AttendanceController {
   async findMine(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -209,6 +210,24 @@ export class AttendanceController {
       const dayType = req.query.dayType === 'HOLIDAY' ? 'HOLIDAY' : 'WORKDAY';
       const workweekDays = req.query.workweekDays === '6' ? 6 : 5;
       res.json(Result.success(await attendanceService.calculateOvertimePay(req.params.id as string, { dayType, workweekDays })));
+    } catch (error) { next(error); }
+  }
+
+  // GAP-44: attendance history from CSV, same contract as the salary importer.
+  async importHistory(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      if (!req.file) throw new BadRequestError('Berkas CSV wajib diunggah pada field "file"');
+      const result = await importAttendanceHistory(companyId, req.file, { dryRun: req.query.dryRun === 'true' });
+      res.json(Result.success(
+        result,
+        result.errors.length
+          ? 'Impor dibatalkan; tidak ada baris yang ditulis — periksa errors'
+          : result.dryRun
+            ? 'Berkas valid; belum ada yang ditulis'
+            : 'Riwayat absensi diimpor',
+      ));
     } catch (error) { next(error); }
   }
 }

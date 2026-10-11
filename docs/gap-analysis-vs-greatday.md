@@ -1652,3 +1652,13 @@ absensi/saldo cuti): tertutup **42/51**.
 
 Terbuka tersisa 6 (35, 36, 39, 48, 50, 51 — semuanya keputusan produk);
 sebagian tersisa 2 (GAP-33 e-Bupot, GAP-44 importer): tertutup **43/51**.
+
+## 11 Oktober 2026 — GAP-44 DITUTUP
+
+Importer migrasi kini lengkap: master karyawan (#60), master gaji (#60),
+riwayat absensi (`attendance-import.service.ts`, `POST /attendance/import`),
+dan saldo cuti awal (`leave-balance-import.service.ts`,
+`POST /leave/balances/import`) — semuanya dengan dry run dan error per baris.
+
+Sisa: terbuka 6 (semuanya keputusan produk — 35, 36, 39, 48, 50, 51),
+sebagian 1 (GAP-33: SIPP sudah, e-Bupot belum): tertutup **44/51 (86%)**.

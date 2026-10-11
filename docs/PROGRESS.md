@@ -851,3 +851,28 @@ duplikat Finder `@types/* 2` yang mematahkan typecheck — sudah dibersihkan).
 - Real MySQL: payroll-calculation.mysql.test.ts + test baru upah harian
   (1 hadir × tarif 200 → payslip 200, snapshot wage, tanpa potongan alpha;
   0 hadir → tanpa payslip) — hijau.
+
+## Tugas — importer riwayat absensi & saldo cuti awal (GAP-44, sisa separuh)
+
+Dua importer CSV baru meniru kontrak importer gaji (#60) persis: validasi
+seluruh berkas di memori, error per baris dengan nomor barisnya, tulis hanya
+bila seluruh berkas bersih, `?dryRun=true` untuk melihat semua masalah sekali
+jalan.
+
+- `POST /attendance/import` (attendance:create, audit
+  IMPORT_ATTENDANCE_HISTORY): kolom employeeNumber, date, status
+  PRESENT/ABSENT/LATE/EXCUSED, checkIn/checkOut HH:MM opsional. Hanya tanggal
+  lampau — hari ini lewat alur check-in. Bentrok dengan baris tersimpan
+  (unik karyawan+tanggal) jadi error per baris.
+- `POST /leave/balances/import` (leave:create, audit IMPORT_LEAVE_BALANCE):
+  employeeNumber, leaveTypeCode, year, totalDays, usedDays/carryOverDays
+  opsional; remainingDays diturunkan dan tidak boleh negatif. Saldo yang sudah
+  ada TIDAK ditimpa (pemakaian yang sudah berjalan bisa hilang diam-diam) —
+  koreksi lewat POST /leave/balances yang diaudit.
+
+Dengan ini GAP-44 tertutup penuh: karyawan, gaji, riwayat absensi, saldo cuti.
+
+### Status verifikasi
+
+- `npx tsc --noEmit` bersih; 11 unit test importer hijau; suite
+  attendance+leave+route-security 149 test hijau.
