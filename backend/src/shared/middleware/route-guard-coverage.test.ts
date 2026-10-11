@@ -78,6 +78,29 @@ const SELF_SERVICE: Record<string, string> = {
   'work-calendar/work-calendar.routes.ts PATCH /shift-swaps/:requestId/approve': 'Approver identity enforced by workflowEngine.applyAction.',
   'work-calendar/work-calendar.routes.ts PATCH /shift-swaps/:requestId/reject': 'Approver identity enforced by workflowEngine.applyAction.',
 
+  // Helpdesk (GAP-50): the /my surface is bounded to the caller's own tickets;
+  // the service re-checks ownership and answers 404 for anyone else's.
+  'helpdesk/helpdesk.routes.ts POST /my': 'Files a ticket as the caller (requireEmployee + session employeeId).',
+  'helpdesk/helpdesk.routes.ts POST /my/:id/comments': 'Comments on the caller\'s own ticket; ownership re-checked in the service.',
+  'helpdesk/helpdesk.routes.ts POST /my/:id/close': 'Closes the caller\'s own ticket; ownership re-checked in the service.',
+
+  // Engagement (GAP-51): writing and thanking are identity-bound, not
+  // permission-bound; author comes from the session, never the body.
+  'engagement/engagement.routes.ts POST /posts': 'Posts as the caller\'s own employee identity.',
+  'engagement/engagement.routes.ts DELETE /posts/:id': 'Soft-deletes the caller\'s OWN post; moderation of others\' posts is the separately authorised /moderate route.',
+  'engagement/engagement.routes.ts POST /kudos': 'Gives kudos as the caller; self-kudos refused in the service.',
+
+  // Timesheet (GAP-35): recording one's own hours. Approving them — the step
+  // with money consequences — is behind timesheet:approve.
+  'timesheet/timesheet.routes.ts POST /entries': 'Records the caller\'s own hours; employee id from the session.',
+  'timesheet/timesheet.routes.ts PATCH /entries/:id': 'Edits the caller\'s own SUBMITTED entry; ownership and lock re-checked in the service.',
+  'timesheet/timesheet.routes.ts DELETE /entries/:id': 'Deletes the caller\'s own SUBMITTED entry; ownership and lock re-checked in the service.',
+
+  // Careers (GAP-48): the one deliberately anonymous surface outside auth —
+  // external applicants have no session. Guarded by per-IP rate limits, strict
+  // validation, and the per-tenant public_career_page_enabled switch.
+  'careers/careers.routes.ts POST /:companyCode/postings/:postingCode/apply': 'Public application; no session exists to check. Rate limited and tenant-opt-in.',
+
   // Delegating one's own authority. The repository refuses self-delegation, an
   // inactive delegate, and a delegate outside the caller's company; revoking
   // is scoped to the delegator.

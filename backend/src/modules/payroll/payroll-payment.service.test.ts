@@ -190,8 +190,12 @@ describe('disbursement via provider API (GAP-36)', () => {
     expect(result.status).toBe('PAID');
     for (const transaction of result.transactions) {
       expect(transaction.status).toBe('PAID');
-      expect(transaction.bankReference).toMatch(/^SBX-/);
       expect(String(transaction.paidAmount)).toBe(String(transaction.expectedAmount));
+    }
+    // The public view masks routing details; the provider reference is
+    // asserted against the stored rows instead.
+    for (const stored of fixture.state().batch!.transactions) {
+      expect(stored.bankReference).toMatch(/^SBX-/);
     }
     // The provider's outcomes satisfy the same reconciliation the manual path uses.
     const reconciled = await fixture.service.reconcileBatch(context, data.batch.id, key('reconcile'));
