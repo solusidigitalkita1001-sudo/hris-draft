@@ -76,6 +76,7 @@ export async function seedRolePermissions(): Promise<void> {
         // (creator != approver != disburser) can actually be satisfied.
         'payroll:read', 'payroll:export', 'payroll:process', 'payroll:correct',
         'helpdesk:read', 'helpdesk:update',
+        'timesheet:read', 'timesheet:approve',
         'benefit:read',
         'performance:create', 'performance:read', 'performance:update',
         'training:create', 'training:read', 'training:update',
@@ -129,6 +130,8 @@ export async function seedRolePermissions(): Promise<void> {
         'employee:read',
         'org:read',
         'att:read', 'att:approve',
+        // Jam proyek anak buah disetujui atasannya — orang yang tahu jam itu nyata.
+        'timesheet:read', 'timesheet:approve',
         'leave:read', 'leave:approve',
         'work-calendar:read',
         'permission-request:read', 'permission-request:update',

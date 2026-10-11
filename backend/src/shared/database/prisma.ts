@@ -35,6 +35,8 @@ const COMPANY_SCOPED_MODELS = new Set([
   'HrTicketComment',
   'FeedPost',
   'Kudos',
+  'Project',
+  'TimesheetEntry',
   'CollectiveLeave',
   'LeaveEncashment',
   'EmploymentContract',

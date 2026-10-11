@@ -151,6 +151,11 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'daily-activity', action: 'process', name: 'Process / Complete Daily Activity', module: 'daily-activity', code: 'da:process' },
     { resource: 'daily-activity', action: 'export', name: 'Export Daily Activity Report', module: 'daily-activity', code: 'da:export' },
 
+    // Timesheet per proyek (GAP-35). Mengisi jam sendiri adalah self-service;
+    // yang berizin adalah melihat rekap perusahaan dan menyetujui jam orang.
+    { resource: 'timesheet', action: 'read', name: 'Read Timesheets', module: 'timesheet', code: 'timesheet:read' },
+    { resource: 'timesheet', action: 'approve', name: 'Approve Timesheets', module: 'timesheet', code: 'timesheet:approve' },
+
     // HR Helpdesk (GAP-50). Membuat tiket adalah self-service tanpa izin;
     // yang berizin adalah melihat antrian seluruh perusahaan dan memprosesnya.
     { resource: 'helpdesk', action: 'read', name: 'Read Helpdesk Queue', module: 'helpdesk', code: 'helpdesk:read' },
