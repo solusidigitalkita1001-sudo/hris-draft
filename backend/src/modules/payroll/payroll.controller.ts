@@ -9,6 +9,8 @@ import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
 import { bpjsReportService, bpjsReportToCsv } from './bpjs-report.service';
 import { sippWageExportToCsv } from '@/shared/payroll/sipp-wage-export';
 import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
+import { payrollCorrectionService } from './payroll-correction.service';
+import type { CorrectionQueryDTO, RegisterCorrectionDTO } from './payroll-correction.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
 import { payslipPinService } from './payslip-pin.service';
@@ -578,6 +580,38 @@ export class PayrollController {
       const companyId = req.user?.companyId;
       if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
       res.json(Result.success(await payrollArrearsService.cancel(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Corrections (koreksi payslip terbayar) ====================
+  async registerCorrection(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const row = await payrollCorrectionService.register(companyId, req.body as RegisterCorrectionDTO);
+      res.status(201).json(
+        Result.success(
+          { id: row.id, employeeId: row.employeeId, sourcePayslipId: row.sourcePayslipId, amount: row.amount, remainingAmount: row.remainingAmount, status: row.status },
+          'Koreksi terdaftar dan akan dibayarkan pada run CORRECTION berikutnya',
+        ),
+      );
+    } catch (error) { next(error); }
+  }
+
+  async findAllCorrections(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as CorrectionQueryDTO;
+      res.json(Result.success(await payrollCorrectionService.list(companyId, query)));
+    } catch (error) { next(error); }
+  }
+
+  async cancelCorrection(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await payrollCorrectionService.cancel(companyId, String(req.params.id))));
     } catch (error) { next(error); }
   }
 

@@ -71,6 +71,9 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'payroll', action: 'disburse', name: 'Disburse Payroll', module: 'payroll', code: 'payroll:disburse' },
     { resource: 'payroll', action: 'export', name: 'Export Payroll', module: 'payroll', code: 'payroll:export' },
     { resource: 'payroll', action: 'process', name: 'Process Payroll', module: 'payroll', code: 'payroll:process' },
+    // Mendaftarkan koreksi mengubah uang yang sudah dibayar; izinnya sendiri,
+    // dengan alasan yang masuk audit log (GAP-14/21b).
+    { resource: 'payroll', action: 'correct', name: 'Register Payroll Correction', module: 'payroll', code: 'payroll:correct' },
 
     // Benefit
     { resource: 'benefit', action: 'create', name: 'Create Benefit Plan', module: 'benefit', code: 'benefit:create' },

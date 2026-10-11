@@ -788,3 +788,23 @@ Tidak ada kode yang berubah, jadi tidak ada yang perlu dijalankan. Yang bisa
 diperiksa adalah angkanya, dan tiap angka di laporan itu berasal dari
 perbandingan mekanis `schema.prisma` terhadap kedua daftar di
 `shared/database/`.
+
+## Tugas — payroll correction run (GAP-14/21b)
+
+Spec 8 Oktober diimplementasikan penuh: model `PayrollCorrection` +
+migrasi + allowlist tenant, izin `payroll:correct` (HR_MANAGER, sejalan
+dengan perannya menyiapkan run), endpoint register/list/cancel yang meniru
+rapel, dan `calculateCorrectionPayroll` sejajar cabang THR. Dua deviasi sadar
+dari spec dicatat di header spec-nya: batas potongan memperhitungkan pajak
+supaya invarian "netto tidak pernah negatif" benar-benar berlaku, dan guard
+periode memakai "bukan CLOSED" seperti run lain, bukan "harus ACTIVE".
+
+### Status verifikasi
+
+- Unit + DTO + guard: `payroll-correction.*.test.ts`,
+  `payroll-correction-calc.test.ts`, `run-type-guards.test.ts`,
+  `money-path-roles.test.ts` — hijau.
+- Real MySQL (hris_payment_integration): `payroll-correction.mysql.test.ts`
+  dan `payroll-calculation.mysql.test.ts` — 21 test hijau, termasuk register →
+  run → APPLIED dan kelebihan-bayar-melebihi-earning.
+- `npx tsc --noEmit` bersih.

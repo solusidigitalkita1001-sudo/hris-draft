@@ -26,6 +26,7 @@ import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
 import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
+import { correctionQuerySchema, registerCorrectionSchema } from './payroll-correction.dto';
 
 // Memory storage: the importer parses the buffer and never needs a path.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -34,7 +35,7 @@ const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/corrections', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -249,6 +250,35 @@ router.delete(
   auditLog({ action: 'CANCEL', entity: 'PayrollArrears', model: 'payrollArrears' }),
   validate(idParamSchema, 'params'),
   payrollController.cancelArrears.bind(payrollController)
+);
+
+// ==================== Corrections (payslip yang sudah dibayar) ====================
+// Changing paid money: its own permission (payroll:correct), a mandatory
+// reason, and the same company guard as runs. Paid by a CORRECTION run.
+router.get(
+  '/corrections',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(correctionQuerySchema, 'query'),
+  payrollController.findAllCorrections.bind(payrollController)
+);
+
+router.post(
+  '/corrections',
+  authorize({ resource: 'payroll', action: 'correct' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CREATE', entity: 'PayrollCorrection' }),
+  validate(registerCorrectionSchema, 'body'),
+  payrollController.registerCorrection.bind(payrollController)
+);
+
+router.post(
+  '/corrections/:id/cancel',
+  authorize({ resource: 'payroll', action: 'correct' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CANCEL', entity: 'PayrollCorrection', model: 'payrollCorrection' }),
+  validate(idParamSchema, 'params'),
+  payrollController.cancelCorrection.bind(payrollController)
 );
 
 // ==================== Payroll Periods ====================

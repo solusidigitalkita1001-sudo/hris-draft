@@ -1597,3 +1597,28 @@ Dihitung dengan memberi nilai separuh untuk empat gap sebagian: **89,7%**.
 4. **27 dari 40 yang tertutup memakai verdict 5 Oktober**, bukan pembacaan hari
    ini. Kalau ada satu yang regresi dalam dua hari, angka ini tidak akan
    menangkapnya — yang menangkapnya CI, dan CI hijau.
+
+
+---
+
+## 11 Oktober 2026 — GAP-14 / GAP-21b DITUTUP
+
+Run bertipe `CORRECTION` kini dihitung, bukan ditolak. Bukti di kode:
+
+- `backend/src/modules/payroll/payroll-correction.service.ts` — daftar koreksi
+  per payslip terbayar (`POST/GET /payroll/corrections`, cancel), izin baru
+  `payroll:correct`, satu `PENDING` per payslip.
+- `backend/src/modules/payroll/payroll.service.ts:calculateCorrectionPayroll`
+  — dipanggil dari `calculatePayroll` sejajar cabang THR; kurang bayar dibayar
+  penuh, kelebihan bayar jadi potongan dengan netto tidak pernah negatif,
+  sisanya tetap `PENDING`; pajak marginal di periode pembayaran
+  (TER/annualized).
+- Model `PayrollCorrection` (`payroll_corrections`), masuk
+  `COMPANY_SCOPED_MODELS`.
+- Terverifikasi sampai MySQL nyata: `payroll-correction.mysql.test.ts`
+  (register → run CORRECTION → APPLIED + jejak; kelebihan bayar melebihi
+  earning → netto 0, sisa PENDING).
+
+Desain dan alasannya: `docs/superpowers/specs/2026-10-08-payroll-correction-run-design.md`.
+Dengan ini kolom "sebagian" audit 7 Oktober berkurang jadi 3 (GAP-33 e-Bupot,
+GAP-42 run SEVERANCE, GAP-44 importer absensi/saldo cuti): tertutup **41/51**.

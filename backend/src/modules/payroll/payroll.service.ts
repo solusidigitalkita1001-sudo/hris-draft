@@ -19,6 +19,7 @@ import { NotFoundError, ConflictError, BadRequestError, ValidationError, Forbidd
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
 import { isConcurrencyFailure } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
+import { payrollCorrectionService } from './payroll-correction.service';
 import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
 import { calculatePph21Correction, shouldReconcileAnnualTax } from '@/shared/payroll/pph21-annual';
 import { mailService } from '@/shared/mail/MailService';
@@ -790,6 +791,298 @@ export class PayrollService {
     await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
   }
 
+  /**
+   * A CORRECTION run (GAP-14/21b): pay the registered corrections, and nothing
+   * else. Like THR, deliberately NOT a variant of the monthly loop — a
+   * correction payslip has no attendance, no overtime, no loan instalment and
+   * no BPJS. Per employee: underpayments are paid in full as one earning,
+   * overpayments become one deduction capped so the net never goes negative
+   * (a payslip never bills the employee, and a bank file never carries a
+   * negative figure); whatever deduction did not fit stays PENDING with a
+   * reduced `remainingAmount` and waits for the next correction earning.
+   *
+   * Tax: the correction earning is taxed in the period that PAYS it — the
+   * same treatment as arrears — as the marginal PPh 21 it adds on top of the
+   * employee's regular monthly gross, under the company's `pph21_method`
+   * (TER or ANNUALIZED) via the same helper THR uses.
+   */
+  private async calculateCorrectionPayroll(runId: string, database: Prisma.TransactionClient) {
+    const run = await payrollRepository.findPayrollRunById(runId, database);
+    if (!run) throw new NotFoundError('Payroll run not found');
+    // Same bar as the other run types: an open period (DRAFT or ACTIVE) can be
+    // paid in, a CLOSED one cannot. Creation already refuses CLOSED; this keeps
+    // the rule inside the calculation too, where the money is actually written.
+    if (run.period.status === 'CLOSED') {
+      throw new ConflictError(`A correction run cannot pay into CLOSED period ${run.period.code}`);
+    }
+
+    const correctionsByEmployee = await payrollCorrectionService.pendingByEmployee(run.companyId, database);
+    if (correctionsByEmployee.size === 0) {
+      throw new ConflictError('No pending corrections exist; register them first (POST /payroll/corrections)');
+    }
+    // A correction may not be paid inside the very period it corrects — that
+    // period's figures are what the correction says were wrong. Refusing the
+    // whole run (rather than skipping the row) makes somebody look: the
+    // corrected period should already be behind us.
+    for (const rows of correctionsByEmployee.values()) {
+      for (const row of rows) {
+        if (row.sourcePayslip.payrollRun.periodId === run.periodId) {
+          throw new ConflictError(
+            'A pending correction targets a payslip of this very period; a correction is paid in a later period, not the one it corrects',
+          );
+        }
+      }
+    }
+
+    const earningComponent = await this.ensureCorrectionEarningComponent(run.companyId, database);
+    const deductionComponent = await this.ensureCorrectionDeductionComponent(run.companyId, database);
+    // Same refusal as THR: without a PPH21 component the run would pay the
+    // earning gross and the company would owe tax it never deducted.
+    const taxComponent = await payrollRepository.findSalaryComponentByCode(run.companyId, 'PPH21', database);
+    if (!taxComponent) {
+      throw new BadRequestError(
+        'No PPH21 salary component exists for this company, so the PPh 21 on the correction cannot be '
+        + 'recorded; create it before running a correction',
+      );
+    }
+
+    const referenceDate = new Date(run.period.endDate);
+    const [policy, methodSetting] = await Promise.all([
+      loadPayrollPolicyConfig(database, run.companyId, referenceDate.getUTCFullYear()),
+      database.companySetting.findUnique({
+        where: { companyId_key: { companyId: run.companyId, key: 'pph21_method' } },
+        select: { value: true },
+      }),
+    ]);
+    const method = methodSetting?.value === 'TER' ? 'TER' as const : 'ANNUALIZED' as const;
+
+    // The regular monthly gross is only the BASE of the marginal tax — an
+    // employee who already left (the usual overpayment case) simply has no
+    // base, and the correction is taxed as the month's only income.
+    const employeeIds = [...correctionsByEmployee.keys()];
+    const salaryRows = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
+    const asOfSalaries = this.asOfSalariesOrConflict(
+      salaryRows.filter((row) => correctionsByEmployee.has(row.employeeId)), run.period.endDate);
+    const salaryByEmployee = new Map(asOfSalaries.map((salary) => [salary.employeeId, salary]));
+
+    const employees = await database.employee.findMany({
+      where: { id: { in: employeeIds }, companyId: run.companyId },
+      select: {
+        id: true, fullName: true, employeeNumber: true, employmentType: true,
+        maritalStatus: true, taxId: true,
+        department: { select: { id: true, name: true } },
+        position: { select: { id: true, name: true } },
+        _count: { select: { families: { where: { isDependent: true } } } },
+      },
+    });
+    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+
+    const zero = new Prisma.Decimal(0);
+    let totalEarnings = new Prisma.Decimal(0);
+    let totalDeductions = new Prisma.Decimal(0);
+    let employeeCount = 0;
+    let appliedRows = 0;
+    const skipped: string[] = [];
+
+    for (const [employeeId, rows] of correctionsByEmployee) {
+      const employee = employeeById.get(employeeId);
+      if (!employee) {
+        // A hard-deleted employee has nowhere to be paid; the rows stay
+        // PENDING and visible instead of silently vanishing with the run.
+        skipped.push(employeeId);
+        continue;
+      }
+
+      const positives = rows.filter((row) => new Prisma.Decimal(row.remainingAmount).greaterThan(0));
+      const negatives = rows.filter((row) => new Prisma.Decimal(row.remainingAmount).lessThan(0));
+      const earning = positives.reduce((sum, row) => sum.plus(row.remainingAmount), zero);
+      const deduction = negatives.reduce((sum, row) => sum.plus(new Prisma.Decimal(row.remainingAmount).abs()), zero);
+
+      // Only an overpayment to recover: nothing to pay it from this run, so
+      // the rows wait for the employee's next correction earning. Reported,
+      // not an error — HR decided the figure, the run just cannot net it yet.
+      if (earning.lessThanOrEqualTo(0)) {
+        skipped.push(employee.employeeNumber);
+        continue;
+      }
+
+      const salary = salaryByEmployee.get(employeeId);
+      const monthlyGross = salary ? Number(salary.baseSalary) : 0;
+      const tax = calculateThrTax({
+        monthlyGross,
+        thrAmount: earning.toNumber(),
+        married: employee.maritalStatus === 'MARRIED',
+        dependents: employee._count?.families ?? 0,
+        hasNpwp: Boolean(employee.taxId),
+        monthlyPensionContribution: salary ? bpjsPensionFor(policy, Number(salary.baseSalary)) : 0,
+        method,
+        terTables: policy.ter,
+      }, policy.pph21);
+      const taxAmount = new Prisma.Decimal(tax.tax);
+
+      // The spec's invariant is "the net is never negative", and tax is also a
+      // deduction: the recoverable overpayment is whatever the earning leaves
+      // AFTER its own withholding, or next month's slip would bill the
+      // employee for this month's tax.
+      const room = Prisma.Decimal.max(earning.minus(taxAmount), zero);
+      const appliedDeduction = Prisma.Decimal.min(deduction, room);
+      const netPay = earning.minus(taxAmount).minus(appliedDeduction).toDecimalPlaces(2);
+
+      const payslip = await payrollRepository.createPayslip({
+        payrollRun: { connect: { id: runId } },
+        employee: { connect: { id: employeeId } },
+        company: { connect: { id: run.companyId } },
+        ...(salary ? { employeeSalary: { connect: { id: salary.id } } } : {}),
+        // Not a month of work: no base salary and no attendance figures, the
+        // same statement the THR payslip makes.
+        baseSalary: 0,
+        totalEarnings: earning,
+        totalDeductions: taxAmount.plus(appliedDeduction),
+        netPay,
+        workDays: 0, presentDays: 0, leaveDays: 0, absentDays: 0,
+        overtimeHours: 0, overtimeWorkdayHours: 0, overtimeHolidayHours: 0,
+        employeeSnapshot: {
+          fullName: employee.fullName,
+          employeeNumber: employee.employeeNumber,
+          employmentType: employee.employmentType,
+          departmentId: employee.department?.id ?? null,
+          departmentName: employee.department?.name ?? null,
+          positionId: employee.position?.id ?? null,
+          positionName: employee.position?.name ?? null,
+          // The working, frozen with the payment, like THR's: which rows this
+          // slip covered and how its tax was derived.
+          correction: {
+            correctionIds: rows.map((row) => row.id),
+            earning: earning.toString(),
+            deductionRequested: deduction.toString(),
+            deductionApplied: appliedDeduction.toString(),
+            taxMethod: tax.method,
+            monthlyGrossBase: String(monthlyGross),
+          },
+        },
+        status: 'DRAFT',
+      }, database);
+
+      const components: Parameters<typeof payrollRepository.createPayslipComponents>[0] = [{
+        payslipId: payslip.id,
+        salaryComponentId: earningComponent.id,
+        name: earningComponent.name,
+        type: 'ALLOWANCE',
+        amount: earning,
+        isTaxable: true,
+      }];
+      if (appliedDeduction.greaterThan(0)) {
+        components.push({
+          payslipId: payslip.id,
+          salaryComponentId: deductionComponent.id,
+          name: deductionComponent.name,
+          type: 'DEDUCTION',
+          amount: appliedDeduction,
+          isTaxable: false,
+        });
+      }
+      if (taxAmount.greaterThan(0)) {
+        components.push({
+          payslipId: payslip.id,
+          salaryComponentId: taxComponent.id,
+          name: taxComponent.name,
+          type: 'DEDUCTION',
+          amount: taxAmount,
+          isTaxable: false,
+        });
+      }
+      await payrollRepository.createPayslipComponents(components, database);
+
+      // Earnings are always paid in full, so every positive row closes.
+      // Negative rows close only as far as the earning covered them, oldest
+      // first; a partly-covered row keeps the uncovered remainder.
+      const fullClaims = positives.map((row) => ({ correctionId: row.id, payslipId: payslip.id }));
+      let leftToCover = appliedDeduction;
+      const partialClaims: Array<{ correctionId: string; remainingAmount: Prisma.Decimal }> = [];
+      for (const row of negatives) {
+        const owed = new Prisma.Decimal(row.remainingAmount).abs();
+        const take = Prisma.Decimal.min(owed, leftToCover);
+        leftToCover = leftToCover.minus(take);
+        if (take.equals(owed)) {
+          fullClaims.push({ correctionId: row.id, payslipId: payslip.id });
+        } else if (take.greaterThan(0)) {
+          partialClaims.push({ correctionId: row.id, remainingAmount: owed.minus(take).negated() });
+        }
+      }
+      await payrollCorrectionService.markApplied(run.companyId, runId, fullClaims, database);
+      await payrollCorrectionService.reduceRemaining(run.companyId, partialClaims, database);
+
+      totalEarnings = totalEarnings.plus(earning);
+      totalDeductions = totalDeductions.plus(taxAmount).plus(appliedDeduction);
+      employeeCount += 1;
+      appliedRows += fullClaims.length;
+    }
+
+    if (employeeCount === 0) {
+      // Everyone pending is deduction-only: there is nothing this run can pay,
+      // and an empty COMPLETED run would read as "corrections done".
+      throw new ConflictError(
+        'Every pending correction is an overpayment with no earning to recover it from; nothing can be paid in this run',
+      );
+    }
+
+    // The audit trail the spec asks for: the run says what it covered and whom
+    // it had to leave pending.
+    const summary = `Koreksi diterapkan: ${appliedRows} baris, ${employeeCount} karyawan.`
+      + (skipped.length ? ` Dilewati (tanpa earning): ${skipped.join(', ')}.` : '');
+    const existingRun = await database.payrollRun.findUnique({ where: { id: runId }, select: { notes: true } });
+    await database.payrollRun.update({
+      where: { id: runId },
+      data: { notes: existingRun?.notes ? `${existingRun.notes}\n${summary}` : summary },
+    });
+
+    await payrollRepository.updatePayrollRunTotals(runId, {
+      totalEmployees: employeeCount,
+      totalEarnings,
+      totalDeductions,
+      totalNetPay: totalEarnings.minus(totalDeductions),
+    }, database);
+    await payrollRepository.updatePayrollRunStatus(runId, 'COMPLETED', undefined, database);
+  }
+
+  private async ensureCorrectionEarningComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'CORRECTION_EARNING_AUTO';
+    // Revive rather than look-then-insert: a retired system component still holds
+    // its code in the unique index, so the insert would kill the payroll run's
+    // transaction. See DECISIONS.md D-007.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
+      companyId,
+      name: 'Koreksi Kurang Bayar',
+      code,
+      type: 'ALLOWANCE',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: true,
+      // The figure was established against the period it corrects; prorating
+      // it against this period would change what HR signed off.
+      isProrated: false, isFixedAllowance: false,
+      description: 'System generated: koreksi kurang bayar atas payslip yang sudah dibayar (GAP-14/21b)',
+      sortOrder: 997,
+    }, database);
+  }
+
+  private async ensureCorrectionDeductionComponent(companyId: string, database: Prisma.TransactionClient) {
+    const code = 'CORRECTION_DEDUCTION_AUTO';
+    // Revive rather than look-then-insert: see D-007, as above.
+    return payrollRepository.reviveOrCreateSystemSalaryComponent({
+      companyId,
+      name: 'Koreksi Kelebihan Bayar',
+      code,
+      type: 'DEDUCTION',
+      calculationMethod: 'FIXED',
+      amount: 0,
+      isTaxable: false,
+      isProrated: false, isFixedAllowance: false,
+      description: 'System generated: pemulihan kelebihan bayar atas payslip yang sudah dibayar (GAP-14/21b)',
+      sortOrder: 997,
+    }, database);
+  }
+
   /** As-of selection, with its data error surfaced as the HTTP conflict. */
   private asOfSalariesOrConflict<T extends { employeeId: string; effectiveDate: Date | string; isActive: boolean }>(
     rows: readonly T[], periodEnd: Date | string,
@@ -818,15 +1111,19 @@ export class PayrollService {
     if (run.runType === 'THR') {
       return this.calculateThrPayroll(runId, database);
     }
-    // SEVERANCE and CORRECTION are still refused. Severance is computed and
-    // taxed on the exit path (`onboarding.calculateFinalPayroll`, PP 68/2009),
-    // not as a payroll run; and a correction run would need to know which
-    // period it corrects and what was already paid. Answering with a regular
-    // month's salary under either name is the failure this guard exists for.
+    // A correction run pays the registered corrections (GAP-14/21b): it knows
+    // which payslip each figure corrects and pays nothing else.
+    if (run.runType === 'CORRECTION') {
+      return this.calculateCorrectionPayroll(runId, database);
+    }
+    // SEVERANCE is still refused. Severance is computed and taxed on the exit
+    // path (`onboarding.calculateFinalPayroll`, PP 68/2009), not as a payroll
+    // run. Answering with a regular month's salary under its name is the
+    // failure this guard exists for.
     if (run.runType !== 'REGULAR') {
       throw new ConflictError(
-        `A ${run.runType} payroll run cannot be calculated: this engine computes regular monthly payroll `
-        + 'and THR. Void the run, or record the amounts as arrears on a regular run.',
+        `A ${run.runType} payroll run cannot be calculated: this engine computes regular monthly payroll, `
+        + 'THR and corrections. Severance is paid on the exit path.',
       );
     }
 

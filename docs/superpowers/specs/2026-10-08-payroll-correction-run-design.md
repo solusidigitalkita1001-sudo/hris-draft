@@ -2,7 +2,14 @@
 
 **Tanggal:** 8 Oktober 2026
 **Gap:** GAP-14 / GAP-21b (lihat [gap-analysis-vs-greatday.md](../../gap-analysis-vs-greatday.md))
-**Status:** desain disetujui, menunggu rencana implementasi
+**Status:** diimplementasikan 11 Oktober 2026 — rencana di
+[plans/2026-10-11-payroll-correction-run.md](../plans/2026-10-11-payroll-correction-run.md),
+dokumentasi endpoint di [payroll-corrections.md](../../payroll-corrections.md).
+Satu deviasi dari §3: batas potongan memperhitungkan pajak
+(`min(deduction, earning − tax)`), karena rumus asli bisa membuat netto negatif
+sebesar pajaknya sendiri — invariannya ("netto tidak pernah negatif") yang
+dipertahankan, bukan rumusnya. Guard periode memakai "bukan CLOSED", bukan
+"harus ACTIVE": periode DRAFT dibayar run reguler/THR juga.
 
 ---
 

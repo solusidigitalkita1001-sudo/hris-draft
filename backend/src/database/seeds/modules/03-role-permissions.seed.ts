@@ -74,7 +74,7 @@ export async function seedRolePermissions(): Promise<void> {
         // HR management prepares the run; approval and release belong to
         // other roles so the separation of duties payroll already enforces
         // (creator != approver != disburser) can actually be satisfied.
-        'payroll:read', 'payroll:export', 'payroll:process',
+        'payroll:read', 'payroll:export', 'payroll:process', 'payroll:correct',
         'benefit:read',
         'performance:create', 'performance:read', 'performance:update',
         'training:create', 'training:read', 'training:update',

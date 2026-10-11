@@ -1,0 +1,186 @@
+import { Prisma, PayrollCorrectionStatus } from '@prisma/client';
+import prisma from '@/shared/database/prisma';
+import { BadRequestError, ConflictError, NotFoundError } from '@/shared/exceptions/AppError';
+import { logger } from '@/shared/logger/WinstonLogger';
+import { getCurrentUser } from '@/shared/context/RequestContext';
+import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
+
+export interface RegisterCorrectionInput {
+  sourcePayslipId: string;
+  amount: number;
+  reason: string;
+}
+
+/**
+ * Corrections — fixing a figure on a payslip that was ALREADY paid (GAP-14/21b).
+ *
+ * The third path the code has named twice: `voidPayrollRun` only takes a run
+ * that is not yet approved, and `arrears.register` refuses when a payslip
+ * exists ("a wrong amount is a correction, not arrears"). A correction is a
+ * human-registered delta against a specific payslip, paid out by a CORRECTION
+ * run in a later period — underpayment as an earning, overpayment as a
+ * deduction that never drives the net below zero.
+ */
+export class PayrollCorrectionService {
+  async register(companyId: string, input: RegisterCorrectionInput) {
+    const payslip = await prisma.payslip.findFirst({
+      where: { id: input.sourcePayslipId, companyId },
+      select: {
+        id: true,
+        employeeId: true,
+        status: true,
+        payrollRun: { select: { id: true, status: true, periodId: true } },
+      },
+    });
+    if (!payslip) throw new NotFoundError('Payslip not found in the active company');
+
+    // Before approval nothing has been paid, so the remedy is the existing
+    // one: void the run and run it again. One problem must not have two paths.
+    if (payslip.payrollRun.status === 'COMPLETED' || payslip.status !== 'FINAL') {
+      throw new ConflictError(
+        'This payslip is not paid money yet; void the run (PATCH /payroll/runs/:id/void) and recalculate '
+        + 'instead of registering a correction',
+      );
+    }
+    if (payslip.payrollRun.status !== 'APPROVED' && payslip.payrollRun.status !== 'DISBURSED') {
+      throw new ConflictError(`A correction targets paid money; this payslip's run is ${payslip.payrollRun.status}`);
+    }
+
+    await assertEmployeeInScope(payslip.employeeId, 'payroll');
+
+    // One live correction per payslip. A second correction of the same payslip
+    // is allowed — AFTER the first is APPLIED — so the trail stays sequential.
+    const pending = await prisma.payrollCorrection.findFirst({
+      where: { sourcePayslipId: payslip.id, status: PayrollCorrectionStatus.PENDING },
+      select: { id: true },
+    });
+    if (pending) {
+      throw new BadRequestError('A pending correction already exists for this payslip; cancel it or let a CORRECTION run apply it first');
+    }
+
+    const amount = new Prisma.Decimal(input.amount).toDecimalPlaces(2);
+    const row = await prisma.payrollCorrection.create({
+      data: {
+        companyId,
+        employeeId: payslip.employeeId,
+        sourcePayslipId: payslip.id,
+        amount,
+        remainingAmount: amount,
+        reason: input.reason,
+        registeredBy: getCurrentUser()?.id ?? null,
+      },
+    });
+
+    logger.info('Payroll correction registered', {
+      correctionId: row.id, sourcePayslipId: payslip.id, employeeId: payslip.employeeId, amount: amount.toString(),
+    });
+    return row;
+  }
+
+  async list(companyId: string, filters: { status?: PayrollCorrectionStatus; employeeId?: string } = {}) {
+    return prisma.payrollCorrection.findMany({
+      where: {
+        companyId,
+        ...(filters.status ? { status: filters.status } : {}),
+        ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        employee: { select: { employeeNumber: true, fullName: true } },
+        sourcePayslip: { select: { id: true, payrollRun: { select: { id: true, name: true, periodId: true } } } },
+      },
+    });
+  }
+
+  async cancel(companyId: string, id: string) {
+    const row = await prisma.payrollCorrection.findFirst({ where: { id, companyId }, select: { id: true, status: true } });
+    if (!row) throw new NotFoundError('Correction entry not found');
+    if (row.status !== PayrollCorrectionStatus.PENDING) {
+      throw new BadRequestError(`Only pending corrections can be cancelled; this entry is ${row.status}`);
+    }
+
+    // Conditional update: a run that claimed this row a moment ago moved it out
+    // of PENDING, and cancelling it afterwards would hide money already paid.
+    const result = await prisma.payrollCorrection.updateMany({
+      where: { id, companyId, status: PayrollCorrectionStatus.PENDING },
+      data: { status: PayrollCorrectionStatus.CANCELLED },
+    });
+    if (result.count === 0) {
+      throw new BadRequestError('This correction was claimed by a payroll run while you were cancelling it');
+    }
+    return { id, status: PayrollCorrectionStatus.CANCELLED };
+  }
+
+  /**
+   * Pending corrections for a CORRECTION run, keyed by employee, oldest first —
+   * partial overpayment coverage consumes rows in registration order. Each row
+   * carries its source period so the run can refuse to pay a correction inside
+   * the very period it corrects. Read inside the run's transaction.
+   */
+  async pendingByEmployee(companyId: string, database: Prisma.TransactionClient = prisma) {
+    const rows = await database.payrollCorrection.findMany({
+      where: { companyId, status: PayrollCorrectionStatus.PENDING },
+      include: { sourcePayslip: { select: { payrollRun: { select: { periodId: true } } } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const byEmployee = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const list = byEmployee.get(row.employeeId) ?? [];
+      list.push(row);
+      byEmployee.set(row.employeeId, list);
+    }
+    return byEmployee;
+  }
+
+  /**
+   * Claim the rows a run covered IN FULL: APPLIED, trace columns filled,
+   * nothing left to pay. Conditional on PENDING and counted — if another run
+   * claimed a row first, the whole calculation fails rather than paying the
+   * same correction twice.
+   */
+  async markApplied(
+    companyId: string,
+    runId: string,
+    claims: Array<{ correctionId: string; payslipId: string }>,
+    database: Prisma.TransactionClient = prisma,
+  ) {
+    for (const claim of claims) {
+      const result = await database.payrollCorrection.updateMany({
+        where: { id: claim.correctionId, companyId, status: PayrollCorrectionStatus.PENDING },
+        data: {
+          status: PayrollCorrectionStatus.APPLIED,
+          remainingAmount: new Prisma.Decimal(0),
+          payslipId: claim.payslipId,
+          appliedRunId: runId,
+          appliedAt: new Date(),
+        },
+      });
+      if (result.count !== 1) {
+        throw new BadRequestError('Correction entry changed while this payroll run was calculating; re-run the calculation');
+      }
+    }
+  }
+
+  /**
+   * Shrink an overpayment row the run could only cover partly: the remainder
+   * stays PENDING and waits for the employee's next correction earning.
+   */
+  async reduceRemaining(
+    companyId: string,
+    claims: Array<{ correctionId: string; remainingAmount: Prisma.Decimal }>,
+    database: Prisma.TransactionClient = prisma,
+  ) {
+    for (const claim of claims) {
+      const result = await database.payrollCorrection.updateMany({
+        where: { id: claim.correctionId, companyId, status: PayrollCorrectionStatus.PENDING },
+        data: { remainingAmount: claim.remainingAmount },
+      });
+      if (result.count !== 1) {
+        throw new BadRequestError('Correction entry changed while this payroll run was calculating; re-run the calculation');
+      }
+    }
+  }
+}
+
+export const payrollCorrectionService = new PayrollCorrectionService();
