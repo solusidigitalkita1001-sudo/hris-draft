@@ -21,6 +21,14 @@
  * 1721-A1 a tax office accepted. The figures are the part that is expensive to
  * get right and the part that does not change with the layout, so they are
  * assembled here and `verified: false` says plainly what has not happened.
+ *
+ * 12 Okt 2026: dicek baris-per-baris terhadap petunjuk pengisian resmi
+ * (Lampiran PER-2/PJ/2024 hal. 29-32) — label, nomor 1.1, masa mm-mm, dan
+ * semantik angka 14/19/20 (pemberi kerja sebelumnya), 21 (=18-19-20),
+ * 22a (selain masa terakhir) dan 23a (masa terakhir) semuanya cocok.
+ * `verified` tetap false sampai dibandingkan dengan formulir yang DITERIMA
+ * kantor pajak; bukti potong bulanan/final pendampingnya ada di
+ * `bukti-potong.ts`.
  */
 
 /** A line of Bagian B, exactly as the form prints it. */

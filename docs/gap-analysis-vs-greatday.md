@@ -1687,3 +1687,22 @@ menunggu adapter nyata pertama.
 **Daftar GAP-01..51: tidak ada lagi yang berstatus TERBUKA.** Sisa satu yang
 sebagian: GAP-33 (SIPP ada, e-Bupot menunggu contoh berkas resmi dari DJP).
 Tertutup **50/51**.
+
+## 12 Oktober 2026 — GAP-33 DITUTUP: daftar GAP-01..51 TUNTAS (51/51)
+
+Separuh terakhir (e-Bupot) ditutup setelah user menyediakan Lampiran I
+PER-2/PJ/2024 resmi:
+
+- `shared/payroll/bukti-potong.ts` — builder 1721-VIII (bulanan, `1.5`) dan
+  1721-VII (final pesangon, `1.4`), ditranskripsi dari formulir + petunjuk
+  pengisiannya; 1721-A1 lama diverifikasi baris-per-baris terhadap petunjuk
+  yang sama.
+- `GET /payroll/bukti-potong-1721-viii?periodId=` (JSON/CSV, seluruh karyawan
+  per masa) dan `GET /payroll/bukti-potong-1721-vii/:severancePaymentId`.
+- Batas yang jujur: keluaran adalah data formulir untuk e-Bupot, bukan berkas
+  impor aplikasi DJP; `verified:false` sampai dibandingkan formulir yang
+  diterima kantor pajak. Lihat docs/bukti-potong-ebupot.md.
+
+**Status akhir daftar: 51/51 — tidak ada yang terbuka, tidak ada yang
+sebagian.** Pengukuran berikutnya mulai dari daftar kapabilitas baru, bukan
+dari sisa.

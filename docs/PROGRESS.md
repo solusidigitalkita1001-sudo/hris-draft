@@ -896,3 +896,16 @@ berjalan dalam system context dengan filter companyId eksplisit.
   disburse-api (FINANCE, bukan approver); katalog settings hijau.
 - Migrasi (custom_fields, hr_helpdesk, engagement_feed_kudos,
   project_timesheets) terdeploy ke DB integrasi lokal.
+
+## Tugas — bahan e-Bupot: 1721-VIII bulanan + 1721-VII final (GAP-33 tuntas)
+
+User menyediakan Lampiran I PER-2/PJ/2024 resmi. Implementasi 1721-A1 yang
+ada dicek baris-per-baris terhadap petunjuk pengisiannya (hal. 29-32) — cocok
+semua; catatan verifikasi ditambahkan di header `form-1721-a1.ts`. Dua builder
+baru di `shared/payroll/bukti-potong.ts` (+ service & route): 1721-VIII
+bulanan per periode (JSON/CSV) dan 1721-VII final pesangon dari
+`SeverancePayment` beku. Rincian dan batasnya: docs/bukti-potong-ebupot.md.
+
+### Status verifikasi
+
+- 35 test hijau (builder + service + A1 lama); `npx tsc --noEmit` bersih.

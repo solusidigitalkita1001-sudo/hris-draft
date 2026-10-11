@@ -25,7 +25,7 @@ import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeS
 import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
-import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
+import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, monthlyBuktiPotongQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
 import { correctionQuerySchema, registerCorrectionSchema } from './payroll-correction.dto';
 import { registerSeveranceSchema, severanceQuerySchema } from './payroll-severance.dto';
 
@@ -36,7 +36,7 @@ const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/corrections', '/severance-payments', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/corrections', '/severance-payments', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bukti-potong-1721-viii', '/bukti-potong-1721-vii', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -222,6 +222,25 @@ router.get(
   validate(annualTaxRecapQuerySchema, 'query'),
   auditView({ action: 'VIEW_BUKTI_POTONG_1721_A1', entity: 'Payslip' }),
   payrollController.buktiPotong1721A1.bind(payrollController)
+);
+
+// Bahan e-Bupot bulanan (1721-VIII) dan final pesangon (1721-VII), GAP-33.
+// Angka pajak per karyawan: guard yang sama dengan rekap tahunan.
+router.get(
+  '/bukti-potong-1721-viii',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(monthlyBuktiPotongQuerySchema, 'query'),
+  auditView({ action: 'VIEW_BUKTI_POTONG_1721_VIII', entity: 'Payslip' }),
+  payrollController.buktiPotong1721VIII.bind(payrollController)
+);
+
+router.get(
+  '/bukti-potong-1721-vii/:severancePaymentId',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  auditView({ action: 'VIEW_BUKTI_POTONG_1721_VII', entity: 'SeverancePayment' }),
+  payrollController.buktiPotong1721VII.bind(payrollController)
 );
 
 // ==================== Arrears (rapel periode tertutup) ====================

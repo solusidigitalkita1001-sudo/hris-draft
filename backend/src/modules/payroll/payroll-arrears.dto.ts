@@ -36,3 +36,13 @@ export const bpjsReportQuerySchema = z.object({
 });
 
 export type BpjsReportQueryDTO = z.infer<typeof bpjsReportQuerySchema>;
+
+/// Bahan e-Bupot bulanan (1721-VIII): per periode, opsional satu karyawan.
+export const monthlyBuktiPotongQuerySchema = z.object({
+  periodId: z.string().uuid(),
+  employeeId: z.string().uuid().optional(),
+  /// csv untuk rekonsiliasi tim pajak — sengaja bukan berkas impor e-Bupot.
+  format: z.enum(['json', 'csv']).default('json'),
+});
+
+export type MonthlyBuktiPotongQueryDTO = z.infer<typeof monthlyBuktiPotongQuerySchema>;

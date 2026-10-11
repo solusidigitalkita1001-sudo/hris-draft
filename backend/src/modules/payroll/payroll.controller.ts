@@ -13,6 +13,8 @@ import { payrollCorrectionService } from './payroll-correction.service';
 import type { CorrectionQueryDTO, RegisterCorrectionDTO } from './payroll-correction.dto';
 import { payrollSeveranceService } from './payroll-severance.service';
 import type { RegisterSeveranceDTO, SeveranceQueryDTO } from './payroll-severance.dto';
+import { monthlyToCsv, payrollBuktiPotongService } from './payroll-bukti-potong.service';
+import type { MonthlyBuktiPotongQueryDTO } from './payroll-arrears.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
 import { payslipPinService } from './payslip-pin.service';
@@ -614,6 +616,32 @@ export class PayrollController {
       const companyId = req.user?.companyId;
       if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
       res.json(Result.success(await payrollCorrectionService.cancel(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Bukti potong non-A1 (bahan e-Bupot, GAP-33) ====================
+  async buktiPotong1721VIII(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as MonthlyBuktiPotongQueryDTO;
+      const result = await payrollBuktiPotongService.monthly(companyId, query.periodId, query.employeeId);
+      if (query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="bukti-potong-1721-viii-${result.period.code}.csv"`);
+        res.send(monthlyToCsv(result));
+        return;
+      }
+      res.json(Result.success(result));
+    } catch (error) { next(error); }
+  }
+
+  async buktiPotong1721VII(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(
+        await payrollBuktiPotongService.finalSeverance(companyId, String(req.params.severancePaymentId))));
     } catch (error) { next(error); }
   }
 
