@@ -52,6 +52,7 @@ export async function seedRolePermissions(): Promise<void> {
         'settings:read', 'settings:update',
         'ewa:create', 'ewa:read', 'ewa:update', 'ewa:approve', 'ewa:disburse', 'ewa:export',
         'da:create', 'da:read', 'da:update', 'da:delete', 'da:approve', 'da:process', 'da:export',
+        'asset:read', 'asset:create', 'asset:update', 'asset:delete',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -88,6 +89,8 @@ export async function seedRolePermissions(): Promise<void> {
         'document:create', 'document:read', 'document:update',
         'ewa:read', 'ewa:approve', 'ewa:export',
         'da:read', 'da:approve', 'da:process', 'da:export',
+        // Register aset dikelola HR/GA; penghapusan dari register tetap admin.
+        'asset:read', 'asset:create', 'asset:update',
       ].includes(p.code)
     )
     .map((p) => p.id);
@@ -117,6 +120,8 @@ export async function seedRolePermissions(): Promise<void> {
         // Helpdesk adalah pekerjaan harian staf HR: memegang antrian dan
         // menjawab tiket.
         'helpdesk:read', 'helpdesk:update',
+        // Serah terima aset harian (assign/return/transfer) juga kerja staf.
+        'asset:read', 'asset:update',
       ].includes(p.code)
     )
     .map((p) => p.id);

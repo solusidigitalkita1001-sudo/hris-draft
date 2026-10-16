@@ -47,6 +47,38 @@ export class AssetController {
     try { res.status(201).json(Result.created(await assetService.create(req.body))); }
     catch (error) { next(error); }
   }
+  async update(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await assetService.update(req.user!.companyId!, req.params.id as string, req.body))); }
+    catch (error) { next(error); }
+  }
+  async delete(req: Request, res: Response, next: NextFunction) {
+    try { res.json(Result.success(await assetService.delete(req.params.id as string), 'Asset deleted')); }
+    catch (error) { next(error); }
+  }
+  async transfer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await assetService.transfer(req.user!.companyId!, req.params.id as string, req.body, req.user!.id))); }
+    catch (error) { next(error); }
+  }
+  async outstanding(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.success(await assetService.outstandingFor(req.user!.companyId!, req.params.employeeId as string))); }
+    catch (error) { next(error); }
+  }
+  async listCategories(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.success(await assetService.listCategories(req.user!.companyId!))); }
+    catch (error) { next(error); }
+  }
+  async createCategory(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.status(201).json(Result.created(await assetService.createCategory(req.user!.companyId!, req.body))); }
+    catch (error) { next(error); }
+  }
+  async updateCategory(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.updated(await assetService.updateCategory(req.user!.companyId!, req.params.id as string, req.body))); }
+    catch (error) { next(error); }
+  }
+  async deleteCategory(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { res.json(Result.success(await assetService.deleteCategory(req.user!.companyId!, req.params.id as string), 'Category deleted')); }
+    catch (error) { next(error); }
+  }
   async assign(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try { res.json(Result.updated(await assetService.assign(req.params.id as string, req.body, req.user!.id))); }
     catch (error) { next(error); }

@@ -1,4 +1,5 @@
 import { prisma } from '@/shared/database/prisma';
+import { ASSET_CLEARANCE_ITEM } from '@/modules/asset/asset.service';
 import { CreateChecklistDTO, UpdateChecklistDTO, CreateResignationDTO, CreateClearanceDTO } from './onboarding.dto';
 
 export class OnboardingRepository {
@@ -82,6 +83,9 @@ export class OnboardingRepository {
       { department: 'IT', checklistItem: 'Return laptop & accessories' },
       { department: 'IT', checklistItem: 'Deactivate system accounts & email' },
       { department: 'GA', checklistItem: 'Return ID card & access card' },
+      // Terhubung ke register aset: item ini tidak bisa CLEARED selama
+      // karyawan masih memegang aset (onboarding.service.updateClearance).
+      { department: 'GA', checklistItem: ASSET_CLEARANCE_ITEM },
       { department: 'Finance', checklistItem: 'Settlement of outstanding loans' },
       { department: 'Finance', checklistItem: 'Final salary & benefit calculation' },
       { department: 'HR', checklistItem: 'Exit interview' },

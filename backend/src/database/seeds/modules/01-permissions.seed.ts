@@ -161,6 +161,15 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'helpdesk', action: 'read', name: 'Read Helpdesk Queue', module: 'helpdesk', code: 'helpdesk:read' },
     { resource: 'helpdesk', action: 'update', name: 'Process Helpdesk Tickets', module: 'helpdesk', code: 'helpdesk:update' },
 
+    // Asset management. Dulu menumpang employee:* (dan frontend sudah terlanjur
+    // mengecek asset:read) — resource sendiri supaya register aset bisa
+    // diberikan ke GA tanpa membuka data karyawan. Melihat aset yang dipegang
+    // sendiri (/assets/my) adalah self-service tanpa izin.
+    { resource: 'asset', action: 'read', name: 'Read Assets', module: 'asset', code: 'asset:read' },
+    { resource: 'asset', action: 'create', name: 'Create Assets', module: 'asset', code: 'asset:create' },
+    { resource: 'asset', action: 'update', name: 'Assign/Update Assets', module: 'asset', code: 'asset:update' },
+    { resource: 'asset', action: 'delete', name: 'Delete Assets', module: 'asset', code: 'asset:delete' },
+
     // Announcement (Engagement Portal). Reading is open to every signed-in
     // employee — the audience rules decide who sees what — so only the write
     // side needs permissions. Publishing is separated from creating on purpose:

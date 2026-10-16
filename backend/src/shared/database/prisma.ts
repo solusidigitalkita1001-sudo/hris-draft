@@ -92,7 +92,6 @@ const COMPANY_SCOPED_MODELS = new Set([
   'AssetCategory',
   'Asset',
   'AssetAssignment',
-  'AssetPatrolLog',
   'ClaimCategoryLimit',
   'EarnedWageAccess',
   'DailyActivity',
