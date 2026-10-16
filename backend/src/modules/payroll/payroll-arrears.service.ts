@@ -2,6 +2,7 @@ import { Prisma, PayrollArrearsStatus } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
 import { employmentWindow } from '@/shared/payroll/employment-window';
+import { createPendingRegistry, groupByEmployee } from '@/shared/payroll/pending-registry';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { getCurrentUser } from '@/shared/context/RequestContext';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
@@ -27,6 +28,16 @@ export interface RegisterArrearsInput {
  * the employee should have received, and the paying run's own tax and
  * contribution logic takes it from there.
  */
+const registry = createPendingRegistry({
+  delegate: (db) => db.payrollArrears,
+  messages: {
+    notFound: 'Arrears entry not found',
+    onlyPendingCancellable: (status) => `Only pending arrears can be cancelled; this entry is ${status}`,
+    claimedWhileCancelling: 'This arrears entry was claimed by a payroll run while you were cancelling it',
+    changedWhileCalculating: 'Arrears entry changed while this payroll run was calculating; re-run the calculation',
+  },
+});
+
 export class PayrollArrearsService {
   /**
    * Work out what the employee should have been paid for that period.
@@ -193,22 +204,7 @@ export class PayrollArrearsService {
   }
 
   async cancel(companyId: string, id: string) {
-    const row = await prisma.payrollArrears.findFirst({ where: { id, companyId }, select: { id: true, status: true } });
-    if (!row) throw new NotFoundError('Arrears entry not found');
-    if (row.status !== PayrollArrearsStatus.PENDING) {
-      throw new BadRequestError(`Only pending arrears can be cancelled; this entry is ${row.status}`);
-    }
-
-    // Conditional update: a run that claimed this row a moment ago moved it out
-    // of PENDING, and cancelling it afterwards would hide money already paid.
-    const result = await prisma.payrollArrears.updateMany({
-      where: { id, companyId, status: PayrollArrearsStatus.PENDING },
-      data: { status: PayrollArrearsStatus.CANCELLED },
-    });
-    if (result.count === 0) {
-      throw new BadRequestError('This arrears entry was claimed by a payroll run while you were cancelling it');
-    }
-    return { id, status: PayrollArrearsStatus.CANCELLED };
+    return registry.cancel(companyId, id);
   }
 
   /** Pending arrears for a run, keyed by employee. Read inside the run's transaction. */
@@ -217,22 +213,13 @@ export class PayrollArrearsService {
       where: { companyId, status: PayrollArrearsStatus.PENDING },
       include: { sourcePeriod: { select: { code: true, name: true } } },
     });
-
-    const byEmployee = new Map<string, typeof rows>();
-    for (const row of rows) {
-      const list = byEmployee.get(row.employeeId) ?? [];
-      list.push(row);
-      byEmployee.set(row.employeeId, list);
-    }
-    return byEmployee;
+    return groupByEmployee(rows);
   }
 
   /**
-   * Claim the rows a run actually put on a payslip.
-   *
-   * Conditional on PENDING and counted: if another run claimed a row first, the
-   * count comes back short and the caller fails the whole run rather than
-   * paying the same arrears twice.
+   * Claim the rows a run actually put on a payslip. Conditional on PENDING and
+   * counted (see pending-registry): a row claimed by another run first fails
+   * the whole calculation rather than paying the same arrears twice.
    */
   async markApplied(
     companyId: string,
@@ -240,20 +227,11 @@ export class PayrollArrearsService {
     claims: Array<{ arrearsId: string; payslipId: string }>,
     database: Prisma.TransactionClient = prisma,
   ) {
-    for (const claim of claims) {
-      const result = await database.payrollArrears.updateMany({
-        where: { id: claim.arrearsId, companyId, status: PayrollArrearsStatus.PENDING },
-        data: {
-          status: PayrollArrearsStatus.APPLIED,
-          payslipId: claim.payslipId,
-          appliedRunId: runId,
-          appliedAt: new Date(),
-        },
-      });
-      if (result.count !== 1) {
-        throw new BadRequestError('Arrears entry changed while this payroll run was calculating; re-run the calculation');
-      }
-    }
+    await registry.markApplied(
+      companyId, runId,
+      claims.map((claim) => ({ id: claim.arrearsId, payslipId: claim.payslipId })),
+      database,
+    );
   }
 }
 

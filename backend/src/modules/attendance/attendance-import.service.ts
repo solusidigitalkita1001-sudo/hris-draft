@@ -1,7 +1,9 @@
-import { parse } from 'csv-parse/sync';
 import { AttendanceStatus } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
-import { BadRequestError } from '@/shared/exceptions/AppError';
+import {
+  type ImportResult, type ImportRowError,
+  dateOnly, employeeIdsByNumber, employeeNumberOf, parseImportRecords, writableRows,
+} from '@/shared/import/csv-import';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 
 const logger = new WinstonLogger('AttendanceImport');
@@ -22,20 +24,8 @@ const logger = new WinstonLogger('AttendanceImport');
  * check-in flow, not a spreadsheet.
  */
 
-export interface AttendanceImportError {
-  row: number;
-  column?: string;
-  value?: unknown;
-  message: string;
-}
-
-export interface AttendanceImportResult {
-  dryRun: boolean;
-  totalRows: number;
-  valid: number;
-  created: number;
-  errors: AttendanceImportError[];
-}
+export type AttendanceImportError = ImportRowError;
+export type AttendanceImportResult = ImportResult;
 
 interface ParsedRow {
   row: number;
@@ -50,12 +40,6 @@ interface ParsedRow {
 
 const STATUSES = new Set<string>(Object.values(AttendanceStatus));
 
-function dateOnly(value: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 /** "HH:MM" or "HH:MM:SS" on the row's own date, read as UTC like `date` is. */
 function timeOn(dateText: string, value: string): Date | null | undefined {
   if (!value) return null;
@@ -69,31 +53,18 @@ export async function importAttendanceHistory(
   file: Express.Multer.File,
   options: { dryRun?: boolean } = {},
 ): Promise<AttendanceImportResult> {
-  const records = parse(file.buffer, {
-    columns: true, skip_empty_lines: true, trim: true, relax_column_count: true,
-  }) as Record<string, string>[];
-  if (!records.length) throw new BadRequestError('Berkas tidak berisi satu baris data pun');
+  const records = parseImportRecords(file);
 
   const errors: AttendanceImportError[] = [];
   const parsed: ParsedRow[] = [];
 
-  // One query for the whole file rather than one per row.
-  const numbers = [...new Set(records
-    .map((row) => row.employeeNumber || row.employee_number || row.nik || '')
-    .filter(Boolean))];
-  const employees = numbers.length
-    ? await prisma.employee.findMany({
-        where: { companyId, deletedAt: null, employeeNumber: { in: numbers } },
-        select: { id: true, employeeNumber: true },
-      })
-    : [];
-  const idByNumber = new Map(employees.map((row) => [row.employeeNumber, row.id]));
+  const idByNumber = await employeeIdsByNumber(companyId, records);
 
   const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
   const seen = new Set<string>();
   records.forEach((row, index) => {
     const rowIndex = index + 2; // row 1 is the header
-    const employeeNumber = row.employeeNumber || row.employee_number || row.nik || '';
+    const employeeNumber = employeeNumberOf(row);
     const rawDate = row.date || row.tanggal || '';
     const rawStatus = (row.status || 'PRESENT').toUpperCase();
     const rawCheckIn = row.checkIn || row.check_in || row.jam_masuk || '';
@@ -176,8 +147,7 @@ export async function importAttendanceHistory(
     }
   }
 
-  const flaggedRows = new Set(errors.map((error) => error.row));
-  const writable = parsed.filter((row) => !flaggedRows.has(row.row));
+  const writable = writableRows(parsed, errors);
 
   const result: AttendanceImportResult = {
     dryRun: Boolean(options.dryRun),

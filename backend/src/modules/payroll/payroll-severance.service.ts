@@ -5,6 +5,7 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { getCurrentUser } from '@/shared/context/RequestContext';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { onboardingService } from '@/modules/onboarding/onboarding.service';
+import { createPendingRegistry, groupByEmployee } from '@/shared/payroll/pending-registry';
 import type { RegisterSeveranceDTO } from './payroll-severance.dto';
 
 /**
@@ -15,6 +16,16 @@ import type { RegisterSeveranceDTO } from './payroll-severance.dto';
  * included — and a SEVERANCE run pays it. The tax is final (PP 68/2009), so it
  * is computed exactly once, here; the run never taxes anything.
  */
+const registry = createPendingRegistry({
+  delegate: (db) => db.severancePayment,
+  messages: {
+    notFound: 'Severance payment not found',
+    onlyPendingCancellable: (status) => `Only pending severance payments can be cancelled; this entry is ${status}`,
+    claimedWhileCancelling: 'This severance payment was claimed by a payroll run while you were cancelling it',
+    changedWhileCalculating: 'Severance payment changed while this payroll run was calculating; re-run the calculation',
+  },
+});
+
 export class PayrollSeveranceService {
   async register(companyId: string, input: RegisterSeveranceDTO) {
     const { resignationId, ...opts } = input;
@@ -105,22 +116,7 @@ export class PayrollSeveranceService {
   }
 
   async cancel(companyId: string, id: string) {
-    const row = await prisma.severancePayment.findFirst({ where: { id, companyId }, select: { id: true, status: true } });
-    if (!row) throw new NotFoundError('Severance payment not found');
-    if (row.status !== SeverancePaymentStatus.PENDING) {
-      throw new BadRequestError(`Only pending severance payments can be cancelled; this entry is ${row.status}`);
-    }
-
-    // Conditional update: a run that claimed this row a moment ago moved it out
-    // of PENDING, and cancelling it afterwards would hide money already paid.
-    const result = await prisma.severancePayment.updateMany({
-      where: { id, companyId, status: SeverancePaymentStatus.PENDING },
-      data: { status: SeverancePaymentStatus.CANCELLED },
-    });
-    if (result.count === 0) {
-      throw new BadRequestError('This severance payment was claimed by a payroll run while you were cancelling it');
-    }
-    return { id, status: SeverancePaymentStatus.CANCELLED };
+    return registry.cancel(companyId, id);
   }
 
   /** Pending severance payments keyed by employee. Read inside the run's transaction. */
@@ -129,20 +125,13 @@ export class PayrollSeveranceService {
       where: { companyId, status: SeverancePaymentStatus.PENDING },
       orderBy: { createdAt: 'asc' },
     });
-
-    const byEmployee = new Map<string, typeof rows>();
-    for (const row of rows) {
-      const list = byEmployee.get(row.employeeId) ?? [];
-      list.push(row);
-      byEmployee.set(row.employeeId, list);
-    }
-    return byEmployee;
+    return groupByEmployee(rows);
   }
 
   /**
-   * Claim the rows a run paid. Conditional on PENDING and counted — if another
-   * run claimed a row first, the whole calculation fails rather than paying
-   * the same severance twice.
+   * Claim the rows a run paid. Conditional on PENDING and counted (see
+   * pending-registry): a row claimed by another run first fails the whole
+   * calculation rather than paying the same severance twice.
    */
   async markApplied(
     companyId: string,
@@ -150,20 +139,11 @@ export class PayrollSeveranceService {
     claims: Array<{ severancePaymentId: string; payslipId: string }>,
     database: Prisma.TransactionClient = prisma,
   ) {
-    for (const claim of claims) {
-      const result = await database.severancePayment.updateMany({
-        where: { id: claim.severancePaymentId, companyId, status: SeverancePaymentStatus.PENDING },
-        data: {
-          status: SeverancePaymentStatus.APPLIED,
-          payslipId: claim.payslipId,
-          appliedRunId: runId,
-          appliedAt: new Date(),
-        },
-      });
-      if (result.count !== 1) {
-        throw new BadRequestError('Severance payment changed while this payroll run was calculating; re-run the calculation');
-      }
-    }
+    await registry.markApplied(
+      companyId, runId,
+      claims.map((claim) => ({ id: claim.severancePaymentId, payslipId: claim.payslipId })),
+      database,
+    );
   }
 }
 

@@ -1,6 +1,8 @@
-import { parse } from 'csv-parse/sync';
 import prisma from '@/shared/database/prisma';
-import { BadRequestError } from '@/shared/exceptions/AppError';
+import {
+  type ImportResult, type ImportRowError,
+  employeeIdsByNumber, employeeNumberOf, parseImportRecords, writableRows,
+} from '@/shared/import/csv-import';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 
 const logger = new WinstonLogger('LeaveBalanceImport');
@@ -15,20 +17,8 @@ const logger = new WinstonLogger('LeaveBalanceImport');
  * is good, and `dryRun` to see every problem in one pass.
  */
 
-export interface LeaveBalanceImportError {
-  row: number;
-  column?: string;
-  value?: unknown;
-  message: string;
-}
-
-export interface LeaveBalanceImportResult {
-  dryRun: boolean;
-  totalRows: number;
-  valid: number;
-  created: number;
-  errors: LeaveBalanceImportError[];
-}
+export type LeaveBalanceImportError = ImportRowError;
+export type LeaveBalanceImportResult = ImportResult;
 
 interface ParsedRow {
   row: number;
@@ -52,24 +42,12 @@ export async function importOpeningLeaveBalances(
   file: Express.Multer.File,
   options: { dryRun?: boolean } = {},
 ): Promise<LeaveBalanceImportResult> {
-  const records = parse(file.buffer, {
-    columns: true, skip_empty_lines: true, trim: true, relax_column_count: true,
-  }) as Record<string, string>[];
-  if (!records.length) throw new BadRequestError('Berkas tidak berisi satu baris data pun');
+  const records = parseImportRecords(file);
 
   const errors: LeaveBalanceImportError[] = [];
   const parsed: ParsedRow[] = [];
 
-  const numbers = [...new Set(records
-    .map((row) => row.employeeNumber || row.employee_number || row.nik || '')
-    .filter(Boolean))];
-  const employees = numbers.length
-    ? await prisma.employee.findMany({
-        where: { companyId, deletedAt: null, employeeNumber: { in: numbers } },
-        select: { id: true, employeeNumber: true },
-      })
-    : [];
-  const idByNumber = new Map(employees.map((row) => [row.employeeNumber, row.id]));
+  const idByNumber = await employeeIdsByNumber(companyId, records);
 
   const codes = [...new Set(records
     .map((row) => (row.leaveTypeCode || row.leave_type_code || row.tipe_cuti || '').toUpperCase())
@@ -85,7 +63,7 @@ export async function importOpeningLeaveBalances(
   const seen = new Set<string>();
   records.forEach((row, index) => {
     const rowIndex = index + 2; // row 1 is the header
-    const employeeNumber = row.employeeNumber || row.employee_number || row.nik || '';
+    const employeeNumber = employeeNumberOf(row);
     const code = (row.leaveTypeCode || row.leave_type_code || row.tipe_cuti || '').toUpperCase();
     const rawYear = row.year || row.tahun || '';
 
@@ -165,8 +143,7 @@ export async function importOpeningLeaveBalances(
     }
   }
 
-  const flaggedRows = new Set(errors.map((error) => error.row));
-  const writable = parsed.filter((row) => !flaggedRows.has(row.row));
+  const writable = writableRows(parsed, errors);
 
   const result: LeaveBalanceImportResult = {
     dryRun: Boolean(options.dryRun),
