@@ -4,13 +4,15 @@ const state: {
   period: Row | null;
   payslips: Row[];
   severance: Row | null;
-} = { period: null, payslips: [], severance: null };
+  appliedRun: Row | null;
+} = { period: null, payslips: [], severance: null, appliedRun: null };
 
 jest.mock('@/shared/database/prisma', () => {
   const client = {
     payrollPeriod: { findFirst: jest.fn(async () => state.period) },
     payslip: { findMany: jest.fn(async () => state.payslips) },
     severancePayment: { findFirst: jest.fn(async () => state.severance) },
+    payrollRun: { findFirst: jest.fn(async () => state.appliedRun) },
   };
   return { __esModule: true, default: client, prisma: client };
 });
@@ -32,6 +34,7 @@ beforeEach(() => {
   state.period = { id: 'period-mar', code: 'PR-2026-03', name: 'Maret 2026', startDate: new Date('2026-03-01T00:00:00Z') };
   state.payslips = [];
   state.severance = null;
+  state.appliedRun = { id: 'run-severance', status: 'APPROVED' };
 });
 
 describe('1721-VIII per periode', () => {
@@ -84,6 +87,7 @@ describe('1721-VII pesangon', () => {
   it('builds from the frozen APPLIED payment, cumulative gross driving the top rate', async () => {
     state.severance = {
       id: 'severance-1', resignationId: 'resignation-1', status: 'APPLIED',
+      appliedRunId: 'run-severance',
       appliedAt: new Date('2026-10-31T00:00:00Z'),
       grossAmount: '60000000', taxAmount: '2000000',
       basis: { cumulativeGross: 120_000_000 },
@@ -103,5 +107,19 @@ describe('1721-VII pesangon', () => {
     state.severance = { id: 'severance-1', status: 'PENDING', appliedAt: null, employee: employee('e1') };
     await expect(payrollBuktiPotongService.finalSeverance(COMPANY, 'severance-1'))
       .rejects.toThrow(/masih PENDING/);
+  });
+
+  // APPLIED terjadi saat kalkulasi, saat run masih COMPLETED dan bisa
+  // di-void — bukti potong final menunggu run-nya APPROVED/DISBURSED,
+  // gerbang yang sama dengan 1721-VIII bulanan.
+  it('refuses while the paying run is still COMPLETED (voidable)', async () => {
+    state.severance = {
+      id: 'severance-1', resignationId: 'resignation-1', status: 'APPLIED',
+      appliedRunId: 'run-severance', appliedAt: new Date('2026-10-31T00:00:00Z'),
+      grossAmount: '60000000', taxAmount: '2000000', basis: {}, employee: employee('e1'),
+    };
+    state.appliedRun = { id: 'run-severance', status: 'COMPLETED' };
+    await expect(payrollBuktiPotongService.finalSeverance(COMPANY, 'severance-1'))
+      .rejects.toThrow(/belum di-approve/);
   });
 });

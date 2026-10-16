@@ -84,6 +84,15 @@ export class LeaveEncashmentService {
     });
     if (!salary) throw new BadRequestError('Employee has no active salary; set the salary before encashing leave');
     if (salary.currency !== 'IDR') throw new BadRequestError('Leave encashment currently supports IDR salary allocations');
+    // GAP-49: baseSalary pekerja harian adalah tarif sehari; rumus bulanan di
+    // bawah membagi tarif itu dengan divisor dan kurang bayar ±21×. Pagar yang
+    // sama dengan arrears — tarif harian yang mau dipakai sebagai dasar harus
+    // diputuskan sadar, bukan lolos lewat rumus bulanan.
+    if (salary.payBasis === 'DAILY') {
+      throw new BadRequestError(
+        'Leave encashment derives a daily rate from a monthly wage; a daily-wage employee needs a deliberate rate decision instead',
+      );
+    }
 
     // Only tunjangan TETAP counts. This used to take every ALLOWANCE row,
     // which swept in transport-per-day and meal-per-shift and inflated the

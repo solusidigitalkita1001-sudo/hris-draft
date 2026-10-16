@@ -6,7 +6,8 @@ const state: {
   created: Row[];
   updated: Array<{ where: Row; data: Row }>;
   comments: Row[];
-} = { ticket: null, tickets: [], created: [], updated: [], comments: [] };
+  assignee: Row | null;
+} = { ticket: null, tickets: [], created: [], updated: [], comments: [], assignee: null };
 
 jest.mock('@/shared/database/prisma', () => {
   const client = {
@@ -28,6 +29,10 @@ jest.mock('@/shared/database/prisma', () => {
         state.comments.push(data);
         return { id: 'comment-1', ...data };
       }),
+    },
+    user: {
+      // Assignee tervalidasi se-perusahaan; default-nya ada.
+      findFirst: jest.fn(async () => state.assignee),
     },
   };
   return { __esModule: true, default: client, prisma: client };
@@ -51,6 +56,7 @@ beforeEach(() => {
   state.created = [];
   state.updated = [];
   state.comments = [];
+  state.assignee = { id: 'user-hr' };
 });
 
 describe('status transitions', () => {
@@ -123,6 +129,13 @@ describe('HR side', () => {
     await helpdeskService.update(COMPANY, 'ticket-1', { assigneeUserId: 'user-hr', priority: 'HIGH' });
     expect(state.updated[0].data).toMatchObject({ assigneeUserId: 'user-hr', priority: 'HIGH' });
     expect(state.updated[0].data.status).toBeUndefined();
+  });
+
+  it('refuses an assignee who has no access to the company', async () => {
+    state.assignee = null;
+    await expect(helpdeskService.update(COMPANY, 'ticket-1', { assigneeUserId: 'user-asing' }))
+      .rejects.toThrow(/bukan user aktif/);
+    expect(state.updated).toHaveLength(0);
   });
 
   it('the queue is a paginated LIST: default hides CLOSED, caps rows, and counts comments instead of shipping them', async () => {

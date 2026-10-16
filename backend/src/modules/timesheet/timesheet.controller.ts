@@ -72,13 +72,13 @@ export class TimesheetController {
 
   async approve(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      res.json(Result.success(await timesheetService.decide(companyOf(req), String(req.params.id), String(req.user?.id), 'APPROVED')));
+      res.json(Result.success(await timesheetService.decide(companyOf(req), String(req.params.id), String(req.user?.id), 'APPROVED', req.user?.employeeId)));
     } catch (error) { next(error); }
   }
 
   async reject(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      res.json(Result.success(await timesheetService.decide(companyOf(req), String(req.params.id), String(req.user?.id), 'REJECTED')));
+      res.json(Result.success(await timesheetService.decide(companyOf(req), String(req.params.id), String(req.user?.id), 'REJECTED', req.user?.employeeId)));
     } catch (error) { next(error); }
   }
 
