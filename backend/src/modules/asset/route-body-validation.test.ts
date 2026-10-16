@@ -25,10 +25,13 @@ const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/
 
 describe('the asset return route validates its body', () => {
   it('applies returnAssetSchema, not merely exports it', () => {
+    // Route declarations span multiple lines now; check the statement block,
+    // from the path literal to its closing `);`.
     const routes = code(assetRoutes);
-    const line = routes.split('\n').find((row) => row.includes("'/:id/return'"));
-    expect(line).toBeDefined();
-    expect(line).toContain('validate(returnAssetSchema)');
+    const start = routes.indexOf("'/:id/return'");
+    expect(start).toBeGreaterThan(-1);
+    const block = routes.slice(start, routes.indexOf(');', start));
+    expect(block).toContain('validate(returnAssetSchema)');
   });
 
   it('accepts only the four conditions an asset can come back in', () => {

@@ -1,7 +1,10 @@
 import { prisma } from '@/shared/database/prisma';
 import { Prisma } from '@prisma/client';
-import { NotFoundError } from '@/shared/exceptions/AppError';
-import { CreateAssetDTO, AssignAssetDTO, ReturnAssetDTO, MyAssetsQueryDTO } from './asset.dto';
+import { ConflictError, NotFoundError } from '@/shared/exceptions/AppError';
+import {
+  AssetCategoryCreateDTO, AssetCategoryUpdateDTO, AssignAssetDTO, CreateAssetDTO,
+  MyAssetsQueryDTO, ReturnAssetDTO, TransferAssetDTO, UpdateAssetDTO,
+} from './asset.dto';
 import {
   generateDepreciationSchedule,
   bookValueAfterMonths,
@@ -149,12 +152,28 @@ export class AssetRepository {
     return prisma.asset.create({ data: { ...data, purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : undefined, purchaseValue: data.purchaseValue, currentValue: data.purchaseValue } });
   }
 
-  async update(id: string, data: Partial<CreateAssetDTO>) {
-    return prisma.asset.update({ where: { id }, data });
+  async update(id: string, data: UpdateAssetDTO) {
+    const { purchaseDate, ...rest } = data;
+    return prisma.asset.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(purchaseDate !== undefined
+          ? { purchaseDate: purchaseDate === null ? null : new Date(purchaseDate) }
+          : {}),
+      },
+    });
   }
 
   async softDelete(id: string) {
     return prisma.asset.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+
+  async activeAssignment(assetId: string) {
+    return prisma.assetAssignment.findFirst({
+      where: { assetId, returnedAt: null },
+      select: { id: true, employeeId: true, conditionAtAssign: true },
+    });
   }
 
   async assign(assetId: string, data: AssignAssetDTO, userId: string) {
@@ -174,6 +193,80 @@ export class AssetRepository {
     });
     const status = data.conditionAtReturn === 'DAMAGED' || data.conditionAtReturn === 'LOST' ? 'MAINTENANCE' : 'AVAILABLE';
     return prisma.asset.update({ where: { id: assetId }, data: { status } });
+  }
+
+  /**
+   * Serah terima langsung: pegangan lama ditutup dan yang baru dibuka dalam
+   * SATU transaksi — jalur return+assign terpisah meninggalkan jendela ketika
+   * aset "tidak dipegang siapa pun" padahal barangnya berpindah tangan.
+   * Conditional pada `returnedAt: null` + count, jadi dua transfer serentak
+   * tidak menghasilkan dua pegangan aktif.
+   */
+  async transfer(assetId: string, companyId: string, data: TransferAssetDTO, userId: string) {
+    return prisma.$transaction(async (tx) => {
+      const active = await tx.assetAssignment.findFirst({
+        where: { assetId, returnedAt: null },
+        select: { id: true, employeeId: true },
+      });
+      if (!active) throw new ConflictError('Aset ini tidak sedang dipegang siapa pun; pakai assign, bukan transfer');
+      if (active.employeeId === data.toEmployeeId) {
+        throw new ConflictError('Aset sudah dipegang karyawan itu');
+      }
+
+      const closed = await tx.assetAssignment.updateMany({
+        where: { id: active.id, returnedAt: null },
+        data: { returnedAt: new Date(), conditionAtReturn: data.condition },
+      });
+      if (closed.count !== 1) throw new ConflictError('Pegangan aset berubah saat transfer berlangsung; muat ulang dan coba lagi');
+
+      return tx.assetAssignment.create({
+        data: {
+          assetId, companyId,
+          employeeId: data.toEmployeeId,
+          conditionAtAssign: data.condition,
+          notes: data.notes,
+          createdBy: userId,
+        },
+        include: { employee: { select: { id: true, fullName: true, employeeNumber: true } } },
+      });
+    });
+  }
+
+  /** Aset yang masih dipegang seorang karyawan — bahan exit clearance. */
+  async outstandingFor(companyId: string, employeeId: string) {
+    return prisma.assetAssignment.findMany({
+      where: { companyId, employeeId, returnedAt: null, asset: { deletedAt: null } },
+      select: {
+        id: true, assignedAt: true, conditionAtAssign: true,
+        asset: { select: { id: true, assetCode: true, name: true, serialNumber: true, status: true } },
+      },
+      orderBy: { assignedAt: 'asc' },
+    });
+  }
+
+  // ==================== Categories ====================
+  async findCategories(companyId: string) {
+    return prisma.assetCategory.findMany({ where: { companyId }, orderBy: { name: 'asc' } });
+  }
+
+  async findCategoryById(companyId: string, id: string) {
+    return prisma.assetCategory.findFirst({ where: { id, companyId } });
+  }
+
+  async createCategory(companyId: string, data: AssetCategoryCreateDTO) {
+    return prisma.assetCategory.create({ data: { ...data, companyId } });
+  }
+
+  async updateCategory(id: string, data: AssetCategoryUpdateDTO) {
+    return prisma.assetCategory.update({ where: { id }, data });
+  }
+
+  async deleteCategory(id: string) {
+    return prisma.assetCategory.delete({ where: { id } });
+  }
+
+  async countAssetsInCategory(companyId: string, categoryId: string) {
+    return prisma.asset.count({ where: { companyId, categoryId, deletedAt: null } });
   }
 }
 

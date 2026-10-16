@@ -5,6 +5,7 @@ import prisma from '@/shared/database/prisma';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { calculateSeverance, EmploymentEndReason } from '@/shared/payroll/severance';
 import { calculateSeveranceTax } from '@/shared/payroll/severance-tax';
+import { ASSET_CLEARANCE_ITEM, assetService } from '@/modules/asset/asset.service';
 
 export class OnboardingService {
   async getChecklists(employeeId: string) {
@@ -174,6 +175,26 @@ export class OnboardingService {
     const allowed = ['PENDING', 'IN_PROGRESS', 'CLEARED', 'REJECTED', 'OVERDUE'];
     if (!allowed.includes(status)) {
       throw new BadRequestError(`Status clearance tidak dikenal: ${status}`);
+    }
+
+    // Item aset terhubung ke register: CLEARED hanya kalau karyawan sudah
+    // tidak memegang apa pun. Aset hilang/rusak tetap lewat return (kondisi
+    // LOST/DAMAGED) supaya jejak dan nilai bukunya tercatat — bukan dengan
+    // meng-CLEAR tangan kosong.
+    if (status === 'CLEARED') {
+      const clearance = await prisma.exitClearance.findUnique({
+        where: { id },
+        select: { checklistItem: true, resignation: { select: { employeeId: true } } },
+      });
+      if (clearance?.checklistItem === ASSET_CLEARANCE_ITEM) {
+        const outstanding = await assetService.countOutstanding(clearance.resignation.employeeId);
+        if (outstanding > 0) {
+          throw new ConflictError(
+            `Karyawan masih memegang ${outstanding} aset; kembalikan lewat register aset `
+            + '(kondisi LOST untuk yang hilang) sebelum clearance ini bisa CLEARED',
+          );
+        }
+      }
     }
     return onboardingRepository.updateClearance(id, status, notes);
   }

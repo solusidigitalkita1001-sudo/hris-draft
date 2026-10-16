@@ -1,6 +1,6 @@
 # Referensi API HRIS
 
-Dibuat otomatis dari router yang berjalan pada 2026-10-16 — **477 path, 643 operasi**.
+Dibuat otomatis dari router yang berjalan pada 2026-10-16 — **481 path, 651 operasi**.
 
 Dokumen ini tidak ditulis tangan. Sumbernya `GET /api/v1/meta/openapi.json`, yang dibangun dengan menyusuri stack Express: path, method, skema request (dikonversi dari skema zod yang benar-benar memvalidasi request), permission yang diminta `authorize()`, dan apakah route berada di balik autentikasi. Karena itu isinya tidak bisa menyimpang dari server — kalau sebuah endpoint berubah, dokumen ini berubah saat dibuat ulang. Regenerasi: `node scripts/generate-api-reference.mjs` (lihat header skrip).
 
@@ -57,17 +57,25 @@ Tiga endpoint memakai kredensial yang **bukan** sesi pengguna, dan itu disengaja
 | `GET /api/v1/announcements/manage/{id}/readers` | `announcement:read` | bearer/cookie | — |
 | `GET /api/v1/announcements/unread-count` | — | bearer/cookie | — |
 
-## `assets` — 7 operasi
+## `assets` — 15 operasi
 
 | Method & path | Permission | Auth | Body |
 |---|---|---|---|
-| `GET /api/v1/assets` | `employee:read` | bearer/cookie | — |
-| `POST /api/v1/assets` | `employee:create` | bearer/cookie | ya |
-| `GET /api/v1/assets/{id}` | `employee:read` | bearer/cookie | — |
-| `POST /api/v1/assets/{id}/assign` | `employee:update` | bearer/cookie | ya |
-| `GET /api/v1/assets/{id}/depreciation` | `employee:read` | bearer/cookie | — |
-| `POST /api/v1/assets/{id}/return` | `employee:update` | bearer/cookie | ya |
+| `GET /api/v1/assets` | `asset:read` | bearer/cookie | — |
+| `POST /api/v1/assets` | `asset:create` | bearer/cookie | ya |
+| `GET /api/v1/assets/{id}` | `asset:read` | bearer/cookie | — |
+| `PUT /api/v1/assets/{id}` | `asset:update` | bearer/cookie | ya |
+| `DELETE /api/v1/assets/{id}` | `asset:delete` | bearer/cookie | — |
+| `POST /api/v1/assets/{id}/assign` | `asset:update` | bearer/cookie | ya |
+| `GET /api/v1/assets/{id}/depreciation` | `asset:read` | bearer/cookie | — |
+| `POST /api/v1/assets/{id}/return` | `asset:update` | bearer/cookie | ya |
+| `POST /api/v1/assets/{id}/transfer` | `asset:update` | bearer/cookie | ya |
+| `GET /api/v1/assets/categories` | `asset:read` | bearer/cookie | — |
+| `POST /api/v1/assets/categories` | `asset:create` | bearer/cookie | ya |
+| `PUT /api/v1/assets/categories/{id}` | `asset:update` | bearer/cookie | ya |
+| `DELETE /api/v1/assets/categories/{id}` | `asset:delete` | bearer/cookie | — |
 | `GET /api/v1/assets/my` | — | bearer/cookie | — |
+| `GET /api/v1/assets/outstanding/{employeeId}` | `asset:read` | bearer/cookie | — |
 
 ## `attendance` — 21 operasi
 

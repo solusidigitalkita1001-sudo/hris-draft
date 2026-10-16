@@ -1016,3 +1016,51 @@ arah aman (dibiarkan).
   baru: potongan statutori pekerja harian, void memulihkan klaim EWA,
   1721-VII menolak run COMPLETED, assignee helpdesk asing ditolak) + 34 test
   guard/kontrak route — semua hijau, 0 gagal.
+
+## Tugas — modul asset didalamkan sampai layak ditanya pembeli
+
+Dari v1 tipis (7 endpoint, satu layar list) menjadi modul utuh:
+
+- Edit/hapus aset akhirnya ter-expose (repository-nya selalu punya, route-nya
+  tidak pernah ada); status AVAILABLE/MAINTENANCE/RETIRED bisa diatur — jalan
+  keluar dari MAINTENANCE yang tadinya buntu — dan DITOLAK selama aset
+  dipegang; kode aset terkunci (identitas stiker fisik).
+- Kategori aset punya CRUD; metode depresiasi + umur ekonomis per kategori
+  akhirnya hidup (sebelumnya tidak ada jalan membuat kategori, semua aset
+  jatuh ke fallback). Hapus kategori ditolak selama dipakai.
+- Transfer antar karyawan atomik: tutup+buka pegangan dalam satu transaksi,
+  conditional+counted — tidak ada jendela "tak dipegang siapa pun" dan tidak
+  ada dua pegangan aktif dari race.
+- Exit clearance tersambung ke register: resign baru mendapat item
+  "Pengembalian aset perusahaan" yang menolak CLEARED selama karyawan masih
+  memegang aset; GET /assets/outstanding/:employeeId menyajikan pegangan
+  aktif + nilai buku (bahan beban aset hilang). Aset hilang dicatat lewat
+  return LOST, bukan clearance kosong.
+- Permission pindah dari menumpang employee:* ke resource asset:* sendiri
+  (ini juga membereskan guard frontend yang sudah mengecek asset:read);
+  grant: COMPANY_ADMIN semua, HR_MANAGER read/create/update, HR_STAFF
+  read/update. SEED PERLU DIJALANKAN ULANG. Semua mutasi kini diaudit.
+- Model mati AssetPatrolLog (nol kode sejak dibuat) dihapus — migrasi
+  20261016141948_drop_asset_patrol_log.
+- UI AssetList dirombak: form create/edit dengan pilihan kategori, aksi
+  serah/kembali/alih dengan pemilih karyawan, pengelola kategori; status
+  RETIRED menggantikan DISPOSED yang tidak pernah ada di backend. (Form lama
+  mengirim field category/status yang di-strip diam-diam oleh DTO.)
+- Dokumentasi: docs/asset-management.md; api-reference diregenerasi
+  (481 path; operasi asset 7 → 15). Batas yang disengaja tercatat di dok:
+  stock opname/patrol, QR, berita acara PDF, validasi branchId, posting
+  akuntansi.
+
+Rule baru atas permintaan pemilik: .claude/rules/pre-push-verification.md —
+tujuh gerbang wajib lulus sebelum push (tsc, test dari output mentah,
+integrasi MySQL bila menyentuh uang/schema, migrasi tanpa drift, build
+frontend, smoke nyata, baca ulang diff).
+
+### Status verifikasi
+
+- tsc backend+frontend bersih; build frontend lulus; 2.264 unit + 132
+  integrasi MySQL (15 suite) + 31 test asset/onboarding (termasuk
+  asset-depth.test.ts baru) hijau, 0 gagal; prisma migrate diff nol.
+- Smoke end-to-end terhadap server lokal: kategori → aset (depresiasi ikut
+  metode kategori) → assign → edit-saat-dipegang (nama ok, status/hapus 409)
+  → transfer → outstanding ber-nilai-buku → return → hapus. Semua sesuai.
