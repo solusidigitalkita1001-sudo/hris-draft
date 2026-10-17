@@ -24,9 +24,19 @@ const rolePerms = readFileSync(join(SEEDS, '03-role-permissions.seed.ts'), 'utf8
 const roles = readFileSync(join(SEEDS, '02-roles.seed.ts'), 'utf8');
 const testData = readFileSync(join(SEEDS, '05-test-data.seed.ts'), 'utf8');
 
+/**
+ * Awal blok sebuah role di source seed. Role wajib dipegang lewat
+ * `requireRole('X')`; FINANCE sengaja opsional dan tetap `roleMap.get('X')` —
+ * marker ini menerima keduanya.
+ */
+function roleBlockStart(role: string, from = 0): number {
+  const viaRequire = rolePerms.indexOf(`requireRole('${role}')`, from);
+  return viaRequire !== -1 ? viaRequire : rolePerms.indexOf(`roleMap.get('${role}')`, from);
+}
+
 /** The permission list literal for one role block. */
 function blockFor(role: string): string {
-  const start = rolePerms.indexOf(`roleMap.get('${role}')`);
+  const start = roleBlockStart(role);
   expect(start).toBeGreaterThan(-1);
   return rolePerms.slice(start, start + 2500);
 }
@@ -84,11 +94,11 @@ function payrollPermissions(source: string): string[] {
 }
 
 function seededPayrollPermissions(role: string): string[] {
-  const start = rolePerms.indexOf(`roleMap.get('${role}')`);
+  const start = roleBlockStart(role);
   expect(start).toBeGreaterThan(-1);
   // Bound at the next role so a long block cannot borrow its neighbour's grants.
-  const next = rolePerms.indexOf('roleMap.get(', start + 1);
-  const block = rolePerms.slice(start, next === -1 ? undefined : next);
+  const nextMarker = rolePerms.slice(start + 1).search(/(?:requireRole|roleMap\.get)\('[A-Z_]+'\)/);
+  const block = rolePerms.slice(start, nextMarker === -1 ? undefined : start + 1 + nextMarker);
   return [...block.matchAll(/'(payroll:\w+)'/g)].map((match) => match[1]);
 }
 
