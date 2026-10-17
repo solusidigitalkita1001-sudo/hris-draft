@@ -36,6 +36,9 @@ export const entriesQuerySchema = z.object({
   projectId: z.string().uuid().optional(),
   from: dateOnly.optional(),
   to: dateOnly.optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  /// Kursor = id baris terakhir dari halaman sebelumnya.
+  cursor: z.string().uuid().optional(),
 });
 
 export const reportQuerySchema = z.object({

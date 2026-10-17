@@ -121,6 +121,10 @@ export class TimesheetService {
         } } : {}),
       },
       orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      // Daftar approval berpaginasi seperti antrian helpdesk: dua tahun
+      // timesheet perusahaan tidak boleh terkirim utuh demi satu layar.
+      take: query.limit ?? 50,
+      ...(query.cursor ? { skip: 1, cursor: { id: query.cursor } } : {}),
       include: { project: PROJECT_SELECT, employee: EMPLOYEE_SELECT },
     });
   }

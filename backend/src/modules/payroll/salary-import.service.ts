@@ -1,7 +1,9 @@
-import { parse } from 'csv-parse/sync';
 import { Prisma } from '@prisma/client';
 import prisma from '@/shared/database/prisma';
-import { BadRequestError } from '@/shared/exceptions/AppError';
+import {
+  type ImportResult, type ImportRowError,
+  dateOnly, employeeIdsByNumber, employeeNumberOf, parseImportRecords, writableRows,
+} from '@/shared/import/csv-import';
 import { WinstonLogger } from '@/shared/logger/WinstonLogger';
 
 const logger = new WinstonLogger('SalaryImport');
@@ -25,20 +27,10 @@ const logger = new WinstonLogger('SalaryImport');
  * and try again — not discover them one transaction rollback at a time.
  */
 
-export interface SalaryImportError {
-  row: number;
-  column?: string;
-  value?: unknown;
-  message: string;
-}
+export type SalaryImportError = ImportRowError;
 
-export interface SalaryImportResult {
-  dryRun: boolean;
-  totalRows: number;
-  valid: number;
-  created: number;
+export interface SalaryImportResult extends ImportResult {
   superseded: number;
-  errors: SalaryImportError[];
 }
 
 interface ParsedRow {
@@ -54,42 +46,22 @@ interface ParsedRow {
 /** Decimal(15,2) — anything larger is a typo, not a salary. */
 const MAX_BASE_SALARY = new Prisma.Decimal('9999999999999.99');
 
-function dateOnly(value: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 export async function importSalaryMaster(
   companyId: string,
   file: Express.Multer.File,
   options: { dryRun?: boolean } = {},
 ): Promise<SalaryImportResult> {
-  const records = parse(file.buffer, {
-    columns: true, skip_empty_lines: true, trim: true, relax_column_count: true,
-  }) as Record<string, string>[];
-  if (!records.length) throw new BadRequestError('Berkas tidak berisi satu baris data pun');
+  const records = parseImportRecords(file);
 
   const errors: SalaryImportError[] = [];
   const parsed: ParsedRow[] = [];
 
-  // One query for the whole file rather than one per row: a 500-row import
-  // should not be 500 round trips.
-  const numbers = [...new Set(records
-    .map((row) => row.employeeNumber || row.employee_number || row.nik || '')
-    .filter(Boolean))];
-  const employees = numbers.length
-    ? await prisma.employee.findMany({
-        where: { companyId, deletedAt: null, employeeNumber: { in: numbers } },
-        select: { id: true, employeeNumber: true },
-      })
-    : [];
-  const idByNumber = new Map(employees.map((row) => [row.employeeNumber, row.id]));
+  const idByNumber = await employeeIdsByNumber(companyId, records);
 
   const seen = new Set<string>();
   records.forEach((row, index) => {
     const rowIndex = index + 2; // row 1 is the header
-    const employeeNumber = row.employeeNumber || row.employee_number || row.nik || '';
+    const employeeNumber = employeeNumberOf(row);
     const rawSalary = row.baseSalary || row.base_salary || row.gaji_pokok || '';
     const rawDate = row.effectiveDate || row.effective_date || row.tanggal_berlaku || '';
 
@@ -168,10 +140,7 @@ export async function importSalaryMaster(
     }
   }
 
-  // A parsed row can still have been rejected by the clash check above, so
-  // "valid" is parsed-minus-flagged rather than parsed.
-  const flaggedRows = new Set(errors.map((error) => error.row));
-  const writable = parsed.filter((row) => !flaggedRows.has(row.row));
+  const writable = writableRows(parsed, errors);
 
   const result: SalaryImportResult = {
     dryRun: Boolean(options.dryRun),

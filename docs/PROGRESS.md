@@ -944,6 +944,26 @@ lintas-modul yang pantas PR-nya sendiri; `timesheet.list` tanpa batas.
 - Sweep serial penuh + MySQL nyata: 2.096 test hijau, 0 gagal; tsc bersih.
 - Drift schema↔migrasi: nol (prisma migrate diff kosong).
 
+## Tugas — refactor yang ditunda dari audit: scaffold importer, registry PENDING, batas timesheet
+
+Tiga cleanup yang sengaja ditunda pada audit /code-review (branch
+feat/payroll-correction-run), kini PR-nya sendiri:
+
+- `shared/import/csv-import.ts`: scaffold bersama ketiga importer GAP-44
+  (parse+guard berkas, lookup karyawan batch, dateOnly, writableRows);
+  aturan per domain tetap di importer masing-masing.
+- `shared/payroll/pending-registry.ts`: mesin klaim bersama arrears/koreksi/
+  pesangon — cancel bersyarat PENDING dan markApplied terhitung; pesan error
+  per entitas dipertahankan persis (dikunci test). `reduceRemaining` tetap
+  milik koreksi.
+- `timesheet.list` berpaginasi (limit≤200 default 50 + cursor), pola yang
+  sama dengan antrian helpdesk; `timesheet.listMine` dibiarkan — data milik
+  sendiri berfilter tanggal.
+
+### Status verifikasi
+
+- tsc bersih; 89 test modul terdampak + 734 unit payroll + 130 integrasi
+  MySQL nyata (15 suite, --runInBand) semua hijau, 0 gagal.
 ## Tugas — CI merah rata sejak 12 Okt: ratchet lint terlampaui
 
 Semua run CI gagal di job backend: `eslint --max-warnings 823` sementara

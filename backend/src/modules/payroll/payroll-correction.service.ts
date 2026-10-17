@@ -4,6 +4,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '@/shared/exceptio
 import { logger } from '@/shared/logger/WinstonLogger';
 import { getCurrentUser } from '@/shared/context/RequestContext';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
+import { createPendingRegistry, groupByEmployee } from '@/shared/payroll/pending-registry';
 
 export interface RegisterCorrectionInput {
   sourcePayslipId: string;
@@ -21,6 +22,16 @@ export interface RegisterCorrectionInput {
  * run in a later period — underpayment as an earning, overpayment as a
  * deduction that never drives the net below zero.
  */
+const registry = createPendingRegistry({
+  delegate: (db) => db.payrollCorrection,
+  messages: {
+    notFound: 'Correction entry not found',
+    onlyPendingCancellable: (status) => `Only pending corrections can be cancelled; this entry is ${status}`,
+    claimedWhileCancelling: 'This correction was claimed by a payroll run while you were cancelling it',
+    changedWhileCalculating: 'Correction entry changed while this payroll run was calculating; re-run the calculation',
+  },
+});
+
 export class PayrollCorrectionService {
   async register(companyId: string, input: RegisterCorrectionInput) {
     // Satu transaksi dengan kunci baris payslip: cek "hanya satu PENDING per
@@ -112,22 +123,7 @@ export class PayrollCorrectionService {
   }
 
   async cancel(companyId: string, id: string) {
-    const row = await prisma.payrollCorrection.findFirst({ where: { id, companyId }, select: { id: true, status: true } });
-    if (!row) throw new NotFoundError('Correction entry not found');
-    if (row.status !== PayrollCorrectionStatus.PENDING) {
-      throw new BadRequestError(`Only pending corrections can be cancelled; this entry is ${row.status}`);
-    }
-
-    // Conditional update: a run that claimed this row a moment ago moved it out
-    // of PENDING, and cancelling it afterwards would hide money already paid.
-    const result = await prisma.payrollCorrection.updateMany({
-      where: { id, companyId, status: PayrollCorrectionStatus.PENDING },
-      data: { status: PayrollCorrectionStatus.CANCELLED },
-    });
-    if (result.count === 0) {
-      throw new BadRequestError('This correction was claimed by a payroll run while you were cancelling it');
-    }
-    return { id, status: PayrollCorrectionStatus.CANCELLED };
+    return registry.cancel(companyId, id);
   }
 
   /**
@@ -143,20 +139,14 @@ export class PayrollCorrectionService {
       orderBy: { createdAt: 'asc' },
     });
 
-    const byEmployee = new Map<string, typeof rows>();
-    for (const row of rows) {
-      const list = byEmployee.get(row.employeeId) ?? [];
-      list.push(row);
-      byEmployee.set(row.employeeId, list);
-    }
-    return byEmployee;
+    return groupByEmployee(rows);
   }
 
   /**
    * Claim the rows a run covered IN FULL: APPLIED, trace columns filled,
-   * nothing left to pay. Conditional on PENDING and counted — if another run
-   * claimed a row first, the whole calculation fails rather than paying the
-   * same correction twice.
+   * nothing left to pay. Conditional on PENDING and counted (see
+   * pending-registry): a row claimed by another run first fails the whole
+   * calculation rather than paying the same correction twice.
    */
   async markApplied(
     companyId: string,
@@ -164,21 +154,12 @@ export class PayrollCorrectionService {
     claims: Array<{ correctionId: string; payslipId: string }>,
     database: Prisma.TransactionClient = prisma,
   ) {
-    for (const claim of claims) {
-      const result = await database.payrollCorrection.updateMany({
-        where: { id: claim.correctionId, companyId, status: PayrollCorrectionStatus.PENDING },
-        data: {
-          status: PayrollCorrectionStatus.APPLIED,
-          remainingAmount: new Prisma.Decimal(0),
-          payslipId: claim.payslipId,
-          appliedRunId: runId,
-          appliedAt: new Date(),
-        },
-      });
-      if (result.count !== 1) {
-        throw new BadRequestError('Correction entry changed while this payroll run was calculating; re-run the calculation');
-      }
-    }
+    await registry.markApplied(
+      companyId, runId,
+      claims.map((claim) => ({ id: claim.correctionId, payslipId: claim.payslipId })),
+      database,
+      { remainingAmount: new Prisma.Decimal(0) },
+    );
   }
 
   /**
