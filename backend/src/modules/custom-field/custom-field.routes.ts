@@ -5,7 +5,7 @@ import { authorize } from '@/shared/middleware/Authorize';
 import { validate } from '@/shared/middleware/RequestValidator';
 import { auditLog } from '@/shared/middleware/AuditLog';
 import { customFieldController } from './custom-field.controller';
-import { createCustomFieldSchema, setCustomFieldValuesSchema, updateCustomFieldSchema } from './custom-field.dto';
+import { createCustomFieldSchema, employeeIdParamSchema, setCustomFieldValuesSchema, updateCustomFieldSchema } from './custom-field.dto';
 import { idParamSchema } from '@/modules/payroll/payroll.validation';
 
 const router = Router();
@@ -29,10 +29,12 @@ router.patch('/:id',
 
 router.get('/employees/:employeeId/values',
   authorize({ resource: 'employee', action: 'read' }),
+  validate(employeeIdParamSchema, 'params'),
   customFieldController.valuesFor.bind(customFieldController));
 router.put('/employees/:employeeId/values',
   authorize({ resource: 'employee', action: 'update' }),
   auditLog({ action: 'UPDATE', entity: 'EmployeeCustomFieldValue' }),
+  validate(employeeIdParamSchema, 'params'),
   validate(setCustomFieldValuesSchema),
   customFieldController.setValues.bind(customFieldController));
 

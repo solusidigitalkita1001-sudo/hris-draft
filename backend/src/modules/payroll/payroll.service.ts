@@ -517,6 +517,26 @@ export class PayrollService {
           });
         }
       }
+
+      // Run REGULAR mengklaim tiga registry lain saat kalkulasi; prinsip yang
+      // sama berlaku. Rapel diklaim utuh → kembali PENDING utuh. EWA: uangnya
+      // SUDAH di tangan karyawan, baris kembali PAID (payrollRunId null) agar
+      // run pengganti memotongnya lagi — dibiarkan DEDUCTED menunjuk run
+      // VOIDED berarti perusahaan kehilangan advance itu. Pencairan cuti
+      // kembali APPROVED agar run pengganti membayarnya. Filter per-run-id
+      // membuat ketiganya no-op untuk run yang tidak mengklaim apa pun.
+      await tx.payrollArrears.updateMany({
+        where: { companyId, appliedRunId: id, status: 'APPLIED' },
+        data: { status: 'PENDING', appliedRunId: null, payslipId: null, appliedAt: null },
+      });
+      await tx.earnedWageAccess.updateMany({
+        where: { companyId, payrollRunId: id, status: 'DEDUCTED' },
+        data: { status: 'PAID', payrollRunId: null, deductedAt: null, amountDeductedPayroll: null },
+      });
+      await tx.leaveEncashment.updateMany({
+        where: { companyId, appliedRunId: id, status: 'PAID' },
+        data: { status: 'APPROVED', appliedRunId: null, payslipId: null, paidAt: null },
+      });
     });
 
     logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason, runType: run.runType });
@@ -987,7 +1007,10 @@ export class PayrollService {
         married: employee.maritalStatus === 'MARRIED',
         dependents: employee._count?.families ?? 0,
         hasNpwp: Boolean(employee.taxId),
-        monthlyPensionContribution: salary ? bpjsPensionFor(policy, Number(salary.baseSalary)) : 0,
+        // DAILY: baseSalary adalah tarif sehari — konsisten dengan monthlyGross
+        // yang di-nol-kan di atas, iuran pensiun juga tidak dihitung darinya.
+        monthlyPensionContribution: salary && salary.payBasis !== 'DAILY'
+          ? bpjsPensionFor(policy, Number(salary.baseSalary)) : 0,
         method,
         terTables: policy.ter,
       }, policy.pph21);
@@ -1659,6 +1682,24 @@ export class PayrollService {
     const appliedEwaDeductions: PayrollEWADeduction[] = [];
     let employeeCount = 0;
 
+    // Pekerja harian tidak punya alokasi komponen, padahal engine hanya
+    // menulis potongan PPh21/BPJS ke baris alokasi berkode PPH21/BPJS-TK/
+    // BPJS-KES — tanpa ini pajak dan iuran DIHITUNG lalu dibuang dan netto
+    // harian = bruto penuh. Pinjam komponen statutori milik company (bila
+    // didefinisikan) sebagai alokasi sintetis bernilai 0; engine menimpa
+    // angkanya, persis seperti karyawan bulanan yang alokasinya memuat
+    // komponen itu. Company tanpa komponen statutori berperilaku konsisten
+    // dengan karyawan bulanan tanpa alokasi itu: tidak ada potongan.
+    const statutoryComponents = await database.salaryComponent.findMany({
+      where: {
+        companyId: run.companyId, code: { in: ['PPH21', 'BPJS-TK', 'BPJS-KES'] },
+        isActive: true, deletedAt: null,
+      },
+    });
+    const dailyStatutoryAllocations = statutoryComponents.map((component) => ({
+      isActive: true, amount: new Prisma.Decimal(0), salaryComponent: component,
+    }));
+
     for (const salary of employeeSalaries) {
       if (!salary.isActive) continue;
       // The employed slice of this period decides both whether to pay and how
@@ -1885,11 +1926,12 @@ export class PayrollService {
       };
 
       // DAILY: the engine sees the month's EARNED base (tarif × hadir) so BPJS
-      // and every percent-of-wage figure follow the real wage; the allocation
-      // list is empty by the guard above. Attendance already did the
-      // "proration", so the window factor must not shrink it again.
+      // and every percent-of-wage figure follow the real wage; stored
+      // allocations are empty by the guard above, and the statutory synthetic
+      // rows stand in so tax/BPJS have somewhere to land. Attendance already
+      // did the "proration", so the window factor must not shrink it again.
       const salaryForPay = isDaily && dailyEarnedBase
-        ? { ...salary, baseSalary: dailyEarnedBase, components: [] }
+        ? { ...salary, baseSalary: dailyEarnedBase, components: dailyStatutoryAllocations }
         : salary;
       const pay = calculateEmployeePay(salaryForPay, extraComponents, taxContext, {
         BASE_SALARY: (isDaily && dailyEarnedBase ? dailyEarnedBase : salary.baseSalary).toString(), WORK_DAYS: String(workDaysInPeriod),

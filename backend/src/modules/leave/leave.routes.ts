@@ -139,12 +139,16 @@ router.delete(
 router.get('/', authorize({ resource: 'leave', action: 'read' }), leaveController.findAll.bind(leaveController));
 // Static balance routes must be declared before /:id.
 router.get('/balances/employee', authorize({ resource: 'leave', action: 'read' }), leaveController.getBalances.bind(leaveController));
-router.post('/balances', authorize({ resource: 'leave', action: 'create' }), auditLog({ action: 'SET_BALANCE', entity: 'LeaveBalance' }), validate(createLeaveBalanceSchema), leaveController.setBalance.bind(leaveController));
-router.post('/balances/accrue', authorize({ resource: 'leave', action: 'create' }), auditLog({ action: 'YEARLY_ACCRUE', entity: 'LeaveBalance' }), validate(triggerYearlyAccrualSchema), leaveController.triggerYearlyAccrual.bind(leaveController));
+// Menulis SALDO adalah pekerjaan admin, bukan pengajuan cuti: leave:create
+// dipegang EMPLOYEE untuk mengajukan cutinya sendiri, jadi ketiga route
+// saldo di bawah memakai leave:update (dipegang COMPANY_ADMIN/HR_MANAGER,
+// sama seperti pembatalan cuti bersama).
+router.post('/balances', authorize({ resource: 'leave', action: 'update' }), auditLog({ action: 'SET_BALANCE', entity: 'LeaveBalance' }), validate(createLeaveBalanceSchema), leaveController.setBalance.bind(leaveController));
+router.post('/balances/accrue', authorize({ resource: 'leave', action: 'update' }), auditLog({ action: 'YEARLY_ACCRUE', entity: 'LeaveBalance' }), validate(triggerYearlyAccrualSchema), leaveController.triggerYearlyAccrual.bind(leaveController));
 // GAP-44: saldo cuti awal dari CSV (dry run via ?dryRun=true) — POST /balances
 // dalam bentuk massal, untuk migrasi pelanggan yang datang di tengah tahun.
 router.post('/balances/import',
-  authorize({ resource: 'leave', action: 'create' }),
+  authorize({ resource: 'leave', action: 'update' }),
   auditLog({ action: 'IMPORT_LEAVE_BALANCE', entity: 'LeaveBalance' }),
   csvImportUpload.single('file'),
   leaveController.importBalances.bind(leaveController));

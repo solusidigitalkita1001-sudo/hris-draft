@@ -964,6 +964,58 @@ feat/payroll-correction-run), kini PR-nya sendiri:
 
 - tsc bersih; 89 test modul terdampak + 734 unit payroll + 130 integrasi
   MySQL nyata (15 suite, --runInBand) semua hijau, 0 gagal.
+
+## Tugas — review cross-file (angle yang kemaren mati), 11 temuan, 11 diperbaiki
+
+Melanjutkan audit /code-review atas branch: angle cross-file tracer yang
+kemaren mati kena session limit diulang sebagai tiga tracer paralel (alur
+uang, tenant/permission, kontrak data). Semua temuan diverifikasi dua sisi
+sebelum diperbaiki:
+
+1. KRITIS — pekerja harian tak pernah dipotong PPh21/BPJS di run REGULAR:
+   engine hanya menulis potongan ke baris alokasi berkode PPH21/BPJS-*, dan
+   gaji DAILY dilarang beralokasi. Kini run meminjamkan komponen statutori
+   company sebagai alokasi sintetis bernilai 0 yang angkanya ditimpa engine.
+2. Void run REGULAR menelantarkan klaim rapel/EWA/pencairan cuti (kelas bug
+   yang 9a490e5 tutup hanya untuk pesangon+koreksi) → void kini memulihkan
+   kelimanya; EWA kembali PAID agar run pengganti memotong advance lagi.
+3. Bukti potong 1721-VII bisa terbit untuk pesangon yang run-nya masih
+   COMPLETED (bisa di-void) → kini menuntut run APPROVED/DISBURSED, gerbang
+   yang sama dengan 1721-VIII.
+4. Pencairan cuti lolos dari pagar DAILY (tarif sehari ÷ 21 ≈ kurang bayar
+   21×) → ditolak eksplisit seperti arrears.
+5. Iuran pensiun run CORRECTION memakai tarif sehari sebagai upah bulanan
+   untuk DAILY → di-nol-kan, konsisten dengan monthlyGross-nya.
+6. Invarian "DAILY tanpa komponen bulanan" bocor via PATCH salary dan jalur
+   re-aktivasi (parse tanpa payBasis) → ditolak di keduanya.
+7. Importer saldo cuti (dan POST /leave/balances, /balances/accrue) diguard
+   leave:create yang dipegang EMPLOYEE → pindah ke leave:update; grant baru
+   untuk COMPANY_ADMIN + HR_MANAGER (SEED PERLU DIJALANKAN ULANG).
+8. Approver timesheet bisa menyetujui jamnya sendiri → ditolak (empat mata,
+   prinsip maker-checker payroll).
+9. assigneeUserId helpdesk tak divalidasi → wajib user hidup ber-akses
+   company.
+10. Paginasi kursor timesheet/helpdesk tanpa tiebreaker unik → + id asc.
+11. Validasi params yang bolong: careers (schema mati dipasang), bukti potong
+    1721-VII, custom-field values.
+
+docs/api-reference.md diregenerasi dari router hidup (477 path, 643 operasi,
+dari 428) — generator kini di-commit: scripts/generate-api-reference.mjs.
+
+SENGAJA tidak diubah (keputusan tercatat): respons 409 careers apply bisa
+dipakai memverifikasi "email ini sudah melamar" (dibatasi 10/jam/IP — terima
+risiko atau jadikan 201 generik, keputusan produk); COMPANY_ADMIN tanpa
+helpdesk:*/timesheet:* (pemisahan peran, tinjau saat RBAC berikutnya);
+api-contract.test hanya memindai *.controller.ts (careers merakit respons di
+routes — patuh, tapi tak terjaga test); EWA/loan untuk DAILY kurang-izin ke
+arah aman (dibiarkan).
+
+### Status verifikasi
+
+- tsc bersih; 951 unit + 132 integrasi MySQL nyata (15 suite, termasuk test
+  baru: potongan statutori pekerja harian, void memulihkan klaim EWA,
+  1721-VII menolak run COMPLETED, assignee helpdesk asing ditolak) + 34 test
+  guard/kontrak route — semua hijau, 0 gagal.
 ## Tugas — CI merah rata sejak 12 Okt: ratchet lint terlampaui
 
 Semua run CI gagal di job backend: `eslint --max-warnings 823` sementara

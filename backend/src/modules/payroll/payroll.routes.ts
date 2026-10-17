@@ -21,7 +21,7 @@ import {
   calculateBpjsSchema,
   calculateJknSchema,
 } from './payroll.dto';
-import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema, payrollUnlockSchema, setPayslipPinSchema, payslipPinUnlockSchema } from './payroll.validation';
+import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, severancePaymentIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema, payrollUnlockSchema, setPayslipPinSchema, payslipPinUnlockSchema } from './payroll.validation';
 import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
@@ -239,6 +239,7 @@ router.get(
   '/bukti-potong-1721-vii/:severancePaymentId',
   authorize({ resource: 'payroll', action: 'read' }),
   requireCompanyPayrollAccess,
+  validate(severancePaymentIdParamSchema, 'params'),
   auditView({ action: 'VIEW_BUKTI_POTONG_1721_VII', entity: 'SeverancePayment' }),
   payrollController.buktiPotong1721VII.bind(payrollController)
 );

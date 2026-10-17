@@ -33,3 +33,7 @@ export const setCustomFieldValuesSchema = z.object({
 export type CreateCustomFieldDTO = z.infer<typeof createCustomFieldSchema>;
 export type UpdateCustomFieldDTO = z.infer<typeof updateCustomFieldSchema>;
 export type SetCustomFieldValuesDTO = z.infer<typeof setCustomFieldValuesSchema>;
+
+export const employeeIdParamSchema = z.object({
+  employeeId: z.string().uuid(),
+});

@@ -68,7 +68,9 @@ export class HelpdeskService {
         ...(filters.category ? { category: filters.category } : {}),
         ...(filters.assigneeUserId ? { assigneeUserId: filters.assigneeUserId } : {}),
       },
-      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+      // Tiebreaker id: kursor Prisma butuh urutan total — tiket yang seri di
+      // priority+createdAt bisa terlewat/terduplikat di batas halaman tanpanya.
+      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
       take: filters.limit ?? 50,
       ...(filters.cursor ? { skip: 1, cursor: { id: filters.cursor } } : {}),
       include: {
@@ -95,6 +97,20 @@ export class HelpdeskService {
 
     if (input.status && input.status !== ticket.status && !TRANSITIONS[ticket.status].includes(input.status)) {
       throw new ConflictError(`Tiket ${ticket.status} tidak bisa pindah ke ${input.status}`);
+    }
+
+    // Assignee harus user hidup yang punya akses company ini — userId asing
+    // atau milik tenant lain membuat antrian menunjuk orang yang tidak akan
+    // pernah melihat tiketnya.
+    if (input.assigneeUserId) {
+      const assignee = await prisma.user.findFirst({
+        where: {
+          id: input.assigneeUserId, deletedAt: null,
+          companyAccesses: { some: { companyId } },
+        },
+        select: { id: true },
+      });
+      if (!assignee) throw new BadRequestError('Assignee bukan user aktif di perusahaan ini');
     }
 
     return prisma.hrTicket.update({

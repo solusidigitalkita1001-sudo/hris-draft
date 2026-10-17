@@ -57,3 +57,7 @@ export const listQuerySchema = z.object({
   sort: z.string().optional(),
   order: z.enum(['asc', 'desc']).default('desc'),
 });
+
+export const severancePaymentIdParamSchema = z.object({
+  severancePaymentId: z.string().uuid(),
+});

@@ -42,7 +42,7 @@ export async function seedRolePermissions(): Promise<void> {
         'employee:create', 'employee:read', 'employee:update', 'employee:delete', 'employee:export', 'employee:read-sensitive',
         'org:create', 'org:read', 'org:update',
         'att:read', 'att:approve', 'att:export',
-        'leave:create', 'leave:read', 'leave:approve', 'leave:export',
+        'leave:create', 'leave:read', 'leave:update', 'leave:approve', 'leave:export',
         'work-calendar:create', 'work-calendar:read', 'work-calendar:update', 'work-calendar:delete',
         'permission-request:read', 'permission-request:update',
         'employee-loan:read', 'employee-loan:update',
@@ -74,7 +74,7 @@ export async function seedRolePermissions(): Promise<void> {
         // Announcement: drafting and publishing is HR management's own work.
         'announcement:read', 'announcement:create', 'announcement:update', 'announcement:approve',
         'att:read', 'att:approve', 'att:export',
-        'leave:create', 'leave:read', 'leave:approve', 'leave:export',
+        'leave:create', 'leave:read', 'leave:update', 'leave:approve', 'leave:export',
         'work-calendar:create', 'work-calendar:read', 'work-calendar:update',
         'permission-request:read', 'permission-request:update',
         'employee-loan:read', 'employee-loan:update',

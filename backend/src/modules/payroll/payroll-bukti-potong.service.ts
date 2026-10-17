@@ -105,6 +105,22 @@ export class PayrollBuktiPotongService {
     if (payment.status !== 'APPLIED' || !payment.appliedAt) {
       throw new ConflictError('Bukti potong dibuat untuk pesangon yang sudah DIBAYAR; pembayaran ini masih ' + payment.status);
     }
+    // APPLIED saja belum berarti dibayar: klaim terjadi saat kalkulasi, saat
+    // run baru COMPLETED dan masih bisa di-void. Gerbang yang sama dengan
+    // 1721-VIII bulanan: bukti potong final hanya untuk run yang uangnya
+    // benar-benar disetujui/cair.
+    const appliedRun = payment.appliedRunId
+      ? await prisma.payrollRun.findFirst({
+          where: { id: payment.appliedRunId, companyId },
+          select: { status: true },
+        })
+      : null;
+    if (!appliedRun || (appliedRun.status !== 'APPROVED' && appliedRun.status !== 'DISBURSED')) {
+      throw new ConflictError(
+        'Run SEVERANCE yang membayar pesangon ini belum di-approve; bukti potong final menunggu uangnya pasti '
+        + `(status run saat ini: ${appliedRun?.status ?? 'tidak ditemukan'})`,
+      );
+    }
 
     const basis = (payment.basis ?? {}) as { cumulativeGross?: number };
     const appliedAt = new Date(payment.appliedAt);

@@ -120,7 +120,9 @@ export class TimesheetService {
           ...(query.to ? { lte: new Date(`${query.to}T00:00:00.000Z`) } : {}),
         } } : {}),
       },
-      orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      // Tiebreaker id: kursor Prisma butuh urutan total — baris yang seri di
+      // date+createdAt bisa terlewat/terduplikat di batas halaman tanpanya.
+      orderBy: [{ date: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       // Daftar approval berpaginasi seperti antrian helpdesk: dua tahun
       // timesheet perusahaan tidak boleh terkirim utuh demi satu layar.
       take: query.limit ?? 50,
@@ -129,9 +131,17 @@ export class TimesheetService {
     });
   }
 
-  async decide(companyId: string, id: string, approverUserId: string, decision: 'APPROVED' | 'REJECTED') {
-    const entry = await prisma.timesheetEntry.findFirst({ where: { id, companyId }, select: { id: true, status: true } });
+  async decide(
+    companyId: string, id: string, approverUserId: string, decision: 'APPROVED' | 'REJECTED',
+    approverEmployeeId?: string | null,
+  ) {
+    const entry = await prisma.timesheetEntry.findFirst({ where: { id, companyId }, select: { id: true, status: true, employeeId: true } });
     if (!entry) throw new NotFoundError('Baris timesheet tidak ditemukan');
+    // Jam yang menjadi tagihan butuh empat mata — prinsip yang sama dengan
+    // maker-checker payroll: pencatat tidak menyetujui jamnya sendiri.
+    if (approverEmployeeId && entry.employeeId === approverEmployeeId) {
+      throw new ConflictError('Jam kerja sendiri tidak bisa disetujui sendiri; minta approver lain memutuskan');
+    }
     // Keputusan hanya atas baris yang menunggu: APPROVED terkunci (angkanya
     // mungkin sudah ditagihkan), REJECTED kembali lewat baris baru.
     const result = await prisma.timesheetEntry.updateMany({

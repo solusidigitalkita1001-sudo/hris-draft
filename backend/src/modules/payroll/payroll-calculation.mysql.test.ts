@@ -471,4 +471,74 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(thr.notes).toContain('THR pekerja harian dilewati');
     expect(thr.notes).toContain(worker.employeeNumber);
   });
+
+  /**
+   * GAP-49 lanjutan: engine hanya menulis potongan statutori ke baris alokasi
+   * berkode PPH21/BPJS-* — pekerja harian tidak punya alokasi, jadi tanpa
+   * alokasi sintetis pajak/iuran DIHITUNG lalu dibuang dan netto = bruto
+   * penuh. Alokasi sintetis meminjam komponen statutori milik company.
+   */
+  it('deducts statutory BPJS/PPh21 from a daily-wage employee when the company defines the components', async () => {
+    const f = await fixture();
+    await mockDatabase.salaryComponent.createMany({ data: [
+      { companyId: f.companyId, code: 'PPH21', name: 'PPh 21', type: 'DEDUCTION', amount: '0', isTaxable: false },
+      { companyId: f.companyId, code: 'BPJS-TK', name: 'BPJS Ketenagakerjaan', type: 'DEDUCTION', amount: '0', isTaxable: false },
+      { companyId: f.companyId, code: 'BPJS-KES', name: 'BPJS Kesehatan', type: 'DEDUCTION', amount: '0', isTaxable: false },
+    ] });
+    const worker = await mockDatabase.employee.create({ data: {
+      companyId: f.companyId, employeeNumber: randomUUID(), firstName: 'Harian', lastName: 'Potong', fullName: 'Harian Potong',
+    } });
+    await mockDatabase.employeeSalary.create({ data: {
+      companyId: f.companyId, employeeId: worker.id, baseSalary: '200.00', payBasis: 'DAILY', effectiveDate: new Date('2026-09-01'),
+    } });
+    await mockDatabase.attendance.createMany({ data: [
+      { companyId: f.companyId, employeeId: worker.id, date: new Date('2026-10-01'), status: 'PRESENT' },
+      { companyId: f.companyId, employeeId: worker.id, date: new Date('2026-10-02'), status: 'PRESENT' },
+    ] });
+
+    const completed = await run(f);
+    const slip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: completed.id, employeeId: worker.id } });
+    const components = await mockDatabase.payslipComponent.findMany({
+      where: { payslipId: slip.id }, include: { salaryComponent: true },
+    });
+    // Basis upah = 400 (2 hari × 200), tarif default: JHT 2% + JP 1% = 12,
+    // JKN 1% = 4. Bruto 400/bulan jauh di bawah PTKP, jadi PPh 21 nol.
+    expect(components.find((row) => row.salaryComponent.code === 'BPJS-TK')?.amount.toString()).toBe('12');
+    expect(components.find((row) => row.salaryComponent.code === 'BPJS-KES')?.amount.toString()).toBe('4');
+    expect(Number(components.find((row) => row.salaryComponent.code === 'PPH21')?.amount ?? 0)).toBe(0);
+    expect(Number(slip.totalDeductions)).toBe(16);
+    expect(Number(slip.netPay)).toBe(Number(slip.totalEarnings) - 16);
+  });
+
+  /**
+   * Void run REGULAR harus mengembalikan klaim EWA-nya: uang advance sudah di
+   * tangan karyawan, dan baris DEDUCTED yang menunjuk run VOIDED tidak akan
+   * pernah dipotong run pengganti (query pending menyaring payrollRunId null)
+   * — perusahaan kehilangan advance itu diam-diam. Prinsip yang sama dengan
+   * restore klaim pesangon/koreksi; rapel dan pencairan cuti mengikuti bentuk
+   * updateMany yang identik.
+   */
+  it('void of a REGULAR run returns its EWA claim so the replacement run deducts it again', async () => {
+    const f = await fixture();
+    const { person } = await employee(f);
+    const advance = await ewa(f, person.id);
+
+    const first = await run(f);
+    expect(await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: advance.id } }))
+      .toMatchObject({ status: 'DEDUCTED', payrollRunId: first.id });
+
+    await runInRequestContext(
+      { user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+      () => service.voidPayrollRun(first.id, f.maker),
+    );
+    const restored = await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: advance.id } });
+    expect(restored.status).toBe('PAID');
+    expect(restored.payrollRunId).toBeNull();
+    expect(restored.deductedAt).toBeNull();
+    expect(restored.amountDeductedPayroll).toBeNull();
+
+    const second = await run(f);
+    expect(await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: advance.id } }))
+      .toMatchObject({ status: 'DEDUCTED', payrollRunId: second.id });
+  });
 });

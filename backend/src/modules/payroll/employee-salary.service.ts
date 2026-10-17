@@ -135,6 +135,12 @@ export const employeeSalaryService = {
         id, companyId, deletedAt: null, employee: { companyId, deletedAt: null, AND: [employeeWhere] },
       }, include: { components: true } });
       if (!salary) throw new NotFoundError('Employee salary not found in the permitted payroll scope');
+      // Invarian create (DTO refine) berlaku juga di sini: PATCH yang
+      // menambahkan alokasi ke gaji DAILY akan ditolak keras oleh run
+      // payroll, jadi tolak di pintu masuknya.
+      if (salary.payBasis === 'DAILY' && data.components?.length) {
+        throw new ConflictError('A DAILY-basis salary cannot carry monthly component allocations');
+      }
       const financialChange = data.baseSalary !== undefined || data.currency !== undefined || data.effectiveDate !== undefined || data.components !== undefined;
       if (financialChange && await database.payslip.findFirst({ where: { employeeSalaryId: id }, select: { id: true } })) {
         throw new ConflictError('This salary allocation has been used by payroll; create a new allocation for financial changes');
@@ -150,6 +156,9 @@ export const employeeSalaryService = {
         // caller does not replace its financial fields/components.
         parse(createEmployeeSalarySchema, {
           employeeId: salary.employeeId, baseSalary: data.baseSalary ?? salary.baseSalary.toNumber(),
+          // Tanpa payBasis tersimpan, refine DAILY-tanpa-komponen tidak pernah
+          // bisa menyala di jalur re-aktivasi.
+          payBasis: salary.payBasis,
           currency: data.currency ?? salary.currency, effectiveDate: data.effectiveDate ?? salary.effectiveDate.toISOString(),
           components: data.components ?? salary.components.filter(row => row.isActive).map(row => ({ salaryComponentId: row.salaryComponentId, amount: row.amount.toNumber() })),
         });
