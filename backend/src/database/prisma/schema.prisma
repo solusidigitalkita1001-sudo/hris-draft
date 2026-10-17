@@ -125,6 +125,15 @@ model Company {
   attendanceDevices                     AttendanceDevice[]
   attendanceDevicePunches               AttendanceDevicePunch[]
   payrollArrears                        PayrollArrears[]
+  payrollCorrections                    PayrollCorrection[]
+  severancePayments                     SeverancePayment[]
+  customFieldDefinitions                CustomFieldDefinition[]
+  employeeCustomFieldValues             EmployeeCustomFieldValue[]
+  hrTickets                             HrTicket[]
+  feedPosts                             FeedPost[]
+  kudos                                 Kudos[]
+  projects                              Project[]
+  timesheetEntries                      TimesheetEntry[]
   collectiveLeaves                      CollectiveLeave[]
   webhookSubscriptions                  WebhookSubscription[]
   webhookDeliveries                     WebhookDelivery[]
@@ -419,7 +428,9 @@ model EmployeeSalary {
   employeeId    String    @map("employee_id") @db.VarChar(36)
   companyId     String    @map("company_id") @db.VarChar(36)
   effectiveDate DateTime  @map("effective_date")
+  /// Untuk payBasis DAILY ini adalah TARIF SEHARI, bukan gaji sebulan.
   baseSalary    Decimal   @map("base_salary") @db.Decimal(15, 2)
+  payBasis      PayBasis  @default(MONTHLY) @map("pay_basis")
   currency      String    @default("IDR") @db.VarChar(10)
   isActive      Boolean   @default(true) @map("is_active")
   notes         String?   @db.Text
@@ -567,6 +578,8 @@ model Payslip {
   paymentTransactions    PayrollPaymentTransaction[]
   loanDeductionSnapshots PayrollLoanDeductionSnapshot[]
   arrears                PayrollArrears[]
+  /// Koreksi yang terdaftar ATAS payslip ini (nominalnya salah saat dibayar).
+  correctionSources      PayrollCorrection[] @relation("CorrectionSource")
   leaveEncashments       LeaveEncashment[]
 
   @@index([payrollRunId])
@@ -2453,6 +2466,14 @@ model Employee {
   attendances                                   Attendance[]
   attendanceDevicePunches                       AttendanceDevicePunch[]
   payrollArrears                                PayrollArrears[]
+  payrollCorrections                            PayrollCorrection[]
+  severancePayments                             SeverancePayment[]
+  customFieldValues                             EmployeeCustomFieldValue[]
+  hrTickets                                     HrTicket[]
+  feedPosts                                     FeedPost[]
+  kudosGiven                                    Kudos[]    @relation("KudosFrom")
+  kudosReceived                                 Kudos[]    @relation("KudosTo")
+  timesheetEntries                              TimesheetEntry[]
   leaveEncashments                              LeaveEncashment[]
   employmentContracts                           EmploymentContract[]
   attendanceCorrections                         AttendanceCorrection[]
@@ -3171,6 +3192,7 @@ model Resignation {
   company    Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
   employee   Employee        @relation("ResignationEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
   clearances ExitClearance[]
+  severancePayment SeverancePayment?
 
   @@index([companyId])
   @@index([employeeId])
@@ -5601,6 +5623,308 @@ enum PayrollArrearsStatus {
   APPLIED
   /// Dibatalkan HR sebelum dibayar.
   CANCELLED
+}
+
+/// Koreksi nominal atas payslip yang SUDAH dibayar (GAP-14/21b). Rapel
+/// (PayrollArrears) membayar orang yang terlewat; koreksi membetulkan angka
+/// yang sudah keluar. Angkanya didaftarkan manusia dengan alasan — bukan hasil
+/// hitung-ulang periode, yang akan menyamarkan perubahan data referensi
+/// sebagai selisih. Dibayar oleh run bertipe CORRECTION.
+model PayrollCorrection {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  companyId       String   @map("company_id") @db.VarChar(36)
+  employeeId      String   @map("employee_id") @db.VarChar(36)
+  /// Payslip yang nominalnya salah. Koreksi melekat pada PEMBAYARAN, bukan pada
+  /// periode: dari payslip kita dapat periode, run, dan nominal yang sudah
+  /// dibayar sekaligus. (Rapel memakai periode justru karena di sana payslip
+  /// tidak ada.)
+  sourcePayslipId String   @map("source_payslip_id") @db.VarChar(36)
+  /// Positif = kurang bayar, negatif = kelebihan bayar. Nol ditolak DTO.
+  amount          Decimal  @db.Decimal(15, 2)
+  /// Bagian `amount` yang belum tertutup run mana pun. Awalnya = amount.
+  remainingAmount Decimal  @map("remaining_amount") @db.Decimal(15, 2)
+  reason          String   @db.Text
+  status          PayrollCorrectionStatus @default(PENDING)
+  registeredBy    String?  @map("registered_by") @db.VarChar(36)
+  appliedRunId    String?  @map("applied_run_id") @db.VarChar(36)
+  payslipId       String?  @map("payslip_id") @db.VarChar(36)
+  appliedAt       DateTime? @map("applied_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  sourcePayslip Payslip  @relation("CorrectionSource", fields: [sourcePayslipId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, status])
+  @@index([employeeId])
+  @@index([sourcePayslipId])
+  @@map("payroll_corrections")
+}
+
+enum PayrollCorrectionStatus {
+  /// Terdaftar, menunggu run CORRECTION berikutnya.
+  PENDING
+  /// Sudah tertutup penuh oleh sebuah run; tidak akan dibayar lagi.
+  APPLIED
+  /// Dibatalkan HR sebelum diterapkan.
+  CANCELLED
+}
+
+/// Pembayaran pesangon (GAP-42). `calculateFinalPayroll` hanya MENGUTIP angka
+/// (UU 13/2003 + PP 68/2009) — baris ini membekukannya saat HR mendaftarkan
+/// pembayaran, lalu run bertipe SEVERANCE membayarnya lewat maker-checker
+/// payroll biasa. Pajaknya final: dihitung sekali di sini, run tidak
+/// menghitung pajak apa pun.
+model SeverancePayment {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  companyId     String   @map("company_id") @db.VarChar(36)
+  employeeId    String   @map("employee_id") @db.VarChar(36)
+  resignationId String   @map("resignation_id") @db.VarChar(36)
+  /// UP + UPMK + UPH (basis PP 68/2009 pasal 1 angka 4), beku saat pendaftaran.
+  grossAmount   Decimal  @map("gross_amount") @db.Decimal(15, 2)
+  /// PPh 21 final atas pesangon (PP 68/2009), beku saat pendaftaran.
+  taxAmount     Decimal  @map("tax_amount") @db.Decimal(15, 2)
+  netAmount     Decimal  @map("net_amount") @db.Decimal(15, 2)
+  /// Rincian perhitungan (faktor, alasan, masa kerja, komponen) supaya angka
+  /// bisa ditelusuri tanpa menghitung ulang.
+  basis         Json
+  status        SeverancePaymentStatus @default(PENDING)
+  registeredBy  String?  @map("registered_by") @db.VarChar(36)
+  appliedRunId  String?  @map("applied_run_id") @db.VarChar(36)
+  payslipId     String?  @map("payslip_id") @db.VarChar(36)
+  appliedAt     DateTime? @map("applied_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  resignation Resignation @relation(fields: [resignationId], references: [id], onDelete: Restrict)
+
+  /// Satu pembayaran pesangon per resignation seumur hidup; baris CANCELLED
+  /// dihidupkan kembali saat didaftar ulang, bukan diduplikasi.
+  @@unique([resignationId])
+  @@index([companyId, status])
+  @@index([employeeId])
+  @@map("severance_payments")
+}
+
+enum SeverancePaymentStatus {
+  PENDING
+  APPLIED
+  CANCELLED
+}
+
+/// Timesheet per proyek (GAP-35): jam kerja dibebankan ke proyek, untuk
+/// perusahaan yang menagih atau menghitung biaya per proyek. Absensi mencatat
+/// KEHADIRAN; timesheet mencatat UNTUK APA jam itu dipakai — keduanya sengaja
+/// tidak digabung.
+model Project {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  companyId String   @map("company_id") @db.VarChar(36)
+  code      String   @db.VarChar(50)
+  name      String   @db.VarChar(150)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  entries TimesheetEntry[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("projects")
+}
+
+model TimesheetEntry {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  companyId  String   @map("company_id") @db.VarChar(36)
+  employeeId String   @map("employee_id") @db.VarChar(36)
+  projectId  String   @map("project_id") @db.VarChar(36)
+  date       DateTime @db.Date
+  hours      Decimal  @db.Decimal(4, 2)
+  notes      String?  @db.VarChar(500)
+  status     TimesheetStatus @default(SUBMITTED)
+  approvedBy String?  @map("approved_by") @db.VarChar(36)
+  approvedAt DateTime? @map("approved_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  /// Satu baris per karyawan+proyek+hari; jam ditambah dengan mengubah baris itu.
+  @@unique([employeeId, projectId, date])
+  @@index([companyId, date])
+  @@index([projectId])
+  @@map("timesheet_entries")
+}
+
+enum TimesheetStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+/// Engagement (GAP-51): feed perusahaan dan kudos antar karyawan. Sengaja
+/// kecil — sebuah tempat menulis dan sebuah cara berterima kasih; reaksi,
+/// lampiran, dan moderasi berjenjang menunggu dipakainya yang ini dulu.
+model FeedPost {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  companyId        String    @map("company_id") @db.VarChar(36)
+  authorEmployeeId String    @map("author_employee_id") @db.VarChar(36)
+  content          String    @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  /// Soft delete: penulisnya menarik, atau moderator menurunkan. Jejaknya tinggal.
+  deletedAt        DateTime? @map("deleted_at")
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  author  Employee @relation(fields: [authorEmployeeId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, createdAt])
+  @@map("feed_posts")
+}
+
+model Kudos {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  companyId      String   @map("company_id") @db.VarChar(36)
+  fromEmployeeId String   @map("from_employee_id") @db.VarChar(36)
+  toEmployeeId   String   @map("to_employee_id") @db.VarChar(36)
+  /// Label bebas v1 ("Teamwork", "Going Extra Mile") — katalog menyusul bila perlu.
+  badge          String   @db.VarChar(50)
+  message        String   @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  from    Employee @relation("KudosFrom", fields: [fromEmployeeId], references: [id], onDelete: Restrict)
+  to      Employee @relation("KudosTo", fields: [toEmployeeId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, createdAt])
+  @@index([toEmployeeId])
+  @@map("kudos")
+}
+
+/// HR helpdesk (GAP-50): satu pintu untuk pertanyaan/permintaan karyawan ke HR
+/// ("slip gaji saya beda", "minta surat keterangan") yang sekarang terjadi di
+/// WhatsApp — tiket berstatus, dengan penanggung jawab dan jejak komentar.
+model HrTicket {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  companyId      String   @map("company_id") @db.VarChar(36)
+  /// Karyawan yang mengajukan.
+  employeeId     String   @map("employee_id") @db.VarChar(36)
+  category       String   @db.VarChar(50)
+  subject        String   @db.VarChar(200)
+  description    String   @db.Text
+  status         HrTicketStatus   @default(OPEN)
+  priority       HrTicketPriority @default(MEDIUM)
+  /// User HR yang memegang tiket.
+  assigneeUserId String?  @map("assignee_user_id") @db.VarChar(36)
+  resolvedAt     DateTime? @map("resolved_at")
+  closedAt       DateTime? @map("closed_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  company  Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employee Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  comments HrTicketComment[]
+
+  @@index([companyId, status])
+  @@index([employeeId])
+  @@map("hr_tickets")
+}
+
+enum HrTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum HrTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model HrTicketComment {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  ticketId     String   @map("ticket_id") @db.VarChar(36)
+  authorUserId String   @map("author_user_id") @db.VarChar(36)
+  body         String   @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ticket HrTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("hr_ticket_comments")
+}
+
+/// Custom field per perusahaan (GAP-39). Definisi milik tenant; V1 hanya
+/// untuk entitas EMPLOYEE. Nilai disimpan sebagai teks dan divalidasi per
+/// tipe saat ditulis — satu kolom generik, bukan satu kolom per tipe.
+model CustomFieldDefinition {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  companyId String   @map("company_id") @db.VarChar(36)
+  entity    CustomFieldEntity @default(EMPLOYEE)
+  /// Kunci stabil snake_case; tidak pernah berubah setelah dibuat supaya
+  /// integrasi dan ekspor tidak pecah. Label yang boleh berganti.
+  key       String   @db.VarChar(64)
+  label     String   @db.VarChar(150)
+  type      CustomFieldType
+  /// Pilihan untuk tipe SELECT (array string).
+  options   Json?
+  required  Boolean  @default(false)
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  values  EmployeeCustomFieldValue[]
+
+  @@unique([companyId, entity, key])
+  @@index([companyId])
+  @@map("custom_field_definitions")
+}
+
+enum CustomFieldEntity {
+  EMPLOYEE
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+}
+
+model EmployeeCustomFieldValue {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  companyId    String   @map("company_id") @db.VarChar(36)
+  definitionId String   @map("definition_id") @db.VarChar(36)
+  employeeId   String   @map("employee_id") @db.VarChar(36)
+  value        String   @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  company    Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  definition CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  employee   Employee              @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([definitionId, employeeId])
+  @@index([companyId])
+  @@index([employeeId])
+  @@map("employee_custom_field_values")
+}
+
+/// Dasar upah (GAP-49). MONTHLY: `baseSalary` = gaji sebulan. DAILY:
+/// `baseSalary` = TARIF SEHARI, dibayar run reguler sebesar tarif × hari hadir.
+/// HOURLY sengaja belum ada: absensi belum mengukur jam kerja reguler.
+enum PayBasis {
+  MONTHLY
+  DAILY
 }
 
 /// Cuti bersama: satu hari yang diumumkan perusahaan sebagai cuti kolektif.

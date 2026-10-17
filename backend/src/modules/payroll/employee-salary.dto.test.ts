@@ -36,3 +36,22 @@ describe('salary allocation input contract', () => {
     expect(updateEmployeeSalarySchema.parse({ components: [], companyId: randomUUID() })).toEqual({ components: [] });
   });
 });
+
+describe('pay basis (GAP-49)', () => {
+  const daily = { employeeId: valid.employeeId, effectiveDate: valid.effectiveDate, baseSalary: 200000 };
+
+  it('accepts DAILY without components and defaults to omission (MONTHLY in the schema default)', () => {
+    expect(createEmployeeSalarySchema.safeParse({ ...daily, payBasis: 'DAILY' }).success).toBe(true);
+    expect(createEmployeeSalarySchema.parse(daily).payBasis).toBeUndefined();
+  });
+
+  it('rejects HOURLY — attendance does not measure regular hours yet', () => {
+    expect(createEmployeeSalarySchema.safeParse({ ...daily, payBasis: 'HOURLY' }).success).toBe(false);
+  });
+
+  it('rejects DAILY with monthly component allocations', () => {
+    expect(createEmployeeSalarySchema.safeParse({
+      ...daily, payBasis: 'DAILY', components: [{ salaryComponentId: componentId, amount: 500000 }],
+    }).success).toBe(false);
+  });
+});

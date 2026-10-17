@@ -96,6 +96,20 @@ router.post(
   respond((req) => payrollPaymentService.exportBatch(paymentContext(req), req.params.id as string))
 );
 
+// GAP-36: pencairan lewat API penyedia (setting disbursement_provider).
+// Melepas uang, maka izin dan pemisahan perannya sama dengan mencatat
+// pembayaran manual: payroll:disburse, dan bukan approver run-nya.
+router.post(
+  '/:id/disburse-api',
+  authorize({ resource: 'payroll', action: 'disburse' }),
+  auditLog({ action: 'DISBURSE_PAYMENT_BATCH_VIA_API', entity: 'PayrollPaymentBatch' }),
+  validate(paymentBatchParamsSchema, 'params'),
+  validate(emptyPaymentActionSchema),
+  respond((req) => payrollPaymentService.disburseViaProvider(
+    paymentContext(req), req.params.id as string, idempotencyKey(req)
+  ))
+);
+
 router.patch(
   '/:id/transactions/:transactionId',
   authorize({ resource: 'payroll', action: 'disburse' }),

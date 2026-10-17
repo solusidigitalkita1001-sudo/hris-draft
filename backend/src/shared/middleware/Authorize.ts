@@ -5,7 +5,7 @@ import { tagPermissions } from '@/shared/openapi/route-metadata';
 
 export type PermissionCheck = {
   resource: string;
-  action: 'create' | 'read' | 'update' | 'delete' | 'approve' | 'disburse' | 'export' | 'process';
+  action: 'create' | 'read' | 'update' | 'delete' | 'approve' | 'disburse' | 'export' | 'process' | 'correct';
 };
 
 function toLegacyPermissionCode(resource: string, action: string) {

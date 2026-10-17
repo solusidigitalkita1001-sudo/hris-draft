@@ -9,6 +9,12 @@ import { annualTaxRecapService, recapToCsv } from './annual-tax-recap.service';
 import { bpjsReportService, bpjsReportToCsv } from './bpjs-report.service';
 import { sippWageExportToCsv } from '@/shared/payroll/sipp-wage-export';
 import type { ArrearsQueryDTO, RegisterArrearsDTO } from './payroll-arrears.dto';
+import { payrollCorrectionService } from './payroll-correction.service';
+import type { CorrectionQueryDTO, RegisterCorrectionDTO } from './payroll-correction.dto';
+import { payrollSeveranceService } from './payroll-severance.service';
+import type { RegisterSeveranceDTO, SeveranceQueryDTO } from './payroll-severance.dto';
+import { monthlyToCsv, payrollBuktiPotongService } from './payroll-bukti-potong.service';
+import type { MonthlyBuktiPotongQueryDTO } from './payroll-arrears.dto';
 import { assertEmployeeInScope } from '@/shared/security/employee-data-scope';
 import { payrollUnlockService } from './payroll-unlock.service';
 import { payslipPinService } from './payslip-pin.service';
@@ -578,6 +584,96 @@ export class PayrollController {
       const companyId = req.user?.companyId;
       if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
       res.json(Result.success(await payrollArrearsService.cancel(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Corrections (koreksi payslip terbayar) ====================
+  async registerCorrection(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const row = await payrollCorrectionService.register(companyId, req.body as RegisterCorrectionDTO);
+      res.status(201).json(
+        Result.success(
+          { id: row.id, employeeId: row.employeeId, sourcePayslipId: row.sourcePayslipId, amount: row.amount, remainingAmount: row.remainingAmount, status: row.status },
+          'Koreksi terdaftar dan akan dibayarkan pada run CORRECTION berikutnya',
+        ),
+      );
+    } catch (error) { next(error); }
+  }
+
+  async findAllCorrections(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as CorrectionQueryDTO;
+      res.json(Result.success(await payrollCorrectionService.list(companyId, query)));
+    } catch (error) { next(error); }
+  }
+
+  async cancelCorrection(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await payrollCorrectionService.cancel(companyId, String(req.params.id))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Bukti potong non-A1 (bahan e-Bupot, GAP-33) ====================
+  async buktiPotong1721VIII(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as MonthlyBuktiPotongQueryDTO;
+      const result = await payrollBuktiPotongService.monthly(companyId, query.periodId, query.employeeId);
+      if (query.format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="bukti-potong-1721-viii-${result.period.code}.csv"`);
+        res.send(monthlyToCsv(result));
+        return;
+      }
+      res.json(Result.success(result));
+    } catch (error) { next(error); }
+  }
+
+  async buktiPotong1721VII(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(
+        await payrollBuktiPotongService.finalSeverance(companyId, String(req.params.severancePaymentId))));
+    } catch (error) { next(error); }
+  }
+
+  // ==================== Severance payments (pesangon) ====================
+  async registerSeverancePayment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const row = await payrollSeveranceService.register(companyId, req.body as RegisterSeveranceDTO);
+      res.status(201).json(
+        Result.success(
+          { id: row.id, employeeId: row.employeeId, resignationId: row.resignationId, grossAmount: row.grossAmount, taxAmount: row.taxAmount, netAmount: row.netAmount, status: row.status },
+          'Pesangon terdaftar dan akan dibayarkan pada run SEVERANCE berikutnya',
+        ),
+      );
+    } catch (error) { next(error); }
+  }
+
+  async findAllSeverancePayments(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      const query = req.query as unknown as SeveranceQueryDTO;
+      res.json(Result.success(await payrollSeveranceService.list(companyId, query)));
+    } catch (error) { next(error); }
+  }
+
+  async cancelSeverancePayment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const companyId = req.user?.companyId;
+      if (!companyId) throw new BadRequestError('Akun ini tidak tertaut ke perusahaan aktif');
+      res.json(Result.success(await payrollSeveranceService.cancel(companyId, String(req.params.id))));
     } catch (error) { next(error); }
   }
 

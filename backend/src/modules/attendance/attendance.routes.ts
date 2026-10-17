@@ -17,6 +17,11 @@ import {
 } from './attendance.dto';
 import { workflowActionSchema } from '@/modules/workflow-engine/workflow-engine.dto';
 import { idempotency } from '@/shared/middleware/Idempotency';
+import multer from 'multer';
+import { auditLog } from '@/shared/middleware/AuditLog';
+
+// Memory storage: the importer parses the buffer and never needs a path.
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = Router();
 router.use(authenticate);
@@ -39,6 +44,13 @@ router.get('/overtime/:id/workflow', authorize({ resource: 'attendance', action:
 router.patch('/overtime/:id/workflow-action', authorize({ resource: 'attendance', action: 'approve' }), validate(workflowActionSchema), attendanceController.applyOvertimeWorkflowAction.bind(attendanceController));
 
 // Attendance Records (admin/HR)
+// GAP-44: riwayat absensi dari CSV (dry run via ?dryRun=true). Static path,
+// declared before /:id like the others.
+router.post('/import',
+  authorize({ resource: 'attendance', action: 'create' }),
+  auditLog({ action: 'IMPORT_ATTENDANCE_HISTORY', entity: 'Attendance' }),
+  csvUpload.single('file'),
+  attendanceController.importHistory.bind(attendanceController));
 router.get('/', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceQuerySchema, 'query'), attendanceController.findAll.bind(attendanceController));
 router.get('/context', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceContextQuerySchema, 'query'), attendanceController.getContext.bind(attendanceController));
 router.get('/summary', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getSummary.bind(attendanceController));

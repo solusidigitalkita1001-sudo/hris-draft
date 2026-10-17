@@ -71,6 +71,9 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'payroll', action: 'disburse', name: 'Disburse Payroll', module: 'payroll', code: 'payroll:disburse' },
     { resource: 'payroll', action: 'export', name: 'Export Payroll', module: 'payroll', code: 'payroll:export' },
     { resource: 'payroll', action: 'process', name: 'Process Payroll', module: 'payroll', code: 'payroll:process' },
+    // Mendaftarkan koreksi mengubah uang yang sudah dibayar; izinnya sendiri,
+    // dengan alasan yang masuk audit log (GAP-14/21b).
+    { resource: 'payroll', action: 'correct', name: 'Register Payroll Correction', module: 'payroll', code: 'payroll:correct' },
 
     // Benefit
     { resource: 'benefit', action: 'create', name: 'Create Benefit Plan', module: 'benefit', code: 'benefit:create' },
@@ -147,6 +150,16 @@ export async function seedPermissions(): Promise<void> {
     { resource: 'daily-activity', action: 'approve', name: 'Approve / Review Daily Activity', module: 'daily-activity', code: 'da:approve' },
     { resource: 'daily-activity', action: 'process', name: 'Process / Complete Daily Activity', module: 'daily-activity', code: 'da:process' },
     { resource: 'daily-activity', action: 'export', name: 'Export Daily Activity Report', module: 'daily-activity', code: 'da:export' },
+
+    // Timesheet per proyek (GAP-35). Mengisi jam sendiri adalah self-service;
+    // yang berizin adalah melihat rekap perusahaan dan menyetujui jam orang.
+    { resource: 'timesheet', action: 'read', name: 'Read Timesheets', module: 'timesheet', code: 'timesheet:read' },
+    { resource: 'timesheet', action: 'approve', name: 'Approve Timesheets', module: 'timesheet', code: 'timesheet:approve' },
+
+    // HR Helpdesk (GAP-50). Membuat tiket adalah self-service tanpa izin;
+    // yang berizin adalah melihat antrian seluruh perusahaan dan memprosesnya.
+    { resource: 'helpdesk', action: 'read', name: 'Read Helpdesk Queue', module: 'helpdesk', code: 'helpdesk:read' },
+    { resource: 'helpdesk', action: 'update', name: 'Process Helpdesk Tickets', module: 'helpdesk', code: 'helpdesk:update' },
 
     // Announcement (Engagement Portal). Reading is open to every signed-in
     // employee — the audience rules decide who sees what — so only the write

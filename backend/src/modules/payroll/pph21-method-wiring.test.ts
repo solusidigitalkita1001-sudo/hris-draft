@@ -35,7 +35,7 @@ describe('the PPh 21 withholding method reaches the calculation', () => {
     // the argument to shouldReconcileAnnualTax, so removing the pass-through
     // left that assertion green — the setting would have been read, stored and
     // ignored, which is the defect class this codebase keeps producing.
-    expect(serviceCode).toMatch(/prorationFactor: slice\.fraction,\s*\n\s*useTer,/);
+    expect(serviceCode).toMatch(/prorationFactor: isDaily \? 1 : slice\.fraction,\s*\n\s*useTer,/);
     expect(employeePayCode).toMatch(/const monthlyTax = policy\.useTer/);
   });
 

@@ -41,13 +41,20 @@ export const createEmployeeSalarySchema = z.object({
   companyId: z.string().uuid().optional(),
   effectiveDate: salaryDateSchema,
   baseSalary: salaryMoneySchema,
+  /// DAILY: baseSalary adalah TARIF SEHARI (GAP-49). HOURLY sengaja belum ada.
+  payBasis: z.enum(['MONTHLY', 'DAILY']).optional(),
   // IDR-only by design: PPh21 brackets, PTKP and BPJS caps are all rupiah-bound.
   // Lifting this needs functional currency + dated FX rates, not a wider literal.
   // See docs/payroll-formulas.md, "Mata uang: IDR saja, dan itu disengaja".
   currency: z.literal('IDR').default('IDR'),
   notes: z.string().optional(),
   components: salaryAllocationsSchema.optional(),
-});
+}).refine(
+  (data) => data.payBasis !== 'DAILY' || !data.components?.length,
+  // Tunjangan bulanan untuk pekerja harian harus jadi keputusan sendiri,
+  // bukan alokasi yang kebetulan ikut terbayar penuh tiap bulan.
+  'A DAILY-basis salary cannot carry monthly component allocations',
+);
 
 export const updateEmployeeSalarySchema = z.object({
   baseSalary: salaryMoneySchema.optional(),

@@ -49,6 +49,7 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       await mockDatabase.salaryComponent.deleteMany({ where: { companyId } });
       await mockDatabase.workCalendar.deleteMany({ where: { companyId } });
       await mockDatabase.companySetting.deleteMany({ where: { companyId } });
+      await mockDatabase.attendance.deleteMany({ where: { companyId } });
       await mockDatabase.employee.deleteMany({ where: { companyId } });
       await mockDatabase.company.deleteMany({ where: { id: companyId } });
       await mockDatabase.companyGroup.deleteMany({ where: { id: { in: groups } } });
@@ -100,8 +101,7 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(await mockDatabase.salaryComponent.count({ where: { companyId: f.companyId } })).toBe(1);
     expect(eventBus.publish).not.toHaveBeenCalled();
   }
-  it.each(['SEVERANCE', 'CORRECTION'] as const)(
-    'refuses to calculate a %s run instead of paying a second month of salary', async runType => {
+  it('refuses a SEVERANCE run when nothing is registered, rolling the run back whole', async () => {
       // The period's REGULAR run already exists and carries the month's pay.
       // One run per period PER TYPE means this second run is created
       // legitimately — it is the calculation that must refuse. It read no
@@ -109,15 +109,27 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       // month of salary: a second complete set of payslips for a period
       // already paid, separately approvable and separately disbursable.
       //
-      // THR used to be in this list and is now calculated properly; severance
-      // is computed and taxed on the exit path instead of as a run, and a
-      // correction run would need to know which period it corrects.
+      // All four types now calculate; a severance run pays the REGISTERED
+      // severance payments (payroll-severance.mysql.test.ts), so with nothing
+      // registered there is nothing it may pay.
       const f = await fixture(); await employee(f);
       const regular = await run(f);
       expect(regular.payslips).toHaveLength(1);
-      await expect(runOfType(f, runType)).rejects.toThrow(
-        new RegExp(`A ${runType} payroll run cannot be calculated`));
+      await expect(runOfType(f, 'SEVERANCE')).rejects.toThrow(/No pending severance payments/);
       // The refusal rolls the second run back whole: no extra slip, no extra run.
+      expect(await mockDatabase.payslip.count({ where: { companyId: f.companyId } })).toBe(1);
+      expect(await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } })).toBe(1);
+    });
+
+  it('refuses a CORRECTION run when nothing is registered, rolling the run back whole', async () => {
+      // A correction run pays the registered correction list and nothing else,
+      // so with nothing registered there is nothing it may pay — refusing is
+      // what keeps the old failure (a second month of salary under the name
+      // CORRECTION) impossible.
+      const f = await fixture(); await employee(f);
+      const regular = await run(f);
+      expect(regular.payslips).toHaveLength(1);
+      await expect(runOfType(f, 'CORRECTION')).rejects.toThrow(/No pending corrections/);
       expect(await mockDatabase.payslip.count({ where: { companyId: f.companyId } })).toBe(1);
       expect(await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } })).toBe(1);
     });
@@ -392,5 +404,71 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(await mockDatabase.salaryComponent.count({
       where: { companyId: f.companyId, code: 'PPH21_ANNUAL_CORRECTION_AUTO' },
     })).toBe(0);
+  });
+
+  /**
+   * GAP-49: a DAILY-basis salary pays tarif × hari hadir. The wage arrives as
+   * the DAILY_WAGE_AUTO component (the engine pays allocations, and a daily
+   * worker has none), absent days are simply unpaid (no alpha deduction on
+   * top), and a month with zero attendance writes no payslip at all.
+   */
+  it('pays a daily-wage employee tarif × hari hadir, and no payslip for zero days', async () => {
+    const f = await fixture();
+
+    const worker = await mockDatabase.employee.create({ data: {
+      companyId: f.companyId, employeeNumber: randomUUID(), firstName: 'Harian', lastName: 'Hadir', fullName: 'Harian Hadir',
+    } });
+    await mockDatabase.employeeSalary.create({ data: {
+      companyId: f.companyId, employeeId: worker.id, baseSalary: '200.00', payBasis: 'DAILY', effectiveDate: new Date('2026-09-01'),
+    } });
+    // Present on one of the calendar's two working days; the other is absent
+    // and must cost nothing beyond not being paid. ALSO present on the 4th —
+    // a non-working date in the calendar: for a daily worker that day is
+    // still wage (tarif × hari HADIR, bukan hari kalender).
+    await mockDatabase.attendance.createMany({ data: [
+      { companyId: f.companyId, employeeId: worker.id, date: new Date('2026-10-01'), status: 'PRESENT' },
+      { companyId: f.companyId, employeeId: worker.id, date: new Date('2026-10-04'), status: 'PRESENT' },
+    ] });
+
+    const ghost = await mockDatabase.employee.create({ data: {
+      companyId: f.companyId, employeeNumber: randomUUID(), firstName: 'Harian', lastName: 'Absen', fullName: 'Harian Absen',
+    } });
+    await mockDatabase.employeeSalary.create({ data: {
+      companyId: f.companyId, employeeId: ghost.id, baseSalary: '200.00', payBasis: 'DAILY', effectiveDate: new Date('2026-09-01'),
+    } });
+
+    const completed = await run(f);
+
+    const slip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: completed.id, employeeId: worker.id } });
+    // Dua hari hadir × 200 — termasuk hari di luar tanggal kerja kalender.
+    expect(Number(slip.totalEarnings)).toBe(400);
+    // payslip.baseSalary carries the month's EARNED base, not the per-day rate.
+    expect(Number(slip.baseSalary)).toBe(400);
+    expect(slip.presentDays).toBe(2);
+    expect(Number(slip.netPay)).toBe(Number(slip.totalEarnings) - Number(slip.totalDeductions));
+    expect((slip.employeeSnapshot as { wage?: { payBasis?: string; dailyRate?: string; paidDays?: number } }).wage)
+      .toMatchObject({ payBasis: 'DAILY', dailyRate: '200', paidDays: 2 });
+
+    const components = await mockDatabase.payslipComponent.findMany({
+      where: { payslipId: slip.id }, include: { salaryComponent: true },
+    });
+    const earning = components.find((row) => row.type === 'ALLOWANCE');
+    expect(earning?.salaryComponent.code).toBe('DAILY_WAGE_AUTO');
+    expect(earning?.amount.toString()).toBe('400');
+    // Absence must not be deducted on top of the unpaid day.
+    expect(components.some((row) => row.name.includes('Alpha'))).toBe(false);
+
+    expect(await mockDatabase.payslip.count({ where: { payrollRunId: completed.id, employeeId: ghost.id } })).toBe(0);
+
+    // THR run over a daily-only population: nobody is paid, but the skip is
+    // WRITTEN — THR pekerja harian tetap hak, HR harus melihat siapa yang
+    // belum dibayar lewat jalur run ini.
+    await mockDatabase.salaryComponent.create({ data: {
+      companyId: f.companyId, code: 'PPH21', name: 'PPh 21', type: 'DEDUCTION', amount: '0', isTaxable: false,
+    } });
+    const thr = await runOfType(f, 'THR');
+    expect(thr.payslips).toHaveLength(0);
+    expect(thr.notes).toContain('THR pekerja harian dilewati');
+    expect(thr.notes).toContain(worker.employeeNumber);
   });
 });

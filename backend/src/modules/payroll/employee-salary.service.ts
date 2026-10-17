@@ -82,7 +82,7 @@ export const employeeSalaryService = {
       const salaries = await database.employeeSalary.findMany({
         where: { companyId, employeeId: employee.id, isActive: true, deletedAt: null },
         select: {
-          baseSalary: true, currency: true,
+          baseSalary: true, currency: true, payBasis: true,
           // The allocation, because "upah sebulan" for THR is gaji pokok plus
           // tunjangan tetap — not base salary alone, which is all this used to
           // read. The same rows give the regular taxable gross the THR's tax

@@ -21,7 +21,17 @@
  * 1721-A1 a tax office accepted. The figures are the part that is expensive to
  * get right and the part that does not change with the layout, so they are
  * assembled here and `verified: false` says plainly what has not happened.
+ *
+ * 12 Okt 2026: dicek baris-per-baris terhadap petunjuk pengisian resmi
+ * (Lampiran PER-2/PJ/2024 hal. 29-32) — label, nomor 1.1, masa mm-mm, dan
+ * semantik angka 14/19/20 (pemberi kerja sebelumnya), 21 (=18-19-20),
+ * 22a (selain masa terakhir) dan 23a (masa terakhir) semuanya cocok.
+ * `verified` tetap false sampai dibandingkan dengan formulir yang DITERIMA
+ * kantor pajak; bukti potong bulanan/final pendampingnya ada di
+ * `bukti-potong.ts`.
  */
+
+import { formatBuktiPotongNumberFor } from './bukti-potong';
 
 /** A line of Bagian B, exactly as the form prints it. */
 export interface Form1721A1Line {
@@ -224,13 +234,9 @@ export function buildForm1721A1(input: Form1721A1Input): Form1721A1 {
  *
  * The sequence is the caller's to keep: it runs for one tax year across every
  * employee and restarts at 1 in January, which is a register this product does
- * not hold yet. Formatting it here at least means the shape is right wherever
- * the number comes from.
+ * not hold yet. Delegates to the one formatter all four forms share
+ * (`bukti-potong.ts`), so a format change cannot land in one and not the other.
  */
 export function formatBuktiPotongNumber(taxMonth: number, taxYear: number, sequence: number): string {
-  if (taxMonth < 1 || taxMonth > 12) throw new Error(`Tax month must be 1..12, received ${taxMonth}`);
-  if (sequence < 1 || sequence > 9_999_999) throw new Error(`Sequence must be 1..9999999, received ${sequence}`);
-  const mm = String(taxMonth).padStart(2, '0');
-  const yy = String(taxYear % 100).padStart(2, '0');
-  return `1.1-${mm}.${yy}-${String(sequence).padStart(7, '0')}`;
+  return formatBuktiPotongNumberFor('1721-A1', taxMonth, taxYear, sequence);
 }

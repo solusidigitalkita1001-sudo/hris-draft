@@ -8,6 +8,7 @@ import { generateBankCsv, resolveEmployeeBankInfo } from '@/shared/payroll/disbu
 import { createPaymentBatchSchema, paymentIdempotencyKeySchema, recordPaymentTransactionSchema } from './payroll-payment.dto';
 import type { CreatePaymentBatchDTO, RecordPaymentTransactionDTO } from './payroll-payment.dto';
 import { settlePayrollPaymentBatch } from './payroll-payment-settlement';
+import { fallbackBankReference, resolveDisbursementProvider } from '@/shared/payroll/disbursement-provider';
 
 export interface PayrollPaymentContext { companyId: string; actorId: string }
 
@@ -270,6 +271,74 @@ export class PayrollPaymentService {
       await tx.payrollPaymentBatch.updateMany({ where: { id, companyId: context.companyId }, data: { status, exportedAt: batch.exportedAt ?? new Date() } });
       await this.log(tx, context, batch, 'MANUAL_BANK_FILE_EXPORTED', status);
       return { batch: batchView(await this.loadBatch(tx, context, id)), mode: 'MANUAL_BANK_FILE_EXPORT' as const, paymentSubmitted: false as const, groups };
+    });
+  }
+
+  /**
+   * Pencairan lewat API penyedia (GAP-36): kirim baris PENDING/FAILED batch
+   * ini ke penyedia yang dipilih perusahaan (setting `disbursement_provider`)
+   * dan terapkan hasilnya ke ledger yang sama dengan jalur manual — PAID
+   * mengisi paidAmount+bankReference, FAILED mengisi alasan, PROCESSING
+   * dibiarkan PENDING untuk diselesaikan lewat record manual.
+   *
+   * Export tetap prasyarat: file bank adalah tinjauan manusia atas apa yang
+   * akan dikirim. Penyedia dipanggil di dalam transaksi karena satu-satunya
+   * penyedia saat ini (SANDBOX) berjalan dalam proses; adapter jaringan nyata
+   * pertama HARUS memindahkan submit ke luar transaksi (outbox + idempotensi
+   * referenceNo di sisi penyedia) — jangan memegang lock MySQL selama HTTP.
+   */
+  async disburseViaProvider(context: PayrollPaymentContext, id: string, key: string): Promise<BatchView> {
+    return this.operate(context, key, 'DISBURSE_VIA_PROVIDER', { id }, async (tx) => {
+      const batch = await this.claimBatch(tx, context, id);
+      assertRecorder(batch, context);
+      if (['DRAFT', 'CANCELLED', 'RECONCILED', 'PAID'].includes(batch.status)) {
+        throw new ConflictError('Export this batch before disbursing via API; closed batches cannot be paid again');
+      }
+
+      const setting = await tx.companySetting.findUnique({
+        where: { companyId_key: { companyId: context.companyId, key: 'disbursement_provider' } },
+        select: { value: true },
+      });
+      const provider = resolveDisbursementProvider(setting?.value);
+      if (!provider) {
+        throw new ConflictError('No disbursement provider is configured; set company setting disbursement_provider (currently supported: SANDBOX)');
+      }
+
+      const pending = batch.transactions.filter((transaction) => transaction.status !== 'PAID');
+      if (!pending.length) throw new ConflictError('Every transaction in this batch is already paid');
+
+      const submission = await provider.submit(batch.id, pending.map((transaction) => ({
+        referenceNo: transaction.referenceNo,
+        bankCode: transaction.bankCode,
+        accountNumber: transaction.accountNumber,
+        accountHolder: transaction.accountHolder,
+        amount: transaction.expectedAmount.toFixed(2),
+      })));
+
+      const byReference = new Map(submission.results.map((result) => [result.referenceNo, result]));
+      for (const transaction of pending) {
+        const result = byReference.get(transaction.referenceNo);
+        // Penyedia yang tidak menjawab sebuah baris = PROCESSING: biarkan
+        // PENDING, jangan mengarang hasil.
+        if (!result || result.status === 'PROCESSING') continue;
+        const updated = await tx.payrollPaymentTransaction.updateMany({
+          where: { id: transaction.id, batchId: id, companyId: context.companyId, status: { in: ['PENDING', 'FAILED'] } },
+          data: result.status === 'PAID'
+            ? { status: 'PAID', paidAmount: transaction.expectedAmount, bankReference: result.providerRef ?? fallbackBankReference(provider.name, submission.providerBatchRef, transaction.referenceNo), failureReason: null, recordedBy: context.actorId, recordedAt: new Date() }
+            : { status: 'FAILED', failureReason: result.failureReason ?? `${provider.name}: failed`, recordedBy: context.actorId, recordedAt: new Date() },
+        });
+        if (updated.count !== 1) throw new ConflictError('A payment transaction changed while the provider was disbursing; reload before retrying');
+      }
+
+      const fresh = await this.loadBatch(tx, context, id);
+      const paid = fresh.transactions.filter((item) => item.status === 'PAID').length;
+      const failed = fresh.transactions.filter((item) => item.status === 'FAILED').length;
+      const status: PayrollPaymentBatchStatus = paid === fresh.transactionCount ? 'PAID'
+        : failed === fresh.transactionCount ? 'FAILED'
+          : failed > 0 ? 'PARTIALLY_FAILED' : 'PROCESSING';
+      await tx.payrollPaymentBatch.updateMany({ where: { id, companyId: context.companyId }, data: { status } });
+      await this.log(tx, context, batch, `API_DISBURSEMENT_${provider.name}`, status);
+      return batchView(await this.loadBatch(tx, context, id));
     });
   }
 

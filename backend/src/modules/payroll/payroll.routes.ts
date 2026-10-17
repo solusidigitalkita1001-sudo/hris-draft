@@ -25,7 +25,9 @@ import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeS
 import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
 import { requireCompanyPayrollAccess } from './payroll-access';
-import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
+import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, monthlyBuktiPotongQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
+import { correctionQuerySchema, registerCorrectionSchema } from './payroll-correction.dto';
+import { registerSeveranceSchema, severanceQuerySchema } from './payroll-severance.dto';
 
 // Memory storage: the importer parses the buffer and never needs a path.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -34,7 +36,7 @@ const router = Router();
 
 router.use('/payment-batches', payrollPaymentRoutes);
 router.use('/formulas', payrollFormulaRoutes);
-router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
+router.use(['/employee-salaries', '/employees/:employeeId/thr', '/runs', '/periods', '/payslips', '/arrears', '/corrections', '/severance-payments', '/annual-tax-recap', '/bukti-potong-1721-a1', '/bukti-potong-1721-viii', '/bukti-potong-1721-vii', '/bpjs-report', '/sipp-wage-export'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -222,6 +224,25 @@ router.get(
   payrollController.buktiPotong1721A1.bind(payrollController)
 );
 
+// Bahan e-Bupot bulanan (1721-VIII) dan final pesangon (1721-VII), GAP-33.
+// Angka pajak per karyawan: guard yang sama dengan rekap tahunan.
+router.get(
+  '/bukti-potong-1721-viii',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(monthlyBuktiPotongQuerySchema, 'query'),
+  auditView({ action: 'VIEW_BUKTI_POTONG_1721_VIII', entity: 'Payslip' }),
+  payrollController.buktiPotong1721VIII.bind(payrollController)
+);
+
+router.get(
+  '/bukti-potong-1721-vii/:severancePaymentId',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  auditView({ action: 'VIEW_BUKTI_POTONG_1721_VII', entity: 'SeverancePayment' }),
+  payrollController.buktiPotong1721VII.bind(payrollController)
+);
+
 // ==================== Arrears (rapel periode tertutup) ====================
 // Money for a period that can no longer be re-run, so the same guards as runs:
 // payroll company access before the audit middleware reads anything.
@@ -249,6 +270,65 @@ router.delete(
   auditLog({ action: 'CANCEL', entity: 'PayrollArrears', model: 'payrollArrears' }),
   validate(idParamSchema, 'params'),
   payrollController.cancelArrears.bind(payrollController)
+);
+
+// ==================== Corrections (payslip yang sudah dibayar) ====================
+// Changing paid money: its own permission (payroll:correct), a mandatory
+// reason, and the same company guard as runs. Paid by a CORRECTION run.
+router.get(
+  '/corrections',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(correctionQuerySchema, 'query'),
+  payrollController.findAllCorrections.bind(payrollController)
+);
+
+router.post(
+  '/corrections',
+  authorize({ resource: 'payroll', action: 'correct' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CREATE', entity: 'PayrollCorrection' }),
+  validate(registerCorrectionSchema, 'body'),
+  payrollController.registerCorrection.bind(payrollController)
+);
+
+router.post(
+  '/corrections/:id/cancel',
+  authorize({ resource: 'payroll', action: 'correct' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CANCEL', entity: 'PayrollCorrection', model: 'payrollCorrection' }),
+  validate(idParamSchema, 'params'),
+  payrollController.cancelCorrection.bind(payrollController)
+);
+
+// ==================== Severance payments (pesangon) ====================
+// The figures are frozen at registration (UU 13/2003 + PP 68/2009 final tax)
+// and paid by a SEVERANCE run. Registering is run preparation, so it sits
+// behind the same payroll:process the run creator holds.
+router.get(
+  '/severance-payments',
+  authorize({ resource: 'payroll', action: 'read' }),
+  requireCompanyPayrollAccess,
+  validate(severanceQuerySchema, 'query'),
+  payrollController.findAllSeverancePayments.bind(payrollController)
+);
+
+router.post(
+  '/severance-payments',
+  authorize({ resource: 'payroll', action: 'process' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CREATE', entity: 'SeverancePayment' }),
+  validate(registerSeveranceSchema, 'body'),
+  payrollController.registerSeverancePayment.bind(payrollController)
+);
+
+router.post(
+  '/severance-payments/:id/cancel',
+  authorize({ resource: 'payroll', action: 'process' }),
+  requireCompanyPayrollAccess,
+  auditLog({ action: 'CANCEL', entity: 'SeverancePayment', model: 'severancePayment' }),
+  validate(idParamSchema, 'params'),
+  payrollController.cancelSeverancePayment.bind(payrollController)
 );
 
 // ==================== Payroll Periods ====================

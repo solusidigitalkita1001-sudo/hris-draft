@@ -72,6 +72,12 @@ export class PayrollArrearsService {
     if (salary.currency !== 'IDR') {
       throw new BadRequestError('Arrears currently support IDR salary allocations');
     }
+    // GAP-49: baseSalary pekerja harian adalah tarif sehari; rumus bulanan di
+    // bawah akan menghitung "sebulan" sebesar satu hari. Hari yang terlewat
+    // bagi pekerja harian harus dibayar sadar lewat koreksi, bukan rapel.
+    if (salary.payBasis === 'DAILY') {
+      throw new BadRequestError('Arrears derive a monthly figure; a daily-wage employee is paid missed days via a payroll correction instead');
+    }
 
     const allowances = salary.components.filter((row) => row.salaryComponent.type === 'ALLOWANCE');
     const monthlyGross = allowances.reduce(

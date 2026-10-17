@@ -208,6 +208,11 @@ export class OnboardingService {
     if (!activeSalary) {
       throw new BadRequestError('Data gaji aktif karyawan tidak ditemukan');
     }
+    // GAP-49: pesangon UU 13/2003 dihitung dari upah SEBULAN; baseSalary
+    // pekerja harian adalah tarif sehari, jadi angka di bawah akan salah 25x.
+    if (activeSalary.payBasis === 'DAILY') {
+      throw new BadRequestError('Pesangon pekerja harian belum didukung; dasar upahnya tarif per hari, bukan upah sebulan');
+    }
 
     const result = calculateSeverance({
       monthlyWage: Number(activeSalary.baseSalary),

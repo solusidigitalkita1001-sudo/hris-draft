@@ -1597,3 +1597,112 @@ Dihitung dengan memberi nilai separuh untuk empat gap sebagian: **89,7%**.
 4. **27 dari 40 yang tertutup memakai verdict 5 Oktober**, bukan pembacaan hari
    ini. Kalau ada satu yang regresi dalam dua hari, angka ini tidak akan
    menangkapnya — yang menangkapnya CI, dan CI hijau.
+
+
+---
+
+## 11 Oktober 2026 — GAP-14 / GAP-21b DITUTUP
+
+Run bertipe `CORRECTION` kini dihitung, bukan ditolak. Bukti di kode:
+
+- `backend/src/modules/payroll/payroll-correction.service.ts` — daftar koreksi
+  per payslip terbayar (`POST/GET /payroll/corrections`, cancel), izin baru
+  `payroll:correct`, satu `PENDING` per payslip.
+- `backend/src/modules/payroll/payroll.service.ts:calculateCorrectionPayroll`
+  — dipanggil dari `calculatePayroll` sejajar cabang THR; kurang bayar dibayar
+  penuh, kelebihan bayar jadi potongan dengan netto tidak pernah negatif,
+  sisanya tetap `PENDING`; pajak marginal di periode pembayaran
+  (TER/annualized).
+- Model `PayrollCorrection` (`payroll_corrections`), masuk
+  `COMPANY_SCOPED_MODELS`.
+- Terverifikasi sampai MySQL nyata: `payroll-correction.mysql.test.ts`
+  (register → run CORRECTION → APPLIED + jejak; kelebihan bayar melebihi
+  earning → netto 0, sisa PENDING).
+
+Desain dan alasannya: `docs/superpowers/specs/2026-10-08-payroll-correction-run-design.md`.
+Dengan ini kolom "sebagian" audit 7 Oktober berkurang jadi 3 (GAP-33 e-Bupot,
+GAP-42 run SEVERANCE, GAP-44 importer absensi/saldo cuti): tertutup **41/51**.
+
+## 11 Oktober 2026 — GAP-42 DITUTUP
+
+Run bertipe `SEVERANCE` kini membayar pesangon, bukan ditolak:
+
+- `backend/src/modules/payroll/payroll-severance.service.ts` — pendaftaran
+  membekukan hasil `onboarding.calculateFinalPayroll` (UU 13/2003 + PPh 21
+  final PP 68/2009) per resignation APPROVED/COMPLETED.
+- `payroll.service.ts:calculateSeverancePayroll` — run membayar angka beku
+  lewat maker-checker biasa; tidak menghitung ulang, tidak memajaki ulang.
+- Model `SeverancePayment` (`severance_payments`), masuk `COMPANY_SCOPED_MODELS`.
+- Terverifikasi sampai MySQL nyata: `payroll-severance.mysql.test.ts`.
+
+Kolom "sebagian" audit 7 Oktober tinggal 2 (GAP-33 e-Bupot, GAP-44 importer
+absensi/saldo cuti): tertutup **42/51**.
+
+## 11 Oktober 2026 — GAP-49 DITUTUP (DAILY; HOURLY sengaja ditunda)
+
+- `EmployeeSalary.payBasis` (`MONTHLY|DAILY`) + migrasi; DAILY = tarif sehari.
+- `payroll.service.ts` run reguler: komponen `DAILY_WAGE_AUTO` = tarif × hari
+  hadir; pajak/BPJS/potongan lewat mesin yang sama; alpha dan cuti-tidak-
+  dibayar dilewati; 0 hadir → tanpa payslip.
+- Jalur berasumsi bulanan menolak/melewati DAILY: THR (run + endpoint), rapel,
+  pesangon — pesan eksplisit, bukan angka salah 25×.
+- Terverifikasi sampai MySQL nyata (test upah harian di
+  `payroll-calculation.mysql.test.ts`). Rincian: docs/payroll-daily-wage.md.
+- HOURLY ditunda sadar: absensi belum mengukur jam kerja reguler.
+
+Terbuka tersisa 6 (35, 36, 39, 48, 50, 51 — semuanya keputusan produk);
+sebagian tersisa 2 (GAP-33 e-Bupot, GAP-44 importer): tertutup **43/51**.
+
+## 11 Oktober 2026 — GAP-44 DITUTUP
+
+Importer migrasi kini lengkap: master karyawan (#60), master gaji (#60),
+riwayat absensi (`attendance-import.service.ts`, `POST /attendance/import`),
+dan saldo cuti awal (`leave-balance-import.service.ts`,
+`POST /leave/balances/import`) — semuanya dengan dry run dan error per baris.
+
+Sisa: terbuka 6 (semuanya keputusan produk — 35, 36, 39, 48, 50, 51),
+sebagian 1 (GAP-33: SIPP sudah, e-Bupot belum): tertutup **44/51 (86%)**.
+
+---
+
+## 11 Oktober 2026 (sore) — enam gap "keputusan produk" DIPUTUSKAN: dibangun
+
+Keputusan produk yang audit 5–7 Oktober catat sebagai belum pernah diambil,
+hari ini diambil (dibangun, v1 minimal yang benar) dan dikerjakan:
+
+| Gap | Yang dibangun | Bukti di kode |
+|---|---|---|
+| GAP-39 custom field | definisi per tenant (TEXT/NUMBER/DATE/SELECT) + nilai per karyawan, validasi per tipe saat tulis | `modules/custom-field/` |
+| GAP-50 helpdesk | tiket karyawan→HR berstatus + komentar; self-service vs antrian HR (`helpdesk:read/update`) | `modules/helpdesk/` |
+| GAP-51 engagement | feed perusahaan (soft delete, moderasi via `announcement:approve`) + kudos | `modules/engagement/` |
+| GAP-35 timesheet | proyek + jam per proyek per hari, total hari ≤ 24 jam, approval atasan (`timesheet:approve`), rekap jam APPROVED | `modules/timesheet/` |
+| GAP-48 karier publik | endpoint publik ber-rate-limit, hidup hanya bila `public_career_page_enabled`, lamaran masuk ATS yang ada | `modules/careers/` |
+| GAP-36 API bank | abstraksi `DisbursementProvider` + SANDBOX deterministik, `POST /payment-batches/:id/disburse-api` ke ledger manual yang sama | `shared/payroll/disbursement-provider.ts`, `payroll-payment.service.ts` |
+
+Catatan jujur per batas v1: HOURLY (timesheet mengukur jam proyek, bukan dasar
+upah); adapter bank NYATA butuh kredensial + outbox (tertulis di kodenya);
+upload CV di halaman karier belum (resumeUrl); webhook asinkron penyedia
+menunggu adapter nyata pertama.
+
+**Daftar GAP-01..51: tidak ada lagi yang berstatus TERBUKA.** Sisa satu yang
+sebagian: GAP-33 (SIPP ada, e-Bupot menunggu contoh berkas resmi dari DJP).
+Tertutup **50/51**.
+
+## 12 Oktober 2026 — GAP-33 DITUTUP: daftar GAP-01..51 TUNTAS (51/51)
+
+Separuh terakhir (e-Bupot) ditutup setelah user menyediakan Lampiran I
+PER-2/PJ/2024 resmi:
+
+- `shared/payroll/bukti-potong.ts` — builder 1721-VIII (bulanan, `1.5`) dan
+  1721-VII (final pesangon, `1.4`), ditranskripsi dari formulir + petunjuk
+  pengisiannya; 1721-A1 lama diverifikasi baris-per-baris terhadap petunjuk
+  yang sama.
+- `GET /payroll/bukti-potong-1721-viii?periodId=` (JSON/CSV, seluruh karyawan
+  per masa) dan `GET /payroll/bukti-potong-1721-vii/:severancePaymentId`.
+- Batas yang jujur: keluaran adalah data formulir untuk e-Bupot, bukan berkas
+  impor aplikasi DJP; `verified:false` sampai dibandingkan formulir yang
+  diterima kantor pajak. Lihat docs/bukti-potong-ebupot.md.
+
+**Status akhir daftar: 51/51 — tidak ada yang terbuka, tidak ada yang
+sebagian.** Pengukuran berikutnya mulai dari daftar kapabilitas baru, bukan
+dari sisa.

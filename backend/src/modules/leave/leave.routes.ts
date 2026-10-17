@@ -40,6 +40,10 @@ const storage = multer.diskStorage({
   },
 });
 
+// Memory storage for the CSV importer: it parses the buffer and never needs a
+// path, and the attachment uploader's mime allowlist is for documents, not CSV.
+const csvImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
 const upload = multer({
   storage,
   limits: { fileSize: config.upload.maxFileSize },
@@ -137,6 +141,13 @@ router.get('/', authorize({ resource: 'leave', action: 'read' }), leaveControlle
 router.get('/balances/employee', authorize({ resource: 'leave', action: 'read' }), leaveController.getBalances.bind(leaveController));
 router.post('/balances', authorize({ resource: 'leave', action: 'create' }), auditLog({ action: 'SET_BALANCE', entity: 'LeaveBalance' }), validate(createLeaveBalanceSchema), leaveController.setBalance.bind(leaveController));
 router.post('/balances/accrue', authorize({ resource: 'leave', action: 'create' }), auditLog({ action: 'YEARLY_ACCRUE', entity: 'LeaveBalance' }), validate(triggerYearlyAccrualSchema), leaveController.triggerYearlyAccrual.bind(leaveController));
+// GAP-44: saldo cuti awal dari CSV (dry run via ?dryRun=true) — POST /balances
+// dalam bentuk massal, untuk migrasi pelanggan yang datang di tengah tahun.
+router.post('/balances/import',
+  authorize({ resource: 'leave', action: 'create' }),
+  auditLog({ action: 'IMPORT_LEAVE_BALANCE', entity: 'LeaveBalance' }),
+  csvImportUpload.single('file'),
+  leaveController.importBalances.bind(leaveController));
 router.get('/:id', authorize({ resource: 'leave', action: 'read' }), leaveController.findById.bind(leaveController));
 router.post('/', authorize({ resource: 'leave', action: 'create' }), validate(createLeaveRequestSchema), idempotency(), leaveController.create.bind(leaveController));
 // Upload lampiran cuti (wajib untuk pengajuan < H-7 atau tipe cuti tertentu).

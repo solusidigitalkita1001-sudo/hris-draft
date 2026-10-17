@@ -10,21 +10,28 @@ export async function seedRolePermissions(): Promise<void> {
   const permissions = await prisma.permission.findMany();
 
   const roleMap = new Map(roles.map((r) => [r.code, r.id]));
+  // Seed 02 membuat semua role sistem; kalau salah satunya hilang, gagal
+  // bersuara jauh lebih baik daripada menetapkan izin ke role undefined.
+  const requireRole = (code: string): string => {
+    const id = roleMap.get(code);
+    if (!id) throw new Error(`Role ${code} belum ter-seed; jalankan seed roles lebih dulu`);
+    return id;
+  };
 
   // SUPER_ADMIN - all permissions
-  const superAdminId = roleMap.get('SUPER_ADMIN')!;
+  const superAdminId = requireRole('SUPER_ADMIN');
   const allPermIds = permissions.map((p) => p.id);
   await assignPermissionsToRole(superAdminId, allPermIds);
 
   // GROUP_ADMIN - almost all except super admin specific
-  const groupAdminId = roleMap.get('GROUP_ADMIN')!;
+  const groupAdminId = requireRole('GROUP_ADMIN');
   const groupAdminPerms = permissions
     .filter((p) => !['auth:impersonate'].includes(p.code))
     .map((p) => p.id);
   await assignPermissionsToRole(groupAdminId, groupAdminPerms);
 
   // COMPANY_ADMIN
-  const companyAdminId = roleMap.get('COMPANY_ADMIN')!;
+  const companyAdminId = requireRole('COMPANY_ADMIN');
   const companyAdminPerms = permissions
     .filter((p) =>
       [
@@ -58,7 +65,7 @@ export async function seedRolePermissions(): Promise<void> {
   await assignPermissionsToRole(companyAdminId, companyAdminPerms);
 
   // HR_MANAGER
-  const hrManagerId = roleMap.get('HR_MANAGER')!;
+  const hrManagerId = requireRole('HR_MANAGER');
   const hrManagerPerms = permissions
     .filter((p) =>
       [
@@ -74,7 +81,9 @@ export async function seedRolePermissions(): Promise<void> {
         // HR management prepares the run; approval and release belong to
         // other roles so the separation of duties payroll already enforces
         // (creator != approver != disburser) can actually be satisfied.
-        'payroll:read', 'payroll:export', 'payroll:process',
+        'payroll:read', 'payroll:export', 'payroll:process', 'payroll:correct',
+        'helpdesk:read', 'helpdesk:update',
+        'timesheet:read', 'timesheet:approve',
         'benefit:read',
         'performance:create', 'performance:read', 'performance:update',
         'training:create', 'training:read', 'training:update',
@@ -92,7 +101,7 @@ export async function seedRolePermissions(): Promise<void> {
   await assignPermissionsToRole(hrManagerId, hrManagerPerms);
 
   // HR_STAFF
-  const hrStaffId = roleMap.get('HR_STAFF')!;
+  const hrStaffId = requireRole('HR_STAFF');
   const hrStaffPerms = permissions
     .filter((p) =>
       [
@@ -112,19 +121,24 @@ export async function seedRolePermissions(): Promise<void> {
         'document:create', 'document:read',
         'ewa:read',
         'da:read', 'da:process',
+        // Helpdesk adalah pekerjaan harian staf HR: memegang antrian dan
+        // menjawab tiket.
+        'helpdesk:read', 'helpdesk:update',
       ].includes(p.code)
     )
     .map((p) => p.id);
   await assignPermissionsToRole(hrStaffId, hrStaffPerms);
 
   // MANAGER
-  const managerId = roleMap.get('MANAGER')!;
+  const managerId = requireRole('MANAGER');
   const managerPerms = permissions
     .filter((p) =>
       [
         'employee:read',
         'org:read',
         'att:read', 'att:approve',
+        // Jam proyek anak buah disetujui atasannya — orang yang tahu jam itu nyata.
+        'timesheet:read', 'timesheet:approve',
         'leave:read', 'leave:approve',
         'work-calendar:read',
         'permission-request:read', 'permission-request:update',
@@ -141,7 +155,7 @@ export async function seedRolePermissions(): Promise<void> {
   await assignPermissionsToRole(managerId, managerPerms);
 
   // EMPLOYEE
-  const employeeId = roleMap.get('EMPLOYEE')!;
+  const employeeId = requireRole('EMPLOYEE');
   const employeePerms = permissions
     .filter((p) =>
       [
