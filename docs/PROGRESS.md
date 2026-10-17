@@ -943,3 +943,14 @@ lintas-modul yang pantas PR-nya sendiri; `timesheet.list` tanpa batas.
 
 - Sweep serial penuh + MySQL nyata: 2.096 test hijau, 0 gagal; tsc bersih.
 - Drift schema↔migrasi: nol (prisma migrate diff kosong).
+
+## Tugas — CI merah rata sejak 12 Okt: ratchet lint terlampaui
+
+Semua run CI gagal di job backend: `eslint --max-warnings 823` sementara
+branch tumbuh ke 840 warning (0 error). Dibayar sebagian, diratchet sisanya:
+9 warning dihapus (7 non-null assertion seed role → helper `requireRole`
+yang gagal bersuara, 2 di QueueManager → create-then-return), ratchet naik
+823 → 831 (= jumlah eksak di ujung tumpukan branch). Marker test
+money-path-roles diselaraskan (menerima `requireRole`/`roleMap.get`;
+FINANCE sengaja tetap opsional). Fix di-commit di dasar tumpukan lalu
+di-merge naik supaya kelima PR hijau.
