@@ -10,21 +10,28 @@ export async function seedRolePermissions(): Promise<void> {
   const permissions = await prisma.permission.findMany();
 
   const roleMap = new Map(roles.map((r) => [r.code, r.id]));
+  // Seed 02 membuat semua role sistem; kalau salah satunya hilang, gagal
+  // bersuara jauh lebih baik daripada menetapkan izin ke role undefined.
+  const requireRole = (code: string): string => {
+    const id = roleMap.get(code);
+    if (!id) throw new Error(`Role ${code} belum ter-seed; jalankan seed roles lebih dulu`);
+    return id;
+  };
 
   // SUPER_ADMIN - all permissions
-  const superAdminId = roleMap.get('SUPER_ADMIN')!;
+  const superAdminId = requireRole('SUPER_ADMIN');
   const allPermIds = permissions.map((p) => p.id);
   await assignPermissionsToRole(superAdminId, allPermIds);
 
   // GROUP_ADMIN - almost all except super admin specific
-  const groupAdminId = roleMap.get('GROUP_ADMIN')!;
+  const groupAdminId = requireRole('GROUP_ADMIN');
   const groupAdminPerms = permissions
     .filter((p) => !['auth:impersonate'].includes(p.code))
     .map((p) => p.id);
   await assignPermissionsToRole(groupAdminId, groupAdminPerms);
 
   // COMPANY_ADMIN
-  const companyAdminId = roleMap.get('COMPANY_ADMIN')!;
+  const companyAdminId = requireRole('COMPANY_ADMIN');
   const companyAdminPerms = permissions
     .filter((p) =>
       [
@@ -58,7 +65,7 @@ export async function seedRolePermissions(): Promise<void> {
   await assignPermissionsToRole(companyAdminId, companyAdminPerms);
 
   // HR_MANAGER
-  const hrManagerId = roleMap.get('HR_MANAGER')!;
+  const hrManagerId = requireRole('HR_MANAGER');
   const hrManagerPerms = permissions
     .filter((p) =>
       [
@@ -94,7 +101,7 @@ export async function seedRolePermissions(): Promise<void> {
   await assignPermissionsToRole(hrManagerId, hrManagerPerms);
 
   // HR_STAFF
-  const hrStaffId = roleMap.get('HR_STAFF')!;
+  const hrStaffId = requireRole('HR_STAFF');
   const hrStaffPerms = permissions
     .filter((p) =>
       [
@@ -123,7 +130,7 @@ export async function seedRolePermissions(): Promise<void> {
   await assignPermissionsToRole(hrStaffId, hrStaffPerms);
 
   // MANAGER
-  const managerId = roleMap.get('MANAGER')!;
+  const managerId = requireRole('MANAGER');
   const managerPerms = permissions
     .filter((p) =>
       [
@@ -148,7 +155,7 @@ export async function seedRolePermissions(): Promise<void> {
   await assignPermissionsToRole(managerId, managerPerms);
 
   // EMPLOYEE
-  const employeeId = roleMap.get('EMPLOYEE')!;
+  const employeeId = requireRole('EMPLOYEE');
   const employeePerms = permissions
     .filter((p) =>
       [

@@ -80,26 +80,24 @@ export class QueueManager {
       throw new Error('Queue is disabled');
     }
 
-    if (!this.queues.has(name)) {
-      this.queues.set(
-        name,
-        new Queue(name, {
-          connection: this.connection,
-          ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
-          defaultJobOptions: {
-            attempts: config.queue.defaultAttempts,
-            backoff: {
-              type: 'exponential',
-              delay: config.queue.defaultBackoffMs,
-            },
-            removeOnComplete: 1000,
-            removeOnFail: 1000,
-          },
-        })
-      );
-    }
+    const existing = this.queues.get(name);
+    if (existing) return existing;
 
-    return this.queues.get(name)!;
+    const queue = new Queue(name, {
+      connection: this.connection,
+      ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
+      defaultJobOptions: {
+        attempts: config.queue.defaultAttempts,
+        backoff: {
+          type: 'exponential',
+          delay: config.queue.defaultBackoffMs,
+        },
+        removeOnComplete: 1000,
+        removeOnFail: 1000,
+      },
+    });
+    this.queues.set(name, queue);
+    return queue;
   }
 
   getQueueEvents(name: string): QueueEvents {
@@ -107,17 +105,15 @@ export class QueueManager {
       throw new Error('Queue is disabled');
     }
 
-    if (!this.queueEvents.has(name)) {
-      this.queueEvents.set(
-        name,
-        new QueueEvents(name, {
-          connection: this.connection,
-          ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
-        })
-      );
-    }
+    const existing = this.queueEvents.get(name);
+    if (existing) return existing;
 
-    return this.queueEvents.get(name)!;
+    const events = new QueueEvents(name, {
+      connection: this.connection,
+      ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
+    });
+    this.queueEvents.set(name, events);
+    return events;
   }
 
   async enqueue<T>(queueName: string, jobName: string, data: T, options?: JobsOptions): Promise<ReturnType<Queue['add']> | null> {
