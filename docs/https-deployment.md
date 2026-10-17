@@ -50,7 +50,7 @@ docker compose \
   --env-file backend/.env \
   -f docker-compose.prod.yml \
   -f deploy/compose-https.override.yml \
-  up -d --build --force-recreate api api-replica nginx
+  up -d --build --force-recreate backend worker nginx frontend
 ```
 
 For the repository deployment workflow, set the GitHub Actions repository

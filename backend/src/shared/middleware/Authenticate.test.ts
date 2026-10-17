@@ -25,10 +25,11 @@ const decoded = {
   permissions: ['attendance:read'],
 };
 
-function request(token = 'access-token'): AuthenticatedRequest {
+function request(token = 'access-token', originalUrl = '/api/v1/attendance/me'): AuthenticatedRequest {
   return {
     headers: { authorization: `Bearer ${token}` },
     cookies: {},
+    originalUrl,
   } as unknown as AuthenticatedRequest;
 }
 
@@ -36,7 +37,7 @@ describe('authenticate session version', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     verify.mockReturnValue(decoded);
-    findUser.mockResolvedValue({ sessionVersion: 3, status: 'ACTIVE', deletedAt: null } as never);
+    findUser.mockResolvedValue({ sessionVersion: 3, status: 'ACTIVE', deletedAt: null, mustChangePassword: false } as never);
   });
 
   it('attaches a user only when the persisted session version matches', async () => {
@@ -47,14 +48,14 @@ describe('authenticate session version', () => {
 
     expect(findUser).toHaveBeenCalledWith({
       where: { id: 'user-1' },
-      select: { sessionVersion: true, status: true, deletedAt: true },
+      select: { sessionVersion: true, status: true, deletedAt: true, mustChangePassword: true },
     });
     expect(req.user).toMatchObject({ id: 'user-1', companyId: 'company-1' });
     expect(next).toHaveBeenCalledWith();
   });
 
   it('rejects an access token issued before a password change', async () => {
-    findUser.mockResolvedValue({ sessionVersion: 4, status: 'ACTIVE', deletedAt: null } as never);
+    findUser.mockResolvedValue({ sessionVersion: 4, status: 'ACTIVE', deletedAt: null, mustChangePassword: false } as never);
     const next = jest.fn() as NextFunction;
 
     await authenticate(request(), {} as Response, next);
@@ -63,7 +64,7 @@ describe('authenticate session version', () => {
   });
 
   it('rejects a matching token when the account is suspended', async () => {
-    findUser.mockResolvedValue({ sessionVersion: 3, status: 'SUSPENDED', deletedAt: null } as never);
+    findUser.mockResolvedValue({ sessionVersion: 3, status: 'SUSPENDED', deletedAt: null, mustChangePassword: false } as never);
     const next = jest.fn() as NextFunction;
 
     await authenticate(request(), {} as Response, next);
@@ -82,7 +83,7 @@ describe('authenticate session version', () => {
   });
 
   it('treats a stale token as anonymous on an optional route', async () => {
-    findUser.mockResolvedValue({ sessionVersion: 4, status: 'ACTIVE', deletedAt: null } as never);
+    findUser.mockResolvedValue({ sessionVersion: 4, status: 'ACTIVE', deletedAt: null, mustChangePassword: false } as never);
     const req = request();
     const next = jest.fn() as NextFunction;
 
@@ -100,5 +101,45 @@ describe('authenticate session version', () => {
     await optionalAuthenticate(request(), {} as Response, next);
 
     expect(next).toHaveBeenCalledWith(databaseError);
+  });
+});
+
+describe('paksa ganti password awal (mustChangePassword)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    verify.mockReturnValue(decoded);
+    findUser.mockResolvedValue({ sessionVersion: 3, status: 'ACTIVE', deletedAt: null, mustChangePassword: true } as never);
+  });
+
+  it('menolak rute biasa dengan 403 PASSWORD_CHANGE_REQUIRED', async () => {
+    const next = jest.fn() as NextFunction;
+
+    await authenticate(request('token', '/api/v1/employees'), {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403, code: 'PASSWORD_CHANGE_REQUIRED' }));
+  });
+
+  it.each([
+    '/api/v1/auth/change-password',
+    '/api/v1/auth/logout',
+    '/api/v1/auth/me',
+    '/api/v1/auth/refresh',
+    '/api/v1/auth/csrf',
+  ])('mengizinkan %s supaya penggantian password itu sendiri bisa terjadi', async (url) => {
+    const req = request('token', url);
+    const next = jest.fn() as NextFunction;
+
+    await authenticate(req, {} as Response, next);
+
+    expect(req.user).toMatchObject({ id: 'user-1' });
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('tidak menjebak: prefiks mirip (mis. /auth/me-too) tetap ditolak', async () => {
+    const next = jest.fn() as NextFunction;
+
+    await authenticate(request('token', '/api/v1/auth/me-too'), {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
   });
 });
