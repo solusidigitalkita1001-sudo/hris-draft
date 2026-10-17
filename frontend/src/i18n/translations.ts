@@ -22,6 +22,7 @@ const base = {
     'common.refresh': 'Refresh',
     'common.edit': 'Edit',
     'common.delete': 'Hapus',
+    'common.close': 'Tutup',
     'common.active': 'Aktif',
     'common.inactive': 'Nonaktif',
 
@@ -368,6 +369,7 @@ const base = {
     'common.refresh': 'Refresh',
     'common.edit': 'Edit',
     'common.delete': 'Delete',
+    'common.close': 'Close',
     'common.active': 'Active',
     'common.inactive': 'Inactive',
 

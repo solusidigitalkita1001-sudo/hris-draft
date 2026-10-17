@@ -34,6 +34,7 @@ import { PayrollRunCreate } from '@/modules/payroll/pages/PayrollRunCreate';
 import { PayrollRunDetail } from '@/modules/payroll/pages/PayrollRunDetail';
 import { PayslipDetail } from '@/modules/payroll/pages/PayslipDetail';
 const MyPayslipsPage = lazy(() => import('@/modules/payroll/pages/MyPayslipsPage').then((m) => ({ default: m.MyPayslipsPage })));
+const BuktiPotongPage = lazy(() => import('@/modules/payroll/pages/BuktiPotongPage').then((m) => ({ default: m.BuktiPotongPage })));
 
 // Benefit Pages
 import { BenefitPlanList } from '@/modules/benefit/pages/BenefitPlanList';
@@ -357,6 +358,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
             <PayslipDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'payroll/bukti-potong',
+        element: (
+          <ProtectedRoute requiredPermissions={[{ resource: 'payroll', action: 'read' }]}>
+            <BuktiPotongPage />
           </ProtectedRoute>
         ),
       },
