@@ -62,6 +62,8 @@ export interface PayrollRun {
   periodId: string;
   companyId: string;
   name: string;
+  /// REGULAR (default) | THR | CORRECTION | SEVERANCE — menentukan apa yang dibayar run.
+  runType?: 'REGULAR' | 'THR' | 'CORRECTION' | 'SEVERANCE';
   runNumber: number;
   totalEmployees: number;
   totalEarnings: number;
@@ -332,6 +334,68 @@ class PayrollService {
     });
     return response.data;
   }
+
+  // ==================== Bukti potong (bahan e-Bupot, GAP-33) ====================
+  async getBuktiPotongVIII(periodId: string): Promise<BuktiPotongVIIIResult> {
+    const response = await api.get('/payroll/bukti-potong-1721-viii', { params: { periodId } });
+    return response.data.data;
+  }
+
+  /** CSV rekonsiliasi tim pajak — sengaja bukan berkas impor e-Bupot. */
+  async downloadBuktiPotongVIIICsv(periodId: string): Promise<Blob> {
+    const response = await api.get('/payroll/bukti-potong-1721-viii', {
+      params: { periodId, format: 'csv' },
+      responseType: 'blob',
+    });
+    return response.data;
+  }
+
+  async getSeverancePayments(): Promise<SeverancePayment[]> {
+    const response = await api.get('/payroll/severance-payments');
+    return response.data.data;
+  }
+
+  async getBuktiPotongVII(severancePaymentId: string): Promise<BuktiPotongVIIResult> {
+    const response = await api.get(`/payroll/bukti-potong-1721-vii/${severancePaymentId}`);
+    return response.data.data;
+  }
+}
+
+export interface BuktiPotongEmployee {
+  id: string; fullName: string; employeeNumber: string;
+  npwp: string | null; nik: string | null; address: string | null;
+}
+
+export interface Form1721VIII {
+  form: '1721-VIII'; taxObjectCode: string; masaPajak: string;
+  bruto: number; dasarPengenaanPajak: number; tanpaNpwp: boolean;
+  tarifPercent: number; pphDipotong: number;
+}
+
+export interface Form1721VII {
+  form: '1721-VII'; taxObjectCode: string; masaPajak: string;
+  bruto: number; pphDipotong: number; tarifPercent: number;
+}
+
+export interface BuktiPotongVIIIResult {
+  period: { id: string; code: string; name: string };
+  taxMonth: number; taxYear: number;
+  rows: Array<{ employee: BuktiPotongEmployee; form: Form1721VIII }>;
+}
+
+export interface BuktiPotongVIIResult {
+  employee: BuktiPotongEmployee;
+  severancePaymentId: string; resignationId: string;
+  form: Form1721VII;
+}
+
+export interface SeverancePayment {
+  id: string; employeeId: string; resignationId: string;
+  grossAmount: string; taxAmount: string; netAmount: string;
+  status: 'PENDING' | 'APPLIED' | 'CANCELLED';
+  appliedAt?: string | null;
+  employee?: { employeeNumber: string; fullName: string };
+  resignation?: { id: string; lastWorkingDate: string; status: string };
 }
 
 export const payrollService = new PayrollService();

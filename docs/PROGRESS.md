@@ -1064,3 +1064,25 @@ frontend, smoke nyata, baca ulang diff).
 - Smoke end-to-end terhadap server lokal: kategori → aset (depresiasi ikut
   metode kategori) → assign → edit-saat-dipegang (nama ok, status/hapus 409)
   → transfer → outstanding ber-nilai-buku → return → hapus. Semua sesuai.
+
+## Tugas — dua layar demo payroll: jenis run + bukti potong
+
+Dua lubang demo terbesar hasil audit kelayakan jual, keduanya frontend-only
+(API-nya sudah ada dan teruji):
+
+- PayrollRunCreate kini punya pemilih JENIS run (REGULAR/THR/KOREKSI/
+  PESANGON) dengan penjelasan per jenis — run THR/koreksi/pesangon yang jadi
+  jualan utama akhirnya bisa dipicu dari layar, bukan cuma curl.
+- Halaman baru /payroll/bukti-potong (kartu keempat di dashboard payroll):
+  1721-VIII per periode (tabel karyawan/NPWP/masa/bruto/DPP/tarif/PPh +
+  total + unduh CSV rekonsiliasi) dan daftar pesangon dengan detail
+  1721-VII per baris — gerbang backend (hanya APPLIED + run approved)
+  dibiarkan bicara lewat pesan errornya sendiri.
+
+### Status verifikasi
+
+- tsc + build frontend bersih; 45 test frontend hijau; backend tak tersentuh.
+- Smoke browser nyata (Playwright, login admin): pemilih jenis run tampil
+  dengan hint; halaman bukti potong menampilkan tabel VIII berisi data
+  seeded PT Teknologi Maju (8 karyawan, masa 06-2026) dan bagian VII dengan
+  empty state yang benar.

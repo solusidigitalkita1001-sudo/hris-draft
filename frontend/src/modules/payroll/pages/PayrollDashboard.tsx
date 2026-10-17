@@ -120,6 +120,13 @@ export function PayrollDashboard() {
           <h3 className="font-medium text-sm">{t('fin.dash.runs')}</h3>
           <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.runsDesc')}</p>
         </button>
+        <button
+          onClick={() => navigate('/payroll/bukti-potong')}
+          className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-border hover:border-primary/50 transition-colors text-left"
+        >
+          <h3 className="font-medium text-sm">{t('fin.dash.bukti')}</h3>
+          <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.buktiDesc')}</p>
+        </button>
       </div>
 
       {/* Recent Payroll Runs */}

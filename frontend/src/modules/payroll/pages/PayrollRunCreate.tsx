@@ -22,8 +22,19 @@ export function PayrollRunCreate() {
 
   const [periodId, setPeriodId] = useState('');
   const [name, setName] = useState('');
+  const [runType, setRunType] = useState<'REGULAR' | 'THR' | 'CORRECTION' | 'SEVERANCE'>('REGULAR');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Satu periode boleh punya satu run per JENIS; jenis menentukan apa yang
+  // dibayar (gaji bulan itu, THR, koreksi terdaftar, atau pesangon beku).
+  const RUN_TYPES = [
+    { value: 'REGULAR', label: t('fin.runCreate.type.regular'), hint: t('fin.runCreate.typeHint.regular') },
+    { value: 'THR', label: t('fin.runCreate.type.thr'), hint: t('fin.runCreate.typeHint.thr') },
+    { value: 'CORRECTION', label: t('fin.runCreate.type.correction'), hint: t('fin.runCreate.typeHint.correction') },
+    { value: 'SEVERANCE', label: t('fin.runCreate.type.severance'), hint: t('fin.runCreate.typeHint.severance') },
+  ] as const;
+  const selectedType = RUN_TYPES.find((r) => r.value === runType) ?? RUN_TYPES[0];
 
   const loadPeriods = useCallback(async () => {
     if (!companyId) {
@@ -80,6 +91,7 @@ export function PayrollRunCreate() {
         companyId,
         periodId,
         name: trimmedName,
+        runType,
         notes: notes.trim() || undefined,
       });
 
@@ -140,6 +152,16 @@ export function PayrollRunCreate() {
                 required
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t('fin.runCreate.typeLabel')} *</label>
+            <Select2
+              value={runType}
+              onValueChange={(value) => setRunType(value as typeof runType)}
+              options={RUN_TYPES.map((r) => ({ value: r.value, label: r.label }))}
+            />
+            <p className="text-xs text-muted-foreground">{selectedType.hint}</p>
           </div>
 
           <div className="space-y-2">
