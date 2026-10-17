@@ -1096,3 +1096,38 @@ yang gagal bersuara, 2 di QueueManager → create-then-return), ratchet naik
 money-path-roles diselaraskan (menerima `requireRole`/`roleMap.get`;
 FINANCE sengaja tetap opsional). Fix di-commit di dasar tumpukan lalu
 di-merge naik supaya kelima PR hijau.
+
+## Tugas — blocker produksi sisi-repo dilunasi (server menyusul)
+
+Tiga blocker audit yang bisa selesai tanpa menyentuh server:
+
+1. Jalur HTTPS yang rusak diperbaiki: image nginx kini meng-copy nginx.conf
+   repo (yang meng-include sites-enabled — tanpa ini mount override TLS tidak
+   pernah terbaca), vhost TLS ditulis ulang ke topologi prod NYATA (backend
+   tunggal + container frontend, resolver Docker + variabel, bukan
+   api/api-replica + berkas statis peninggalan compose dev), dan CI kini
+   memvalidasi KEDUA mode dengan susunan yang sama seperti produksi.
+   Menyalakan HTTPS tinggal: pasang cert + set HTTPS_ENABLED=true (server).
+2. Data tidak lagi hilang tiap deploy: volume upload_data (backend+worker)
+   dan redis_data di compose prod; scripts/backup-mysql.sh (dump
+   single-transaction + verifikasi arsip + retensi) + docs/backup.md berisi
+   cron satu baris dan prosedur drill restore yang WAJIB dicatat. Pemasangan
+   cron = server.
+3. Password awal kini dipaksa ganti DI SERVER: akun ber-mustChangePassword
+   hanya boleh menyentuh auth/change-password|logout|me|refresh|csrf, sisanya
+   403 PASSWORD_CHANGE_REQUIRED; seed admin kini mustChangePassword:true;
+   frontend mengantar ke form ganti kata sandi. Smoke nyata: login → 403 →
+   ganti password → pulih.
+
+Masih server-side (belum): pasang cron backup + rclone keluar host, pasang
+TLS cert + HTTPS_ENABLED, uptime monitor + error tracking, ganti kredensial
+default MySQL/RabbitMQ.
+
+### Status verifikasi
+
+- tsc backend+frontend bersih; build frontend lulus; 2.271 unit hijau
+  (termasuk 7 test baru gate password); lint 831 = ratchet, 0 error.
+- nginx -t lulus untuk KEDUA mode persis susunan produksi; compose prod
+  tervalidasi; bash -n script backup.
+- Smoke hidup di server dev: 403 PASSWORD_CHANGE_REQUIRED pada rute biasa,
+  allowlist jalan, ganti password membuka akses, password demo dipulihkan.

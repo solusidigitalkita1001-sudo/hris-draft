@@ -183,6 +183,16 @@ api.interceptors.response.use(
       return api(originalRequest);
     }
 
+    // Server memaksa ganti password awal: semua request non-auth dijawab 403
+    // PASSWORD_CHANGE_REQUIRED. Antar user ke form ganti kata sandi di profil
+    // sekali saja — jangan redirect berulang saat sudah di sana.
+    if (error.response?.status === 403
+      && (error.response?.data as { code?: string } | undefined)?.code === 'PASSWORD_CHANGE_REQUIRED'
+      && !window.location.pathname.startsWith('/profile')) {
+      window.location.href = '/profile?reason=password';
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry
       && !SESSION_ENDPOINT.test(originalRequest.url || '')) {
       originalRequest._retry = true;

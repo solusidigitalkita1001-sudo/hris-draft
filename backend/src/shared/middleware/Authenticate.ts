@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { jwtHandler } from '@/shared/security/JWTHandler';
-import { AuthError, ForbiddenError } from '@/shared/exceptions/AppError';
+import { AppError, AuthError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { runInRequestContext } from '@/shared/context/RequestContext';
 import prisma from '@/shared/database/prisma';
 import type { AccessTokenPayload } from '@/shared/security/JWTHandler';
@@ -41,16 +41,43 @@ function extractToken(req: Request): string | undefined {
  * so Prisma middleware / services can access company scope safely.
  */
 async function isCurrentSession(decoded: AccessTokenPayload): Promise<boolean> {
+  const user = await sessionUser(decoded);
+  return user !== null;
+}
+
+/** Baris user untuk sesi yang masih berlaku, atau null bila sesi mati. */
+async function sessionUser(
+  decoded: AccessTokenPayload,
+): Promise<{ mustChangePassword: boolean } | null> {
   const user = await prisma.user.findUnique({
     where: { id: decoded.sub },
-    select: { sessionVersion: true, status: true, deletedAt: true },
+    select: { sessionVersion: true, status: true, deletedAt: true, mustChangePassword: true },
   });
-  return Boolean(
+  const current = Boolean(
     user &&
     !user.deletedAt &&
     !['INACTIVE', 'SUSPENDED'].includes(user.status) &&
     user.sessionVersion === decoded.sessionVersion,
   );
+  return current && user ? { mustChangePassword: user.mustChangePassword } : null;
+}
+
+/**
+ * Akun ber-`mustChangePassword` (password awal dari admin / seed) hanya boleh
+ * menyentuh rute yang dibutuhkan untuk mengganti password itu sendiri —
+ * dipaksa di server, bukan kepercayaan pada frontend. Login tetap berhasil
+ * (flag-nya dikirim di respons login), request lain dijawab 403
+ * PASSWORD_CHANGE_REQUIRED sampai password diganti.
+ */
+const PASSWORD_CHANGE_ALLOWLIST = /^\/api\/v1\/auth\/(change-password|logout|me|refresh|csrf)(?:[/?]|$)/;
+
+function assertPasswordChanged(req: Request, user: { mustChangePassword: boolean }): void {
+  if (user.mustChangePassword && !PASSWORD_CHANGE_ALLOWLIST.test(req.originalUrl)) {
+    throw new AppError(
+      'Password awal harus diganti sebelum memakai aplikasi (POST /auth/change-password)',
+      403, 'PASSWORD_CHANGE_REQUIRED', true,
+    );
+  }
 }
 
 function attachUser(req: AuthenticatedRequest, decoded: AccessTokenPayload, next: NextFunction): void {
@@ -87,9 +114,11 @@ export async function authenticate(req: AuthenticatedRequest, _res: Response, ne
 
   try {
     const decoded = jwtHandler.verifyAccessToken(token);
-    if (!(await isCurrentSession(decoded))) {
+    const user = await sessionUser(decoded);
+    if (!user) {
       throw new AuthError('Access token session is no longer valid');
     }
+    assertPasswordChanged(req, user);
     attachUser(req, decoded, next);
   } catch (error) {
     if (error instanceof AuthError || error instanceof ForbiddenError) {
