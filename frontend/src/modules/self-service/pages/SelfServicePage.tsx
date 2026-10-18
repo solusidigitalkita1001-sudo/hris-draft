@@ -196,8 +196,10 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
       const uploaded = await permissionRequestService.uploadAttachment(attachmentFile);
       await permissionRequestService.create({
         type,
-        startDate: dayjs(startDate).toISOString(),
-        endDate: dayjs(endDate).toISOString(),
+        // Tanggal kalender dikirim apa adanya; mengubahnya jadi instant UTC
+        // memundurkan harinya di zona timur (WIB 00:00 = 17:00Z hari sebelumnya).
+        startDate,
+        endDate,
         duration,
         reason: reason.trim(),
         attachment: uploaded.url,
@@ -339,7 +341,7 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
     try {
       await workCalendarService.createShiftSwapRequest({
         targetEmployeeId,
-        shiftDate: dayjs(shiftDate).hour(12).minute(0).second(0).millisecond(0).toISOString(),
+        shiftDate,
         reason: reason.trim(),
       });
       toast.success(t('ess.selfService.shiftSwap.toast.submitSuccess'));

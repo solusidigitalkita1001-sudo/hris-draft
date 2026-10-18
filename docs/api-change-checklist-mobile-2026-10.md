@@ -89,6 +89,18 @@ berlaku dalam satu company.
 | `POST /assets/:id/return` | body kini divalidasi (400 kalau tak sesuai skema) | `cce5e8a` |
 | `/permission-requests/:id/approve\|reject` | tidak boleh diselesaikan di luar rantai approval yang dikonfigurasi (409/403, bukan 200) | `5f2be50` |
 
+### 1.6 Format tanggal dipin ke `YYYY-MM-DD`
+
+Tanggal izin (`startDate`, `endDate` pada `POST /permission-requests`) dan
+`shiftDate` pada tukar shift dulu `z.string()` tanpa format. Sekarang kontrak
+resminya **`YYYY-MM-DD`** (`backend/src/shared/validators/calendar-date.ts`).
+
+ISO instant masih diterima sebagai jalur kompatibilitas untuk web lama dan
+dinormalkan ke hari yang dimaksud, tapi jangan dipakai dari mobile. Tanggal
+yang tidak valid dijawab `422 VALIDATION_ERROR` — "Tanggal harus YYYY-MM-DD".
+
+Satuan `duration` pada izin: **hari**, pecahan diizinkan (`0.5` = setengah hari).
+
 ---
 
 ## 2. Field baru pada response lama (aditif — aman, tapi berguna)
@@ -213,6 +225,7 @@ Mobile:
 - [ ] Cek fitur admin aset di app — butuh permission `asset:*` sekarang (§1.4)
 - [ ] Parser JSON/enum dibuat toleran nilai tak dikenal (§2)
 - [ ] Tampilkan `carryOverDays` / `carryOverExpiredAt` di layar saldo cuti (§2)
+- [ ] Kirim tanggal sebagai `YYYY-MM-DD`, bukan ISO instant (§1.6)
 - [ ] Kirim `X-Request-Id` per request (§5)
 - [ ] Putuskan adopsi: helpdesk, feed/kudos, timesheet (§3)
 - [ ] Dukung pagination cursor untuk modul baru (§3)

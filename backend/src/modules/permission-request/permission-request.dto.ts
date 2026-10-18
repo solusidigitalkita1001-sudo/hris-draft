@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import { calendarDateSchema } from '@/shared/validators/calendar-date';
 
 export const createPermissionSchema = z.object({
   type: z.enum(['SICK', 'PERSONAL', 'LATE', 'EARLY_LEAVE', 'LEAVE_OFFICE', 'BUSINESS_TRIP', 'WORK_FROM_HOME', 'OTHER']),
-  startDate: z.string(),
-  endDate: z.string(),
+  startDate: calendarDateSchema,
+  endDate: calendarDateSchema,
+  /** Satuan: HARI. Pecahan diizinkan (0.5 = setengah hari). */
   duration: z.number().positive(),
   reason: z.string().min(1).max(1000),
   // Kebijakan bisnis: izin SELALU wajib lampiran. Dibiarkan optional di schema
@@ -14,8 +16,8 @@ export const createPermissionSchema = z.object({
 
 export const updatePermissionSchema = z.object({
   type: z.enum(['SICK', 'PERSONAL', 'LATE', 'EARLY_LEAVE', 'LEAVE_OFFICE', 'BUSINESS_TRIP', 'WORK_FROM_HOME', 'OTHER']).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: calendarDateSchema.optional(),
+  endDate: calendarDateSchema.optional(),
   duration: z.number().positive().optional(),
   reason: z.string().min(1).max(1000).optional(),
 });

@@ -21,8 +21,8 @@ bukan keputusan yang bisa diambil dari kode.
 |---|---|---|
 | BE-01 | Jalur HTTPS **siap di repo**, belum dipasang | DNS, sertifikat, env — DevOps |
 | BE-02 | Skrip fixture **ada**, belum dijalankan di staging | jalankan + serahkan kredensial lewat kanal aman |
-| BE-03 | Kontrak **sudah ada di kode**, dijawab lengkap di bawah | 2 keputusan kecil: satuan `duration`, format tanggal |
-| BE-04 | Dijawab di bawah (envelope, pagination, identity, `shiftDate`, upload) | pin format `shiftDate` + `startDate/endDate` di schema |
+| BE-03 | Kontrak **sudah ada di kode**, dijawab lengkap di bawah | selesai — satuan `duration` dan format tanggal sudah diputuskan & di-merge |
+| BE-04 | Dijawab di bawah (envelope, pagination, identity, `shiftDate`, upload) | selesai — format tanggal sudah dipin di schema |
 | BE-05 | Tooling **ada** (fixture GPS/shift/face), server face match jalan | jalankan fixture + sediakan foto enrollment |
 | BE-06 | Endpoint **sudah ada**, role EMPLOYEE sudah punya izinnya | tidak ada pekerjaan backend — mobile tinggal integrasi |
 | BE-07 | Register/delete token + pengiriman FCM/APNs **sudah ada** | kredensial FCM/APNs per environment + uji e2e |
@@ -126,16 +126,23 @@ Bearer + role (`GROUP_ADMIN`, `COMPANY_ADMIN`, `HR_MANAGER`, `HR_STAFF`,
 `MANAGER`, `EMPLOYEE`). File disimpan privat per `<companyId>/<employeeId>`
 dengan nama acak; direktori `uploads/` tidak pernah di-serve statis.
 
-### Dua hal yang memang belum diputuskan (dan jawaban kami)
+### Dua hal yang sebelumnya menggantung — sudah diputuskan dan sudah di-merge
 
-| Pertanyaan | Kondisi sekarang | Usulan backend |
+| Hal | Keputusan | Implementasi |
 |---|---|---|
-| Satuan `duration` | `z.number().positive()`, disimpan `Float`, **tidak pernah dibaca logika server mana pun** | pakai **hari**, pecahan diizinkan (`0.5` = setengah hari). Kalau mobile lebih suka jam, bilang sekarang — tinggal dicatat di schema sebelum ada data production |
-| Format `startDate`/`endDate` | `z.string()` tanpa validasi format, lalu di-parse jadi `DateTime` | **`YYYY-MM-DD`** (date-only, tanpa timezone — izin itu peristiwa kalender, bukan titik waktu). Kami akan pin regex-nya di schema |
+| Satuan `duration` | **hari**, pecahan diizinkan (`0.5` = setengah hari) | sudah jadi kontrak de-facto: form web memberi label "durasi (hari)" dan validasinya membatasi `duration` <= rentang tanggal. Sekarang dicatat di schema |
+| Format `startDate`/`endDate` dan `shiftDate` | kontrak resmi **`YYYY-MM-DD`** | `shared/validators/calendar-date.ts` — ISO instant tetap diterima demi klien lama, lalu dinormalkan ke hari yang dimaksud |
 
-Timezone: tanggal date-only dibaca apa adanya, jadi tidak ada pergeseran
-hari karena offset perangkat. Jangan kirim ISO instant (`2026-11-02T00:00:00Z`)
-untuk field ini.
+Normalisasinya: `YYYY-MM-DD` disimpan sebagai tengah hari UTC, jadi tidak ada
+rendering zona waktu yang menggeser harinya. Instant (mis.
+`2026-11-01T17:00:00.000Z`, yang di WIB berarti 2 November pukul 00:00)
+dibulatkan ke hari UTC terdekat sehingga tetap tercatat **2 November**.
+
+**Untuk mobile: kirim `YYYY-MM-DD`.** Jangan kirim ISO instant — itu jalur
+kompatibilitas untuk web lama, bukan kontrak yang didukung ke depan. Tanggal
+yang tidak valid dijawab `422 VALIDATION_ERROR` dengan pesan
+"Tanggal harus YYYY-MM-DD".
+
 
 ### Contoh error
 
@@ -178,8 +185,8 @@ kontrak, dan diff-kan di CI mobile — bukan daftar yang disalin tangan.
 
 Klien perlu mendukung ketiganya; jangan paksakan satu model.
 
-**`shiftDate`** — `work-calendar.dto.ts:98` masih `z.string()` tanpa format.
-Sama seperti tanggal izin: kami akan pin **`YYYY-MM-DD`**. Kirim date-only.
+**`shiftDate`** — sudah dipin ke **`YYYY-MM-DD`**, lewat validator yang sama
+dengan tanggal izin (lihat BE-03). Kirim date-only.
 
 **Batas upload** — seragam dari config, bukan per endpoint: **5 MB**,
 `image/jpeg`, `image/png`, `image/gif`, `application/pdf`, plus validasi magic
@@ -280,8 +287,8 @@ Empat breaking change sejak baseline 21 September — detail di
 
 ## Pekerjaan yang backend ambil dari dokumen ini
 
-- [ ] Pin format `startDate`/`endDate` izin dan `shiftDate` ke `YYYY-MM-DD` di schema
-- [ ] Putuskan & dokumentasikan satuan `duration` izin (usulan: hari, pecahan boleh)
+- [x] Pin format `startDate`/`endDate` izin dan `shiftDate` ke `YYYY-MM-DD` di schema
+- [x] Putuskan & dokumentasikan satuan `duration` izin — **hari**, pecahan boleh
 - [ ] Dokumentasikan alur lampiran izin dua langkah di `mobile-api.md` + OpenAPI
 - [ ] Ekspos `runType` di payslip self-service kalau mobile perlu melabeli slip THR
 - [ ] Tambah varian fixture negatif (face mismatch, luar geofence, shift malam) bila QA minta

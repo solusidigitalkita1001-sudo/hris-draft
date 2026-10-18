@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDateSchema } from '@/shared/validators/calendar-date';
 
 const timeSchema = z.string().regex(/^\d{2}:\d{2}$/);
 const dayTypeSchema = z.enum(['WD', 'WS', 'WE', 'NH', 'JL', 'CH', 'RH', 'OT']);
@@ -95,7 +96,7 @@ export const updateShiftFormulaSchema = createShiftFormulaSchema.partial().exten
 
 export const createShiftSwapRequestSchema = z.object({
   targetEmployeeId: z.string().uuid(),
-  shiftDate: z.string(),
+  shiftDate: calendarDateSchema,
   reason: z.string().min(1).max(1000),
 });
 
