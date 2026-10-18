@@ -6,6 +6,10 @@
 > Panduan auth ringkas juga ada di `api-mobile-integration.md`.
 >
 > Baseline: branch `feat/mobile-api-gap`, per 21 September 2026.
+>
+> **Perubahan sesudah baseline ini belum semuanya masuk dokumen ini.** Delta
+> 30 Sep – 18 Okt 2026 ada di `api-change-checklist-mobile-2026-10.md` — baca itu
+> dulu sebelum mengerjakan integrasi baru.
 
 ---
 
