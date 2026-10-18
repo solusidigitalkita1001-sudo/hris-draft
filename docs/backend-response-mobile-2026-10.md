@@ -19,15 +19,15 @@ bukan keputusan yang bisa diambil dari kode.
 
 | ID | Status backend | Sisa pekerjaan |
 |---|---|---|
-| BE-01 | Jalur HTTPS **siap di repo**, belum dipasang | DNS, sertifikat, env — DevOps |
+| BE-01 | Jalur dipilih: **subdomain + Let's Encrypt di VPS**; runbook siap | eksekusi di server: DNS, certbot, env |
 | BE-02 | Skrip fixture **ada**, belum dijalankan di staging | jalankan + serahkan kredensial lewat kanal aman |
 | BE-03 | Kontrak **sudah ada di kode**, dijawab lengkap di bawah | selesai — satuan `duration` dan format tanggal sudah diputuskan & di-merge |
 | BE-04 | Dijawab di bawah (envelope, pagination, identity, `shiftDate`, upload) | selesai — format tanggal sudah dipin di schema |
 | BE-05 | Tooling **ada** (fixture GPS/shift/face), server face match jalan | jalankan fixture + sediakan foto enrollment |
 | BE-06 | Endpoint **sudah ada**, role EMPLOYEE sudah punya izinnya | tidak ada pekerjaan backend — mobile tinggal integrasi |
 | BE-07 | Register/delete token + pengiriman FCM/APNs **sudah ada** | kredensial FCM/APNs per environment + uji e2e |
-| BE-08 | **Tidak ada modul chat sama sekali** | keputusan Product: keluarkan dari scope rilis |
-| BE-09 | Kebijakan, bukan kode | keputusan Product/Legal |
+| BE-08 | **Diputuskan 18 Okt: chat DI LUAR scope rilis** | tidak ada — mobile tetap menampilkan unavailable |
+| BE-09 | **Ditunda** atas keputusan pemilik proyek | blocker submit store; harus selesai sebelum rilis |
 
 ---
 
@@ -42,9 +42,16 @@ Status: **siap dipasang, belum terpasang.**
 - Production **saat ini masih HTTP** di `http://srv540825.hstgr.cloud:8084`
   (API) dan `:8083` (web). Itu host demo, bukan rilis.
 
-Yang dibutuhkan dari DevOps: nama DNS, sertifikat publik (bukan self-signed,
-bukan IP), port 80/443 terbuka, lalu set `APP_URL`, `CORS_ORIGINS`,
-`COOKIE_SECURE=true`, `TLS_CERTIFICATE_PATH`, `TLS_PRIVATE_KEY_PATH`.
+**Keputusan 18 Okt 2026:** subdomain diarahkan ke VPS yang sudah ada,
+sertifikat dari Let's Encrypt, perpanjangan otomatis. Langkah per langkah —
+DNS, `certbot certonly --standalone`, isi `backend/.env`, dan renewal hook yang
+me-reload nginx di dalam container — sudah ditulis di
+[`docs/https-deployment.md`](https-deployment.md) bagian *Issuing the
+certificate on this VPS*.
+
+Yang masih dibutuhkan dari pemilik proyek: nama subdomain dan akses DNS-nya.
+Frontend wajib di-build ulang dengan `VITE_API_URL` versi HTTPS, kalau tidak
+halaman HTTPS akan memanggil API HTTP dan diblokir browser.
 
 Catatan untuk mobile: begitu HTTPS hidup, tidak perlu pengecualian cleartext.
 Sampai itu terjadi, jangan jadikan host demo sebagai basis acceptance.
@@ -252,9 +259,14 @@ notification/resource ID yang kalian butuhkan dan kami sesuaikan payload-nya.
 
 Status: **tidak ada modul chat di backend.** Tidak ada route, model, atau tabel.
 
-Tidak ada kontrak yang bisa diberikan dalam waktu dekat. Rekomendasi backend:
-keluarkan chat dari scope rilis, dan mobile menampilkan fitur itu sebagai
-unavailable — persis seperti yang sudah kalian lakukan.
+**Keputusan pemilik proyek, 18 Oktober 2026: chat dikeluarkan dari scope
+rilis.** Mobile tetap menampilkannya unavailable — persis seperti yang sudah
+kalian lakukan. Tidak ada pekerjaan backend, dan rilis tidak menunggu ini.
+
+Kalau yang dibutuhkan sebenarnya "tempat ngobrol internal" dan bukan pesan
+pribadi 1-on-1, modul engagement sudah hidup dan tinggal dipakai: feed
+perusahaan (`/engagement/posts`) dan kudos antar karyawan (`/engagement/kudos`)
+— lihat §3.2 di checklist.
 
 ## BE-09 — Kebijakan data dan operasional
 
@@ -266,8 +278,14 @@ Bukan ranah kode. Yang sudah ada dari sisi backend:
   terotorisasi.
 
 Consent, retensi/penghapusan, privacy policy, Data Safety, App Privacy,
-monitoring, dan rollback **belum punya keputusan tertulis**. Itu menunggu
-Product/Legal, bukan backend.
+monitoring, dan rollback **belum punya keputusan tertulis**, dan per 18 Oktober
+2026 pemilik proyek memutuskan menundanya ke Product.
+
+Dicatat terbuka supaya tidak mengagetkan di akhir: Google Play (Data Safety) dan
+App Store (App Privacy) menolak submit tanpa deklarasi ini, dan aplikasi ini
+mengumpulkan selfie, lokasi, NIK, NPWP, serta data payroll. Jadi ini bukan item
+yang bisa dilewati, hanya ditunda — dan ia akan menjadi blocker tepat di saat
+rilis mau jalan.
 
 ---
 
