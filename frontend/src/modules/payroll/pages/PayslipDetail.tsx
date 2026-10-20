@@ -136,7 +136,7 @@ export function PayslipDetail() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('fin.common.baseSalary')}</p>
-            <p className="font-medium">Rp {Number(payslip.baseSalary).toLocaleString()}</p>
+            <p className="font-medium">Rp {Number(payslip.baseSalary).toLocaleString('id-ID')}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('fin.common.status')}</p>
@@ -153,12 +153,12 @@ export function PayslipDetail() {
             {allowances.map((comp) => (
               <div key={comp.id} className="flex justify-between text-sm">
                 <span className="text-muted-foreground">{comp.name}</span>
-                <span>Rp {Number(comp.amount).toLocaleString()}</span>
+                <span>Rp {Number(comp.amount).toLocaleString('id-ID')}</span>
               </div>
             ))}
             <div className="flex justify-between text-sm font-medium pt-2 border-t border-border">
               <span>{t('fin.payslip.totalEarnings')}</span>
-              <span className="text-emerald-600">Rp {Number(payslip.totalEarnings).toLocaleString()}</span>
+              <span className="text-emerald-600">Rp {Number(payslip.totalEarnings).toLocaleString('id-ID')}</span>
             </div>
           </div>
         </div>
@@ -170,12 +170,12 @@ export function PayslipDetail() {
             {deductions.map((comp) => (
               <div key={comp.id} className="flex justify-between text-sm">
                 <span className="text-muted-foreground">{comp.name}</span>
-                <span>Rp {Number(comp.amount).toLocaleString()}</span>
+                <span>Rp {Number(comp.amount).toLocaleString('id-ID')}</span>
               </div>
             ))}
             <div className="flex justify-between text-sm font-medium pt-2 border-t border-border">
               <span>{t('fin.payslip.totalDeductions')}</span>
-              <span className="text-red-600">Rp {Number(payslip.totalDeductions).toLocaleString()}</span>
+              <span className="text-red-600">Rp {Number(payslip.totalDeductions).toLocaleString('id-ID')}</span>
             </div>
           </div>
         </div>
@@ -184,7 +184,7 @@ export function PayslipDetail() {
         <div className="px-6 py-4">
           <div className="flex justify-between text-base font-semibold">
             <span>{t('fin.common.netPay')}</span>
-            <span className="text-emerald-600">Rp {Number(payslip.netPay).toLocaleString()}</span>
+            <span className="text-emerald-600">Rp {Number(payslip.netPay).toLocaleString('id-ID')}</span>
           </div>
         </div>
 

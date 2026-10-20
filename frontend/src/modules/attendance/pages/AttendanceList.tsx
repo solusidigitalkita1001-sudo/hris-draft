@@ -28,6 +28,7 @@ import { formatDate, formatTime } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
 import { useI18n } from '@/i18n/provider';
 import type { TranslationKey } from '@/i18n/translations';
+import { attendanceMethodLabel } from '@/utils/enum-label';
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PRESENT: <CheckCircle2 size={14} className="text-emerald-500" />,
@@ -976,7 +977,7 @@ export function AttendanceList() {
                   </td>
                   <td className="px-4 py-3 text-center text-xs text-muted-foreground">
                     <div className="space-y-1">
-                      <p>{r.method || '-'}</p>
+                      <p>{attendanceMethodLabel(r.method, t)}</p>
                       {r.distanceMeters !== null && r.distanceMeters !== undefined && (
                         <p className="inline-flex items-center gap-1">
                           <MapPin size={12} />

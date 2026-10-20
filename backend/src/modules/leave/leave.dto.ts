@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDateSchema } from '@/shared/validators/calendar-date';
 
 export const createLeaveTypeSchema = z.object({
   companyId: z.string().uuid(),
@@ -15,8 +16,11 @@ export const createLeaveRequestSchema = z.object({
   employeeId: z.string().uuid(),
   companyId: z.string().uuid(),
   leaveTypeId: z.string().uuid(),
-  startDate: z.string().datetime(),
-  endDate: z.string().datetime(),
+  // Cuti adalah rentang hari kalender, bukan titik waktu. Menerima
+  // `YYYY-MM-DD` menyamakan kontraknya dengan izin dan tukar shift; ISO
+  // instant dari klien web lama tetap diterima dan dinormalkan.
+  startDate: calendarDateSchema,
+  endDate: calendarDateSchema,
   reason: z.string().min(1),
   attachment: z.string().optional(),
 });

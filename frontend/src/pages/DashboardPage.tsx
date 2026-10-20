@@ -190,7 +190,10 @@ export function DashboardPage() {
     void load();
   }, [load]);
 
-  const firstName = (user?.name || user?.email || t('ops.dashboard.page.you')).split(' ')[0];
+  // Akun tanpa karyawan tertaut (super admin) tidak punya nama; menyapa orang
+  // dengan alamat email lengkap terbaca seperti sistem yang belum dikonfigurasi.
+  const greetingName = user?.name || user?.email?.split('@')[0] || t('ops.dashboard.page.you');
+  const firstName = greetingName.split(' ')[0];
   const todayLabel = dayjs().format('dddd, D MMMM YYYY');
 
   const quickActions = buildQuickActions(persona, t);

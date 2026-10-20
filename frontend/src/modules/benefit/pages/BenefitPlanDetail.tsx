@@ -121,7 +121,7 @@ export function BenefitPlanDetail() {
               {plan.maxAmount && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t('fin.benefit.maxAmount')}</span>
-                  <span className="font-medium">Rp {Number(plan.maxAmount).toLocaleString()}</span>
+                  <span className="font-medium">Rp {Number(plan.maxAmount).toLocaleString('id-ID')}</span>
                 </div>
               )}
               {plan.description && (

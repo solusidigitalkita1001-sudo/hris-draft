@@ -121,7 +121,19 @@ export function TopNavigation() {
   // Tampilkan role dengan wewenang tertinggi, bukan urutan array dari server.
   const ROLE_PRECEDENCE = ['SUPER_ADMIN', 'GROUP_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'MANAGER', 'EMPLOYEE'];
   const topRole = ROLE_PRECEDENCE.find((role) => user?.roles?.includes(role)) ?? user?.roles?.[0];
-  const roleLabel = topRole?.replace(/_/g, ' ').toLowerCase();
+  // `capitalize` di CSS membuat HR_MANAGER terbaca "Hr Manager". Nama jabatan
+  // ditulis utuh di sini supaya singkatan tetap huruf besar.
+  const ROLE_LABELS: Record<string, string> = {
+    SUPER_ADMIN: 'Super Admin',
+    GROUP_ADMIN: 'Admin Grup',
+    COMPANY_ADMIN: 'Admin Perusahaan',
+    HR_MANAGER: 'HR Manager',
+    HR_STAFF: 'Staf HR',
+    FINANCE: 'Finance',
+    MANAGER: 'Manajer',
+    EMPLOYEE: 'Karyawan',
+  };
+  const roleLabel = topRole ? ROLE_LABELS[topRole] ?? topRole.replace(/_/g, ' ') : undefined;
 
   return (
     <header className="topbar-blur sticky top-0 z-30">
@@ -196,7 +208,7 @@ export function TopNavigation() {
               </span>
               <span className="hidden text-left md:block">
                 <span className="block text-sm font-medium leading-tight">{user?.name || user?.email}</span>
-                <span className="block text-[11px] capitalize leading-tight text-muted-foreground">{roleLabel}</span>
+                <span className="block text-[11px] leading-tight text-muted-foreground">{roleLabel}</span>
               </span>
               <ChevronDown size={14} className="hidden text-muted-foreground md:block" aria-hidden="true" />
             </button>

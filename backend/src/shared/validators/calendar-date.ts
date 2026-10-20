@@ -13,14 +13,21 @@ import { z } from 'zod';
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 
-/** Tengah hari UTC: aman dirender sebagai hari yang sama di UTC-11..UTC+12. */
-function atUtcNoon(dateOnly: string): Date {
-  return new Date(`${dateOnly}T12:00:00.000Z`);
+/**
+ * Tengah malam UTC — konvensi yang sudah dipakai seluruh basis kode ini
+ * (`new Date('2026-12-28')`), dan yang diasumsikan oleh query rentang tanggal
+ * seperti penghitungan hari kerja. Menggesernya ke tengah hari membuat baris
+ * kalender hari pertama jatuh di luar filter `gte` dan cuti dua hari terhitung
+ * satu. Untuk zona Indonesia (UTC+7..+9) tengah malam UTC tetap dirender
+ * sebagai tanggal yang sama.
+ */
+function atUtcMidnight(dateOnly: string): Date {
+  return new Date(`${dateOnly}T00:00:00.000Z`);
 }
 
 export function toCalendarDate(value: string): Date | null {
   if (CALENDAR_DATE.test(value)) {
-    const date = atUtcNoon(value);
+    const date = atUtcMidnight(value);
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
@@ -33,7 +40,7 @@ export function toCalendarDate(value: string): Date | null {
   // Batasnya: instant yang memang di tengah hari (mis. 20:00Z) akan dibaca
   // sebagai hari berikutnya — kalau suatu saat ada klien yang mengirim waktu
   // sungguhan, barulah zona waktu company perlu ikut dibaca.
-  return atUtcNoon(new Date(parsed.getTime() + HALF_DAY_MS).toISOString().slice(0, 10));
+  return atUtcMidnight(new Date(parsed.getTime() + HALF_DAY_MS).toISOString().slice(0, 10));
 }
 
 /** Zod schema: menerima `YYYY-MM-DD` atau ISO instant, menghasilkan `Date`. */

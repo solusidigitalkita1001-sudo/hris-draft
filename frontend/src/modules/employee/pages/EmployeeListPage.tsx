@@ -16,6 +16,8 @@ import { cn } from '@/utils/cn';
 import { apiErrorMessage } from '@/lib/errors';
 import { useI18n } from '@/i18n/provider';
 
+import { employeeStatusLabel, employmentTypeLabel } from '@/utils/enum-label';
+
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
   PROBATION: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
@@ -24,10 +26,10 @@ const STATUS_STYLES: Record<string, string> = {
   CONTRACT_END: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
 };
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, label }: { status: string; label: string }) {
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[status] || ''}`}>
-      {status.replace(/_/g, ' ')}
+      {label}
     </span>
   );
 }
@@ -298,7 +300,7 @@ export function EmployeeListPage() {
           className="h-9 text-xs sm:max-w-xs"
         />
 
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {['', 'ACTIVE', 'PROBATION', 'RESIGNED', 'TERMINATED', 'CONTRACT_END'].map((s) => (
             <button
               key={s}
@@ -309,7 +311,7 @@ export function EmployeeListPage() {
                   : 'bg-background text-muted-foreground border-border hover:border-primary/50'
               }`}
             >
-              {s || t('wf.common.all')}
+              {s ? employeeStatusLabel(s, t) : t('wf.common.all')}
             </button>
           ))}
         </div>
@@ -372,9 +374,9 @@ export function EmployeeListPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">{emp.department?.name || '-'}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">{emp.position?.name || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">{emp.employmentType}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{employmentTypeLabel(emp.employmentType, t)}</td>
                   <td className="px-4 py-3 text-center">
-                    <StatusBadge status={emp.employmentStatus} />
+                    <StatusBadge status={emp.employmentStatus} label={employeeStatusLabel(emp.employmentStatus, t)} />
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-muted-foreground">
                     {emp.joinDate ? formatDate(emp.joinDate) : '-'}

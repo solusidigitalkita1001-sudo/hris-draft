@@ -631,8 +631,8 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
             companyId: COMPANY_A_ID,
             employeeId: EMPLOYEE_B_ID,
             leaveTypeId: 'lt-1',
-            startDate: '2026-01-10',
-            endDate: '2026-01-12',
+            startDate: new Date('2026-01-10T00:00:00.000Z'),
+            endDate: new Date('2026-01-12T00:00:00.000Z'),
             reason: 'test',
           })
         )
@@ -655,8 +655,9 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
 
       // Tanggal relatif: fixture bertanggal tetap membuat test ini basi begitu
       // tanggal tsb lewat, karena aturan H-7 mewajibkan lampiran.
-      const startDate = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
-      const endDate = new Date(Date.now() + 32 * 86_400_000).toISOString().slice(0, 10);
+      // DTO cuti kini menghasilkan Date (lihat shared/validators/calendar-date).
+      const startDate = new Date(`${new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)}T00:00:00.000Z`);
+      const endDate = new Date(`${new Date(Date.now() + 32 * 86_400_000).toISOString().slice(0, 10)}T00:00:00.000Z`);
 
       const result = await runAs(userEmployeeA(), () =>
         leaveService.createLeaveRequest({

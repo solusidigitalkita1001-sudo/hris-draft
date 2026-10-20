@@ -81,15 +81,21 @@ export function LeaveList() {
     if (!approvAction) return;
     setActionLoading(true);
     try {
-      await leaveService.submitWorkflowAction(
+      const result = await leaveService.submitWorkflowAction(
         approvAction.id,
         approvAction.type,
         actionComment.trim() || undefined
       );
+      // Satu langkah approval bukan berarti pengajuannya selesai. Mengatakan
+      // "disetujui" saat statusnya masih PENDING membuat approver mengira
+      // urusannya beres, padahal masih menunggu tahap berikutnya.
+      const finalStatus = result?.leaveRequest?.status;
       toast.success(
-        approvAction.type === 'APPROVE'
-          ? t('ess.leave.toast.approved')
-          : t('ess.leave.toast.rejected')
+        approvAction.type !== 'APPROVE'
+          ? t('ess.leave.toast.rejected')
+          : finalStatus === 'APPROVED'
+            ? t('ess.leave.toast.approved')
+            : t('ess.leave.toast.stepApproved')
       );
       setApprovAction(null);
       setActionComment('');

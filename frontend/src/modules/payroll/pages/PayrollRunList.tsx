@@ -123,9 +123,9 @@ export function PayrollRunList() {
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">{run.period?.name || '-'}</td>
                   <td className="px-4 py-3 text-center text-sm">{run.totalEmployees}</td>
-                  <td className="px-4 py-3 text-right text-sm">Rp {Number(run.totalEarnings).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right text-sm">Rp {Number(run.totalDeductions).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right text-sm font-medium">Rp {Number(run.totalNetPay).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-sm">Rp {Number(run.totalEarnings).toLocaleString('id-ID')}</td>
+                  <td className="px-4 py-3 text-right text-sm">Rp {Number(run.totalDeductions).toLocaleString('id-ID')}</td>
+                  <td className="px-4 py-3 text-right text-sm font-medium">Rp {Number(run.totalNetPay).toLocaleString('id-ID')}</td>
                   <td className="px-4 py-3 text-center">
                     <StatusBadge status={run.status} />
                   </td>

@@ -415,7 +415,7 @@ function SalaryComponentListForCompany({ companyId }: { companyId: string }) {
                     {comp.calculationMethod === 'PERCENTAGE'
                       ? `${comp.ratePercent}%`
                       : comp.amount
-                        ? `Rp ${Number(comp.amount).toLocaleString()}`
+                        ? `Rp ${Number(comp.amount).toLocaleString('id-ID')}`
                         : '-'}
                   </td>
                   <td className="px-4 py-3 text-center">
