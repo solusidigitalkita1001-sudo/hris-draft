@@ -476,7 +476,12 @@ export function SelfServicePage() {
   const employeeId = user?.employeeId || localStorage.getItem('employeeId') || '';
 
   const fetchPermissions = useCallback(async () => {
-    if (!employeeId) return;
+    // Akun tanpa karyawan tertaut (mis. super admin) tidak punya pengajuan.
+    // Tanpa ini loading tidak pernah selesai dan halaman menggantung selamanya.
+    if (!employeeId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await permissionRequestService.findMyRequests(employeeId, statusFilter || undefined);
@@ -639,8 +644,16 @@ export function SelfServicePage() {
         </div>
       )}
 
+      {!loading && !employeeId && (
+        <div className="mt-3.5 rounded-card border border-border bg-card px-6 py-16 text-center">
+          <p className="text-sm font-medium text-foreground">
+            {t('ess.selfService.permission.toast.noEmployeeId')}
+          </p>
+        </div>
+      )}
+
       {/* ─── PERMISSIONS TAB ──────────────────────────── */}
-      {!loading && activeTab === 'permissions' && (
+      {!loading && employeeId && activeTab === 'permissions' && (
         <div className="mt-3.5">
           {permissions.length === 0 ? (
             <div className="flex flex-col items-center gap-3.5 rounded-card border border-border bg-card px-6 py-16">
