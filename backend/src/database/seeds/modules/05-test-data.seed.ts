@@ -1217,13 +1217,13 @@ export async function seedTestData(): Promise<void> {
   // ===================================================
   console.log('  Creating leave types...');
   const leaveTypes = [
-    { name: 'Annual Leave', code: 'ANNUAL', isPaid: true, isAnnual: true, maxDays: 12, requiresAttachment: false },
-    { name: 'Sick Leave', code: 'SICK', isPaid: true, isAnnual: false, maxDays: 14, requiresAttachment: false },
-    { name: 'Maternity Leave', code: 'MATERNITY', isPaid: true, isAnnual: false, maxDays: 90, requiresAttachment: true },
-    { name: 'Paternity Leave', code: 'PATERNITY', isPaid: true, isAnnual: false, maxDays: 3, requiresAttachment: false },
-    { name: 'Marriage Leave', code: 'MARRIAGE', isPaid: true, isAnnual: false, maxDays: 3, requiresAttachment: true },
-    { name: 'Bereavement Leave', code: 'BEREAVEMENT', isPaid: true, isAnnual: false, maxDays: 3, requiresAttachment: false },
-    { name: 'Unpaid Leave', code: 'UNPAID', isPaid: false, isAnnual: false, maxDays: 30, requiresAttachment: false },
+    { name: 'Cuti Tahunan', code: 'ANNUAL', isPaid: true, isAnnual: true, maxDays: 12, requiresAttachment: false },
+    { name: 'Cuti Sakit', code: 'SICK', isPaid: true, isAnnual: false, maxDays: 14, requiresAttachment: false },
+    { name: 'Cuti Melahirkan', code: 'MATERNITY', isPaid: true, isAnnual: false, maxDays: 90, requiresAttachment: true },
+    { name: 'Cuti Pendampingan Istri', code: 'PATERNITY', isPaid: true, isAnnual: false, maxDays: 3, requiresAttachment: false },
+    { name: 'Cuti Menikah', code: 'MARRIAGE', isPaid: true, isAnnual: false, maxDays: 3, requiresAttachment: true },
+    { name: 'Cuti Duka', code: 'BEREAVEMENT', isPaid: true, isAnnual: false, maxDays: 3, requiresAttachment: false },
+    { name: 'Cuti Tanpa Gaji', code: 'UNPAID', isPaid: false, isAnnual: false, maxDays: 30, requiresAttachment: false },
   ];
 
   const createdLeaveTypes: any[] = [];
