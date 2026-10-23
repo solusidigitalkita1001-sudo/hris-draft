@@ -177,20 +177,27 @@ router.post('/periods/:id/planning/publish', authorize({ resource: 'performance'
 router.put('/planning-assignments/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformancePlanningAssignmentSchema), performanceController.updatePlanningAssignment.bind(performanceController));
 router.post('/planning-assignments/:id/reassign', authorize({ resource: 'performance', action: 'update' }), validate(reassignPerformancePlanningAssignmentSchema), performanceController.reassignPlanningAssignment.bind(performanceController));
 router.delete('/planning-assignments/:id', authorize({ resource: 'performance', action: 'update' }), performanceController.deletePlanningAssignment.bind(performanceController));
-router.post('/planning-assignments/:id/submit', authorize({ resource: 'performance', action: 'update' }), validate(performanceExecutionActionSchema), performanceController.submitPlanningAssignment.bind(performanceController));
-router.post('/planning-assignments/:id/approve', authorize({ resource: 'performance', action: 'approve' }), validate(performanceExecutionActionSchema), performanceController.approvePlanningAssignment.bind(performanceController));
-router.post('/planning-assignments/:id/reject', authorize({ resource: 'performance', action: 'approve' }), validate(performanceExecutionActionSchema), performanceController.rejectPlanningAssignment.bind(performanceController));
-router.post('/planning-assignments/:id/revision', authorize({ resource: 'performance', action: 'approve' }), validate(performanceExecutionActionSchema), performanceController.requestPlanningAssignmentRevision.bind(performanceController));
+// ── Ruang kerja eksekusi: milik karyawan dan atasannya ──────────────
+// Permission performance:read/update/approve dipegang HR dan admin, bukan
+// karyawan maupun manajer lini, sehingga memakainya di sini mengunci justru
+// orang yang harus mengisi dan menyetujui penilaian. Kepemilikan diperiksa di
+// service pada setiap rute: actor diambil dari sesi (ensureExecutionActor),
+// lalu dicocokkan sebagai pemilik (ensureExecutionOwner), approver
+// (ensureExecutionApprover), atau peran target (resolveExecutionTargetActorRole).
+router.post('/planning-assignments/:id/submit', validate(performanceExecutionActionSchema), performanceController.submitPlanningAssignment.bind(performanceController));
+router.post('/planning-assignments/:id/approve', validate(performanceExecutionActionSchema), performanceController.approvePlanningAssignment.bind(performanceController));
+router.post('/planning-assignments/:id/reject', validate(performanceExecutionActionSchema), performanceController.rejectPlanningAssignment.bind(performanceController));
+router.post('/planning-assignments/:id/revision', validate(performanceExecutionActionSchema), performanceController.requestPlanningAssignmentRevision.bind(performanceController));
 router.post('/planning-assignments/:id/complete', authorize({ resource: 'performance', action: 'update' }), validate(performanceExecutionActionSchema), performanceController.completePlanningAssignment.bind(performanceController));
 router.post('/planning-assignments/:id/targets', authorize({ resource: 'performance', action: 'create' }), validate(createPerformancePlanningTargetSchema), performanceController.createPlanningTarget.bind(performanceController));
 router.put('/planning-targets/:id', authorize({ resource: 'performance', action: 'update' }), validate(updatePerformancePlanningTargetSchema), performanceController.updatePlanningTarget.bind(performanceController));
 router.delete('/planning-targets/:id', authorize({ resource: 'performance', action: 'update' }), performanceController.deletePlanningTarget.bind(performanceController));
 router.post('/planning-targets/:id/progress', authorize({ resource: 'performance', action: 'update' }), validate(createPerformanceTargetProgressSchema), performanceController.createPlanningTargetProgress.bind(performanceController));
 router.post('/planning-targets/:id/evidences', authorize({ resource: 'performance', action: 'update' }), evidenceUpload.single('file'), discardUploadOnFailure(), validateFileMagicBytes(), performanceController.uploadPlanningEvidence.bind(performanceController));
-router.get('/execution/approval-queue', authorize({ resource: 'performance', action: 'read' }), performanceController.getExecutionApprovalQueue.bind(performanceController));
-router.get('/execution/my-assignments', authorize({ resource: 'performance', action: 'read' }), performanceController.getMyExecutionAssignments.bind(performanceController));
-router.get('/execution/assignments/:id', authorize({ resource: 'performance', action: 'read' }), performanceController.getExecutionAssignmentById.bind(performanceController));
-router.patch('/execution/targets/:id/comment', authorize({ resource: 'performance', action: 'update' }), validate(updateExecutionTargetCommentSchema), performanceController.updateExecutionTargetComment.bind(performanceController));
+router.get('/execution/approval-queue', performanceController.getExecutionApprovalQueue.bind(performanceController));
+router.get('/execution/my-assignments', performanceController.getMyExecutionAssignments.bind(performanceController));
+router.get('/execution/assignments/:id', performanceController.getExecutionAssignmentById.bind(performanceController));
+router.patch('/execution/targets/:id/comment', validate(updateExecutionTargetCommentSchema), performanceController.updateExecutionTargetComment.bind(performanceController));
 router.get('/periods/:id/results', authorize({ resource: 'performance', action: 'read' }), performanceController.getPerformanceResults.bind(performanceController));
 router.get('/periods/:id/development-recommendations', authorize({ resource: 'performance', action: 'read' }), performanceController.getDevelopmentRecommendations.bind(performanceController));
 router.post('/periods/:id/development-recommendations/sync', authorize({ resource: 'performance', action: 'update' }), validate(syncPerformanceDevelopmentRecommendationsSchema), performanceController.syncDevelopmentRecommendations.bind(performanceController));
@@ -202,12 +209,17 @@ router.post('/periods/:id/results/publish', authorize({ resource: 'performance',
 router.post('/periods/:id/results/reminders', authorize({ resource: 'performance', action: 'approve' }), validate(sendPerformanceResultRemindersSchema), performanceController.sendPerformanceResultReminders.bind(performanceController));
 router.get('/periods/:id/automation-schedules', authorize({ resource: 'performance', action: 'read' }), performanceController.getAutomationSchedules.bind(performanceController));
 router.post('/periods/:id/automation-schedules', authorize({ resource: 'performance', action: 'update' }), validate(createPerformanceAutomationScheduleSchema), performanceController.createAutomationSchedule.bind(performanceController));
-router.get('/results/me', authorize({ resource: 'performance', action: 'read' }), performanceController.getMyPublishedResults.bind(performanceController));
-router.post('/results/:id/acknowledge', authorize({ resource: 'performance', action: 'read' }), validate(acknowledgePerformanceResultSchema), performanceController.acknowledgePerformanceResult.bind(performanceController));
-router.post('/results/:id/attachments', authorize({ resource: 'performance', action: 'read' }), attachmentUpload.single('file'), discardUploadOnFailure(), validateFileMagicBytes(PERFORMANCE_ATTACHMENT_ALLOWED_MIMES), performanceController.uploadPerformanceResultAttachment.bind(performanceController));
-router.post('/results/:id/disputes', authorize({ resource: 'performance', action: 'read' }), validate(createPerformanceResultDisputeSchema), performanceController.createPerformanceResultDispute.bind(performanceController));
+// Rute hasil penilaian milik sendiri: karyawan harus bisa membaca,
+// mengakui, melampirkan bukti, dan mengajukan sanggahan atas hasilnya sendiri.
+// Permission `performance:read` dipegang HR/manajer, bukan karyawan, sehingga
+// pagar itu justru mengunci pemiliknya. Kepemilikan tetap diperiksa di service
+// (findPublishedResultsByEmployee dan pemeriksaan employeeId pada tiap aksi).
+router.get('/results/me', performanceController.getMyPublishedResults.bind(performanceController));
+router.post('/results/:id/acknowledge', validate(acknowledgePerformanceResultSchema), performanceController.acknowledgePerformanceResult.bind(performanceController));
+router.post('/results/:id/attachments', attachmentUpload.single('file'), discardUploadOnFailure(), validateFileMagicBytes(PERFORMANCE_ATTACHMENT_ALLOWED_MIMES), performanceController.uploadPerformanceResultAttachment.bind(performanceController));
+router.post('/results/:id/disputes', validate(createPerformanceResultDisputeSchema), performanceController.createPerformanceResultDispute.bind(performanceController));
 router.post('/results/:id/reopen', authorize({ resource: 'performance', action: 'approve' }), validate(reopenPerformanceResultSchema), performanceController.reopenPerformanceResult.bind(performanceController));
-router.post('/result-disputes/:id/attachments', authorize({ resource: 'performance', action: 'read' }), attachmentUpload.single('file'), discardUploadOnFailure(), validateFileMagicBytes(PERFORMANCE_ATTACHMENT_ALLOWED_MIMES), performanceController.uploadPerformanceDisputeAttachment.bind(performanceController));
+router.post('/result-disputes/:id/attachments', attachmentUpload.single('file'), discardUploadOnFailure(), validateFileMagicBytes(PERFORMANCE_ATTACHMENT_ALLOWED_MIMES), performanceController.uploadPerformanceDisputeAttachment.bind(performanceController));
 router.post('/result-disputes/:id/respond', authorize({ resource: 'performance', action: 'approve' }), validate(respondPerformanceResultDisputeSchema), performanceController.respondPerformanceResultDispute.bind(performanceController));
 router.get('/periods/:id/calibrations', authorize({ resource: 'performance', action: 'read' }), performanceController.getCalibrationSessions.bind(performanceController));
 router.post('/periods/:id/calibrations', authorize({ resource: 'performance', action: 'create' }), validate(createPerformanceCalibrationSessionSchema), performanceController.createCalibrationSession.bind(performanceController));

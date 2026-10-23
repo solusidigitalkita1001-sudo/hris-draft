@@ -127,16 +127,20 @@ export class AttendanceController {
 
   async getSummary(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { companyId, month, year } = req.query as { companyId: string; month: string; year: string };
-      const data = await attendanceService.getSummary(companyId, month, year);
+      const { companyId, month, year, departmentId } = req.query as unknown as {
+        companyId: string; month: number; year: number; departmentId?: string;
+      };
+      const data = await attendanceService.getSummary(companyId, month, year, departmentId);
       res.json(Result.success(data));
     } catch (error) { next(error); }
   }
 
   async getReport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { companyId, month, year } = req.query as { companyId: string; month: string; year: string };
-      const csv = await attendanceService.getReport(companyId, month, year);
+      const { companyId, month, year, departmentId } = req.query as unknown as {
+        companyId: string; month: number; year: number; departmentId?: string;
+      };
+      const csv = await attendanceService.getReport(companyId, month, year, departmentId);
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="attendance-report-${month}-${year}.csv"`);
       res.send(csv);

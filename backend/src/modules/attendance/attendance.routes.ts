@@ -7,6 +7,7 @@ import { attendanceController } from './attendance.controller';
 import {
   attendanceContextQuerySchema,
   attendanceQuerySchema,
+  attendancePeriodQuerySchema,
   checkoutAttendanceSchema,
   createAttendanceSchema,
   myAttendanceQuerySchema,
@@ -53,8 +54,8 @@ router.post('/import',
   attendanceController.importHistory.bind(attendanceController));
 router.get('/', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceQuerySchema, 'query'), attendanceController.findAll.bind(attendanceController));
 router.get('/context', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceContextQuerySchema, 'query'), attendanceController.getContext.bind(attendanceController));
-router.get('/summary', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getSummary.bind(attendanceController));
-router.get('/report', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getReport.bind(attendanceController));
+router.get('/summary', authorize({ resource: 'attendance', action: 'read' }), validate(attendancePeriodQuerySchema, 'query'), attendanceController.getSummary.bind(attendanceController));
+router.get('/report', authorize({ resource: 'attendance', action: 'read' }), validate(attendancePeriodQuerySchema, 'query'), attendanceController.getReport.bind(attendanceController));
 router.get('/:id', authorize({ resource: 'attendance', action: 'read' }), attendanceController.findById.bind(attendanceController));
 router.post('/', authorize({ resource: 'attendance', action: 'create' }), validate(createAttendanceSchema), attendanceController.create.bind(attendanceController));
 router.patch('/:id/checkout', authorize({ resource: 'attendance', action: 'update' }), validate(checkoutAttendanceSchema), attendanceController.checkOut.bind(attendanceController));
