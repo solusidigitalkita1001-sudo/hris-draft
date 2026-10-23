@@ -161,7 +161,9 @@ describe('payroll payment HTTP boundary', () => {
     expect(service.getBatchForRun).toHaveBeenCalledWith(context, RUN);
     expect(response.body).toEqual({ success: true, message: 'Success', data: null });
     expect(response.headers['cache-control']).toBe('no-store');
-    await request(app()).get(`${BASE}/run/invalid`).expect(422);
+    // Run IDs tolerate seed/import codes, so the rejected case breaks the
+    // length bound rather than simply not being a UUID.
+    await request(app()).get(`${BASE}/run/${'r'.repeat(37)}`).expect(422);
     expect(service.getBatchForRun).toHaveBeenCalledTimes(1);
   });
 

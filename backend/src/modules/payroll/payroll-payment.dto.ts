@@ -1,7 +1,16 @@
 import { z } from 'zod';
 
+// Id payroll run tidak selalu UUID — data seed/impor memakai kode terbaca
+// seperti "prun-202606-main" dan kolomnya VarChar(36). Dipakai sama seperti
+// payrollRunIdParamSchema di payroll.validation.ts supaya satu run tidak
+// terbuka di satu modul lalu ditolak 422 di modul pembayarannya.
+const payrollRunIdSchema = z.string().min(1).max(36).regex(
+  /^[A-Za-z0-9_-]+$/,
+  'Format id payroll run tidak valid'
+);
+
 export const createPaymentBatchSchema = z.object({
-  runId: z.string().uuid(),
+  runId: payrollRunIdSchema,
 }).strip();
 
 // Keep amounts as decimal strings until the service constructs a Prisma Decimal.
@@ -28,7 +37,7 @@ export const paymentBatchParamsSchema = z.object({
 }).strip();
 
 export const paymentBatchRunParamsSchema = z.object({
-  runId: z.string().uuid(),
+  runId: payrollRunIdSchema,
 }).strip();
 
 export const paymentTransactionParamsSchema = paymentBatchParamsSchema.extend({

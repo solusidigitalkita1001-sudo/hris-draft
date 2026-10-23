@@ -17,8 +17,12 @@ export const employeeThrQuerySchema = z.object({
   date: z.union([calendarDateSchema, z.string().datetime({ offset: true })]).optional(),
 });
 
+// Id payroll run mengikuti alasan yang sama seperti payslip di bawah: data
+// seed/impor memakai kode terbaca seperti "prun-202606-main", dan kolomnya
+// VarChar(36). Validasi ketat-UUID menolak baris yang dibuat sistem sendiri,
+// sehingga membuka run dari daftar menjawab 422.
 export const payrollRunIdParamSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1).max(36).regex(/^[A-Za-z0-9_-]+$/, 'Format id payroll run tidak valid'),
 });
 
 // Id payslip tidak selalu UUID: data seed/impor memakai kode seperti
