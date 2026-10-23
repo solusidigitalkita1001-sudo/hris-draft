@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
+import { employeeStatusLabel, employmentTypeLabel, genderLabel, maritalStatusLabel } from '@/utils/enum-label';
 import {
   FamilyTab, EducationTab, EmergencyContactTab,
   TrainingTab, SkillTab, ExperienceTab, AttachmentTab,
@@ -596,7 +597,7 @@ export function EmployeeDetailPage() {
                       {employee.branch?.name || t('employees.detail.companyLevel')}
                     </span>
                     <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
-                      {employee.employmentStatus}
+                      {employeeStatusLabel(employee.employmentStatus, t)}
                     </span>
                   </div>
 
@@ -619,8 +620,8 @@ export function EmployeeDetailPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <OverviewStatCard icon={BadgeCheck} label={t('employees.detail.stats.employmentStatus')} value={employee.employmentStatus} />
-              <OverviewStatCard icon={Briefcase} label={t('employees.detail.stats.employmentType')} value={employee.employmentType} />
+              <OverviewStatCard icon={BadgeCheck} label={t('employees.detail.stats.employmentStatus')} value={employeeStatusLabel(employee.employmentStatus, t)} />
+              <OverviewStatCard icon={Briefcase} label={t('employees.detail.stats.employmentType')} value={employmentTypeLabel(employee.employmentType, t)} />
               <OverviewStatCard icon={CalendarDays} label={t('employees.detail.stats.joinDate')} value={employee.joinDate ? formatDate(employee.joinDate) : '-'} />
               <OverviewStatCard icon={Sparkles} label={t('employees.detail.stats.careerHistory')} value={t('employees.detail.stats.recordCount', { count: transactions.length })} />
             </div>
@@ -687,9 +688,9 @@ export function EmployeeDetailPage() {
                     subtitle={t('employees.detail.cards.personalDetails.subtitle')}
                   >
                     <div className="grid gap-3">
-                      <DetailItem label={t('employees.detail.fields.gender')} value={employee.gender} />
+                      <DetailItem label={t('employees.detail.fields.gender')} value={genderLabel(employee.gender, t)} />
                       <DetailItem label={t('employees.detail.fields.religion')} value={employee.religion} />
-                      <DetailItem label={t('employees.detail.fields.maritalStatus')} value={employee.maritalStatus} />
+                      <DetailItem label={t('employees.detail.fields.maritalStatus')} value={maritalStatusLabel(employee.maritalStatus, t)} />
                       <DetailItem label={t('employees.detail.fields.idNumber')} value={employee.idNumber} />
                     </div>
                   </DetailCard>

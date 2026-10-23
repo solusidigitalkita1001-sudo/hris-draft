@@ -94,15 +94,15 @@ export function PayrollRunDetail() {
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <p className="text-xs text-muted-foreground mb-1">{t('fin.payslip.totalEarnings')}</p>
-          <p className="text-2xl font-semibold">Rp {totalEarnings.toLocaleString()}</p>
+          <p className="text-2xl font-semibold">Rp {totalEarnings.toLocaleString('id-ID')}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <p className="text-xs text-muted-foreground mb-1">{t('fin.payslip.totalDeductions')}</p>
-          <p className="text-2xl font-semibold text-red-600">Rp {totalDeductions.toLocaleString()}</p>
+          <p className="text-2xl font-semibold text-red-600">Rp {totalDeductions.toLocaleString('id-ID')}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-4">
           <p className="text-xs text-muted-foreground mb-1">{t('fin.common.netPay')}</p>
-          <p className="text-2xl font-semibold text-emerald-600">Rp {totalNetPay.toLocaleString()}</p>
+          <p className="text-2xl font-semibold text-emerald-600">Rp {totalNetPay.toLocaleString('id-ID')}</p>
         </div>
       </div>
 
@@ -171,10 +171,10 @@ export function PayrollRunDetail() {
                     <p className="text-sm font-medium">{payslip.employee?.fullName || t('fin.common.unknown')}</p>
                     <p className="text-xs text-muted-foreground">{payslip.employee?.employeeNumber}</p>
                   </td>
-                  <td className="px-4 py-3 text-right text-sm">Rp {Number(payslip.baseSalary).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right text-sm text-emerald-600">Rp {Number(payslip.totalEarnings).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right text-sm text-red-600">Rp {Number(payslip.totalDeductions).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right text-sm font-medium">Rp {Number(payslip.netPay).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-sm">Rp {Number(payslip.baseSalary).toLocaleString('id-ID')}</td>
+                  <td className="px-4 py-3 text-right text-sm text-emerald-600">Rp {Number(payslip.totalEarnings).toLocaleString('id-ID')}</td>
+                  <td className="px-4 py-3 text-right text-sm text-red-600">Rp {Number(payslip.totalDeductions).toLocaleString('id-ID')}</td>
+                  <td className="px-4 py-3 text-right text-sm font-medium">Rp {Number(payslip.netPay).toLocaleString('id-ID')}</td>
                   <td className="px-4 py-3 text-center">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-400">
                       {payslip.status}

@@ -100,7 +100,7 @@ export function ReviewList() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
+        <div className="relative w-full sm:w-72 sm:shrink-0">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t('perf.reviewList.searchPlaceholder')}
@@ -117,10 +117,10 @@ export function ReviewList() {
             { value: '', label: t('perf.reviewList.allCycles') },
             ...cycles.map((c) => ({ value: c.id, label: c.name })),
           ]}
-          className="h-9 text-xs"
+          className="h-9 text-xs sm:max-w-xs"
         />
 
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {['', 'DRAFT', 'SUBMITTED', 'APPROVED', 'COMPLETED'].map((s) => (
             <button
               key={s}

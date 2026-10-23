@@ -196,8 +196,10 @@ function PermissionForm({ onClose }: { onClose: () => void }) {
       const uploaded = await permissionRequestService.uploadAttachment(attachmentFile);
       await permissionRequestService.create({
         type,
-        startDate: dayjs(startDate).toISOString(),
-        endDate: dayjs(endDate).toISOString(),
+        // Tanggal kalender dikirim apa adanya; mengubahnya jadi instant UTC
+        // memundurkan harinya di zona timur (WIB 00:00 = 17:00Z hari sebelumnya).
+        startDate,
+        endDate,
         duration,
         reason: reason.trim(),
         attachment: uploaded.url,
@@ -339,7 +341,7 @@ function ShiftSwapRequestForm({ onClose }: { onClose: () => void }) {
     try {
       await workCalendarService.createShiftSwapRequest({
         targetEmployeeId,
-        shiftDate: dayjs(shiftDate).hour(12).minute(0).second(0).millisecond(0).toISOString(),
+        shiftDate,
         reason: reason.trim(),
       });
       toast.success(t('ess.selfService.shiftSwap.toast.submitSuccess'));
@@ -474,7 +476,12 @@ export function SelfServicePage() {
   const employeeId = user?.employeeId || localStorage.getItem('employeeId') || '';
 
   const fetchPermissions = useCallback(async () => {
-    if (!employeeId) return;
+    // Akun tanpa karyawan tertaut (mis. super admin) tidak punya pengajuan.
+    // Tanpa ini loading tidak pernah selesai dan halaman menggantung selamanya.
+    if (!employeeId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await permissionRequestService.findMyRequests(employeeId, statusFilter || undefined);
@@ -637,8 +644,16 @@ export function SelfServicePage() {
         </div>
       )}
 
+      {!loading && !employeeId && (
+        <div className="mt-3.5 rounded-card border border-border bg-card px-6 py-16 text-center">
+          <p className="text-sm font-medium text-foreground">
+            {t('ess.selfService.permission.toast.noEmployeeId')}
+          </p>
+        </div>
+      )}
+
       {/* ─── PERMISSIONS TAB ──────────────────────────── */}
-      {!loading && activeTab === 'permissions' && (
+      {!loading && employeeId && activeTab === 'permissions' && (
         <div className="mt-3.5">
           {permissions.length === 0 ? (
             <div className="flex flex-col items-center gap-3.5 rounded-card border border-border bg-card px-6 py-16">

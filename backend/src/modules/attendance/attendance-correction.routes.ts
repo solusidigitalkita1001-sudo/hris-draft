@@ -21,8 +21,11 @@ router.get('/my/:id', attendanceCorrectionController.findMineById.bind(attendanc
 router.get('/', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceCorrectionListQuerySchema, 'query'), attendanceCorrectionController.findAll.bind(attendanceCorrectionController));
 router.get('/:id', authorize({ resource: 'attendance', action: 'read' }), attendanceCorrectionController.findById.bind(attendanceCorrectionController));
 router.post('/', validate(createAttendanceCorrectionSchema), idempotency(), attendanceCorrectionController.create.bind(attendanceCorrectionController));
-router.put('/:id/approve', authorize({ resource: 'attendance', action: 'update' }), attendanceCorrectionController.approve.bind(attendanceCorrectionController));
-router.put('/:id/reject', authorize({ resource: 'attendance', action: 'update' }), validate(rejectAttendanceCorrectionSchema), attendanceCorrectionController.reject.bind(attendanceCorrectionController));
+// Menyetujui koreksi adalah tindakan persetujuan, bukan penyuntingan data
+// absensi. Memakai attendance:update mengunci atasan — yang memegang
+// att:approve, bukan att:update — dari antrean yang memang miliknya.
+router.put('/:id/approve', authorize({ resource: 'attendance', action: 'approve' }), attendanceCorrectionController.approve.bind(attendanceCorrectionController));
+router.put('/:id/reject', authorize({ resource: 'attendance', action: 'approve' }), validate(rejectAttendanceCorrectionSchema), attendanceCorrectionController.reject.bind(attendanceCorrectionController));
 router.patch('/:id/workflow-action', authorize({ resource: 'attendance', action: 'update' }), validate(workflowActionSchema), attendanceCorrectionController.applyWorkflowAction.bind(attendanceCorrectionController));
 
 export default router;

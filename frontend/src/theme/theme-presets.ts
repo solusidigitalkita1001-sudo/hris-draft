@@ -35,9 +35,8 @@ export function applyThemePreset(theme: ThemePreset) {
 
   root.dataset.theme = theme;
 
-  if (preset.isDark) {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
-  }
+  // index.html memasang class "light" sejak awal; tanpa menanggalkannya,
+  // root berakhir dengan "light dark" sekaligus setelah tombol tema ditekan.
+  root.classList.toggle('dark', preset.isDark);
+  root.classList.toggle('light', !preset.isDark);
 }

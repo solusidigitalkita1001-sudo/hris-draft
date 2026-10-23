@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDateSchema } from '@/shared/validators/calendar-date';
 
 const deviceGpsSchema = z.object({
   isMockLocation: z.boolean().optional().nullable(),
@@ -108,6 +109,19 @@ export const attendanceQuerySchema = z.object({
 });
 
 /**
+ * Ringkasan dan laporan absensi menyusun rentang tanggal dari month/year.
+ * Tanpa skema ini keduanya menerima `undefined` lalu jatuh jauh di dalam —
+ * `month.padStart` melempar TypeError dan groupBy Prisma menolak NaN, dua-duanya
+ * muncul ke klien sebagai 500 padahal yang salah adalah permintaannya.
+ */
+export const attendancePeriodQuerySchema = z.object({
+  companyId: z.string().uuid(),
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100),
+  departmentId: z.string().uuid().optional(),
+});
+
+/**
  * Mobile self-service queries never accept an employee/company identity. Those
  * values are taken from the authenticated session by the controller.
  */
@@ -138,7 +152,9 @@ export const attendanceContextQuerySchema = z.object({
 export const createOvertimeSchema = z.object({
   employeeId: z.string().uuid(),
   companyId: z.string().uuid(),
-  date: z.string().datetime(),
+  // Tanggal lembur adalah hari kerjanya; jam mulai/selesai yang membawa waktu.
+  // Disamakan dengan izin, cuti, tukar shift, dan koreksi absensi.
+  date: calendarDateSchema,
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
   durationHours: z.number().positive(),

@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Select2 } from '@/components/ui/select2';
 import { useCompanyStore } from '@/stores/company.store';
 import { useI18n } from '@/i18n/provider';
+import type { TranslationKey } from '@/i18n/translations';
 import {
   documentManagementService,
   type DocumentCategory,
@@ -278,15 +279,16 @@ function statusTone(status: string) {
   return 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-400';
 }
 
-const expiryFilterTabs: { key: ExpiryFilter; label: string }[] = [
-  { key: 'ALL', label: 'Semua' },
-  { key: 'EXPIRING', label: 'Akan Expired' },
-  { key: 'EXPIRED', label: 'Expired' },
+const expiryFilterTabs: { key: ExpiryFilter; labelKey: TranslationKey }[] = [
+  { key: 'ALL', labelKey: 'ops.docs.filter.all' },
+  { key: 'EXPIRING', labelKey: 'ops.docs.filter.expiring' },
+  { key: 'EXPIRED', labelKey: 'ops.docs.filter.expired' },
 ];
 
 const EXPIRING_SOON_DAYS = 30;
 
 export function DocumentManagementPage() {
+  const { t } = useI18n();
   const { activeCompany } = useCompanyStore();
   const [documents, setDocuments] = useState<ManagedDocument[]>([]);
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
@@ -476,7 +478,7 @@ export function DocumentManagementPage() {
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>
@@ -486,7 +488,7 @@ export function DocumentManagementPage() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari judul, file, atau kategori"
+              placeholder={t('ops.docs.filter.searchPlaceholder')}
               className="pl-9"
             />
           </div>
@@ -494,13 +496,13 @@ export function DocumentManagementPage() {
             value={categoryId}
             onValueChange={setCategoryId}
             options={[
-              { value: '', label: 'Semua kategori' },
+              { value: '', label: t('ops.docs.filter.allCategories') },
               ...categories.map((category) => ({
                 value: category.id,
                 label: category.name,
               })),
             ]}
-            placeholder="Semua kategori"
+            placeholder={t('ops.docs.filter.allCategories')}
             className="md:w-64"
           />
         </div>

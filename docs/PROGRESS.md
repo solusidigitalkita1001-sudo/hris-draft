@@ -1096,3 +1096,78 @@ yang gagal bersuara, 2 di QueueManager → create-then-return), ratchet naik
 money-path-roles diselaraskan (menerima `requireRole`/`roleMap.get`;
 FINANCE sengaja tetap opsional). Fix di-commit di dasar tumpukan lalu
 di-merge naik supaya kelima PR hijau.
+
+## Tugas — blocker produksi sisi-repo dilunasi (server menyusul)
+
+Tiga blocker audit yang bisa selesai tanpa menyentuh server:
+
+1. Jalur HTTPS yang rusak diperbaiki: image nginx kini meng-copy nginx.conf
+   repo (yang meng-include sites-enabled — tanpa ini mount override TLS tidak
+   pernah terbaca), vhost TLS ditulis ulang ke topologi prod NYATA (backend
+   tunggal + container frontend, resolver Docker + variabel, bukan
+   api/api-replica + berkas statis peninggalan compose dev), dan CI kini
+   memvalidasi KEDUA mode dengan susunan yang sama seperti produksi.
+   Menyalakan HTTPS tinggal: pasang cert + set HTTPS_ENABLED=true (server).
+2. Data tidak lagi hilang tiap deploy: volume upload_data (backend+worker)
+   dan redis_data di compose prod; scripts/backup-mysql.sh (dump
+   single-transaction + verifikasi arsip + retensi) + docs/backup.md berisi
+   cron satu baris dan prosedur drill restore yang WAJIB dicatat. Pemasangan
+   cron = server.
+3. Password awal kini dipaksa ganti DI SERVER: akun ber-mustChangePassword
+   hanya boleh menyentuh auth/change-password|logout|me|refresh|csrf, sisanya
+   403 PASSWORD_CHANGE_REQUIRED; seed admin kini mustChangePassword:true;
+   frontend mengantar ke form ganti kata sandi. Smoke nyata: login → 403 →
+   ganti password → pulih.
+
+Masih server-side (belum): pasang cron backup + rclone keluar host, pasang
+TLS cert + HTTPS_ENABLED, uptime monitor + error tracking, ganti kredensial
+default MySQL/RabbitMQ.
+
+### Status verifikasi
+
+- tsc backend+frontend bersih; build frontend lulus; 2.271 unit hijau
+  (termasuk 7 test baru gate password); lint 831 = ratchet, 0 error.
+- nginx -t lulus untuk KEDUA mode persis susunan produksi; compose prod
+  tervalidasi; bash -n script backup.
+- Smoke hidup di server dev: 403 PASSWORD_CHANGE_REQUIRED pada rute biasa,
+  allowlist jalan, ganti password membuka akses, password demo dipulihkan.
+
+## Tugas — rekap kebutuhan tim mobile dijawab, lima keputusan ditutup
+
+Tim mobile mengirim rekap 18 Okt 2026 berisi BE-01..BE-09 plus kontrak yang
+masih menggantung. Jawabannya dibaca dari kode, bukan dari dokumen:
+`docs/backend-response-mobile-2026-10.md`. Delta API 30 Sep – 18 Okt yang belum
+pernah mereka terima: `docs/api-change-checklist-mobile-2026-10.md`.
+
+Separuh daftar itu ternyata sudah ada di backend dan hanya tidak terdokumentasi
+(alur lampiran izin dua langkah, download dokumen employee, register token +
+pengiriman FCM/APNs, `code` yang selalu ada di envelope error, `employeeId`
+create cuti yang ditimpa dari sesi).
+
+Keputusan pemilik proyek, 18 Okt 2026:
+
+1. **BE-01 HTTPS** — subdomain + Let's Encrypt di VPS yang sudah ada. Runbook
+   (DNS, certbot standalone, env, renewal hook yang me-reload nginx di dalam
+   container) ditulis di `docs/https-deployment.md`. Eksekusi = server.
+2. **BE-02/BE-05 fixture** — dijalankan di server demo sekarang, tidak menunggu
+   staging. Template `backend/.env.mobile-fixture.example`; skrip tetap dry-run
+   sampai `MOBILE_FIXTURE_APPLY=staging-synthetic-only`. Menunggu dari pemilik:
+   email karyawan uji, titik GPS + radius, satu foto enrollment.
+3. **BE-03/BE-04 kontrak tanggal** — `YYYY-MM-DD` dipin lewat
+   `shared/validators/calendar-date.ts`; ISO instant diterima sebagai jalur
+   kompatibilitas dan dinormalkan ke hari yang dimaksud. `duration` izin =
+   hari, pecahan boleh.
+4. **BE-08 chat** — DI LUAR scope rilis. Backend tidak punya modul chat sama
+   sekali; tidak ada yang dibangun. Mobile tetap menampilkan unavailable.
+   Kebutuhan "ngobrol internal" sudah tertutup modul engagement (feed + kudos).
+5. **BE-09 kebijakan data** — ditunda ke Product. Dicatat terbuka: Play Data
+   Safety dan Apple App Privacy menolak submit tanpa ini, dan aplikasi ini
+   mengumpulkan selfie, lokasi, NIK, NPWP, serta data payroll. Ditunda, bukan
+   dihapus.
+
+### Status verifikasi
+
+- tsc backend + frontend bersih.
+- jest: 18 hijau (calendar-date + permission-request), work-calendar 34 hijau.
+- vitest frontend: 45 hijau, 9 file.
+- Bukti dari output mentah, bukan ringkasan proxy.

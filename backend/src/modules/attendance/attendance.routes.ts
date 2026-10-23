@@ -7,6 +7,7 @@ import { attendanceController } from './attendance.controller';
 import {
   attendanceContextQuerySchema,
   attendanceQuerySchema,
+  attendancePeriodQuerySchema,
   checkoutAttendanceSchema,
   createAttendanceSchema,
   myAttendanceQuerySchema,
@@ -36,7 +37,12 @@ router.patch('/me/check-out', validate(selfCheckOutSchema), idempotency(), atten
 // Overtime. Keep these routes before /:id so GET /overtime is not interpreted
 // as an attendance record whose id happens to be "overtime".
 router.get('/overtime', authorize({ resource: 'attendance', action: 'read' }), validate(overtimeQuerySchema, 'query'), attendanceController.findAllOvertime.bind(attendanceController));
-router.post('/overtime', authorize({ resource: 'attendance', action: 'create' }), validate(overtimeRequestSchema), idempotency(), attendanceController.createOvertime.bind(attendanceController));
+// Lembur diajukan karyawan untuk dirinya sendiri: controller memaksa
+// employeeId dari sesi bagi siapa pun yang bukan HR/manajer, jadi pagar
+// attendance:create — izin yang tidak dipegang karyawan — justru mengunci
+// pengaju aslinya. HR/manajer tetap bisa mengajukan atas nama orang lain
+// lewat pemeriksaan peran di controller.
+router.post('/overtime', validate(overtimeRequestSchema), idempotency(), attendanceController.createOvertime.bind(attendanceController));
 router.get('/overtime/:id/pay', authorize({ resource: 'attendance', action: 'read' }), attendanceController.calculateOvertimePay.bind(attendanceController));
 router.patch('/overtime/:id/approve', authorize({ resource: 'attendance', action: 'approve' }), attendanceController.approveOvertime.bind(attendanceController));
 router.patch('/overtime/:id/reject', authorize({ resource: 'attendance', action: 'approve' }), attendanceController.rejectOvertime.bind(attendanceController));
@@ -53,8 +59,8 @@ router.post('/import',
   attendanceController.importHistory.bind(attendanceController));
 router.get('/', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceQuerySchema, 'query'), attendanceController.findAll.bind(attendanceController));
 router.get('/context', authorize({ resource: 'attendance', action: 'read' }), validate(attendanceContextQuerySchema, 'query'), attendanceController.getContext.bind(attendanceController));
-router.get('/summary', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getSummary.bind(attendanceController));
-router.get('/report', authorize({ resource: 'attendance', action: 'read' }), attendanceController.getReport.bind(attendanceController));
+router.get('/summary', authorize({ resource: 'attendance', action: 'read' }), validate(attendancePeriodQuerySchema, 'query'), attendanceController.getSummary.bind(attendanceController));
+router.get('/report', authorize({ resource: 'attendance', action: 'read' }), validate(attendancePeriodQuerySchema, 'query'), attendanceController.getReport.bind(attendanceController));
 router.get('/:id', authorize({ resource: 'attendance', action: 'read' }), attendanceController.findById.bind(attendanceController));
 router.post('/', authorize({ resource: 'attendance', action: 'create' }), validate(createAttendanceSchema), attendanceController.create.bind(attendanceController));
 router.patch('/:id/checkout', authorize({ resource: 'attendance', action: 'update' }), validate(checkoutAttendanceSchema), attendanceController.checkOut.bind(attendanceController));

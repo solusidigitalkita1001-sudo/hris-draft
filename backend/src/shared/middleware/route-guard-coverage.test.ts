@@ -56,6 +56,7 @@ const SELF_SERVICE: Record<string, string> = {
   'auth/auth.routes.ts DELETE /sessions/:id': 'Revokes one of the caller\'s own sessions.',
 
   // Own attendance.
+  'attendance/attendance.routes.ts POST /overtime': 'Submits the caller\'s own overtime; the controller overwrites employeeId from the session unless the actor is HR/manager.',
   'attendance/attendance.routes.ts POST /me/check-in': 'Records the caller\'s own attendance.',
   'attendance/attendance.routes.ts PATCH /me/check-out': 'Closes the caller\'s own attendance.',
   'attendance/attendance-correction.routes.ts POST /': 'Files a correction for the caller; approval is separately authorised.',
@@ -117,6 +118,20 @@ const SELF_SERVICE: Record<string, string> = {
   'notification/notification.routes.ts DELETE /:id': 'Deletes one of the caller\'s own notifications.',
   'announcement/announcement.routes.ts PUT /:id/read': 'Records the caller\'s own read receipt.',
   'training/training.routes.ts POST /enrollments/:id/feedback': 'Submits feedback on the caller\'s own enrolment.',
+
+  // Hasil penilaian milik sendiri. Permission performance:read dipegang
+  // HR/manajer, bukan karyawan, sehingga memakainya di sini justru mengunci
+  // pemilik hasil. Service memeriksa result.employeeId === pemanggil pada
+  // ketiganya sebelum menulis apa pun.
+  'performance/performance.routes.ts POST /results/:id/acknowledge': 'Acknowledges the caller\'s own published result; ownership re-checked in the service.',
+  'performance/performance.routes.ts POST /results/:id/attachments': 'Attaches evidence to the caller\'s own result; uploader must be the employee, reviewer, approver, or publisher.',
+  'performance/performance.routes.ts POST /planning-assignments/:id/submit': 'Submits the caller\'s own execution assignment; ensureExecutionOwner re-checks it.',
+  'performance/performance.routes.ts POST /planning-assignments/:id/approve': 'Acts as the assignment\'s approver; ensureExecutionApprover re-checks it.',
+  'performance/performance.routes.ts POST /planning-assignments/:id/reject': 'Acts as the assignment\'s approver; ensureExecutionApprover re-checks it.',
+  'performance/performance.routes.ts POST /planning-assignments/:id/revision': 'Acts as the assignment\'s approver; ensureExecutionApprover re-checks it.',
+  'performance/performance.routes.ts PATCH /execution/targets/:id/comment': 'Comments as employee, reviewer, or approver of that target; the role is resolved from the session.',
+  'performance/performance.routes.ts POST /result-disputes/:id/attachments': 'Attaches evidence to a dispute the caller owns or reviews.',
+  'performance/performance.routes.ts POST /results/:id/disputes': 'Disputes the caller\'s own published result; ownership and dispute window re-checked in the service.',
 };
 
 interface Route {

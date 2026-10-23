@@ -133,7 +133,7 @@ function PersonalHeatmap({ records }: { records: AttendanceRecord[] }) {
   // Offset agar kolom pertama = Senin (dayjs: 0 = Minggu)
   const leadingBlanks = (monthStart.day() + 6) % 7;
 
-  const cells: Array<{ key: string; className: string; title?: string } | null> = [];
+  const cells: Array<{ key: string; day: number; className: string; filled: boolean; isToday: boolean; title?: string } | null> = [];
   for (let i = 0; i < leadingBlanks; i += 1) cells.push(null);
   for (let d = 1; d <= daysInMonth; d += 1) {
     const date = monthStart.date(d);
@@ -144,7 +144,10 @@ function PersonalHeatmap({ records }: { records: AttendanceRecord[] }) {
     else if (date.isAfter(today, 'day')) className = 'bg-muted/40';
     cells.push({
       key,
+      day: d,
       className,
+      filled: Boolean(status),
+      isToday: date.isSame(today, 'day'),
       title: `${date.format('D MMM')}${status ? ` · ${statusMeta(status, t).label}` : ''}`,
     });
   }
@@ -158,7 +161,10 @@ function PersonalHeatmap({ records }: { records: AttendanceRecord[] }) {
         <span className="text-[11.5px] text-muted-foreground">{today.format('MMMM YYYY')}</span>
       </div>
 
-      <div className="mt-5 grid grid-cols-7 gap-1.5">
+      {/* Lebar dibatasi: tanpa itu tiap kotak melar sebesar tombol di layar lebar
+          dan kalender sebulan memakan satu layar penuh. Angka tanggal ditulis di
+          dalam kotak — tanpa itu tidak ada cara tahu kotak merah itu tanggal berapa. */}
+      <div className="mt-5 grid max-w-[22rem] grid-cols-7 gap-1.5">
         {DAY_LABELS.map((d) => (
           <span key={d} className="text-center text-[9px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">
             {t(d)}
@@ -166,7 +172,18 @@ function PersonalHeatmap({ records }: { records: AttendanceRecord[] }) {
         ))}
         {cells.map((cell, i) =>
           cell ? (
-            <div key={cell.key} title={cell.title} className={cn('aspect-square rounded-md', cell.className)} />
+            <div
+              key={cell.key}
+              title={cell.title}
+              className={cn(
+                'flex aspect-square items-center justify-center rounded-md text-[11px] font-medium tabular-nums',
+                cell.className,
+                cell.filled ? 'text-white' : 'text-muted-foreground',
+                cell.isToday && 'ring-2 ring-primary ring-offset-1 ring-offset-card'
+              )}
+            >
+              {cell.day}
+            </div>
           ) : (
             <div key={`blank-${i}`} />
           )

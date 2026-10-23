@@ -6,6 +6,17 @@ import { initialsOf } from './format';
 
 type ActivityItem = DashboardSummary['recentActivity'][number];
 
+/**
+ * Audit log menyimpan aksi sebagai kode (`SUPER_ADMIN_TENANT_ACCESS`). Kode itu
+ * benar untuk mesin dan tidak terbaca untuk manusia — ini kartu pertama yang
+ * dilihat orang di dashboard, jadi tampilkan kalimatnya, bukan konstantanya.
+ */
+function humanize(value: string | null | undefined): string {
+  if (!value) return '';
+  const words = value.replace(/_/g, ' ').trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 /** Kartu "Aktivitas Terbaru" — audit log ringkas dari ringkasan dashboard. */
 export function RecentActivityCard({
   items,
@@ -34,7 +45,7 @@ export function RecentActivityCard({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12.5px] font-medium text-foreground">
-                  {item.action} {item.entity}
+                  {humanize(item.action)}{item.entity ? ` · ${item.entity}` : ''}
                 </p>
                 <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                   {item.actorEmail}

@@ -25,6 +25,14 @@ describe('access control', () => {
     ])).toBe(false);
   });
 
+  it('hides employee-only pages from an account with no employee record', () => {
+    // Super admin tanpa data karyawan bukan kurang wewenang — ia memang tidak
+    // punya slip gaji. Dulu menu tetap tampil lalu halamannya menjawab 400.
+    const rule = { requireAuth: true, requireEmployee: true, requiredRoles: ['EMPLOYEE'] };
+    expect(canAccess(user({ roles: ['SUPER_ADMIN'], employeeId: undefined }), rule)).toBe(false);
+    expect(canAccess(user({ employeeId: 'emp-1' }), rule)).toBe(true);
+  });
+
   it('supports wildcard permissions and the super-admin override', () => {
     expect(hasAllPermissions(user({ permissions: ['payroll:*'] }), [{ resource: 'payroll', action: 'disburse' }])).toBe(true);
     expect(canAccess(user({ roles: ['SUPER_ADMIN'], permissions: [] }), {

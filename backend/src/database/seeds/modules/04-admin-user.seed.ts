@@ -21,7 +21,9 @@ export async function seedAdminUser(): Promise<void> {
       email: adminEmail,
       passwordHash,
       status: 'ACTIVE',
-      mustChangePassword: false,
+      // Password seed terkenal publik (tertulis di repo); server menolak
+      // request lain sampai diganti — lihat Authenticate.assertPasswordChanged.
+      mustChangePassword: true,
     },
   });
 

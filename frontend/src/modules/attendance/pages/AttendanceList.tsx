@@ -28,6 +28,7 @@ import { formatDate, formatTime } from '@/utils/format';
 import { apiErrorMessage } from '@/lib/errors';
 import { useI18n } from '@/i18n/provider';
 import type { TranslationKey } from '@/i18n/translations';
+import { attendanceMethodLabel } from '@/utils/enum-label';
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PRESENT: <CheckCircle2 size={14} className="text-emerald-500" />,
@@ -902,7 +903,7 @@ export function AttendanceList() {
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         {isOperational ? (
           <>
-            <div className="relative flex-1 max-w-xs">
+            <div className="relative w-full sm:w-72 sm:shrink-0">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder={t('ess.attendance.filter.searchEmployee')} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
             </div>
@@ -913,7 +914,7 @@ export function AttendanceList() {
           <input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}
             className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground" />
         )}
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {['', 'PRESENT', 'ABSENT', 'LATE', 'EXCUSED'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${statusFilter === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'}`}>
@@ -976,7 +977,7 @@ export function AttendanceList() {
                   </td>
                   <td className="px-4 py-3 text-center text-xs text-muted-foreground">
                     <div className="space-y-1">
-                      <p>{r.method || '-'}</p>
+                      <p>{attendanceMethodLabel(r.method, t)}</p>
                       {r.distanceMeters !== null && r.distanceMeters !== undefined && (
                         <p className="inline-flex items-center gap-1">
                           <MapPin size={12} />

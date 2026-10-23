@@ -81,15 +81,21 @@ export function LeaveList() {
     if (!approvAction) return;
     setActionLoading(true);
     try {
-      await leaveService.submitWorkflowAction(
+      const result = await leaveService.submitWorkflowAction(
         approvAction.id,
         approvAction.type,
         actionComment.trim() || undefined
       );
+      // Satu langkah approval bukan berarti pengajuannya selesai. Mengatakan
+      // "disetujui" saat statusnya masih PENDING membuat approver mengira
+      // urusannya beres, padahal masih menunggu tahap berikutnya.
+      const finalStatus = result?.leaveRequest?.status;
       toast.success(
-        approvAction.type === 'APPROVE'
-          ? t('ess.leave.toast.approved')
-          : t('ess.leave.toast.rejected')
+        approvAction.type !== 'APPROVE'
+          ? t('ess.leave.toast.rejected')
+          : finalStatus === 'APPROVED'
+            ? t('ess.leave.toast.approved')
+            : t('ess.leave.toast.stepApproved')
       );
       setApprovAction(null);
       setActionComment('');
@@ -170,11 +176,11 @@ export function LeaveList() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
+        <div className="relative w-full sm:w-72 sm:shrink-0">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder={t('ess.common.searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {['', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${statusFilter === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'}`}>

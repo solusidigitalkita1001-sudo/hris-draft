@@ -909,17 +909,16 @@ export class AttendanceService {
     });
   }
 
-  async getSummary(companyId: string, month: string, year: string, departmentId?: string) {
-    return attendanceRepository.getSummary(companyId, Number(month), Number(year), departmentId);
+  async getSummary(companyId: string, month: number, year: number, departmentId?: string) {
+    return attendanceRepository.getSummary(companyId, month, year, departmentId);
   }
 
-  async getReport(companyId: string, month: string, year: string, departmentId?: string) {
-    // Convert month/year to date range
-    const startDate = `${year}-${month.padStart(2, '0')}-01`;
-    const endMonth = Number(month);
-    const endYear = Number(year);
-    const lastDay = new Date(endYear, endMonth, 0).getDate();
-    const endDate = `${year}-${month.padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  async getReport(companyId: string, month: number, year: number, departmentId?: string) {
+    // month/year sudah divalidasi sebagai angka 1-12 / 2000-2100 di route.
+    const paddedMonth = String(month).padStart(2, '0');
+    const lastDay = new Date(year, month, 0).getDate();
+    const startDate = `${year}-${paddedMonth}-01`;
+    const endDate = `${year}-${paddedMonth}-${String(lastDay).padStart(2, '0')}`;
 
     const result = await attendanceRepository.getReport(companyId, { startDate, endDate, departmentId });
     return result.csv;

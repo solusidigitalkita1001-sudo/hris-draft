@@ -61,7 +61,7 @@ export function PayrollDashboard() {
             </div>
           </div>
           <p className="text-2xl font-semibold">
-            {latestRun ? `Rp ${Number(latestRun.totalNetPay).toLocaleString()}` : '0'}
+            {latestRun ? `Rp ${Number(latestRun.totalNetPay).toLocaleString('id-ID')}` : '0'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">{t('fin.dash.latestNetPay')}</p>
         </div>
@@ -166,7 +166,7 @@ export function PayrollDashboard() {
                     <td className="px-4 py-3 text-sm text-muted-foreground">{run.period?.name || '-'}</td>
                     <td className="px-4 py-3 text-center text-sm">{run.totalEmployees}</td>
                     <td className="px-4 py-3 text-right text-sm font-medium">
-                      Rp {Number(run.totalNetPay).toLocaleString()}
+                      Rp {Number(run.totalNetPay).toLocaleString('id-ID')}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <StatusBadge status={run.status} />

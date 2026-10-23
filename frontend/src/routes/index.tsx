@@ -508,10 +508,15 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      // Ruang kerja penilaian milik sendiri dan antrean atasan. Dulu dipagari
+      // performance:read — izin milik HR/admin — sehingga karyawan dan manajer
+      // lini, yang justru harus mengisinya, terlempar ke /unauthorized.
+      // Lingkup data dibatasi server: tiap endpoint memeriksa pemanggil sebagai
+      // pemilik, reviewer, atau approver sebelum mengembalikan apa pun.
       {
         path: 'performance/self-review',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+          <ProtectedRoute>
             <PerformanceSelfReviewPage />
           </ProtectedRoute>
         ),
@@ -519,7 +524,7 @@ export const router = createBrowserRouter([
       {
         path: 'performance/manager-review',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+          <ProtectedRoute>
             <PerformanceManagerReviewPage />
           </ProtectedRoute>
         ),
@@ -535,7 +540,7 @@ export const router = createBrowserRouter([
       {
         path: 'performance/my-results',
         element: (
-          <ProtectedRoute requiredPermissions={[{ resource: 'performance', action: 'read' }]}>
+          <ProtectedRoute>
             <PerformanceMyResultsPage />
           </ProtectedRoute>
         ),

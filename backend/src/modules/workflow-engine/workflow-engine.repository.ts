@@ -742,7 +742,11 @@ export class WorkflowEngineRepository {
     }
 
     if (!canAct) {
-      throw new ForbiddenError('You are not allowed to act on this workflow step');
+      // Pesan ini sampai langsung ke layar approver, jadi ia harus menjelaskan
+      // keadaannya (tahap ini milik orang lain), bukan sekadar menolak.
+      throw new ForbiddenError(
+        `Anda bukan approver untuk tahap "${currentStep.name}". Pengajuan ini sedang menunggu approver tahap tersebut.`,
+      );
     }
 
     return prisma.$transaction(async (tx) => {

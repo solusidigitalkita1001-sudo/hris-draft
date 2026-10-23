@@ -571,7 +571,7 @@ export function BranchListPage() {
       />
 
       <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
+        <div className="relative w-full sm:w-72 sm:shrink-0">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t('organization.branches.filters.searchPlaceholder')}

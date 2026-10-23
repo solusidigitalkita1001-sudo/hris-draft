@@ -97,43 +97,43 @@ const navItems: NavItem[] = [
     labelKey: 'sidebar.selfService',
     icon: <UserCheck size={17} />,
     path: '/self-service',
-    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.attendanceCorrection',
     icon: <CalendarClock size={17} />,
     path: '/attendance-corrections',
-    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.myPayslips',
     icon: <Receipt size={17} />,
     path: '/my-payslips',
-    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.loan',
     icon: <Banknote size={17} />,
     path: '/employee-loans',
-    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.ewa',
     icon: <Wallet size={17} />,
     path: '/ewa',
-    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.dailyActivity',
     icon: <MapPin size={17} />,
     path: '/daily-activity',
-    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.travelExpense',
     icon: <Plane size={17} />,
     path: '/travel-expenses',
-    access: { requireAuth: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
   },
   {
     labelKey: 'sidebar.workflow',
@@ -252,6 +252,25 @@ const navItems: NavItem[] = [
       { labelKey: 'sidebar.performance.cycles', icon: <BarChart3 size={16} />, path: '/performance/cycles' },
       { labelKey: 'sidebar.performance.reviews', icon: <ClipboardList size={16} />, path: '/performance/reviews' },
       { labelKey: 'sidebar.performance.goals', icon: <Target size={16} />, path: '/performance/goals' },
+    ],
+  },
+  // Ruang kerja penilaian milik sendiri. Grup "Kinerja" di atas butuh
+  // performance:read — izin HR/admin — jadi karyawan dan manajer lini tidak
+  // pernah melihatnya, dan halaman hasil/self-review mereka tidak punya jalan
+  // masuk sama sekali meski rutenya terbuka.
+  {
+    labelKey: 'sidebar.myPerformance',
+    icon: <Target size={17} />,
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    children: [
+      { labelKey: 'sidebar.myPerformance.results', icon: <ClipboardList size={16} />, path: '/performance/my-results' },
+      { labelKey: 'sidebar.myPerformance.selfReview', icon: <ClipboardList size={16} />, path: '/performance/self-review' },
+      {
+        labelKey: 'sidebar.myPerformance.managerReview',
+        icon: <ClipboardList size={16} />,
+        path: '/performance/manager-review',
+        access: { requireAuth: true, requireEmployee: true, requiredRoles: OPERATIONAL_ROLES },
+      },
     ],
   },
   {

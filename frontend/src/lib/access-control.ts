@@ -9,6 +9,13 @@ export interface AccessRule {
   requireAuth?: boolean;
   requiredPermissions?: PermissionRequirement[];
   requiredRoles?: string[];
+  /**
+   * Halaman yang hanya masuk akal untuk akun yang tertaut ke data karyawan:
+   * slip gaji saya, pengajuan saya, klaim saya. Super admin tanpa karyawan
+   * bukan kurang wewenang — ia memang tidak punya slip gaji, jadi aturan ini
+   * disengaja berlaku lebih dulu daripada bypass SUPER_ADMIN.
+   */
+  requireEmployee?: boolean;
 }
 
 export const EMPLOYEE_SELF_SERVICE_ROLES = [
@@ -63,6 +70,10 @@ export function canAccess(user: AuthUser | null | undefined, rule?: AccessRule) 
   }
 
   if (!user) {
+    return false;
+  }
+
+  if (rule.requireEmployee && !user.employeeId) {
     return false;
   }
 
