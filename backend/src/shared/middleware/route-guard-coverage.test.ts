@@ -56,6 +56,7 @@ const SELF_SERVICE: Record<string, string> = {
   'auth/auth.routes.ts DELETE /sessions/:id': 'Revokes one of the caller\'s own sessions.',
 
   // Own attendance.
+  'attendance/attendance.routes.ts POST /overtime': 'Submits the caller\'s own overtime; the controller overwrites employeeId from the session unless the actor is HR/manager.',
   'attendance/attendance.routes.ts POST /me/check-in': 'Records the caller\'s own attendance.',
   'attendance/attendance.routes.ts PATCH /me/check-out': 'Closes the caller\'s own attendance.',
   'attendance/attendance-correction.routes.ts POST /': 'Files a correction for the caller; approval is separately authorised.',

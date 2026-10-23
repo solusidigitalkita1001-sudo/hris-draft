@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDateSchema } from '@/shared/validators/calendar-date';
 
 const deviceGpsSchema = z.object({
   isMockLocation: z.boolean().optional().nullable(),
@@ -151,7 +152,9 @@ export const attendanceContextQuerySchema = z.object({
 export const createOvertimeSchema = z.object({
   employeeId: z.string().uuid(),
   companyId: z.string().uuid(),
-  date: z.string().datetime(),
+  // Tanggal lembur adalah hari kerjanya; jam mulai/selesai yang membawa waktu.
+  // Disamakan dengan izin, cuti, tukar shift, dan koreksi absensi.
+  date: calendarDateSchema,
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
   durationHours: z.number().positive(),

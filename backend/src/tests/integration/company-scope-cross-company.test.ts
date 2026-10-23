@@ -678,7 +678,7 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
           attendanceService.createOvertime({
             companyId: COMPANY_A_ID,
             employeeId: EMPLOYEE_B_ID,
-            date: '2026-01-10',
+            date: new Date('2026-01-10T00:00:00.000Z'),
             startTime: '18:00',
             endTime: '20:00',
             durationHours: 2,
@@ -704,7 +704,7 @@ describe('CompanyScope Cross-Tenant Access Prevention (Fase A.6)', () => {
         attendanceService.createOvertime({
           companyId: COMPANY_A_ID,
           employeeId: EMPLOYEE_A_ID,
-          date: '2026-01-10',
+          date: new Date('2026-01-10T00:00:00.000Z'),
           startTime: '18:00',
           endTime: '20:00',
           durationHours: 2,

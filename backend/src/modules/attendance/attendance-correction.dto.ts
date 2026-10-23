@@ -1,8 +1,12 @@
 import { z } from 'zod';
+import { calendarDateSchema } from '@/shared/validators/calendar-date';
 
 export const createAttendanceCorrectionSchema = z.object({
   attendanceId: z.string().uuid().optional(),
-  date: z.string().datetime(),
+  // Koreksi menyasar satu hari kerja, bukan satu titik waktu: samakan dengan
+  // izin, cuti, dan tukar shift supaya klien tidak perlu menghafal format
+  // berbeda per modul. Jam yang diminta di bawah tetap timestamp penuh.
+  date: calendarDateSchema,
   requestedCheckIn: z.string().datetime().optional(),
   requestedCheckOut: z.string().datetime().optional(),
   reason: z.string().trim().min(3).max(2000),
