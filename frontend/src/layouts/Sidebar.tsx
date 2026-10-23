@@ -254,6 +254,25 @@ const navItems: NavItem[] = [
       { labelKey: 'sidebar.performance.goals', icon: <Target size={16} />, path: '/performance/goals' },
     ],
   },
+  // Ruang kerja penilaian milik sendiri. Grup "Kinerja" di atas butuh
+  // performance:read — izin HR/admin — jadi karyawan dan manajer lini tidak
+  // pernah melihatnya, dan halaman hasil/self-review mereka tidak punya jalan
+  // masuk sama sekali meski rutenya terbuka.
+  {
+    labelKey: 'sidebar.myPerformance',
+    icon: <Target size={17} />,
+    access: { requireAuth: true, requireEmployee: true, requiredRoles: EMPLOYEE_SELF_SERVICE_ROLES },
+    children: [
+      { labelKey: 'sidebar.myPerformance.results', icon: <ClipboardList size={16} />, path: '/performance/my-results' },
+      { labelKey: 'sidebar.myPerformance.selfReview', icon: <ClipboardList size={16} />, path: '/performance/self-review' },
+      {
+        labelKey: 'sidebar.myPerformance.managerReview',
+        icon: <ClipboardList size={16} />,
+        path: '/performance/manager-review',
+        access: { requireAuth: true, requireEmployee: true, requiredRoles: OPERATIONAL_ROLES },
+      },
+    ],
+  },
   {
     labelKey: 'sidebar.lms',
     icon: <GraduationCap size={17} />,
