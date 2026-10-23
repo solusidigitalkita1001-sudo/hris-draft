@@ -237,7 +237,7 @@ export function WorkCalendarHolidaysPage() {
           className="h-9 sm:max-w-[8rem]"
         />
 
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {(['all', 'NH', 'JL'] as const).map((t) => (
             <button
               key={t}

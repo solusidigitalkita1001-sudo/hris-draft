@@ -145,7 +145,7 @@ export function GoalList() {
             className="pl-9 h-9"
           />
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {['', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].map((s) => (
             <button
               key={s}

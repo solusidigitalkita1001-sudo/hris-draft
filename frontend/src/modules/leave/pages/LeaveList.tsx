@@ -180,7 +180,7 @@ export function LeaveList() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder={t('ess.common.searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {['', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${statusFilter === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'}`}>

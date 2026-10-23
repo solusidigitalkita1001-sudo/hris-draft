@@ -15,7 +15,10 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
           <p className="text-sm text-muted-foreground mt-1">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {/* shrink-0 tanpa flex-wrap memaksa deretan tombol tetap satu baris; di
+          lebar ponsel barisan Import/Export/Refresh/Tambah mendorong seluruh
+          halaman sehingga body ikut bergeser horizontal. */}
+      {actions && <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{actions}</div>}
     </div>
   );
 }

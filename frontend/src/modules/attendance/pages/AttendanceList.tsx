@@ -914,7 +914,7 @@ export function AttendanceList() {
           <input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}
             className="h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground" />
         )}
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {['', 'PRESENT', 'ABSENT', 'LATE', 'EXCUSED'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${statusFilter === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'}`}>

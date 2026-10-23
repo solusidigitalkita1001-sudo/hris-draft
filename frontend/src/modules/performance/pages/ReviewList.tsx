@@ -120,7 +120,7 @@ export function ReviewList() {
           className="h-9 text-xs sm:max-w-xs"
         />
 
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {['', 'DRAFT', 'SUBMITTED', 'APPROVED', 'COMPLETED'].map((s) => (
             <button
               key={s}
