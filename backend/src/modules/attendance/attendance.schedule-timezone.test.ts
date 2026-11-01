@@ -86,7 +86,7 @@ describe('lateness judged in the employee timezone', () => {
     expect(created.lateMinutes).toBe(10);
   });
 
-  it('freezes the timezone on the row, so the stored lateMinutes stays re-derivable', async () => {
+  it('records the clock on the row, so a stored lateMinutes can be explained later', async () => {
     await punch('2026-10-04T01:10:00.000Z');
 
     const [[created]] = repositoryCreate.mock.calls;

@@ -363,9 +363,12 @@ export class AttendanceService {
       dayType: context.schedule.dayType,
       workStart: context.schedule.workStart ?? null,
       workEnd: context.schedule.workEnd ?? null,
-      // The clock `workStart`/`workEnd` were read against. Without it a stored
-      // `lateMinutes` cannot be re-derived from the snapshot, which is the
-      // whole point of freezing the schedule on the row.
+      // The clock `workStart`/`workEnd` were read against. Purely forensic:
+      // nothing reads it back, and it is not frozen — checkout re-stamps the
+      // snapshot from a freshly resolved context, so the row records the last
+      // context resolved rather than the one check-in was judged by. It is
+      // still worth writing, because a stored `lateMinutes` with no record of
+      // the clock behind it cannot be explained to the person it was taken off.
       timezone: context.timezone,
       warnings,
     } as Prisma.InputJsonValue;

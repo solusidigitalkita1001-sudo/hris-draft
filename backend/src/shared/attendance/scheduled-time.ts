@@ -45,6 +45,27 @@ export function resolveEffectiveTimezone(
 }
 
 /**
+ * A zone name that is safe to hand to `Intl`.
+ *
+ * `Intl` does NOT reject `timeZone: undefined` — it reads it as "no zone given"
+ * and resolves the *runtime's* zone, which is the server clock this whole module
+ * exists to get rid of. The type says `string`, but the value arrives from
+ * database rows, test doubles and `as any` boundaries, so the type is not the
+ * guarantee it looks like. A missing or blank zone therefore resolves here, once,
+ * to the schema default — the same answer `resolveEffectiveTimezone` gives, so
+ * absent means "not configured" everywhere in this module rather than meaning
+ * UTC in one place and the host's zone in another.
+ *
+ * A zone that is present but is not a real IANA name is a different situation
+ * and keeps its own answer (see `zoneOffsetMs`): nothing can be inferred from a
+ * typo, so it degrades to UTC rather than inventing a seven-hour claim about
+ * somebody's pay.
+ */
+function usableZone(timezone: string | null | undefined): string {
+  return timezone?.trim() || DEFAULT_ATTENDANCE_TIMEZONE;
+}
+
+/**
  * How far the zone's wall clock is ahead of UTC at a given instant, in ms.
  * `null` when the zone is unusable, which the callers read as "fall back to
  * UTC" — the same way `dateKeyInTimezone` degrades rather than taking
@@ -89,6 +110,14 @@ function zoneOffsetMs(instant: number, timezone: string): number | null {
  * Indonesia has no DST, so this only matters for a company configured outside
  * it — but a schedule silently wrong twice a year is not a better bug than one
  * wrong always.
+ *
+ * Spring-forward leaves wall-clock times that never happen (02:30 on the US
+ * transition day). The second pass resolves those **backwards**, to the last
+ * instant before the gap — 02:30 lands on 01:30 local, not on 03:30. That is a
+ * deliberate choice, not a leftover: these instants are schedule boundaries, so
+ * an earlier start cannot manufacture lateness and an earlier end cannot
+ * manufacture early-leave. Both are decided against the employee if the
+ * resolution jumps forward. `scheduled-time.test.ts` pins the direction.
  */
 function zonedWallClockToInstant(
   year: number,
@@ -98,12 +127,13 @@ function zonedWallClockToInstant(
   minutes: number,
   timezone: string,
 ): Date {
+  const zone = usableZone(timezone);
   const naive = Date.UTC(year, month, day, hours, minutes, 0, 0);
-  const firstOffset = zoneOffsetMs(naive, timezone);
+  const firstOffset = zoneOffsetMs(naive, zone);
   if (firstOffset === null) return new Date(naive);
 
   const candidate = naive - firstOffset;
-  const secondOffset = zoneOffsetMs(candidate, timezone);
+  const secondOffset = zoneOffsetMs(candidate, zone);
   if (secondOffset === null || secondOffset === firstOffset) return new Date(candidate);
   return new Date(naive - secondOffset);
 }
@@ -135,6 +165,9 @@ function minutesOfDay(time: string): number {
  * employee's local date (attendance.service.ts). Converting the instant into
  * `timezone` first would re-derive a date that is already decided, and would
  * shift it for any zone west of UTC.
+ *
+ * A missing or blank `timezone` resolves to the schema default rather than to
+ * the host's zone; see `usableZone` for why the type alone is not enough.
  */
 export function buildScheduledTime(baseDate: Date, time: string, timezone: string): Date {
   const { hours, minutes } = parseWallClock(time);

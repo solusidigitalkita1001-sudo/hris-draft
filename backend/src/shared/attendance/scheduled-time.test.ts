@@ -60,11 +60,20 @@ describe('buildScheduledTime', () => {
       .toBe('2026-03-08T12:00:00.000Z');
   });
 
-  it('still lands on the stated calendar date for a wall-clock time DST skipped', () => {
+  it('resolves a wall-clock time DST skipped backwards, to the instant before the gap', () => {
     // 02:30 never happens on 2026-03-08 in New York. Any answer is a
-    // compromise; an answer on a different calendar date is a bug.
-    const scheduled = buildScheduledTime(new Date('2026-03-08T00:00:00.000Z'), '02:30', 'America/New_York');
-    expect(Number.isFinite(scheduled.getTime())).toBe(true);
+    // compromise, and the direction is a deliberate one: backwards, so 02:30
+    // reads as 01:30 local rather than 03:30. These instants bound a shift, and
+    // jumping forward would decide both ends against the employee — a later
+    // start manufactures lateness, a later end manufactures early-leave. This
+    // assertion exists so the direction cannot change by accident.
+    const base = new Date('2026-03-08T00:00:00.000Z');
+    const scheduled = buildScheduledTime(base, '02:30', 'America/New_York');
+
+    expect(scheduled.toISOString()).toBe('2026-03-08T06:30:00.000Z');
+    expect(scheduled).toEqual(buildScheduledTime(base, '01:30', 'America/New_York'));
+    expect(scheduled.getTime()).toBeLessThan(buildScheduledTime(base, '03:30', 'America/New_York').getTime());
+    // Whatever the compromise, it stays on the calendar date asked for.
     expect(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(scheduled))
       .toBe('2026-03-08');
   });
@@ -80,9 +89,58 @@ describe('buildScheduledTime', () => {
 
   it('falls back to UTC when the stored timezone is not a real zone', () => {
     // Mirrors `dateKeyInTimezone`: an unusable zone must not take attendance
-    // down, and UTC is the one offset that is always available.
+    // down, and UTC is the one offset that is always available. A present-but-
+    // bogus name is a typo, and nothing about somebody's pay should be inferred
+    // from a typo — unlike an *absent* zone, which means "not configured" and
+    // takes the schema default below.
     expect(buildScheduledTime(DAY, '08:00', 'Mars/Olympus_Mons').toISOString())
       .toBe('2026-10-04T08:00:00.000Z');
+  });
+});
+
+describe('a timezone that never arrived', () => {
+  /**
+   * `Intl` treats `timeZone: undefined` as "no zone given" and resolves the
+   * runtime's own zone, so an argument that goes missing at an untyped boundary
+   * — a test double, an `as any`, a column read as null — reinstates exactly the
+   * server clock this module was written to remove. The static type says
+   * `string`; the values come from the database and from mocks, so it is not the
+   * guarantee it looks like.
+   */
+  const processZone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['an empty string', ''],
+    ['whitespace', '   '],
+  ])('reads %s as the schema default, like every other absent zone', (_label, zone) => {
+    const scheduled = buildScheduledTime(DAY, '08:00', zone as unknown as string);
+
+    expect(scheduled.toISOString()).toBe('2026-10-04T01:00:00.000Z');
+    expect(scheduled).toEqual(buildScheduledTime(DAY, '08:00', DEFAULT_ATTENDANCE_TIMEZONE));
+  });
+
+  it('gives a shift end the same treatment', () => {
+    const scheduledEnd = buildScheduledEndTime(DAY, '22:00', '06:00', undefined as unknown as string);
+
+    expect(scheduledEnd?.toISOString()).toBe('2026-10-04T23:00:00.000Z');
+  });
+
+  it('does not read a missing zone as the zone the process happens to run in', () => {
+    // The exact construction this module replaced: 08:00 in the server's own
+    // timezone.
+    const asTheServerWouldRead = new Date(DAY);
+    asTheServerWouldRead.setHours(8, 0, 0, 0);
+    const scheduled = buildScheduledTime(DAY, '08:00', undefined as unknown as string);
+
+    expect(scheduled.toISOString()).toBe('2026-10-04T01:00:00.000Z');
+    // Under TZ=UTC — production — those two are seven hours apart, which is the
+    // entire finding. On a host already set to Asia/Jakarta they coincide, and
+    // that coincidence is precisely why the bug survived this long.
+    if (processZone !== DEFAULT_ATTENDANCE_TIMEZONE) {
+      expect(scheduled.getTime()).not.toBe(asTheServerWouldRead.getTime());
+    }
   });
 });
 
