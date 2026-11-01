@@ -12,12 +12,28 @@ describe('payroll maker-checker persistence', () => {
     await repository.createPayrollRun({ periodId: 'period', companyId: 'A', name: 'September' }, 1, 'maker');
     // runType defaults to REGULAR here rather than being omitted: a run row
     // with no type would be invisible to the one-run-per-type guard.
-    expect(prisma.payrollRun.create).toHaveBeenCalledWith({ data: { periodId: 'period', companyId: 'A', name: 'September', runNumber: 1, runType: 'REGULAR', createdBy: 'maker' } });
+    expect(prisma.payrollRun.create).toHaveBeenCalledWith({ data: { periodId: 'period', companyId: 'A', name: 'September', runNumber: 1, runType: 'REGULAR', thrReferenceDate: null, createdBy: 'maker' } });
   });
   it('carries an explicit run type through to the row', async () => {
     await repository.createPayrollRun({ periodId: 'period', companyId: 'A', name: 'THR 2026', runType: 'THR' }, 2, 'maker');
     expect(prisma.payrollRun.create).toHaveBeenCalledWith({
-      data: { periodId: 'period', companyId: 'A', name: 'THR 2026', runNumber: 2, runType: 'THR', createdBy: 'maker' },
+      data: { periodId: 'period', companyId: 'A', name: 'THR 2026', runNumber: 2, runType: 'THR', thrReferenceDate: null, createdBy: 'maker' },
+    });
+  });
+  it('carries the holiday date of a THR run, and only of a THR run', async () => {
+    // P-C3: tanggal hari raya menentukan eligibilitas dan prorata. Di run
+    // bertipe lain ia tidak punya pembaca, jadi ia tidak boleh mendarat di
+    // baris run meski pemanggil internal menyodorkannya.
+    await repository.createPayrollRun(
+      { periodId: 'period', companyId: 'A', name: 'THR 2026', runType: 'THR', thrReferenceDate: '2026-04-21T00:00:00.000Z' }, 3, 'maker');
+    expect(prisma.payrollRun.create).toHaveBeenCalledWith({
+      data: { periodId: 'period', companyId: 'A', name: 'THR 2026', runNumber: 3, runType: 'THR', thrReferenceDate: new Date('2026-04-21T00:00:00.000Z'), createdBy: 'maker' },
+    });
+    jest.clearAllMocks();
+    await repository.createPayrollRun(
+      { periodId: 'period', companyId: 'A', name: 'September', thrReferenceDate: '2026-04-21T00:00:00.000Z' }, 4, 'maker');
+    expect(prisma.payrollRun.create).toHaveBeenCalledWith({
+      data: { periodId: 'period', companyId: 'A', name: 'September', runNumber: 4, runType: 'REGULAR', thrReferenceDate: null, createdBy: 'maker' },
     });
   });
   it('conditions approval on completed status, known creator, and a different checker', async () => {

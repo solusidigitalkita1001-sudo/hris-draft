@@ -30,7 +30,7 @@ import { calculatePph21 } from '@/shared/payroll/pph21';
 import { buildPayrollJournal } from '@/shared/payroll/journal';
 import { employmentWindow } from '@/shared/payroll/employment-window';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
-import { calculateThr } from '@/shared/payroll/thr';
+import { calculateThr, thrEmploymentEligibility } from '@/shared/payroll/thr';
 import { calculateThrTax } from '@/shared/payroll/thr-tax';
 import { AmbiguousSalaryError, selectAsOfSalaries } from '@/shared/payroll/as-of-salary';
 import { monthlyStatutoryWage } from '@/shared/payroll/statutory-wage';
@@ -654,6 +654,12 @@ export class PayrollService {
     if (!run) throw new NotFoundError('Payroll run not found');
 
     const allSalaryRows = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
+    // Deliberately the PERIOD END, not `thrReferenceDate`: which salary row is
+    // in force is a question about the run's period, and moving it to the
+    // holiday would change the upah — and so every THR amount — which this
+    // change does not touch. Siapa yang dibayar berubah di bawah; berapa tidak.
+    // Konsekuensinya dicatat: bila hari raya jatuh setelah periode berakhir,
+    // baris gaji yang baru berlaku setelah periode itu belum ikut terpilih.
     const employeeSalaries = this.asOfSalariesOrConflict(allSalaryRows, run.period.endDate);
 
     const thrComponent = await this.ensureThrEarningComponent(run.companyId, database);
@@ -667,7 +673,11 @@ export class PayrollService {
       );
     }
 
-    const referenceDate = new Date(run.period.endDate);
+    // Hari raya, bukan akhir periode. Permenaker mengukur masa kerja DAN hak
+    // dari tanggal hari raya, yang hampir tidak pernah jatuh di akhir periode
+    // payroll — run THR Maret untuk Idulfitri awal April memakai tanggal yang
+    // salah selama ini. Null → akhir periode, perilaku run yang sudah ada.
+    const referenceDate = new Date(run.thrReferenceDate ?? run.period.endDate);
     const [policy, methodSetting] = await Promise.all([
       loadPayrollPolicyConfig(database, run.companyId, referenceDate.getUTCFullYear()),
       database.companySetting.findUnique({
@@ -683,6 +693,31 @@ export class PayrollService {
 
     for (const salary of employeeSalaries) {
       const employee = salary.employee;
+      // SIAPA sebelum BERAPA — dan sebelum tanggal masuk. Loop ini membayar
+      // setiap baris gaji yang ia muat: karyawan yang resign berbulan-bulan
+      // sebelumnya tetap menerima THR penuh, karena masa kerjanya memang
+      // panjang dan tidak ada satu pun pemeriksaan hubungan kerja di sini.
+      // `calculateThr` tidak bisa menolaknya — ia hanya tahu tanggal masuk.
+      //
+      // Dicek lebih dulu daripada joinDate justru karena tidak butuh joinDate:
+      // orang yang tidak berhak tidak boleh menggagalkan run semua orang lain
+      // hanya karena tanggal masuknya kosong di baris yang sudah tidak dibayar.
+      const eligibility = thrEmploymentEligibility({
+        employmentType: employee?.employmentType,
+        employmentStatus: employee?.employmentStatus,
+        status: employee?.status,
+        lastWorkingDate: employee?.resignations[0]?.lastWorkingDate ?? null,
+        holidayDate: referenceDate,
+      });
+      if (!eligibility.entitled) {
+        // Dicatat, bukan dibuang diam-diam: "kenapa THR saya tidak keluar"
+        // adalah pertanyaan yang harus bisa dijawab dari log.
+        logger.info('THR skipped: no entitlement on the holiday date', {
+          runId, employeeId: salary.employeeId, reason: eligibility.reason,
+        });
+        continue;
+      }
+
       // Tenure decides both eligibility and the prorated fraction, so a
       // missing join date cannot be guessed. Named, so it is fixable.
       if (!employee?.joinDate) {

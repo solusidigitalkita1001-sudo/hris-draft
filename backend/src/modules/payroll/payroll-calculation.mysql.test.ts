@@ -41,6 +41,7 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       await mockDatabase.payslip.deleteMany({ where: { companyId } });
       await mockDatabase.payrollRun.deleteMany({ where: { companyId } });
       await mockDatabase.payrollPeriod.deleteMany({ where: { companyId } });
+      await mockDatabase.resignation.deleteMany({ where: { companyId } });
       await mockDatabase.employeeSalaryComponent.deleteMany({ where: { employeeSalary: { companyId } } });
       await mockDatabase.employeeSalary.deleteMany({ where: { companyId } });
       await mockDatabase.loanInstallment.deleteMany({ where: { loan: { companyId } } });
@@ -89,9 +90,9 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
   }
   const run = (f: Awaited<ReturnType<typeof fixture>>, periodId = f.period.id) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
     () => service.createPayrollRun({ companyId: f.companyId, periodId, name: 'Synthetic payroll' }, f.maker));
-  const runOfType = (f: Awaited<ReturnType<typeof fixture>>, runType: 'THR' | 'SEVERANCE' | 'CORRECTION') =>
+  const runOfType = (f: Awaited<ReturnType<typeof fixture>>, runType: 'THR' | 'SEVERANCE' | 'CORRECTION', thrReferenceDate?: string) =>
     runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
-      () => service.createPayrollRun({ companyId: f.companyId, periodId: f.period.id, name: `Synthetic ${runType}`, runType }, f.maker));
+      () => service.createPayrollRun({ companyId: f.companyId, periodId: f.period.id, name: `Synthetic ${runType}`, runType, thrReferenceDate }, f.maker));
   async function expectNoPayroll(f: Awaited<ReturnType<typeof fixture>>) {
     for (const count of [await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } }),
       await mockDatabase.payslip.count({ where: { companyId: f.companyId } }),
@@ -197,6 +198,141 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(thr.payslips).toHaveLength(0);
     expect(Number(thr.totalEarnings)).toBe(0);
   });
+
+  /**
+   * P-C3. The THR loop used to pay every salary row it loaded: it checked the
+   * join date and the tenure fraction and nothing else — not the employee's
+   * status, not `employmentStatus`, not an approved resignation. Somebody who
+   * had left months earlier was paid a full THR, and the only date the run
+   * had was the period end, which is not when the holiday falls.
+   *
+   * Permenaker 6/2016 Art. 2-3: THR is owed to whoever is in an employment
+   * relationship on the holiday, plus PKWTT (permanent) staff whose
+   * relationship ended within 30 days before it. PKWT (fixed-term) staff whose
+   * term has ended are owed nothing, however recently it ended.
+   */
+  describe('THR eligibility on the holiday date (Permenaker 6/2016)', () => {
+    // The fixture period runs 2026-10-01 → 2026-10-28, so the holiday sits
+    // inside it and the 20/40-day cases below land on real calendar dates.
+    const HOLIDAY = '2026-10-21T00:00:00.000Z';
+
+    async function thrFixture() {
+      const f = await fixture();
+      await mockDatabase.salaryComponent.create({ data: {
+        companyId: f.companyId, code: 'PPH21', name: 'PPh 21', type: 'DEDUCTION', amount: '0', isTaxable: false,
+      } });
+      return f;
+    }
+
+    /** Two years of service at 1000 base: a full, unprorated THR if owed. */
+    async function veteran(
+      f: Awaited<ReturnType<typeof fixture>>,
+      overrides: { employmentType?: 'PERMANENT' | 'CONTRACT'; employmentStatus?: 'ACTIVE' | 'RESIGNED' | 'CONTRACT_END'; status?: 'ACTIVE' | 'INACTIVE'; joinDate?: Date } = {},
+    ) {
+      const person = await employee(f);
+      await mockDatabase.employee.update({
+        where: { id: person.person.id }, data: { joinDate: new Date('2024-01-01'), ...overrides },
+      });
+      return person.person;
+    }
+
+    async function resign(f: Awaited<ReturnType<typeof fixture>>, employeeId: string, lastWorkingDate: string) {
+      return mockDatabase.resignation.create({ data: {
+        companyId: f.companyId, employeeId, resignDate: new Date('2026-08-01'),
+        lastWorkingDate: new Date(lastWorkingDate), status: 'APPROVED',
+      } });
+    }
+
+    it('pays an employee still in an employment relationship on the holiday', async () => {
+      const f = await thrFixture();
+      const person = await veteran(f);
+
+      const thr = await runOfType(f, 'THR', HOLIDAY);
+      expect(thr.payslips).toHaveLength(1);
+      expect(thr.payslips[0].employeeId).toBe(person.id);
+      expect(Number(thr.payslips[0].totalEarnings)).toBe(1000);
+    });
+
+    it('pays a PKWTT whose employment ended 20 days before the holiday', async () => {
+      const f = await thrFixture();
+      // 2026-10-01 is 20 days before 2026-10-21: inside the 30-day window, so
+      // the THR is still owed even though the person has left.
+      const person = await veteran(f, { employmentType: 'PERMANENT', employmentStatus: 'RESIGNED', status: 'INACTIVE' });
+      await resign(f, person.id, '2026-10-01');
+
+      const thr = await runOfType(f, 'THR', HOLIDAY);
+      expect(thr.payslips).toHaveLength(1);
+      expect(thr.payslips[0].employeeId).toBe(person.id);
+    });
+
+    it('skips a PKWTT whose employment ended 40 days before the holiday', async () => {
+      const f = await thrFixture();
+      // 2026-09-11 is 40 days before 2026-10-21: past the 30-day window.
+      const person = await veteran(f, { employmentType: 'PERMANENT', employmentStatus: 'RESIGNED', status: 'INACTIVE' });
+      await resign(f, person.id, '2026-09-11');
+
+      const thr = await runOfType(f, 'THR', HOLIDAY);
+      expect(thr.payslips).toHaveLength(0);
+      expect(Number(thr.totalEarnings)).toBe(0);
+    });
+
+    it('skips a PKWT whose fixed term had ended, inside the 30 days or not', async () => {
+      const f = await thrFixture();
+      // Same 20-day gap that earns a PKWTT its THR. The grace window is a
+      // PKWTT rule only, so this one is owed nothing.
+      const resigned = await veteran(f, { employmentType: 'CONTRACT', employmentStatus: 'RESIGNED', status: 'INACTIVE' });
+      await resign(f, resigned.id, '2026-10-01');
+      // And a contract that simply ran out, which leaves no resignation row at
+      // all — only `employmentStatus`.
+      await veteran(f, { employmentType: 'CONTRACT', employmentStatus: 'CONTRACT_END', status: 'INACTIVE' });
+
+      const thr = await runOfType(f, 'THR', HOLIDAY);
+      expect(thr.payslips).toHaveLength(0);
+      expect(Number(thr.totalEarnings)).toBe(0);
+    });
+
+    it('does not let a leaver with no join date block the THR of everybody else', async () => {
+      const f = await thrFixture();
+      const entitled = await veteran(f);
+      // Left years ago and never had a join date filled in. Tenure is only
+      // needed to decide HOW MUCH, so refusing the whole run over a row that
+      // is not being paid would hold up everyone else's THR for nothing.
+      const departed = await employee(f);
+      await mockDatabase.employee.update({
+        where: { id: departed.person.id },
+        data: { employmentType: 'CONTRACT', employmentStatus: 'CONTRACT_END', status: 'INACTIVE' },
+      });
+
+      const thr = await runOfType(f, 'THR', HOLIDAY);
+      expect(thr.payslips).toHaveLength(1);
+      expect(thr.payslips[0].employeeId).toBe(entitled.id);
+    });
+
+    it('measures tenure from the holiday, not from the period end', async () => {
+      const f = await thrFixture();
+      // Joined 2026-09-25: one full month by the period end (2026-10-28), but
+      // not yet one month on the holiday (2026-10-21). The holiday is the date
+      // the law measures from, so this person is not yet entitled.
+      await veteran(f, { joinDate: new Date('2026-09-25') });
+
+      const thr = await runOfType(f, 'THR', HOLIDAY);
+      expect(thr.thrReferenceDate?.toISOString()).toBe(HOLIDAY);
+      expect(thr.payslips).toHaveLength(0);
+    });
+
+    it('falls back to the period end when no holiday date is given', async () => {
+      const f = await thrFixture();
+      // The same join date, with no holiday supplied: the period end is one
+      // full month on, so the prorated THR is owed.
+      await veteran(f, { joinDate: new Date('2026-09-25') });
+
+      const thr = await runOfType(f, 'THR');
+      expect(thr.thrReferenceDate).toBeNull();
+      expect(thr.payslips).toHaveLength(1);
+      expect(Number(thr.payslips[0].totalEarnings)).toBe(Math.round(1000 / 12));
+    });
+  });
+
   it('rolls back earlier slips, formula/loan snapshots and generated components when a later employee formula fails; retry succeeds', async () => {
     const f = await fixture(), first = await employee(f), second = await employee(f, '100.00', '2026-08-01');
     await loan(f, first.person.id); const advance = await ewa(f, first.person.id);
