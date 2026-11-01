@@ -1,9 +1,23 @@
 name: 🚀 Deploy HRIS
 
+# Deploys ONLY after CI (name: "CI", .github/workflows/ci.yml) has finished
+# successfully on main — never on a bare push. This is deliberate: deploy has
+# no checkout/build/test step of its own, so without this gate it would ship
+# whatever was pushed to main unverified.
+#
+# Race note: CI's own concurrency group (ci-${{ github.ref }}) cancels an
+# in-progress run when another push lands on the same ref. A run that gets
+# cancelled by a rapid follow-up push completes with conclusion "cancelled",
+# not "success", so it never reaches the job `if:` below and never deploys.
+# Net effect for a burst of pushes to main: only the CI run for the LAST push
+# that is allowed to finish will trigger a deploy, and it deploys that run's
+# head_sha (not whatever is at origin/main HEAD by the time it runs). This is
+# considered acceptable — operators should expect "last push that finished
+# CI wins", not "every push deploys".
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       rollback_ref:
@@ -20,6 +34,16 @@ jobs:
     name: Deploy Production
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # workflow_run fires for CI runs on ANY branch/PR (CI triggers on
+    # push: ['**'] and pull_request). Only deploy when that CI run (a) passed
+    # and (b) ran against main — workflow_run itself cannot filter on
+    # conclusion/branch, so it must be enforced here. workflow_dispatch (the
+    # manual rollback path) always passes this check — it is independent of
+    # any CI run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
 
     steps:
       - name: Deploy via SSH
@@ -27,6 +51,11 @@ jobs:
 
         env:
           ROLLBACK_REF: ${{ github.event.inputs.rollback_ref }}
+          # Empty on workflow_dispatch (no workflow_run payload on that event).
+          # On workflow_run this is the exact commit CI verified — deploy must
+          # reset to THIS sha, not to whatever origin/main happens to be by
+          # the time this job runs (another push could have landed since).
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
           HTTPS_ENABLED: ${{ vars.HTTPS_ENABLED || 'false' }}
 
         with:
@@ -35,7 +64,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
 
-          envs: ROLLBACK_REF,HTTPS_ENABLED
+          envs: ROLLBACK_REF,DEPLOY_SHA,HTTPS_ENABLED
 
           timeout: 60s
           command_timeout: 35m
@@ -80,11 +109,18 @@ jobs:
             echo "✅ Production .env backed up"
 
             ROLLBACK_REF="${ROLLBACK_REF:-}"
+            DEPLOY_SHA="${DEPLOY_SHA:-}"
 
             if [ -n "$ROLLBACK_REF" ]; then
               echo "🎯 MANUAL ROLLBACK requested → deploying ref: $ROLLBACK_REF"
               git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
               git reset --hard "$ROLLBACK_REF"
+            elif [ -n "$DEPLOY_SHA" ]; then
+              echo "🔄 Fetching origin/main..."
+              git fetch --prune origin main
+
+              echo "🔄 Resetting repository to CI-verified commit: $DEPLOY_SHA"
+              git reset --hard "$DEPLOY_SHA"
             else
               echo "🔄 Fetching origin/main..."
               git fetch --prune origin main
