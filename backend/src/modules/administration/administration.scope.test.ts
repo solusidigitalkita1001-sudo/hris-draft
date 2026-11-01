@@ -1,13 +1,26 @@
 jest.mock('./administration.repository', () => ({ administrationRepository: { findMyDataScopeByUser: jest.fn() } }));
-import { AdministrationService } from './administration.service';
+jest.mock('@/shared/security/manager-team', () => ({ resolveManagedEmployeeIds: jest.fn().mockResolvedValue([]) }));
+import { AdministrationService, COMPANY_WIDE_DEFAULT_ROLES } from './administration.service';
 import { administrationRepository } from './administration.repository';
+import { resolveManagedEmployeeIds } from '@/shared/security/manager-team';
 import { ForbiddenError } from '@/shared/exceptions/AppError';
 const service = new AdministrationService();
 const user = { id: 'u', companyId: 'A', employeeId: 'e', roles: ['MANAGER'] };
 describe('data scope fail-closed', () => {
   beforeEach(() => jest.clearAllMocks());
-  it.each(['employee', 'attendance', 'payroll', 'leave', 'ALL'])('MANAGER_TEAM fails closed (throws) when the requester manages no one (%s)', (resource) => {
-    expect(() => service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, user, resource)).toThrow(ForbiddenError);
+  it.each(['employee', 'attendance', 'payroll', 'leave', 'ALL'])('MANAGER_TEAM without an employee identity fails closed (throws) (%s)', (resource) => {
+    expect(() => service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, { ...user, employeeId: undefined }, resource)).toThrow(ForbiddenError);
+  });
+  it('keeps a manager who heads no unit on their own record instead of denying every read', () => {
+    // A MANAGER_TEAM scope used to throw on an empty team, which took the
+    // manager's own data with it — a manager not yet registered as a unit head
+    // lost access to everything, their own records included.
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, user)).toEqual({ id: { in: ['e'] } });
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, user, 'leave')).toEqual({ employeeId: { in: ['e'] } });
+  });
+  it('adds the manager to their own team scope, and never twice', () => {
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: ['t1'] }, user)).toEqual({ id: { in: ['t1', 'e'] } });
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: ['e', 't1'] }, user)).toEqual({ id: { in: ['e', 't1'] } });
   });
   it('MANAGER_TEAM scopes to the pre-resolved team ids', () => {
     const mgrTeam = { ...user, teamEmployeeIds: ['e', 't1', 't2'] };
@@ -36,6 +49,61 @@ describe('data scope fail-closed', () => {
   it('allows explicitly assigned companies', async () => {
     await service.findMyDataScopeByUser('B', { ...user, companyScope: ['A', 'B'] });
     expect(administrationRepository.findMyDataScopeByUser).toHaveBeenCalledWith('B', ['MANAGER'], 'ALL');
+  });
+});
+
+/**
+ * S-H1: a role with no RoleDataScope row resolved to "no filter", which the
+ * callers read as the whole company. No seed or migration ever wrote such a
+ * row, so every employee held a company-wide predicate and could read every
+ * colleague's salary. The absence of configuration now means "own record
+ * only", except for the roles that exist to work across the company.
+ */
+describe('fail-closed default when no role of the requester has a configured scope row', () => {
+  const configured = jest.mocked(administrationRepository.findMyDataScopeByUser);
+  beforeEach(() => {
+    jest.clearAllMocks();
+    configured.mockResolvedValue(null);
+    jest.mocked(resolveManagedEmployeeIds).mockResolvedValue([]);
+  });
+  const effective = (roles: string[]) => service.findMyDataScopeByUser('A', { ...user, roles });
+
+  it.each([...COMPANY_WIDE_DEFAULT_ROLES])('keeps %s company-wide, alone and alongside EMPLOYEE', async (role) => {
+    // Every privileged user also holds EMPLOYEE (05-test-data.seed.ts), so the
+    // default must be read off the whole role set, not one role at a time.
+    await expect(effective([role])).resolves.toBeNull();
+    await expect(effective([role, 'EMPLOYEE'])).resolves.toBeNull();
+    await expect(effective(['EMPLOYEE', role, 'MANAGER'])).resolves.toBeNull();
+  });
+
+  it.each([
+    { roles: ['EMPLOYEE'] },
+    { roles: ['A_ROLE_THIS_TENANT_INVENTED'] },
+    { roles: [] as string[] },
+  ])('confines $roles to their own record', async ({ roles }) => {
+    await expect(effective(roles)).resolves.toMatchObject({ scopeType: 'EMPLOYEE_SELF' });
+  });
+
+  it.each([
+    { roles: ['MANAGER'] },
+    { roles: ['MANAGER', 'EMPLOYEE'] },
+  ])('confines $roles to the team they head plus themselves', async ({ roles }) => {
+    jest.mocked(resolveManagedEmployeeIds).mockResolvedValue(['t1']);
+    const scope = await effective(roles);
+    expect(scope).toMatchObject({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: ['t1'] });
+    expect(resolveManagedEmployeeIds).toHaveBeenCalledWith('A', 'e');
+    expect(service.resolveEmployeeFilterForCurrentUser(scope, { ...user, roles })).toEqual({ id: { in: ['t1', 'e'] } });
+  });
+
+  it('leaves a configured row exactly as the existing merge resolved it', async () => {
+    configured.mockResolvedValue({ roleCode: 'EMPLOYEE', scopeType: 'BRANCH_ONLY', scopeValue: 'branch-1' } as never);
+    await expect(effective(['EMPLOYEE'])).resolves.toMatchObject({ scopeType: 'BRANCH_ONLY', scopeValue: 'branch-1' });
+  });
+
+  it('pre-resolves the team for a configured MANAGER_TEAM row too, so the filter never needs a second lookup', async () => {
+    configured.mockResolvedValue({ roleCode: 'MANAGER', scopeType: 'MANAGER_TEAM', scopeValue: null } as never);
+    jest.mocked(resolveManagedEmployeeIds).mockResolvedValue(['t1', 't2']);
+    await expect(effective(['MANAGER'])).resolves.toMatchObject({ teamEmployeeIds: ['t1', 't2'] });
   });
 });
 

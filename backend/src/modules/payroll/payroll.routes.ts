@@ -24,7 +24,7 @@ import {
 import { idParamSchema, payrollRunIdParamSchema, payslipIdParamSchema, employeeSalaryListQuerySchema, employeeThrParamSchema, employeeThrQuerySchema, payrollUnlockSchema, setPayslipPinSchema, payslipPinUnlockSchema } from './payroll.validation';
 import { rateLimit } from 'express-rate-limit';
 import { auditLog, auditView } from '@/shared/middleware/AuditLog';
-import { requireCompanyPayrollAccess } from './payroll-access';
+import { authorizeSelfOrPayrollRead, requireCompanyPayrollAccess } from './payroll-access';
 import { annualTaxRecapQuerySchema, arrearsQuerySchema, bpjsReportQuerySchema, registerArrearsSchema } from './payroll-arrears.dto';
 
 // Memory storage: the importer parses the buffer and never needs a path.
@@ -136,7 +136,8 @@ router.patch(
 
 router.get(
   '/employees/:employeeId/thr',
-  authorize({ resource: 'payroll', action: 'read' }),
+  // Own THR needs no company-wide payroll permission; anybody else's does.
+  authorizeSelfOrPayrollRead(),
   validate(employeeThrParamSchema, 'params'),
   validate(employeeThrQuerySchema, 'query'),
   payrollController.calculateEmployeeThr.bind(payrollController)
@@ -202,10 +203,12 @@ router.get(
   payrollController.annualTaxRecapSummary.bind(payrollController)
 );
 
+// A person's own year of income is theirs to read: the route is reachable
+// without `payroll:read`, which the EMPLOYEE role no longer holds. Reading
+// somebody else's still takes the permission and the company-wide scope.
 router.get(
   '/annual-tax-recap/:employeeId',
-  authorize({ resource: 'payroll', action: 'read' }),
-  requireCompanyPayrollAccess,
+  authorizeSelfOrPayrollRead({ companyWide: true }),
   validate(annualTaxRecapQuerySchema, 'query'),
   auditView({ action: 'VIEW_ANNUAL_TAX_RECAP', entity: 'Payslip' }),
   payrollController.annualTaxRecap.bind(payrollController)
@@ -215,8 +218,7 @@ router.get(
 // '/annual-tax-recap/:employeeId' would have swallowed it, so it comes first.
 router.get(
   '/bukti-potong-1721-a1/:employeeId',
-  authorize({ resource: 'payroll', action: 'read' }),
-  requireCompanyPayrollAccess,
+  authorizeSelfOrPayrollRead({ companyWide: true }),
   validate(annualTaxRecapQuerySchema, 'query'),
   auditView({ action: 'VIEW_BUKTI_POTONG_1721_A1', entity: 'Payslip' }),
   payrollController.buktiPotong1721A1.bind(payrollController)
@@ -452,9 +454,12 @@ router.get(
   payrollController.findPayslipById.bind(payrollController)
 );
 
+// Self-service history, like '/payslips/my/*': the handler takes the employee
+// id from the session and the service refuses any other, so there is no
+// permission left to check — only the caller against themselves. It carried
+// `payroll:read`, which an employee no longer holds.
 router.get(
   '/payslips',
-  authorize({ resource: 'payroll', action: 'read' }),
   payrollController.findMyPayslips.bind(payrollController)
 );
 

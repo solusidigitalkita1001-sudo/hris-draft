@@ -55,6 +55,7 @@ synthetic companies in `afterAll`.
 | `employee-salary.mysql` | `PAYROLL_SALARY_DB_URL` | salary allocation mutations |
 | `employee-salary-read.mysql` | `PAYROLL_SALARY_DB_URL` | salary read access per scope |
 | `payroll-run-access.mysql` | `PAYROLL_ACCESS_DB_URL` | run/payslip access per data scope, maker-checker, tenant intersection |
+| `employee-self-scope.mysql` | `PAYROLL_SALARY_DB_URL` | karyawan tanpa baris scope: gaji/slip/rekap pajak rekan tertutup, miliknya sendiri tetap terbaca |
 | `leave-journey.mysql` | `RUN_DB_INTEGRATION=1` | pengajuan → approval → potongan saldo → pembatalan, termasuk lock baris saldo dan gerbang periode payroll |
 | `reports.mysql` | `RUN_DB_INTEGRATION=1` | agregat headcount/attendance/leave/turnover: angkanya benar dan tidak menghitung baris tenant lain |
 | `decision-notification.mysql` | `RUN_DB_INTEGRATION=1` | notifikasi keputusan approval: satu baris, ke requester, hanya saat keputusan final |
@@ -128,6 +129,24 @@ approval menulis satu baris untuk requester dengan `resource`/`action`/
 memutuskan, ia sudah tahu), penolakan membawa catatan approver, dan workflow dua
 tingkat **tidak** menulis apa pun setelah level pertama — requester baru diberi
 tahu ketika keputusannya final.
+
+## Scope default karyawan (1 November 2026)
+
+Role tanpa baris `RoleDataScope` dulu resolve ke filter kosong, dan filter
+kosong dibaca semua pemanggil sebagai "seluruh perusahaan" — padahal tidak ada
+seed atau migrasi yang pernah menulis baris itu. Digabung dengan `payroll:read`
+yang ikut di-seed untuk role EMPLOYEE, setiap karyawan bisa membaca gaji semua
+rekannya. `employee-self-scope.mysql` menguji dua sisinya sekaligus terhadap
+database sungguhan dan **tanpa** satu pun baris scope: angka rekan (gaji, slip,
+THR, rekap PPh21 tahunan, bukti potong, profil) tertutup, sementara angka milik
+sendiri tetap terbaca walau role-nya tidak lagi memegang `payroll:read`; HR
+tetap company-wide dan manager menyusut ke timnya.
+
+Catatan untuk suite yang sudah ada: beberapa fixture memakai role sintetis
+tanpa baris scope dan mengandalkan default company-wide yang lama. Fixture itu
+sekarang menuliskan baris company-wide secara eksplisit (atau memberi aktornya
+role company-wide yang sesungguhnya), karena "tidak dikonfigurasi" tidak lagi
+berarti "boleh semua".
 
 ## What this pass found
 

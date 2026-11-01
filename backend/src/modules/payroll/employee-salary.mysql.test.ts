@@ -50,6 +50,11 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
     const person = await mockDatabase.employee.create({ data: { companyId, employeeNumber: randomUUID(), firstName: 'Synthetic', lastName: 'Employee', fullName: 'Synthetic Employee' } });
     const component = await mockDatabase.salaryComponent.create({ data: { companyId, code: 'BASE', name: 'Synthetic salary', type: 'ALLOWANCE', amount: '1000', isTaxable: true } });
     const other = await mockDatabase.salaryComponent.create({ data: { companyId, code: 'OTHER', name: 'Synthetic allowance', type: 'ALLOWANCE', amount: '50' } });
+    // Allocating salaries is a company-wide act, and company-wide reach is now
+    // something a role has to be granted: a role with no scope row of its own
+    // is confined to its own record (S-H1). The per-test rows below are more
+    // restrictive, so they still win the merge over this baseline.
+    await mockDatabase.roleDataScope.create({ data: { companyId, roleCode: 'PAYROLL_TEST', resource: 'ALL', scopeType: 'ALL' } });
     return { companyId, actorId, person, component, other };
   }
   type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -230,14 +235,17 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
     expect((await stored(outsideSalary.id)).baseSalary.toString()).toBe('1000');
   });
 
-  it('enforces self scope and fails closed for unavailable manager scope or a missing actor', async () => {
+  it('enforces self and manager scope, and fails closed for a missing actor', async () => {
     const f = await fixture();
     const outside = await mockDatabase.employee.create({ data: { companyId: f.companyId, employeeNumber: randomUUID(), firstName: 'Outside', lastName: 'Scope', fullName: 'Outside Scope' } });
     const scope = await mockDatabase.roleDataScope.create({ data: { companyId: f.companyId, roleCode: 'PAYROLL_TEST', resource: 'payroll', scopeType: 'EMPLOYEE_SELF' } });
     expect((await create(f)).employeeId).toBe(f.person.id);
     await expect(create(f, { employeeId: outside.id })).rejects.toMatchObject({ statusCode: 404 });
+    // A manager heading no unit is scoped to themselves rather than denied
+    // outright: nobody else's allocation, but their own record stays reachable.
     await mockDatabase.roleDataScope.update({ where: { id: scope.id }, data: { scopeType: 'MANAGER_TEAM' } });
-    await expect(create(f, { effectiveDate: '2026-10-01T00:00:00Z' })).rejects.toMatchObject({ statusCode: 403 });
+    expect((await create(f, { effectiveDate: '2026-10-01T00:00:00Z' })).employeeId).toBe(f.person.id);
+    await expect(create(f, { employeeId: outside.id, effectiveDate: '2026-11-01T00:00:00Z' })).rejects.toMatchObject({ statusCode: 404 });
     await expect(runInRequestContext({}, () => service.createEmployeeSalary(input(f)))).rejects.toMatchObject({ statusCode: 403 });
   });
 

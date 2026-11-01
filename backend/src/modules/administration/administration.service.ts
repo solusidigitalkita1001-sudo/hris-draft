@@ -6,6 +6,46 @@ import {
 } from './administration.dto';
 import { ForbiddenError, ValidationError } from '@/shared/exceptions/AppError';
 import { DataScopeType } from '@prisma/client';
+import { resolveManagedEmployeeIds } from '@/shared/security/manager-team';
+
+/**
+ * Roles that keep company-wide reach when nobody has configured a
+ * RoleDataScope row for them. Working across the whole company is what each
+ * of them is for: narrowing HR, finance or company administration by default
+ * would leave them unable to do the job the role exists to do.
+ *
+ * Everyone else — the seeded EMPLOYEE role, and any role a tenant invents —
+ * is confined to their own record instead, because the absence of
+ * configuration used to mean "no filter", which every caller read as "the
+ * whole company" (S-H1: any employee could list every colleague's salary).
+ *
+ * Read against the requester's WHOLE role set, never one role at a time:
+ * every privileged user also holds EMPLOYEE (see 05-test-data.seed.ts), so a
+ * per-role reading would confine HR to its own records.
+ */
+export const COMPANY_WIDE_DEFAULT_ROLES = [
+  'SUPER_ADMIN',
+  'GROUP_ADMIN',
+  'COMPANY_ADMIN',
+  'HR_MANAGER',
+  'HR_STAFF',
+  'FINANCE',
+] as const;
+
+/** The role that heads a team, and therefore defaults to seeing it. */
+const MANAGER_ROLE = 'MANAGER';
+
+/**
+ * A configured RoleDataScope row, or the fail-closed default that stands in
+ * for one. `teamEmployeeIds` is pre-resolved for MANAGER_TEAM so that every
+ * caller of the lookup gets the ids from the same single resolution.
+ */
+export interface EffectiveDataScope {
+  scopeType: DataScopeType | string;
+  scopeValue?: string | null;
+  roleCode?: string;
+  teamEmployeeIds?: string[];
+}
 
 interface UserContext {
   id: string;
@@ -149,26 +189,47 @@ export class AdministrationService {
     };
   }
 
+  /**
+   * The scope that is in force for this requester: the configured row when one
+   * exists, otherwise the fail-closed default for their role set. `null` means
+   * company-wide — the only unrestricted answer, and now reserved for the
+   * roles in COMPANY_WIDE_DEFAULT_ROLES.
+   */
   async findMyDataScopeByUser(
     companyId: string,
     user: UserContext,
     resource: string = 'ALL'
-  ) {
+  ): Promise<EffectiveDataScope | null> {
     this.ensureCompanyScope(user, companyId);
     const roles = user.roles ?? [];
-    return administrationRepository.findMyDataScopeByUser(
+    const configured = await administrationRepository.findMyDataScopeByUser(
       companyId,
       roles,
       resource
     );
+    // A configured row keeps the existing merge semantics untouched: between
+    // the requester's roles, the most restrictive row still wins.
+    const scope = configured ?? this.defaultDataScopeFor(roles);
+    if (!scope) return null;
+    if (scope.scopeType === 'MANAGER_TEAM' && user.employeeId) {
+      // Resolved here, once, so the middleware, the payroll predicate and the
+      // private-file downloads all filter on the same team.
+      return { ...scope, teamEmployeeIds: await resolveManagedEmployeeIds(companyId, user.employeeId) };
+    }
+    return scope;
+  }
+
+  /** `null` = company-wide. See COMPANY_WIDE_DEFAULT_ROLES. */
+  private defaultDataScopeFor(roles: string[]): EffectiveDataScope | null {
+    if (roles.some((role) => (COMPANY_WIDE_DEFAULT_ROLES as readonly string[]).includes(role))) {
+      return null;
+    }
+    if (roles.includes(MANAGER_ROLE)) return { roleCode: MANAGER_ROLE, scopeType: 'MANAGER_TEAM' };
+    return { scopeType: 'EMPLOYEE_SELF' };
   }
 
   resolveEmployeeFilterForCurrentUser(
-    scope: {
-      scopeType: DataScopeType | string;
-      scopeValue?: string | null;
-      roleCode?: string;
-    } | null,
+    scope: EffectiveDataScope | null,
     user: UserContext,
     resource: string = 'employee'
   ): Record<string, unknown> {
@@ -204,11 +265,14 @@ export class AdministrationService {
         return ownField('subDepartmentId', user.subDepartmentId);
       case 'MANAGER_TEAM': {
         // Team ids are pre-resolved from the manager's headed units (like OWN_*
-        // resolves the current org unit). Fail closed: a requester who manages
-        // no one has no team scope (own-record access is a separate EMPLOYEE_SELF).
-        const ids = user.teamEmployeeIds ?? [];
-        if (ids.length === 0) throw new ForbiddenError('Manager scope has no team');
-        return { [resource === 'employee' ? 'id' : 'employeeId']: { in: ids } };
+        // resolves the current org unit), and the manager is always part of
+        // their own scope: an empty team used to throw, which took the
+        // manager's own records with it and denied every request they made.
+        const ids = new Set(scope.teamEmployeeIds ?? user.teamEmployeeIds ?? []);
+        if (user.employeeId) ids.add(user.employeeId);
+        // Fail closed: without an employee identity there is nothing to scope to.
+        if (ids.size === 0) throw new ForbiddenError('Employee identity is required for manager scope');
+        return { [resource === 'employee' ? 'id' : 'employeeId']: { in: [...ids] } };
       }
     }
 

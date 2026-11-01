@@ -66,6 +66,12 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
     const slip = await mockDatabase.payslip.create({ data: { companyId, payrollRunId: run.id, employeeId: person.id, baseSalary: '1000.25', totalEarnings: '1000.25', netPay: '1000.25',
       components: { create: { salaryComponentId: component.id, name: 'Frozen salary', type: 'ALLOWANCE', amount: '1000.25' } } } });
     const outsideSlip = await mockDatabase.payslip.create({ data: { companyId, payrollRunId: run.id, employeeId: outside.id, baseSalary: '2000.50', totalEarnings: '2000.50', netPay: '2000.50' } });
+    // Company-wide reach is something a role has to be granted: a role with no
+    // scope row of its own is confined to its own record now (S-H1), so the
+    // cases below that act for the whole company say so. The per-test rows the
+    // `scope` helper writes are for the payroll resource and more restrictive,
+    // so they still win the merge over this baseline.
+    await mockDatabase.roleDataScope.create({ data: { companyId, roleCode: 'PAYROLL_SCOPE_TEST', resource: 'ALL', scopeType: 'ALL' } });
     return { companyId, actorId, branch, department, subDepartment, person, outside, component, period, run, slip, outsideSlip };
   }
   type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -217,10 +223,15 @@ withDatabase('payroll run and payslip access (isolated real MySQL)', () => {
     expect((await runDetail(f)).payslips.find(row => row.id === f.slip.id)?.components.map(row => row.name)).toEqual(['Frozen salary']);
   });
 
-  it('fails closed before reading payroll on manager scope, missing context and scope lookup failures', async () => {
+  it('narrows manager scope to the team and fails closed on missing context or scope lookup failures', async () => {
     const f = await fixture(); await scope(f, 'MANAGER_TEAM');
+    // A manager heading no unit is scoped to themselves: their own slip, and
+    // nobody else's. It used to be a hard denial, which took the manager's own
+    // records with it and answered 403 to every request they made.
+    expect((await detail(f)).id).toBe(f.slip.id);
+    await expect(detail(f, f.outsideSlip.id)).rejects.toMatchObject({ statusCode: 404 });
     const query = jest.spyOn(mockDatabase.payslip, 'findFirst'), runs = jest.spyOn(mockDatabase.payrollRun, 'findFirst');
-    await expect(detail(f)).rejects.toMatchObject({ statusCode: 403 });
+    // Company aggregates still need company-wide payroll scope.
     await expect(runDetail(f)).rejects.toMatchObject({ statusCode: 403 });
     for (const operation of [() => service.findPayslipById(f.slip.id), () => service.findPayrollRunById(f.run.id), () => service.findAllPayrollPeriods(f.companyId)]) {
       await expect(runInRequestContext<Promise<unknown>>({}, operation)).rejects.toMatchObject({ statusCode: 403 });
