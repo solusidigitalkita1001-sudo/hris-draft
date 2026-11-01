@@ -8,12 +8,19 @@ export interface PayrollAttendanceSummary {
   unpaidLeave: number;
   /** Total approved overtime hours (workday + holiday). */
   overtime: number;
-  /** Hours on the employee's working dates — paid at workday bands. */
+  /** Hours on the employee's SCHEDULED dates — paid at workday bands. */
   overtimeWorkday: number;
-  /** Hours on non-working dates (weekend/holiday per resolved calendar) — paid at holiday bands. */
+  /** Hours on non-scheduled dates (weekend/holiday per resolved calendar) — paid at holiday bands. */
   overtimeHoliday: number;
 }
-export interface PayrollAttendanceInput extends PayrollAttendanceSummary { workingDates: Set<string> }
+export interface PayrollAttendanceInput extends PayrollAttendanceSummary {
+  /**
+   * Scheduled dates narrowed to the employed window, so a day outside it can
+   * never be counted absent. NOT the same set the overtime split reads — that
+   * one is the unclipped schedule; see the classification below.
+   */
+  workingDates: Set<string>;
+}
 
 // Bounded batch reads, shared by review and actual payroll; no query per employee/day.
 export async function loadPayrollAttendance(
@@ -82,6 +89,13 @@ export async function loadPayrollAttendance(
       // decides whether a day can be absent, not whether it was a weekday, and
       // reading the clipped set here would repay overtime filed outside the
       // window at holiday rates.
+      //
+      // Consequence, by design today and not a regression: approved overtime
+      // dated OUTSIDE the employed window is still paid, at workday bands. It
+      // mirrors the absence double-count this clipping fixed — a day outside
+      // the window arguably should not pay either — but dropping it silently
+      // removes money someone's approval granted, so it stays until the policy
+      // is decided. Noted in docs/PROGRESS.md with the WORK_DAYS=0 deferral.
       if (scheduledDates.has(payrollDateKey(row.date))) {
         overtimeWorkday = overtimeWorkday.plus(row.durationHours);
       } else {

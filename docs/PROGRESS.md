@@ -788,3 +788,81 @@ Tidak ada kode yang berubah, jadi tidak ada yang perlu dijalankan. Yang bisa
 diperiksa adalah angkanya, dan tiap angka di laporan itu berasal dari
 perbandingan mekanis `schema.prisma` terhadap kedua daftar di
 `shared/database/`.
+
+## Ditunda — `WORK_DAYS = 0` sesudah potongan alpa diprorata (P-C1)
+
+Perbaikan P-C1 memangkas hari kerja tiap karyawan ke jendela masa kerjanya
+(`clipWorkingDatesToEmployment` di `shared/payroll/attendance-calendar.ts`)
+sebelum `countPayrollAttendance` menghitung, supaya hari sebelum seseorang
+bergabung dan sesudah hari kerja terakhirnya tidak terhitung alpa di atas
+earnings yang sudah diprorata. Itu memperbaiki potongan dobelnya. Tapi ia juga
+mengubah `workDays` — yang masuk ke formula payroll sebagai input `WORK_DAYS` —
+dan satu bentuk input jadi bisa menjatuhkan run yang sebelumnya bersih.
+
+**Yang berubah.** Sebelum perbaikan, `workDays` selalu seluruh hari kerja
+terjadwal di periode itu (22 untuk Oktober 2026), berapa pun jendela masa kerja
+karyawannya. Sesudahnya, `workDays` adalah hari kerja terjadwal **di dalam**
+jendela — dan bisa **0**.
+
+**Kondisi pemicunya**, ketiganya harus bertemu:
+
+1. Jendela masa kerja seorang karyawan di periode itu tidak memuat satu pun
+   hari kerja terjadwal. Contoh konkret: bergabung Sabtu 31 Oktober 2026 pada
+   periode 1–31 Oktober dengan kalender Senin–Jumat — jendelanya hanya
+   tanggal 31, dan itu bukan hari kerja.
+2. Tenant memublikasikan formula yang membagi dengan `WORK_DAYS` (pola
+   `BASE_SALARY * PRESENT_DAYS / WORK_DAYS`).
+3. `absence_deduction_daily_basic_percent = 0`, sehingga pre-fix tenant itu
+   **tidak** kena potongan alpa dan run-nya selesai bersih.
+
+Maka pre-fix `WORK_DAYS = 22` dan pembagiannya tidak pernah kena; post-fix
+`WORK_DAYS = 0` dan `shared/payroll/formula.ts:111` melempar
+`BadRequestError('Formula: division by zero')` di dalam transaksi run, sehingga
+run SELURUH perusahaan rollback. Jadi untuk bentuk input ini ini **bukan** jalur
+yang sudah ada sebelumnya — framing awal di laporan tugasnya ("jalur itu sudah
+ada, hanya ada satu rute baru ke sana") tidak akurat dan sudah dikoreksi. Yang
+memang sudah ada sebelumnya adalah `workDays = 0` lewat **konfigurasi kalender**
+(kalender semua-libur, atau periode yang seluruhnya hari libur) — bentuk input
+yang berbeda, dan sudah ada test-nya.
+
+Perlu dicatat juga arah sebaliknya: pada tenant dengan
+`absence_deduction_daily_basic_percent > 0`, karyawan yang sama pre-fix justru
+lebih buruk — 22 hari alpa, potongan satu bulan penuh melawan earnings ~1/31
+bulan, `netPay < 0`, dan run perusahaan ikut rollback. Perbaikan ini menukar
+kegagalan di satu konfigurasi dengan kegagalan di konfigurasi lain yang lebih
+sempit, bukan menambah kegagalan bersih.
+
+**Kenapa ditunda.** Jawabannya keputusan produk soal uang, bukan keputusan
+teknis, dan ketiga pilihannya membayar orang dengan jumlah berbeda:
+
+- *clamp* — perlakukan `WORK_DAYS = 0` sebagai nol hari kerja sehingga formula
+  rasio menghasilkan 0; karyawannya dibayar nol untuk periode itu;
+- *divisor unclipped* — bagi dengan hari kerja seluruh periode (22) dan biarkan
+  `isProrated` yang menyusutkan, sehingga pembilangnya tetap jujur;
+- *penolakan bernama* — run gagal dengan pesan yang menyebut karyawannya, bukan
+  "division by zero", supaya HR tahu baris mana yang harus dibetulkan.
+
+Ditunda juga sebagai pekerjaan terpisah supaya perbaikan P-C1 tetap satu
+perubahan yang bisa dibaca; tidak ada yang disembunyikan di dalam commit-nya.
+
+**Satu hal lain yang sengaja dibiarkan**, di commit yang sama: lembur yang
+disetujui dengan tanggal **di luar** jendela masa kerja tetap dibayar, dan tetap
+di band hari kerja (`modules/payroll/payroll-attendance.ts` mengklasifikasi
+lembur terhadap jadwal, bukan terhadap jendela). Secara bentuk ini cermin dari
+potongan dobel yang baru saja diperbaiki — hari di luar jendela yang semestinya
+juga tidak membayar — tapi membuangnya diam-diam berarti mencabut uang yang
+sudah lewat persetujuan, jadi ia menunggu keputusan kebijakan yang sama. Kalau
+klasifikasinya dipindah ke set terpotong tanpa keputusan itu, efeknya bukan
+"tidak dibayar" melainkan **dibayar lebih**: tanggal di luar jendela akan jatuh
+ke band hari libur 2x/3x/4x.
+
+### Status verifikasi
+
+Perilaku `WORK_DAYS = 0` tidak diubah, jadi tidak ada test baru untuknya —
+pelemparan `division by zero`-nya sudah terikat oleh `shared/payroll/formula.test.ts`.
+Yang terikat test baru adalah pemangkasannya sendiri:
+`shared/payroll/attendance-calendar.test.ts` (lima kasus murni, termasuk batas
+inklusif dan identitas saat jendelanya tidak diketahui) dan
+`modules/payroll/payroll-attendance.mysql.test.ts` (joiner tanggal 20 dan leaver
+dengan hari kerja terakhir tanggal 10 terhadap MySQL sungguhan: angka review =
+angka run, dan run-nya commit dengan `netPay` positif alih-alih rollback).
