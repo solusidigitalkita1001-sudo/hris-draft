@@ -452,23 +452,51 @@ export class PayrollService {
    * its payslips stay as historical evidence with status VOIDED, and the
    * period is freed for a corrected run. Approved/disbursed money can never
    * be voided here — that requires a real adjustment flow.
+   *
+   * Voiding must also hand back every claim the run took while calculating
+   * (P-C2). Creating a REGULAR run marks its EWA as DEDUCTED, its arrears as
+   * APPLIED, its leave encashments as PAID and writes a loan deduction
+   * snapshot per due installment; each of those is what makes the next run
+   * treat the item as already settled. Flipping the status alone left all of
+   * them pinned to a dead run, so the corrected run silently skipped them —
+   * money owed that no run would ever pay again, and for arrears not even
+   * re-registrable because of the unique key per source period.
+   *
+   * Status flip and release share one transaction: either the run is voided
+   * with every claim free, or nothing changed. The releases are scoped by this
+   * run's id, so a THR run (which claims nothing) voids as a clean no-op and a
+   * row some later run claimed is never stolen back.
    */
   async voidPayrollRun(id: string, userId: string, reason?: string) {
     const { companyId, actor } = await companyPayrollAccess(undefined, userId);
     const run = await this.findPayrollRunById(id);
     if (run.companyId !== companyId) throw new NotFoundError('Payroll run not found');
 
-    const voided = await prisma.payrollRun.updateMany({
-      where: { id, companyId, status: 'COMPLETED' },
-      data: {
-        status: 'VOIDED',
-        notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${run.notes ?? ''}`.trim(),
-      },
-    });
-    if (voided.count !== 1) {
-      throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
-    }
-    logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason });
+    // The transaction budget matches run creation's, because this waits on the
+    // same company lock a run mid-calculation may hold.
+    const released = await prisma.$transaction(async tx => {
+      // Same company lock as run creation, taken in the same order: a
+      // replacement run cannot read "unclaimed" rows while this void is
+      // mid-flight and then commit having skipped the items it just freed.
+      await tx.$queryRaw`SELECT id FROM companies WHERE id = ${companyId} AND deleted_at IS NULL FOR UPDATE`;
+      const voided = await tx.payrollRun.updateMany({
+        where: { id, companyId, status: 'COMPLETED' },
+        data: {
+          status: 'VOIDED',
+          notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${run.notes ?? ''}`.trim(),
+        },
+      });
+      if (voided.count !== 1) {
+        throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
+      }
+      return {
+        ewa: (await ewaRepository.releasePayrollDeductions(companyId, id, tx)).count,
+        arrears: (await payrollArrearsService.releaseApplied(companyId, id, tx)).count,
+        encashments: (await leaveEncashmentService.releasePaid(companyId, id, tx)).count,
+        loanSnapshots: (await employeeLoanRepository.releaseLoanDeductionSnapshots(companyId, id, tx)).count,
+      };
+    }, { maxWait: 10_000, timeout: 60_000 });
+    logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason, released });
     return this.findPayrollRunById(id);
   }
 

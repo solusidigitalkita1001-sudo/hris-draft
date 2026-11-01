@@ -35,6 +35,8 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       await mockDatabase.payrollFormulaAudit.deleteMany({ where: { companyId } });
       await mockDatabase.payrollFormulaVersion.deleteMany({ where: { companyId } });
       await mockDatabase.payrollArrears.deleteMany({ where: { companyId } });
+      await mockDatabase.leaveEncashment.deleteMany({ where: { companyId } });
+      await mockDatabase.leaveType.deleteMany({ where: { companyId } });
       await mockDatabase.payrollLoanDeductionSnapshot.deleteMany({ where: { companyId } });
       await mockDatabase.earnedWageAccess.deleteMany({ where: { companyId } });
       await mockDatabase.payslipComponent.deleteMany({ where: { payslip: { companyId } } });
@@ -92,6 +94,9 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
   const runOfType = (f: Awaited<ReturnType<typeof fixture>>, runType: 'THR' | 'SEVERANCE' | 'CORRECTION') =>
     runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
       () => service.createPayrollRun({ companyId: f.companyId, periodId: f.period.id, name: `Synthetic ${runType}`, runType }, f.maker));
+  const voidRun = (f: Awaited<ReturnType<typeof fixture>>, runId: string, reason?: string) =>
+    runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+      () => service.voidPayrollRun(runId, f.maker, reason));
   async function expectNoPayroll(f: Awaited<ReturnType<typeof fixture>>) {
     for (const count of [await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } }),
       await mockDatabase.payslip.count({ where: { companyId: f.companyId } }),
@@ -392,5 +397,141 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(await mockDatabase.salaryComponent.count({
       where: { companyId: f.companyId, code: 'PPH21_ANNUAL_CORRECTION_AUTO' },
     })).toBe(0);
+  });
+
+  /**
+   * P-C2. Voiding a run used to flip its status only, so every claim the run
+   * had taken — EWA marked DEDUCTED, arrears APPLIED, encashment PAID, loan
+   * installment snapshots — stayed bound to the dead run. The replacement run
+   * queries "unclaimed" rows, so it silently skipped all of them: money owed
+   * that no run would ever pay again, unrecoverable without DB surgery (the
+   * arrears unique key per source period makes re-registration impossible).
+   */
+  it('melepas EWA, rapel, pencairan cuti dan snapshot pinjaman saat run di-void, dan run pengganti menagihnya tepat sekali', async () => {
+    const f = await fixture();
+    const person = await employee(f);
+    const employeeId = person.person.id;
+    const context = { user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } };
+
+    const ewaRow = await ewa(f, employeeId);
+    const installment = await loan(f, employeeId);
+    const closed = await createPeriod(f.companyId, '2026-09-01');
+    await mockDatabase.payrollPeriod.update({ where: { id: closed.id }, data: { status: 'CLOSED' } });
+    const arrears = await runInRequestContext(context,
+      () => payrollArrearsService.register(f.companyId, { employeeId, sourcePeriodId: closed.id }));
+    const leaveType = await mockDatabase.leaveType.create({
+      data: { companyId: f.companyId, code: 'ANNUAL', name: 'Cuti Tahunan', isAnnual: true, maxDays: 12 },
+    });
+    // The balance is debited at approval, not at payment, so an APPROVED row is
+    // the real pre-payroll state and voiding must not re-credit anything.
+    const encashment = await mockDatabase.leaveEncashment.create({
+      data: { companyId: f.companyId, employeeId, leaveTypeId: leaveType.id, year: 2026, days: 1,
+        grossAmount: '40.40', basis: {}, status: 'APPROVED' },
+    });
+
+    const first = await run(f);
+    const firstSlip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: first.id, employeeId } });
+    const componentsOf = async (payslipId: string) => (await mockDatabase.payslipComponent.findMany({
+      where: { payslipId }, orderBy: [{ name: 'asc' }, { amount: 'asc' }],
+      select: { name: true, type: true, amount: true },
+    })).map(row => ({ name: row.name, type: row.type, amount: row.amount.toString() }));
+    const firstComponents = await componentsOf(firstSlip.id);
+    // All four claim kinds really landed on the first slip.
+    for (const name of ['Potongan EWA (Tarik Gaji Awal)', 'Potongan Pinjaman Karyawan',
+      `Rapel ${closed.code}`, `Pencairan ${leaveType.name} (1 hari)`]) {
+      expect(firstComponents.filter(row => row.name === name)).toHaveLength(1);
+    }
+    expect((await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: ewaRow.id } })).status).toBe('DEDUCTED');
+    expect((await mockDatabase.payrollArrears.findUniqueOrThrow({ where: { id: arrears.id } })).status).toBe('APPLIED');
+    expect((await mockDatabase.leaveEncashment.findUniqueOrThrow({ where: { id: encashment.id } })).status).toBe('PAID');
+    expect(await mockDatabase.payrollLoanDeductionSnapshot.count({ where: { runId: first.id } })).toBe(1);
+
+    const voided = await voidRun(f, first.id, 'salah hitung');
+    expect(voided.status).toBe('VOIDED');
+    expect(voided.notes).toContain('[VOID oleh');
+    expect(voided.notes).toContain('salah hitung');
+
+    // Every claim is back in its pre-run state, scoped to this run only.
+    const releasedEwa = await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: ewaRow.id } });
+    expect(releasedEwa.status).toBe('PAID');
+    expect(releasedEwa.payrollRunId).toBeNull();
+    expect(releasedEwa.deductedAt).toBeNull();
+    expect(releasedEwa.amountDeductedPayroll).toBeNull();
+    const releasedArrears = await mockDatabase.payrollArrears.findUniqueOrThrow({ where: { id: arrears.id } });
+    expect(releasedArrears.status).toBe('PENDING');
+    expect(releasedArrears.payslipId).toBeNull();
+    expect(releasedArrears.appliedRunId).toBeNull();
+    expect(releasedArrears.appliedAt).toBeNull();
+    const releasedEncashment = await mockDatabase.leaveEncashment.findUniqueOrThrow({ where: { id: encashment.id } });
+    expect(releasedEncashment.status).toBe('APPROVED');
+    expect(releasedEncashment.payslipId).toBeNull();
+    expect(releasedEncashment.appliedRunId).toBeNull();
+    expect(releasedEncashment.paidAt).toBeNull();
+    expect(await mockDatabase.payrollLoanDeductionSnapshot.count({ where: { runId: first.id } })).toBe(0);
+    expect((await mockDatabase.loanInstallment.findUniqueOrThrow({ where: { id: installment.id } })).status).toBe('PENDING');
+
+    // The voided run's payslip stays as audit evidence.
+    expect(await mockDatabase.payslip.count({ where: { payrollRunId: first.id } })).toBe(1);
+
+    // The replacement run pays and deducts exactly the same figures, once.
+    const second = await run(f);
+    expect(second.id).not.toBe(first.id);
+    const secondSlip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: second.id, employeeId } });
+    expect(await componentsOf(secondSlip.id)).toEqual(firstComponents);
+    expect(secondSlip.totalEarnings.toString()).toBe(firstSlip.totalEarnings.toString());
+    expect(secondSlip.totalDeductions.toString()).toBe(firstSlip.totalDeductions.toString());
+    expect(secondSlip.netPay.toString()).toBe(firstSlip.netPay.toString());
+    const reclaimedEwa = await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: ewaRow.id } });
+    expect(reclaimedEwa.status).toBe('DEDUCTED');
+    expect(reclaimedEwa.payrollRunId).toBe(second.id);
+    expect((await mockDatabase.payrollArrears.findUniqueOrThrow({ where: { id: arrears.id } })).appliedRunId).toBe(second.id);
+    expect((await mockDatabase.leaveEncashment.findUniqueOrThrow({ where: { id: encashment.id } })).appliedRunId).toBe(second.id);
+    expect(await mockDatabase.payrollLoanDeductionSnapshot.findMany({ where: { installmentId: installment.id } }))
+      .toHaveLength(1);
+  });
+
+  /** A THR run claims nothing, so releasing its (empty) claims must be a no-op. */
+  it('tetap bisa mem-void run THR tanpa menyentuh klaim run lain', async () => {
+    const f = await fixture();
+    const person = await employee(f);
+    await mockDatabase.employee.update({ where: { id: person.person.id }, data: { joinDate: new Date('2024-01-01') } });
+    await mockDatabase.salaryComponent.create({
+      data: { companyId: f.companyId, code: 'PPH21', name: 'PPh 21', type: 'DEDUCTION', amount: '0', isTaxable: false },
+    });
+    const ewaRow = await ewa(f, person.person.id);
+    const regular = await run(f);
+    expect((await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: ewaRow.id } })).payrollRunId).toBe(regular.id);
+
+    const thr = await runOfType(f, 'THR');
+    const voided = await voidRun(f, thr.id);
+    expect(voided.status).toBe('VOIDED');
+    // The REGULAR run's EWA claim is untouched: release is scoped by runId.
+    const untouched = await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: ewaRow.id } });
+    expect(untouched.status).toBe('DEDUCTED');
+    expect(untouched.payrollRunId).toBe(regular.id);
+  });
+
+  /**
+   * The status guard still decides, and it decides for the release too: an
+   * approved run's claims must stay claimed, because its money is on its way
+   * out. Status flip and release share one transaction, so the refusal leaves
+   * the claims exactly as they were.
+   */
+  it('menolak void run yang sudah di-approve tanpa melepas klaimnya', async () => {
+    const f = await fixture();
+    const person = await employee(f);
+    const ewaRow = await ewa(f, person.person.id);
+    await loan(f, person.person.id);
+    const regular = await run(f);
+    await mockDatabase.payrollRun.update({ where: { id: regular.id }, data: { status: 'APPROVED' } });
+
+    await expect(voidRun(f, regular.id)).rejects.toThrow(/COMPLETED/);
+
+    const kept = await mockDatabase.earnedWageAccess.findUniqueOrThrow({ where: { id: ewaRow.id } });
+    expect(kept.status).toBe('DEDUCTED');
+    expect(kept.payrollRunId).toBe(regular.id);
+    expect(kept.deductedAt).not.toBeNull();
+    expect(await mockDatabase.payrollLoanDeductionSnapshot.count({ where: { runId: regular.id } })).toBe(1);
+    expect((await mockDatabase.payrollRun.findUniqueOrThrow({ where: { id: regular.id } })).status).toBe('APPROVED');
   });
 });

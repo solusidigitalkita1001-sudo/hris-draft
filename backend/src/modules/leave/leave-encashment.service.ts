@@ -311,6 +311,23 @@ export class LeaveEncashmentService {
       }
     }
   }
+
+  /**
+   * Return the rows to APPROVED when the run that paid them is voided (P-C2),
+   * so the replacement run — which collects APPROVED rows — pays them again.
+   *
+   * The leave balance is deliberately NOT re-credited: it was debited at
+   * approval, not at payment, and the approval still stands.
+   *
+   * Scoped to this run and to PAID: idempotent, and blind to rows a later run
+   * claimed.
+   */
+  async releasePaid(companyId: string, runId: string, database: Prisma.TransactionClient = prisma) {
+    return database.leaveEncashment.updateMany({
+      where: { companyId, appliedRunId: runId, status: LeaveEncashmentStatus.PAID },
+      data: { status: LeaveEncashmentStatus.APPROVED, payslipId: null, appliedRunId: null, paidAt: null },
+    });
+  }
 }
 
 export const leaveEncashmentService = new LeaveEncashmentService();
