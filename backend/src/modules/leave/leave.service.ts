@@ -509,7 +509,10 @@ export class LeaveService {
   }
 
   async getLeaveBalances(employeeId: string) {
-    return leaveRepository.findLeaveBalances(employeeId);
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new ForbiddenError('Leave balances require an active company context');
+    const employeeScope = await employeeAccessWhere('leave');
+    return leaveRepository.findLeaveBalances(employeeId, companyId, employeeScope);
   }
 
   async setLeaveBalance(data: CreateLeaveBalanceDTO) {

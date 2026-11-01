@@ -942,8 +942,15 @@ export class AttendanceService {
   }
 
   // Overtime
+  /**
+   * Scoped like the attendance list and the corrections list. The controller
+   * lets a MANAGER call this with no employeeId (`canReadOthers`), so without
+   * the predicate the answer was every overtime request in the company —
+   * including the hours and multiplier behind somebody else's pay.
+   */
   async findAllOvertime(companyId: string, filters?: { employeeId?: string; status?: string }) {
-    return attendanceRepository.findAllOvertime(companyId, filters);
+    const employeeScope = await employeeAccessWhere('attendance');
+    return attendanceRepository.findAllOvertime(companyId, filters, employeeScope);
   }
 
   async findOvertimeById(id: string) {

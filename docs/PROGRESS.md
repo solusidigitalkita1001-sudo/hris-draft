@@ -822,6 +822,21 @@ id karyawan.
   query pendek per resolusi. Belum ada cache per-request karena belum ada
   bukti ia terasa; kalau nanti terasa, tempatnya `RequestContext` (bukan
   cache proses — keanggotaan tim berubah saat org unit berubah).
+- **Empat pembacaan sejenis yang masih mengabaikan scope karyawan**, semuanya
+  di luar lingkup tugas ini dan sengaja ditangguhkan. Daftar absensi, daftar
+  koreksi absensi, daftar lembur, daftar cuti, dan saldo cuti sudah membawa
+  predikat `employeeAccessWhere`; yang belum:
+  - `leave.service.ts:findLeaveRequestById` — detail pengajuan cuti hanya
+    memeriksa tenant (`instance.companyId !== currentCompanyId`), tanpa
+    predikat karyawan, jadi pemegang `leave:read` bisa membuka pengajuan siapa
+    pun di perusahaannya lewat id.
+  - `employee-loan.service.ts`, `travel-expense.service.ts`, dan seluruh
+    `modules/permission-request/` tidak memanggil `employeeAccessWhere` sama
+    sekali — daftar pinjaman, klaim perjalanan, dan izin masih seluas tenant
+    untuk siapa pun yang punya permission read-nya.
+  Tenant middleware tetap menjaga batas antar-perusahaan di semuanya; yang
+  belum ada adalah batas antar-karyawan DI DALAM satu perusahaan.
+
 - **Dua strategi fixture hidup berdampingan di suite payroll MySQL.** Suite
   yang subjeknya memang data scope (`employee-salary-read`,
   `payroll-run-access`, `employee-salary`) menuliskan baris `RoleDataScope`

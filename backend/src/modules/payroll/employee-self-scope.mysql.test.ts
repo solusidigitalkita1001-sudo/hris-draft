@@ -46,8 +46,10 @@ withDatabase('employee self scope with no configured data scope (isolated real M
     if (!mockDatabase) return;
     const companyId = { in: companies };
     try {
+      await mockDatabase.leaveBalance.deleteMany({ where: { companyId } });
       await mockDatabase.leaveRequest.deleteMany({ where: { companyId } });
       await mockDatabase.leaveType.deleteMany({ where: { companyId } });
+      await mockDatabase.overtimeRequest.deleteMany({ where: { companyId } });
       await mockDatabase.attendance.deleteMany({ where: { companyId } });
       await mockDatabase.payslipComponent.deleteMany({ where: { payslip: { companyId } } });
       await mockDatabase.payslip.deleteMany({ where: { companyId } });
@@ -98,7 +100,13 @@ withDatabase('employee self scope with no configured data scope (isolated real M
     const attendanceOf = (employeeId: string) => mockDatabase.attendance.create({ data: { companyId, employeeId, date: new Date('2026-01-05'), status: 'PRESENT' } });
     const leaveOf = (employeeId: string) => mockDatabase.leaveRequest.create({ data: { companyId, employeeId, leaveTypeId: leaveType.id,
       startDate: new Date('2026-02-02'), endDate: new Date('2026-02-02'), totalDays: 1, reason: 'Synthetic' } });
-    for (const person of [self, colleague, manager, outsider]) { await attendanceOf(person.id); await leaveOf(person.id); }
+    const overtimeOf = (employeeId: string) => mockDatabase.overtimeRequest.create({ data: { companyId, employeeId, date: new Date('2026-01-06'),
+      startTime: new Date('2026-01-06T18:00:00Z'), endTime: new Date('2026-01-06T20:00:00Z'), durationHours: '2', reason: 'Synthetic' } });
+    const balanceOf = (employeeId: string) => mockDatabase.leaveBalance.create({ data: { companyId, employeeId, leaveTypeId: leaveType.id,
+      year: 2026, totalDays: 12, usedDays: 0, remainingDays: 12 } });
+    for (const person of [self, colleague, manager, outsider]) {
+      await attendanceOf(person.id); await leaveOf(person.id); await overtimeOf(person.id); await balanceOf(person.id);
+    }
     return { companyId, department, self, colleague, manager, outsider, ownSalary, colleagueSalary, period, run, ownSlip, colleagueSlip };
   }
   type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -173,6 +181,41 @@ withDatabase('employee self scope with no configured data scope (isolated real M
     const all = [...team, f.outsider.id].sort();
     expect((await asEmployee(f, () => attendanceService.findAll(f.companyId, {}), hr)).map(row => row.employeeId).sort()).toEqual(all);
     expect((await asEmployee(f, () => leaveService.findAllLeaveRequests(f.companyId, {}), hr)).map(row => row.employeeId).sort()).toEqual(all);
+  });
+
+  /**
+   * Two reads whose only narrowing was the middleware's query rewrite, and
+   * which therefore returned the whole company once that rewrite stopped
+   * forging a single employee id for a team scope:
+   *
+   * - the overtime list, which the controller lets a MANAGER call without an
+   *   employeeId at all (`attendance.controller.ts` canReadOthers);
+   * - leave balances, where `employeeId` is a query parameter — and an absent
+   *   one removed the only condition in the query, so every balance in the
+   *   company came back (the tenant middleware kept it inside one company,
+   *   and nothing kept it to the people the caller may see).
+   */
+  it('scopes the overtime list and leave balances to the caller, not to the company', async () => {
+    const f = await fixture();
+    const asManager = { employeeId: f.manager.id, roles: ['MANAGER', 'EMPLOYEE'], permissions: ['att:read', 'att:approve', 'leave:read'] };
+    const hr = { roles: ['HR_STAFF', 'EMPLOYEE'], permissions: ['att:read', 'leave:read'] };
+    const team = [f.self.id, f.colleague.id, f.manager.id].sort();
+    const all = [...team, f.outsider.id].sort();
+
+    const overtime = (changes = {}) => asEmployee(f, () => attendanceService.findAllOvertime(f.companyId, {}), changes);
+    expect((await overtime()).map(row => row.employeeId)).toEqual([f.self.id]);
+    expect((await overtime(asManager)).map(row => row.employeeId).sort()).toEqual(team);
+    expect((await overtime(hr)).map(row => row.employeeId).sort()).toEqual(all);
+
+    // No employeeId at all: the caller's scope has to answer for it.
+    const balances = (changes = {}) => asEmployee(f, () => leaveService.getLeaveBalances(undefined as unknown as string), changes);
+    expect((await balances()).map(row => row.employeeId)).toEqual([f.self.id]);
+    expect((await balances(asManager)).map(row => row.employeeId).sort()).toEqual(team);
+    expect((await balances(hr)).map(row => row.employeeId).sort()).toEqual(all);
+
+    // A named employee is still a filter, and still inside the scope.
+    expect((await asEmployee(f, () => leaveService.getLeaveBalances(f.self.id))).map(row => row.employeeId)).toEqual([f.self.id]);
+    expect(await asEmployee(f, () => leaveService.getLeaveBalances(f.colleague.id))).toEqual([]);
   });
 
   it('keeps an HR reader company-wide while narrowing a manager to their team', async () => {
