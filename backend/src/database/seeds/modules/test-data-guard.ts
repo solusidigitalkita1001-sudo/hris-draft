@@ -19,9 +19,19 @@ export class ProductionTestDataSeedError extends Error {
 /**
  * Throws when the demo test-data seed must not run (`NODE_ENV=production`).
  * Pure function: no DB access, so it is directly unit-testable.
+ *
+ * Fix-review M3: normalizes with `trim().toLowerCase()` so the guard is
+ * self-sufficient — it refuses `' Production '` / `'PRODUCTION'` on its own
+ * terms rather than relying on the app's zod env schema (which already
+ * fail-closes `NODE_ENV` to the lowercase enum `development|test|production`
+ * before this ever runs) to have normalized the value first. Defense in
+ * depth: this function must still be correct if ever called directly with a
+ * differently-cased or padded value.
  */
 export function assertTestDataSeedAllowed(nodeEnv: string | undefined = process.env.NODE_ENV): void {
-  if (nodeEnv === 'production') {
-    throw new ProductionTestDataSeedError(nodeEnv);
+  const normalized = nodeEnv?.trim().toLowerCase();
+  if (normalized === 'production') {
+    // normalized === 'production' only when nodeEnv is a defined string.
+    throw new ProductionTestDataSeedError(nodeEnv as string);
   }
 }

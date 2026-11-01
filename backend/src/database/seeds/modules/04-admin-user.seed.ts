@@ -12,6 +12,7 @@ export async function seedAdminUser(): Promise<void> {
 
   if (existingUser) {
     console.log('  ✓ Admin user already exists, skipping');
+    console.log('  ⚠  existing admin kept; SEED_ADMIN_PASSWORD ignored');
     return;
   }
 
@@ -46,9 +47,13 @@ export async function seedAdminUser(): Promise<void> {
   if (wasGenerated) {
     console.log('  ⚠  SEED_ADMIN_PASSWORD was not set — generated a random password.');
     console.log(`  ⚠  Admin password (shown ONCE, save it now): ${password}`);
-    console.log('  ⚠  This password will not be printed again. The user must change it on first login.');
+    console.log('  ⚠  This password will not be printed again.');
   } else {
     console.log('  ✓ Admin password set from SEED_ADMIN_PASSWORD env var.');
   }
-  console.log('  ✓ mustChangePassword is set — the admin will be forced to change it on first login.');
+  // Fix-review M6: mustChangePassword is a flag the UI reads to show a
+  // change-password notice after login — there is no server-side middleware
+  // gate that blocks other requests until it changes, so this must not claim
+  // the user is "forced" to change it.
+  console.log('  ✓ mustChangePassword is set — the UI will show a change-password notice on next login.');
 }

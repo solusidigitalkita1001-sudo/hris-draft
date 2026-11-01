@@ -24,11 +24,39 @@ describe('04-admin-user.seed.ts no longer ships a predictable admin password', (
     expect(source).toContain('resolveAdminPassword');
   });
 
-  it('only prints the generated password, never a fixed one, and only once on creation', () => {
+  /**
+   * Fix-review M7: the previous version of this test compared the position
+   * of two unrelated indexOf calls (skip-check vs. resolver call), which did
+   * not actually prove the password is printed once. This counts the
+   * literal interpolation site in source instead.
+   */
+  it('interpolates the resolved password into a console.log exactly once', () => {
+    const occurrences = source.split('${password}').length - 1;
+    expect(occurrences).toBe(1);
+  });
+
+  it('only reaches password resolution/printing after the exists-check returns', () => {
     // The skip-if-exists branch returns before any password is touched.
     const existingUserSkip = source.indexOf('already exists');
     const passwordResolution = source.indexOf('resolveAdminPassword(');
     expect(existingUserSkip).toBeGreaterThan(-1);
     expect(passwordResolution).toBeGreaterThan(existingUserSkip);
+  });
+
+  // Fix-review M5: skipping (admin already exists) must say so explicitly,
+  // including that an env override had no effect, instead of silently
+  // doing nothing with it.
+  it('logs that SEED_ADMIN_PASSWORD is ignored when an existing admin is kept', () => {
+    const skipBranchStart = source.indexOf('if (existingUser)');
+    expect(skipBranchStart).toBeGreaterThan(-1);
+    const skipBranchEnd = source.indexOf('return;', skipBranchStart);
+    const skipBranch = source.slice(skipBranchStart, skipBranchEnd);
+    expect(skipBranch).toContain('SEED_ADMIN_PASSWORD ignored');
+  });
+
+  // Fix-review M6: mustChangePassword only drives a UI notice, not a
+  // server-side gate — the console output must not overclaim otherwise.
+  it('does not claim the admin is "forced" to change the password', () => {
+    expect(source.toLowerCase()).not.toContain('forced to change');
   });
 });

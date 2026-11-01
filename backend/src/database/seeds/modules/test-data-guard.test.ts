@@ -24,10 +24,28 @@ describe('assertTestDataSeedAllowed', () => {
     }
   });
 
-  it.each(['development', 'test', 'staging', undefined])(
+  it.each(['development', 'test', undefined])(
+    // 'staging' was dropped from this table: the app's zod env schema
+    // (`src/config/index.ts`) restricts NODE_ENV to the enum
+    // development|test|production, so 'staging' can never actually reach
+    // this function in the running app — asserting a "does not throw" for
+    // it tested a state the app cannot be in.
     'does not throw for NODE_ENV=%s',
     (env) => {
       expect(() => assertTestDataSeedAllowed(env)).not.toThrow();
+    }
+  );
+
+  /**
+   * Fix-review M3: the guard normalizes with trim().toLowerCase() so it is
+   * self-sufficient — correct even if ever called with a differently-cased
+   * or padded value, independent of the zod schema having already
+   * normalized NODE_ENV upstream.
+   */
+  it.each(['PRODUCTION', 'Production', ' production', 'production ', ' PRODUCTION '])(
+    'also refuses NODE_ENV=%j (case/whitespace insensitive)',
+    (env) => {
+      expect(() => assertTestDataSeedAllowed(env)).toThrow(ProductionTestDataSeedError);
     }
   );
 });
@@ -66,5 +84,26 @@ describe('05-test-data.seed.ts no longer prints a false admin credential', () =>
 
   it('does not print the old hardcoded admin password in its credentials banner', () => {
     expect(testDataSource).not.toContain('Admin123!');
+  });
+});
+
+/**
+ * Fix-review M4: seed.ts already guards the call site, but a bare
+ * `import { seedTestData } from '...'; await seedTestData();` from anywhere
+ * else (a script, a future caller, a test) would bypass that. seedTestData
+ * must refuse on its own, at its own first line, regardless of caller.
+ */
+describe('seedTestData() enforces the production guard on itself', () => {
+  const testDataSource = readFileSync(join(__dirname, '05-test-data.seed.ts'), 'utf8');
+
+  it('calls assertTestDataSeedAllowed() as the first statement in its body', () => {
+    const fnStart = testDataSource.indexOf('export async function seedTestData');
+    expect(fnStart).toBeGreaterThan(-1);
+    const bodyStart = testDataSource.indexOf('{', fnStart);
+    const firstCallsite = testDataSource.indexOf('assertTestDataSeedAllowed()', bodyStart);
+    const firstConsoleLog = testDataSource.indexOf('console.log', bodyStart);
+    expect(firstCallsite).toBeGreaterThan(-1);
+    // Allowed to run before any other seeding side effect starts.
+    expect(firstCallsite).toBeLessThan(firstConsoleLog);
   });
 });
