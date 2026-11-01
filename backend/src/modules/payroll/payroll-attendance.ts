@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { BadRequestError } from '@/shared/exceptions/AppError';
-import { countPayrollAttendance, payrollDateKey, payrollPeriodDates, resolvePayrollWorkingDates } from '@/shared/payroll/attendance-calendar';
+import { clipWorkingDatesToEmployment, countPayrollAttendance, payrollDateKey, payrollPeriodDates, resolvePayrollWorkingDates } from '@/shared/payroll/attendance-calendar';
 
 export interface PayrollAttendanceSummary {
   workDays: number; present: number; absent: number; leave: number;
@@ -29,6 +29,11 @@ export async function loadPayrollAttendance(
   const [employees, calendars, shifts, overrides, attendance, leaves, overtimes, trips, permissions] = await Promise.all([
     database.employee.findMany({ where: { id: employeeId, companyId, deletedAt: null }, select: {
       id: true, companyId: true, branchId: true, departmentId: true, employeeCategory: true, shiftFormulaId: true, shiftStartDate: true,
+      // The employed slice of the period, read exactly as `findAllEmployeeSalaries`
+      // reads it: days outside it are not this employee's working days, so they
+      // must not land in the absent count that drives the alpa deduction.
+      joinDate: true,
+      resignations: { where: { status: 'APPROVED' }, orderBy: { lastWorkingDate: 'desc' }, take: 1, select: { lastWorkingDate: true } },
     } }),
     database.workCalendar.findMany({ where: { companyId, isActive: true, deletedAt: null, year: { in: [...new Set(dates.map(date => date.getUTCFullYear()))] } },
       include: { days: { where: { date: range }, select: { date: true, dayType: true } } } }),
@@ -56,7 +61,11 @@ export async function loadPayrollAttendance(
   const attendanceByEmployee = group(attendance), leavesByEmployee = group(leaves), overtimeByEmployee = group(overtimes), overridesByEmployee = group(overrides);
   const presenceByEmployee = group([...trips, ...permissions]);
   for (const employee of employees) {
-    const workingDates = resolvePayrollWorkingDates(employee, dates, { calendars, shifts, overrides: overridesByEmployee.get(employee.id) ?? [] });
+    const scheduledDates = resolvePayrollWorkingDates(employee, dates, { calendars, shifts, overrides: overridesByEmployee.get(employee.id) ?? [] });
+    const workingDates = clipWorkingDatesToEmployment(scheduledDates, {
+      joinDate: employee.joinDate,
+      lastWorkingDate: employee.resignations[0]?.lastWorkingDate ?? null,
+    });
     const counts = countPayrollAttendance(
       workingDates,
       attendanceByEmployee.get(employee.id) ?? [],
@@ -69,7 +78,11 @@ export async function loadPayrollAttendance(
       if (!row.durationHours.isFinite() || row.durationHours.isNegative()) throw new BadRequestError('Approved overtime has invalid hours');
       // A date outside the employee's resolved working dates is a weekend or
       // holiday for THAT employee's calendar/shift → statutory holiday bands.
-      if (workingDates.has(payrollDateKey(row.date))) {
+      // Classified against the SCHEDULE, not the employment window: clipping
+      // decides whether a day can be absent, not whether it was a weekday, and
+      // reading the clipped set here would repay overtime filed outside the
+      // window at holiday rates.
+      if (scheduledDates.has(payrollDateKey(row.date))) {
         overtimeWorkday = overtimeWorkday.plus(row.durationHours);
       } else {
         overtimeHoliday = overtimeHoliday.plus(row.durationHours);
