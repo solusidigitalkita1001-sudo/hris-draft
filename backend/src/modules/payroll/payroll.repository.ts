@@ -2,6 +2,7 @@ import { ConflictError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
 import { Prisma, PayrollRunStatus } from '@prisma/client';
 import { compileFormula } from '@/shared/payroll/formula';
+import { payrollDate } from '@/shared/payroll/attendance-calendar';
 import {
   CreateSalaryComponentDTO,
   UpdateSalaryComponentDTO,
@@ -468,8 +469,14 @@ export class PayrollRepository {
         // DTO: kalau pemanggil internal melewati validasi, tanggal itu tetap
         // tidak boleh mendarat di run REGULAR, di mana tidak ada yang akan
         // pernah membacanya lagi.
+        //
+        // Dinormalkan ke hari kalender UTC lewat `payrollDate`, helper yang
+        // sama yang dipakai jalur kalender absensi: hari raya adalah sebuah
+        // HARI, bukan sebuah saat. Klien yang mengirim 17:00Z tidak boleh
+        // menggeser jendela tenggang 30 hari PKWTT sehari, dan tanggal yang
+        // tersimpan harus bisa dibaca apa adanya di laporan dan audit.
         thrReferenceDate: data.runType === 'THR' && data.thrReferenceDate
-          ? new Date(data.thrReferenceDate)
+          ? payrollDate(new Date(data.thrReferenceDate))
           : null,
         // Diterima createPayrollRunSchema dan ada kolomnya di PayrollRun, tapi
         // tidak pernah ditulis: catatan kenapa sebuah run dibuat hilang tanpa

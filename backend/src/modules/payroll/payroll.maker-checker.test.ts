@@ -24,8 +24,12 @@ describe('payroll maker-checker persistence', () => {
     // P-C3: tanggal hari raya menentukan eligibilitas dan prorata. Di run
     // bertipe lain ia tidak punya pembaca, jadi ia tidak boleh mendarat di
     // baris run meski pemanggil internal menyodorkannya.
+    // Dan dinormalkan ke hari kalender UTC: hari raya adalah sebuah HARI.
+    // Jam 17:00Z yang tersimpan apa adanya akan menggeser jendela tenggang 30
+    // hari PKWTT sehari dan membuat tanggal di laporan tidak bisa dibaca
+    // langsung.
     await repository.createPayrollRun(
-      { periodId: 'period', companyId: 'A', name: 'THR 2026', runType: 'THR', thrReferenceDate: '2026-04-21T00:00:00.000Z' }, 3, 'maker');
+      { periodId: 'period', companyId: 'A', name: 'THR 2026', runType: 'THR', thrReferenceDate: '2026-04-21T17:00:00.000Z' }, 3, 'maker');
     expect(prisma.payrollRun.create).toHaveBeenCalledWith({
       data: { periodId: 'period', companyId: 'A', name: 'THR 2026', runNumber: 3, runType: 'THR', thrReferenceDate: new Date('2026-04-21T00:00:00.000Z'), createdBy: 'maker' },
     });

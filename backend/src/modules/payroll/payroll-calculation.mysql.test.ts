@@ -308,6 +308,59 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
       expect(thr.payslips[0].employeeId).toBe(entitled.id);
     });
 
+    it('refuses a holiday date in a different year from the period', async () => {
+      const f = await thrFixture();
+      await veteran(f);
+      // Satu digit salah ketik. Tidak ada angka yang gagal karenanya: masa
+      // kerja semua orang bergeser setahun penuh dan policy snapshot membeku
+      // ke tabel pajak tahun yang salah, lalu run-nya tetap bisa dicairkan.
+      await expect(runOfType(f, 'THR', '2027-10-21T00:00:00.000Z')).rejects.toThrow(
+        /berada di tahun 2027, sedangkan periode payroll ini berakhir di tahun 2026/);
+      // Ditolak sebelum baris run-nya ada, jadi slotnya tetap bebas.
+      expect(await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } })).toBe(0);
+      expect(await mockDatabase.payslip.count({ where: { companyId: f.companyId } })).toBe(0);
+      expect(eventBus.publish).not.toHaveBeenCalled();
+    });
+
+    it('allows a holiday outside the period as long as the year matches', async () => {
+      const f = await thrFixture();
+      const person = await veteran(f);
+      // Periode fixture berakhir 2026-10-28; 2026-12-25 ada di luar periode
+      // tapi masih di tahunnya. Inilah kasus yang kolom ini ada untuk
+      // melayani — periode Maret dengan hari raya awal April — jadi ia tidak
+      // boleh ikut tertolak oleh gerbang tahun.
+      const thr = await runOfType(f, 'THR', '2026-12-25T00:00:00.000Z');
+      expect(thr.payslips).toHaveLength(1);
+      expect(thr.payslips[0].employeeId).toBe(person.id);
+      expect(thr.thrReferenceDate?.toISOString()).toBe('2026-12-25T00:00:00.000Z');
+    });
+
+    it('stores the holiday as a calendar day, so a time of day cannot shift the grace window', async () => {
+      const f = await thrFixture();
+      // 30 hari sebelum 2026-10-21 adalah 2026-09-21: tepat di batas, jadi
+      // pergeseran sehari ke arah mana pun akan terlihat.
+      const person = await veteran(f, { employmentType: 'PERMANENT', employmentStatus: 'RESIGNED', status: 'INACTIVE' });
+      await resign(f, person.id, '2026-09-21');
+
+      const thr = await runOfType(f, 'THR', '2026-10-21T17:00:00.000Z');
+      expect(thr.thrReferenceDate?.toISOString()).toBe('2026-10-21T00:00:00.000Z');
+      expect(thr.payslips).toHaveLength(1);
+      expect(thr.payslips[0].employeeId).toBe(person.id);
+    });
+
+    it('still refuses to guess tenure for somebody who IS entitled', async () => {
+      const f = await thrFixture();
+      // Arah kerasnya: gerbang kelayakan dipasang lebih dulu supaya orang yang
+      // TIDAK dibayar tidak menggagalkan run. Orang yang berhak tapi tanggal
+      // masuknya kosong tetap harus menghentikannya — jumlah THR-nya tidak
+      // bisa ditebak, dan diam-diam membayar nol lebih buruk daripada menolak.
+      await employee(f); // joinDate tetap null, status ACTIVE, PERMANENT
+      await expect(runOfType(f, 'THR', HOLIDAY)).rejects.toThrow(/has no join date/);
+      // Dan penolakannya menggulung run-nya utuh.
+      expect(await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } })).toBe(0);
+      expect(await mockDatabase.payslip.count({ where: { companyId: f.companyId } })).toBe(0);
+    });
+
     it('measures tenure from the holiday, not from the period end', async () => {
       const f = await thrFixture();
       // Joined 2026-09-25: one full month by the period end (2026-10-28), but

@@ -114,7 +114,18 @@ export interface ThrEmploymentEligibility {
   reason: ThrEligibilityReason;
 }
 
-/** Tengah malam UTC dari sebuah DateTime: tenggang dihitung per hari kalender. */
+/**
+ * Tengah malam UTC dari sebuah DateTime: tenggang dihitung per hari kalender.
+ *
+ * Sengaja TIDAK memanggil `payrollDate` dari `attendance-calendar.ts`, yang
+ * memotong tanggal dengan cara yang sama: file ini tanpa satu import pun (lihat
+ * header — semua fungsi murni), dan helper itu membawa `BadRequestError`
+ * beserta modul kalender shift 300-baris ke dalam kalkulator statuter yang
+ * hanya butuh tiga baris aritmetika tanggal. Penulisnya memanggil `payrollDate`
+ * di repository, tempat nilainya DISIMPAN, jadi nilai yang masuk ke sini sudah
+ * berupa hari kalender; pemotongan di sini adalah jaring kedua untuk baris lama
+ * dan untuk `lastWorkingDate`, yang tidak pernah dinormalkan.
+ */
 function utcDay(date: Date): number {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }

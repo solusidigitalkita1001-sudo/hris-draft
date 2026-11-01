@@ -420,6 +420,29 @@ export class PayrollService {
           if (runType === 'REGULAR' && !period.attendanceReviewedAt) {
             throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
           }
+          // Hari raya harus satu tahun dengan periodenya. Hanya di sini
+          // periodenya kelihatan, jadi hanya di sini salah-tahun bisa
+          // ditangkap — dan DTO tidak punya apa pun untuk dibandingkan.
+          //
+          // Salah ketik satu digit tahun tidak akan terlihat di mana pun: ia
+          // menggeser masa kerja SEMUA orang sebanyak satu tahun penuh, lalu
+          // membekukan tabel pajak/BPJS tahun yang salah ke policy snapshot
+          // run itu. Angkanya tetap keluar, tetap bisa di-approve, dan tetap
+          // bisa dicairkan. Lintas bulan sengaja tetap sah: periode Maret
+          // dengan Idulfitri awal April justru kasus yang kolom ini ada untuk
+          // melayani.
+          if (data.thrReferenceDate) {
+            const holiday = payrollDate(new Date(data.thrReferenceDate));
+            const periodYear = payrollDate(new Date(period.endDate)).getUTCFullYear();
+            if (holiday.getUTCFullYear() !== periodYear) {
+              throw new BadRequestError(
+                `Tanggal hari raya ${payrollDateKey(holiday)} berada di tahun `
+                + `${holiday.getUTCFullYear()}, sedangkan periode payroll ini berakhir di tahun `
+                + `${periodYear}; THR dihitung dan dipajaki menurut tahun periodenya, jadi `
+                + 'perbaiki tanggalnya atau pakai periode tahun itu.',
+              );
+            }
+          }
           // One run per period PER TYPE. The old rule knew nothing of types, so
           // paying THR meant voiding the month's salary run. VOIDED runs still
           // free their slot for a fresh, corrected run of the same type.
