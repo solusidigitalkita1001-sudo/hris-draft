@@ -116,16 +116,27 @@ backup_database() {
     esac
 
     # A non-numeric or zero DB_BACKUP_KEEP would otherwise either blow up the
-    # retention arithmetic below or, with 0, delete the dump just taken on the
-    # same run that created it (tail -n "+1" selects everything).
+    # retention arithmetic below or delete the dump just taken on the same run
+    # that created it (tail -n "+1" selects everything).
     case "$DB_BACKUP_KEEP" in
         '' | *[!0-9]*)
             warn "DB_BACKUP_KEEP='$DB_BACKUP_KEEP' tidak valid (harus bilangan >= 1); memakai default 7."
             DB_BACKUP_KEEP=7
             ;;
-        0)
-            warn "DB_BACKUP_KEEP=0 akan menghapus dump yang baru dibuat; dipaksa ke minimum 1."
-            DB_BACKUP_KEEP=1
+        *)
+            # All-digits is not enough: "00"/"000" pass the check above (no
+            # literal "0)" case arm catches them — the string "00" != "0")
+            # but bash arithmetic reads a leading zero as OCTAL, so
+            # $((DB_BACKUP_KEEP + 1)) would silently evaluate "00" as 0 and
+            # go on to wipe every dump including the one just taken — the
+            # exact same bug as DB_BACKUP_KEEP=0, just not caught by name.
+            # Force decimal first, then apply the same >=1 guard.
+            local keep_raw="$DB_BACKUP_KEEP"
+            DB_BACKUP_KEEP=$((10#$DB_BACKUP_KEEP))
+            if [ "$DB_BACKUP_KEEP" -lt 1 ]; then
+                warn "DB_BACKUP_KEEP='$keep_raw' akan menghapus dump yang baru dibuat; dipaksa ke minimum 1."
+                DB_BACKUP_KEEP=1
+            fi
             ;;
     esac
 
