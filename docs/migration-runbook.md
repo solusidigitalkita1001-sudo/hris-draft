@@ -95,18 +95,26 @@ deploy` against *restored* data end-to-end (§6a never does — it only takes th
 Prove restore works before you need it:
 
 ```bash
+# Password to a mode-600 file, never -p"$P" on argv — same pattern as
+# scripts/server-deploy.sh and the restore snippet in docs/deploy-rollback.md.
+PWD_FILE="$(mktemp)"; chmod 600 "$PWD_FILE"; printf 'MYSQL_PWD=%s\n' "$P" > "$PWD_FILE"
+trap 'rm -f "$PWD_FILE"' EXIT
+set -a; . "$PWD_FILE"; set +a
+
 # BACKUP (throwaway/anonymized source only)
-mysqldump -h "$H" -u "$U" -p"$P" --single-transaction --routines --triggers "$DB" > backup.sql
+mysqldump -h "$H" -u "$U" --single-transaction --routines --triggers "$DB" > backup.sql
 
 # RESTORE into a fresh DB and verify
-mysql -h "$H" -u "$U" -p"$P" -e "CREATE DATABASE hris_restore_test;"
-mysql -h "$H" -u "$U" -p"$P" hris_restore_test < backup.sql
+mysql -h "$H" -u "$U" -e "CREATE DATABASE hris_restore_test;"
+mysql -h "$H" -u "$U" hris_restore_test < backup.sql
 # then: prisma migrate deploy against hris_restore_test + run §4 spot check
+
+set +a; unset MYSQL_PWD
 ```
 
-`-p"$P"` above is fine only because the source is throwaway/anonymized and run by hand off the
-shared server. Never use that form against the real database on the shared host — see §6a's note
-on credential handling for why.
+No `-p"$P"` anywhere above, including on a throwaway/anonymized source — same credential
+discipline as production, not an exception for this drill. See §6a's note on credential handling
+for why `-p`/`-e MYSQL_PWD=...` are both wrong on this shared host.
 
 Run this drill on a schedule with an anonymized production dump (scrub PII: names, NIK/NPWP, bank,
 face embeddings) and record the date + result here each time — the acceptance is that the restore
@@ -128,18 +136,36 @@ restores cleanly while missing rows), the deploy **aborts before the sanitizer r
 change happens on a deploy without a verified backup.
 
 **Where dumps land:** `backups/<database>-<timestamp>-<commit>.sql.gz` inside the deploy
-directory, newest `DB_BACKUP_KEEP` kept (default 7, env-overridable). `backups/` is git-ignored;
-treat it as confidential as `backend/.env` — it holds live employee and payroll data.
+directory, newest `DB_BACKUP_KEEP` kept (default 7, env-overridable; non-numeric or `0` is
+rejected back to a safe value rather than honored literally — `0` would otherwise delete the dump
+just taken). `backups/` is git-ignored; treat it as confidential as `backend/.env` — it holds live
+employee and payroll data. The filename's commit suffix is the full 40-character SHA
+(`DEPLOY_COMMIT`, set by `deploy.yml` via `git rev-parse HEAD`) on a real deploy; only the
+`git rev-parse --short HEAD` fallback used when `DEPLOY_COMMIT` is unset (e.g. running the script
+by hand) produces the short form — both are valid, just not the same length.
 
 **Env knobs** (full table in `docs/deploy-rollback.md` § Database rollback): `DB_BACKUP_ENABLED`
-(default `true`), `DB_BACKUP_DIR`, `DB_BACKUP_KEEP` (default `7`), `DB_BACKUP_MIN_FREE_MB`
-(default `2048`), `MYSQL_CONTAINER`.
+(`true`/`false` only — any other value aborts the deploy rather than silently skipping the
+backup), `DB_BACKUP_DIR`, `DB_BACKUP_KEEP` (default `7`), `DB_BACKUP_MIN_FREE_MB` (default `2048`),
+`MYSQL_CONTAINER`.
 
-**Credential handling:** the password reaches `mysqldump` through a mode-600 `--env-file` passed
-to `docker exec` (`MYSQL_PWD=...`), never as a command argument — this host is shared with four
-other projects, and `docker exec -e MYSQL_PWD=...` would put the password in that shared host's
-own `ps auxww` output for the `docker exec` process itself, not just inside the container. The
-temp file is removed as soon as the dump function returns, success or failure.
+**Credential handling:** the password reaches `mysqldump` through a mode-600 file passed to
+`docker exec --env-file` (`MYSQL_PWD=...`), never as a command argument — this host is shared with
+four other projects, and `docker exec -e MYSQL_PWD=...` would put the password in that shared
+host's own `ps auxww` output for the `docker exec` process itself, not just inside the container.
+The file is written inside `DB_BACKUP_DIR` (already preflighted for free space above, unlike
+`/tmp`) and explicitly deleted the moment `mysqldump` has run for the last time — *not* left to a
+`RETURN` trap, which does not fire when the deploy aborts via the ERR trap or an external signal
+(verified: neither the prune loop's arithmetic nor a `SIGTERM` from the deploy workflow's
+35-minute timeout triggers it). A best-effort `TERM` trap covers a signal landing mid-dump; a
+stale file from a previously killed run is swept at the start of the next deploy's backup step.
+
+**One dump can become two on a failed deploy:** `deploy.yml`'s auto-rollback re-runs
+`server-deploy.sh` for `PREVIOUS_COMMIT` when the forward deploy fails after the schema was
+already touched — that re-run takes its own STEP 5 dump before retrying, of whatever state the
+failed attempt left behind, consuming one more `DB_BACKUP_KEEP` retention slot. This is intended
+(every schema-touching run gets its own dump) but means a single failed deploy can cost two
+retention slots instead of one.
 
 ### Restoring the automated backup (production)
 

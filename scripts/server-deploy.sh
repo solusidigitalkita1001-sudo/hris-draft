@@ -10,6 +10,7 @@ set -Eeuo pipefail
 #   - Docker build/start
 #   - Container readiness
 #   - Database connectivity
+#   - Backup database sebelum perubahan skema
 #   - Recovery migration khusus sementara
 #   - Prisma migrate deploy
 #   - Backend health check
@@ -98,10 +99,35 @@ recover_face_match_index() {
 # =====================================================================
 
 backup_database() {
-    if [ "$DB_BACKUP_ENABLED" != "true" ]; then
-        warn "DB_BACKUP_ENABLED=$DB_BACKUP_ENABLED — melewati backup database"
-        return 0
-    fi
+    # Fail closed on a typo: an unrecognized value used to silently SKIP the
+    # backup (treated as "not true"), so e.g. DB_BACKUP_ENABLED=flase would
+    # quietly deploy with no dump instead of erroring. Only 'true'/'false' are
+    # accepted now; anything else aborts the deploy before it can guess wrong.
+    case "$DB_BACKUP_ENABLED" in
+        true) ;;
+        false)
+            warn "DB_BACKUP_ENABLED=false — melewati backup database"
+            return 0
+            ;;
+        *)
+            error_message "DB_BACKUP_ENABLED='$DB_BACKUP_ENABLED' tidak valid (harus 'true' atau 'false'); migrasi dibatalkan sebelum menyentuh skema."
+            return 1
+            ;;
+    esac
+
+    # A non-numeric or zero DB_BACKUP_KEEP would otherwise either blow up the
+    # retention arithmetic below or, with 0, delete the dump just taken on the
+    # same run that created it (tail -n "+1" selects everything).
+    case "$DB_BACKUP_KEEP" in
+        '' | *[!0-9]*)
+            warn "DB_BACKUP_KEEP='$DB_BACKUP_KEEP' tidak valid (harus bilangan >= 1); memakai default 7."
+            DB_BACKUP_KEEP=7
+            ;;
+        0)
+            warn "DB_BACKUP_KEEP=0 akan menghapus dump yang baru dibuat; dipaksa ke minimum 1."
+            DB_BACKUP_KEEP=1
+            ;;
+    esac
 
     if ! docker exec "$MYSQL_CONTAINER" sh -c 'command -v mysqldump' >/dev/null 2>&1; then
         error_message "mysqldump tidak tersedia di container $MYSQL_CONTAINER; backup tidak bisa dibuat."
@@ -110,7 +136,9 @@ backup_database() {
 
     mkdir -p "$DB_BACKUP_DIR"
 
-    # Refuse rather than fill a shared disk.
+    # Refuse rather than fill a shared disk. NOTE: this preflights
+    # DB_BACKUP_DIR only, not /tmp — which is why the credential file below is
+    # created inside DB_BACKUP_DIR rather than a bare `mktemp`.
     local free_mb
     free_mb="$(df -Pm "$DB_BACKUP_DIR" | awk 'NR==2 {print $4}')"
     if [ -z "$free_mb" ]; then
@@ -163,34 +191,95 @@ backup_database() {
     # secret in THIS HOST's `ps auxww` output for the `docker exec` process
     # itself (verified: the container-internal mysqldump process list is clean,
     # but the host, shared with four other projects, is not) — so the password
-    # goes into a mode-600 env file instead, and only its path reaches argv.
-    # --single-transaction snapshots InnoDB without locking, so no other
-    # project's queries are blocked while this runs.
+    # goes into a mode-600 file instead, read via `docker exec --env-file`, and
+    # only its path reaches argv. Written inside DB_BACKUP_DIR (preflighted for
+    # space above), not a bare `mktemp` under /tmp, which has no such check. A
+    # stale file left by a previously killed run is swept first.
+    rm -f "$DB_BACKUP_DIR"/.db-backup-pwd.*
     local pwd_file
-    pwd_file="$(mktemp)"
+    pwd_file="$(mktemp "$DB_BACKUP_DIR/.db-backup-pwd.XXXXXX")"
     chmod 600 "$pwd_file"
     printf 'MYSQL_PWD=%s\n' "$db_pass" > "$pwd_file"
+    # Belt, not the guarantee — verified empirically that a RETURN trap does
+    # NOT fire when a failing command further down is turned into `exit` by
+    # the global ERR trap (errexit unwinding a nested function call skips
+    # pending RETURN traps), nor on an external SIGTERM (e.g. the deploy
+    # workflow's 35-minute command_timeout). The real guarantee is the
+    # explicit `rm -f "$pwd_file"` right after dump_to's last use below, done
+    # before the retention/prune code that follows — DB_BACKUP_KEEP arithmetic
+    # and the prune loop's `rm` are exactly where those abort paths live, and
+    # by then the password is no longer needed. TERM is trapped too, as a
+    # best-effort second line of defense for a signal landing mid-dump; both
+    # traps are cleared the moment the password file is gone.
     trap 'rm -f "$pwd_file"' RETURN
+    trap 'rm -f "$pwd_file"; exit 143' TERM
 
+    # --no-tablespaces: MySQL 8's --single-transaction otherwise also tries to
+    # lock tablespaces, which hard-fails without the PROCESS privilege
+    # app_user may not have — same privilege class as --routines/--triggers
+    # below, but this one has no fallback form, so it must never be attempted.
     dump_to() {
-        docker exec -i --env-file "$pwd_file" "$MYSQL_CONTAINER" \
-            mysqldump --user="$db_user" --single-transaction --quick \
+        local err_file rc
+        err_file="$(mktemp)"
+        if docker exec -i --env-file "$pwd_file" "$MYSQL_CONTAINER" \
+            mysqldump --user="$db_user" --single-transaction --quick --no-tablespaces \
                 --default-character-set=utf8mb4 "$@" "$db_name" \
-            | gzip -c > "$target"
+            2>"$err_file" | gzip -c > "$target"
+        then
+            rc=0
+        else
+            rc=$?
+        fi
+        cat "$err_file" >&2
+        if [ "$rc" -eq 0 ]; then
+            rm -f "$err_file"
+            return 0
+        fi
+        # Only a grant problem is eligible for the no-routines/triggers retry
+        # below; any other failure (network, disk, OOM, …) must fail the
+        # deploy outright instead of quietly trying a different flag combo.
+        if grep -Eqi 'access denied|process privilege' "$err_file"; then
+            rm -f "$err_file"
+            return 2
+        fi
+        rm -f "$err_file"
+        return 1
     }
 
     # Routines and triggers need privileges beyond the table rights this user
     # certainly has. Attempted first, because a restore silently missing them
     # is a nasty surprise; but a user without those grants must not be the
-    # reason a deploy cannot happen at all, so the plain dump is the fallback.
-    if ! dump_to --routines --triggers; then
-        warn "mysqldump dengan --routines/--triggers gagal; mencoba tanpa keduanya."
-        if ! dump_to; then
-            error_message "mysqldump gagal; migrasi dibatalkan sebelum menyentuh skema."
-            rm -f "$target"
-            return 1
+    # reason a deploy cannot happen at all, so the plain dump is the fallback
+    # — and only for that specific reason (see dump_to's grant check above).
+    local dump_failed=0
+    if dump_to --routines --triggers; then
+        :
+    else
+        local rc=$?
+        if [ "$rc" -eq 2 ]; then
+            warn "mysqldump dengan --routines/--triggers gagal karena hak akses; mencoba tanpa keduanya."
+            if dump_to; then
+                warn "Backup tidak menyertakan stored routine dan trigger (hak akses kurang)."
+            else
+                dump_failed=1
+            fi
+        else
+            warn "mysqldump gagal karena alasan selain hak akses; tidak mencoba ulang dengan opsi lain."
+            dump_failed=1
         fi
-        warn "Backup tidak menyertakan stored routine dan trigger (hak akses kurang)."
+    fi
+
+    # pwd_file's job ends here — unlink now, before any of the code below that
+    # can abort in ways the traps above do not catch (see the comment where
+    # the traps were set).
+    rm -f "$pwd_file"
+    trap - RETURN
+    trap - TERM
+
+    if [ "$dump_failed" -ne 0 ]; then
+        error_message "mysqldump gagal; migrasi dibatalkan sebelum menyentuh skema."
+        rm -f "$target"
+        return 1
     fi
 
     # A truncated dump is the dangerous failure: it restores cleanly and is
@@ -462,7 +551,7 @@ log "STEP 5/9: Backup database before schema changes"
 backup_database
 
 # =====================================================================
-# STEP 5 — SPECIAL MIGRATION RECOVERY
+# STEP 6 — SPECIAL MIGRATION RECOVERY
 #
 # TODO:
 # Hapus section ini setelah production database stabil dan migration
@@ -625,7 +714,7 @@ log "Check failed face-match rate-limit index migration"
 recover_face_match_index
 
 # =====================================================================
-# STEP 6 — PRISMA MIGRATION
+# STEP 7 — PRISMA MIGRATION
 # =====================================================================
 
 log "STEP 7/9: Prisma migrate deploy"
@@ -695,7 +784,7 @@ else
 fi
 
 # =====================================================================
-# STEP 7 — BACKEND HEALTH CHECK
+# STEP 8 — BACKEND HEALTH CHECK
 # =====================================================================
 
 log "STEP 8/9: Backend health check"
@@ -779,7 +868,7 @@ done
 ok "Backend healthy"
 
 # =====================================================================
-# STEP 8 — CLEANUP
+# STEP 9 — CLEANUP
 # =====================================================================
 
 log "STEP 9/9: Docker cleanup"

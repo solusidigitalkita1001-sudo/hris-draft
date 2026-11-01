@@ -70,9 +70,9 @@ Knobs, all environment variables read by the script:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DB_BACKUP_ENABLED` | `true` | Set to anything else to skip the dump. The deploy warns rather than failing. |
+| `DB_BACKUP_ENABLED` | `true` | Only `true`/`false` are accepted. `false` skips the dump with a warning; anything else (a typo) aborts the deploy rather than guessing. |
 | `DB_BACKUP_DIR` | `<deploy dir>/backups` | Where dumps are written. |
-| `DB_BACKUP_KEEP` | `7` | How many of this database's dumps to keep. |
+| `DB_BACKUP_KEEP` | `7` | How many of this database's dumps to keep. Non-numeric or `0` is rejected back to a safe value — `0` would otherwise delete the dump just taken. |
 | `DB_BACKUP_MIN_FREE_MB` | `2048` | The deploy aborts rather than filling a disk shared with other projects. |
 | `MYSQL_CONTAINER` | `mysql-db` | Where `mysqldump` runs. Only this application's database is named. |
 
@@ -85,11 +85,13 @@ a first move — if the dump turns out to be the problem, overwriting is unrecov
 cd /root/projects/dev/hris-draft
 DUMP=backups/<database>-<timestamp>-<commit>.sql.gz
 
-# 1. Credentials, without printing them.
-read -r DB_USER DB_PASS DB_NAME <<<"$(docker exec hris_backend node -e '
+# 1. Credentials, without printing them. Tab-separated (not space-separated)
+#    so a password containing spaces survives — same join used by
+#    scripts/server-deploy.sh's backup_database().
+IFS=$'\t' read -r DB_USER DB_PASS DB_NAME <<<"$(docker exec hris_backend node -e '
   const u = new URL(process.env.DATABASE_URL);
-  console.log(decodeURIComponent(u.username), decodeURIComponent(u.password),
-              decodeURIComponent(u.pathname.slice(1)));')"
+  console.log([decodeURIComponent(u.username), decodeURIComponent(u.password),
+              decodeURIComponent(u.pathname.slice(1))].join("\t"));')"
 
 # 2. Password to a mode-600 env file, not `docker exec -e` — this host is
 #    shared with four other projects, and `-e MYSQL_PWD=...` would put the
