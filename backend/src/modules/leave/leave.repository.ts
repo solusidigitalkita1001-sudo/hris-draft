@@ -23,8 +23,13 @@ export class LeaveRepository {
   }
 
   // Leave Requests
-  async findAllLeaveRequests(companyId: string, filters?: { employeeId?: string; status?: string; leaveTypeId?: string }) {
+  async findAllLeaveRequests(
+    companyId: string,
+    filters?: { employeeId?: string; status?: string; leaveTypeId?: string },
+    employeeScope?: Prisma.EmployeeWhereInput,
+  ) {
     const where: Prisma.LeaveRequestWhereInput = { companyId, deletedAt: null };
+    if (employeeScope) where.employee = employeeScope;
     if (filters?.employeeId) where.employeeId = filters.employeeId;
     if (filters?.status) where.status = filters.status as any;
     if (filters?.leaveTypeId) where.leaveTypeId = filters.leaveTypeId;

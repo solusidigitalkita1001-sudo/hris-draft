@@ -8,7 +8,7 @@ const service = new AdministrationService();
 const user = { id: 'u', companyId: 'A', employeeId: 'e', roles: ['MANAGER'] };
 describe('data scope fail-closed', () => {
   beforeEach(() => jest.clearAllMocks());
-  it.each(['employee', 'attendance', 'payroll', 'leave', 'ALL'])('MANAGER_TEAM without an employee identity fails closed (throws) (%s)', (resource) => {
+  it.each(['employee', 'attendance', 'payroll', 'leave', 'ALL'])('a configured MANAGER_TEAM row without an employee identity fails closed (throws) (%s)', (resource) => {
     expect(() => service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, { ...user, employeeId: undefined }, resource)).toThrow(ForbiddenError);
   });
   it('keeps a manager who heads no unit on their own record instead of denying every read', () => {
@@ -18,17 +18,32 @@ describe('data scope fail-closed', () => {
     expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, user)).toEqual({ id: { in: ['e'] } });
     expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, user, 'leave')).toEqual({ employeeId: { in: ['e'] } });
   });
-  it('adds the manager to their own team scope, and never twice', () => {
-    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: ['t1'] }, user)).toEqual({ id: { in: ['t1', 'e'] } });
-    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: ['e', 't1'] }, user)).toEqual({ id: { in: ['e', 't1'] } });
+  it('scopes a manager who heads a team to that team, and does not add themselves to it', () => {
+    // Widening a configured team scope with the holder's own record would
+    // widen every path it governs, writes included.
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: ['t1'] }, user)).toEqual({ id: { in: ['t1'] } });
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: ['t1', 't1', 't2'] }, user)).toEqual({ id: { in: ['t1', 't2'] } });
   });
   it('MANAGER_TEAM scopes to the pre-resolved team ids', () => {
     const mgrTeam = { ...user, teamEmployeeIds: ['e', 't1', 't2'] };
     expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, mgrTeam)).toEqual({ id: { in: ['e', 't1', 't2'] } });
     expect(service.resolveEmployeeFilterForCurrentUser({ scopeType: 'MANAGER_TEAM' }, mgrTeam, 'leave')).toEqual({ employeeId: { in: ['e', 't1', 't2'] } });
   });
-  it('rejects self scope without employee identity', () => {
+  it('rejects a configured self scope without employee identity', () => {
     expect(() => service.resolveEmployeeFilterForCurrentUser({ scopeType: 'EMPLOYEE_SELF' }, { ...user, employeeId: undefined })).toThrow(ForbiddenError);
+  });
+  /**
+   * `User.employeeId` is nullable and deleting an employee sets it to null, so
+   * an ordinary account with no employee link is a real state. The computed
+   * default governs every such account on every route the scope middleware
+   * touches, and throwing there turned one broken link into a blanket 403
+   * (CompanyScope turns the throw into "Unable to resolve data access scope").
+   * It matches no record instead: just as closed, and the API keeps answering.
+   */
+  it.each(['EMPLOYEE_SELF', 'MANAGER_TEAM'])('matches no record, rather than denying, for a default %s scope with no employee link', (scopeType) => {
+    const orphan = { ...user, employeeId: undefined };
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType, isDefault: true }, orphan)).toEqual({ id: { in: [] } });
+    expect(service.resolveEmployeeFilterForCurrentUser({ scopeType, isDefault: true }, orphan, 'leave')).toEqual({ employeeId: { in: [] } });
   });
   it.each(['BRANCH_ONLY', 'DEPARTMENT_ONLY', 'SUB_DEPARTMENT_ONLY'])('rejects invalid %s', (scopeType) => {
     for (const scopeValue of [undefined, '', ' , ', 'invalid']) {
@@ -92,7 +107,13 @@ describe('fail-closed default when no role of the requester has a configured sco
     const scope = await effective(roles);
     expect(scope).toMatchObject({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: ['t1'] });
     expect(resolveManagedEmployeeIds).toHaveBeenCalledWith('A', 'e');
-    expect(service.resolveEmployeeFilterForCurrentUser(scope, { ...user, roles })).toEqual({ id: { in: ['t1', 'e'] } });
+    expect(service.resolveEmployeeFilterForCurrentUser(scope, { ...user, roles })).toEqual({ id: { in: ['t1'] } });
+  });
+
+  it('falls back to the manager own record only when they head nobody', async () => {
+    const scope = await effective(['MANAGER']);
+    expect(scope).toMatchObject({ scopeType: 'MANAGER_TEAM', teamEmployeeIds: [] });
+    expect(service.resolveEmployeeFilterForCurrentUser(scope, user)).toEqual({ id: { in: ['e'] } });
   });
 
   it('leaves a configured row exactly as the existing merge resolved it', async () => {

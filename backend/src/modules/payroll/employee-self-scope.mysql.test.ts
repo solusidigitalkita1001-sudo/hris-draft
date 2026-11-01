@@ -11,6 +11,8 @@ import { runInRequestContext, RequestUserContext } from '@/shared/context/Reques
 import { PayrollService } from './payroll.service';
 import { annualTaxRecapService } from './annual-tax-recap.service';
 import { EmployeeRepository } from '@/modules/employee/employee.repository';
+import { attendanceService } from '@/modules/attendance/attendance.service';
+import { leaveService } from '@/modules/leave/leave.service';
 
 /**
  * S-H1, against a real database and with no RoleDataScope row in sight —
@@ -44,6 +46,9 @@ withDatabase('employee self scope with no configured data scope (isolated real M
     if (!mockDatabase) return;
     const companyId = { in: companies };
     try {
+      await mockDatabase.leaveRequest.deleteMany({ where: { companyId } });
+      await mockDatabase.leaveType.deleteMany({ where: { companyId } });
+      await mockDatabase.attendance.deleteMany({ where: { companyId } });
       await mockDatabase.payslipComponent.deleteMany({ where: { payslip: { companyId } } });
       await mockDatabase.payslip.deleteMany({ where: { companyId } });
       await mockDatabase.payrollRun.deleteMany({ where: { companyId } });
@@ -74,6 +79,10 @@ withDatabase('employee self scope with no configured data scope (isolated real M
       firstName: name, lastName: 'Synthetic', fullName: `${name} Synthetic`, joinDate: new Date('2020-01-01'), departmentId: department.id } });
     const self = await person('Self'), colleague = await person('Colleague'), manager = await person('Manager');
     await mockDatabase.department.update({ where: { id: department.id }, data: { headId: manager.id } });
+    // Outside the managed department, so "the manager's team" is provably
+    // narrower than "the whole company".
+    const outsider = await mockDatabase.employee.create({ data: { companyId, employeeNumber: randomUUID(),
+      firstName: 'Outsider', lastName: 'Synthetic', fullName: 'Outsider Synthetic', joinDate: new Date('2020-01-01') } });
     const component = await mockDatabase.salaryComponent.create({ data: { companyId, code: 'BASE', name: 'Synthetic base salary', type: 'ALLOWANCE', amount: '1000' } });
     const salary = (employeeId: string, amount: string) => mockDatabase.employeeSalary.create({ data: { companyId, employeeId,
       effectiveDate: new Date('2026-01-01'), baseSalary: amount, components: { create: { salaryComponentId: component.id, amount } } } });
@@ -85,7 +94,12 @@ withDatabase('employee self scope with no configured data scope (isolated real M
     const slip = (employeeId: string, amount: string) => mockDatabase.payslip.create({ data: { companyId, payrollRunId: run.id, employeeId,
       baseSalary: amount, totalEarnings: amount, netPay: amount } });
     const ownSlip = await slip(self.id, '1000.25'), colleagueSlip = await slip(colleague.id, '9999.99');
-    return { companyId, department, self, colleague, manager, ownSalary, colleagueSalary, period, run, ownSlip, colleagueSlip };
+    const leaveType = await mockDatabase.leaveType.create({ data: { companyId, code: 'ANNUAL', name: 'Cuti Tahunan', isPaid: true } });
+    const attendanceOf = (employeeId: string) => mockDatabase.attendance.create({ data: { companyId, employeeId, date: new Date('2026-01-05'), status: 'PRESENT' } });
+    const leaveOf = (employeeId: string) => mockDatabase.leaveRequest.create({ data: { companyId, employeeId, leaveTypeId: leaveType.id,
+      startDate: new Date('2026-02-02'), endDate: new Date('2026-02-02'), totalDays: 1, reason: 'Synthetic' } });
+    for (const person of [self, colleague, manager, outsider]) { await attendanceOf(person.id); await leaveOf(person.id); }
+    return { companyId, department, self, colleague, manager, outsider, ownSalary, colleagueSalary, period, run, ownSlip, colleagueSlip };
   }
   type Fixture = Awaited<ReturnType<typeof fixture>>;
 
@@ -127,6 +141,38 @@ withDatabase('employee self scope with no configured data scope (isolated real M
     // EMPLOYEE role no longer holds.
     const profile = await asEmployee(f, () => employees.findById(f.self.id));
     expect(profile?.employeeSalaries.map(row => row.id)).toEqual([f.ownSalary.id]);
+  });
+
+  /**
+   * The attendance and leave lists were narrowed only by the data-scope
+   * rewrite in the company-scope middleware, which carries a single employee
+   * id. A manager's team cannot be written there, so the manager was reduced
+   * to themselves — unable to see the attendance and leave they hold
+   * `att:approve` / `leave:approve` to decide. Both lists now carry the
+   * server-side employee predicate, where a team can be expressed in full.
+   */
+  it('shows a manager their team attendance and leave, and an employee only their own', async () => {
+    const f = await fixture();
+    const asManager = { employeeId: f.manager.id, roles: ['MANAGER', 'EMPLOYEE'], permissions: ['att:read', 'att:approve', 'leave:read', 'leave:approve'] };
+
+    const ownAttendance = await asEmployee(f, () => attendanceService.findAll(f.companyId, {}));
+    expect(ownAttendance.map(row => row.employeeId)).toEqual([f.self.id]);
+    const ownLeave = await asEmployee(f, () => leaveService.findAllLeaveRequests(f.companyId, {}));
+    expect(ownLeave.map(row => row.employeeId)).toEqual([f.self.id]);
+
+    // The manager heads the department the two colleagues and they sit in —
+    // and that is not the whole company: the outsider must be absent.
+    const team = [f.self.id, f.colleague.id, f.manager.id].sort();
+    const teamAttendance = await asEmployee(f, () => attendanceService.findAll(f.companyId, {}), asManager);
+    expect(teamAttendance.map(row => row.employeeId).sort()).toEqual(team);
+    const teamLeave = await asEmployee(f, () => leaveService.findAllLeaveRequests(f.companyId, {}), asManager);
+    expect(teamLeave.map(row => row.employeeId).sort()).toEqual(team);
+
+    // HR keeps the whole company, the outsider included.
+    const hr = { roles: ['HR_STAFF', 'EMPLOYEE'], permissions: ['att:read', 'leave:read'] };
+    const all = [...team, f.outsider.id].sort();
+    expect((await asEmployee(f, () => attendanceService.findAll(f.companyId, {}), hr)).map(row => row.employeeId).sort()).toEqual(all);
+    expect((await asEmployee(f, () => leaveService.findAllLeaveRequests(f.companyId, {}), hr)).map(row => row.employeeId).sort()).toEqual(all);
   });
 
   it('keeps an HR reader company-wide while narrowing a manager to their team', async () => {

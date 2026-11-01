@@ -1,15 +1,15 @@
 # Real-database integration tests
 
-Nine suites run against a real MySQL database instead of a mocked Prisma
+Several suites run against a real MySQL database instead of a mocked Prisma
 client, because what they check — advisory locks, transaction rollback,
 concurrent runs, `SELECT … FOR UPDATE`, data-scope predicates — is behaviour a
-mock cannot reproduce. They are gated behind environment variables, so
-`npm test` skips them by default and they do not require a database on a
-developer machine that does not have one.
+mock cannot reproduce. The table below is the current list; they are gated
+behind environment variables, so `npm test` skips them by default and they do
+not require a database on a developer machine that does not have one.
 
-Gated is not free: before this pass they had drifted behind the code and four
-of the nine failed. Run them when touching payroll, EWA, salary, or data-scope
-behaviour.
+Gated is not free: before the first pass they had drifted behind the code and
+four of the nine that existed then failed. Run them when touching payroll, EWA,
+salary, or data-scope behaviour.
 
 ## Setup
 
@@ -62,12 +62,18 @@ synthetic companies in `afterAll`.
 
 ## In CI
 
-The `Real-database integration suites (blocking)` job runs the nine suites on
+The `Real-database integration suites (blocking)` job runs these suites on
 every push and pull request, against a MySQL service database named
 `hris_payment_integration` so the suites' own local-and-named guard is
 satisfied. It applies the migration chain first, then runs the same selector
 used above with `--runInBand`. A failure blocks the merge — these suites drifted
 precisely because nothing ran them.
+
+The selector is a pattern (`npx jest --runInBand "\.mysql\.test\.ts$"
+"advisory-lock"`), not a list, so a new `*.mysql.test.ts` suite is picked up by
+CI as soon as it exists — provided its gating environment variable is already
+among the job's, as `PAYROLL_SALARY_DB_URL` is. A suite introducing a NEW
+variable has to add it to `ci.yml`, or it will silently skip there.
 
 ## Journey cuti (29 September 2026)
 

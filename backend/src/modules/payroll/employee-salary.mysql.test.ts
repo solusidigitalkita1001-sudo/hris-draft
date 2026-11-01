@@ -35,7 +35,9 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
       await mockDatabase.employeeSalary.deleteMany({ where: { companyId } });
       await mockDatabase.salaryComponent.deleteMany({ where: { companyId } });
       await mockDatabase.workCalendar.deleteMany({ where: { companyId } });
+      await mockDatabase.department.updateMany({ where: { companyId }, data: { headId: null } });
       await mockDatabase.employee.deleteMany({ where: { companyId } });
+      await mockDatabase.department.deleteMany({ where: { companyId } });
       await mockDatabase.branch.deleteMany({ where: { companyId } });
       await mockDatabase.companySetting.deleteMany({ where: { companyId } });
       await mockDatabase.roleDataScope.deleteMany({ where: { companyId } });
@@ -241,11 +243,14 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
     const scope = await mockDatabase.roleDataScope.create({ data: { companyId: f.companyId, roleCode: 'PAYROLL_TEST', resource: 'payroll', scopeType: 'EMPLOYEE_SELF' } });
     expect((await create(f)).employeeId).toBe(f.person.id);
     await expect(create(f, { employeeId: outside.id })).rejects.toMatchObject({ statusCode: 404 });
-    // A manager heading no unit is scoped to themselves rather than denied
-    // outright: nobody else's allocation, but their own record stays reachable.
+    // A manager heading a team is scoped to that team and is NOT added to it:
+    // the team scope governs writes too, and a manager setting their own pay
+    // is exactly what it must not reach.
     await mockDatabase.roleDataScope.update({ where: { id: scope.id }, data: { scopeType: 'MANAGER_TEAM' } });
-    expect((await create(f, { effectiveDate: '2026-10-01T00:00:00Z' })).employeeId).toBe(f.person.id);
-    await expect(create(f, { employeeId: outside.id, effectiveDate: '2026-11-01T00:00:00Z' })).rejects.toMatchObject({ statusCode: 404 });
+    const department = await mockDatabase.department.create({ data: { companyId: f.companyId, code: randomUUID(), name: 'Managed', headId: f.person.id } });
+    await mockDatabase.employee.update({ where: { id: outside.id }, data: { departmentId: department.id } });
+    await expect(create(f, { effectiveDate: '2026-10-01T00:00:00Z' })).rejects.toMatchObject({ statusCode: 404 });
+    expect((await create(f, { employeeId: outside.id, effectiveDate: '2026-11-01T00:00:00Z' })).employeeId).toBe(outside.id);
     await expect(runInRequestContext({}, () => service.createEmployeeSalary(input(f)))).rejects.toMatchObject({ statusCode: 403 });
   });
 

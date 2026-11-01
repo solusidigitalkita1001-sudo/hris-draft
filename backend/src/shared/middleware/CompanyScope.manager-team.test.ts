@@ -35,19 +35,21 @@ describe('MANAGER_TEAM scope injection', () => {
   });
 
   /**
-   * The team itself is enforced by the server-side predicate
-   * (`employeeAccessWhere`). This query rewrite carries at most one id,
-   * because every DTO validates `employeeId` as a single id, so it keeps
-   * narrowing the request to the caller — narrower than the team, never wider.
+   * A team cannot be written into `employeeId`: every DTO validates it as a
+   * single id, so the set would answer 422 — and the requester's own id would
+   * hide the rest of the team, which is how a manager lost sight of the
+   * attendance and leave they hold `att:approve` / `leave:approve` to decide.
+   * The query is left alone and the team is enforced in full by the
+   * server-side predicate those reads carry.
    */
-  it('lets a manager through, where a team scope used to deny every request', async () => {
+  it('lets a manager through without narrowing the query to one employee', async () => {
     jest.mocked(resolveManagedEmployeeIds).mockResolvedValue(['t1', 't2']);
     const req = request(manager);
     const next = jest.fn();
     await requireCompanyAccess()(req, {} as Response, next);
     expect(next).toHaveBeenCalledWith();
     expect(resolveManagedEmployeeIds).toHaveBeenCalledWith('A', 'e1');
-    expect(req.query).toEqual({ companyId: 'A', employeeId: 'e1' });
+    expect(req.query).toEqual({ companyId: 'A' });
   });
 
   it('lets a manager who heads no unit through as well', async () => {
@@ -55,7 +57,15 @@ describe('MANAGER_TEAM scope injection', () => {
     const next = jest.fn();
     await requireCompanyAccess()(req, {} as Response, next);
     expect(next).toHaveBeenCalledWith();
-    expect(req.query).toEqual({ companyId: 'A', employeeId: 'e1' });
+    expect(req.query).toEqual({ companyId: 'A' });
+  });
+
+  it('still narrows an account with no employee link to nothing, rather than denying it', async () => {
+    const req = request({ ...manager, roles: ['EMPLOYEE'], employeeId: undefined });
+    const next = jest.fn();
+    await requireCompanyAccess()(req, {} as Response, next);
+    expect(next).toHaveBeenCalledWith();
+    expect(req.query).toEqual({ companyId: 'A' });
   });
 
   it('narrows an ordinary employee to their own id', async () => {

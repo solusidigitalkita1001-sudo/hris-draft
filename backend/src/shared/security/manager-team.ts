@@ -11,9 +11,9 @@ const MAX_UNIT_DEPTH = 50;
  *
  * Runs in system context with an explicit companyId filter at every hop, so the
  * walk stays inside one tenant (a unit pointer into another company is never
- * followed). Returns an EMPTY array when the manager heads no unit — the caller
- * then fails closed (a non-manager gets no team scope), never company-wide. Own
- * record access, if needed, comes from a separate EMPLOYEE_SELF scope.
+ * followed). Returns an EMPTY array when the manager heads no unit; the caller
+ * then narrows to the requester's own record (`resolveEmployeeFilterForCurrentUser`),
+ * never company-wide.
  */
 export async function resolveManagedEmployeeIds(
   companyId: string,
@@ -60,8 +60,9 @@ export async function resolveManagedEmployeeIds(
       subs.forEach((s) => subDeptIds.add(s.id));
     }
 
-    // Employees in any managed unit (team only — self access, if wanted, is a
-    // separate EMPLOYEE_SELF scope).
+    // Employees in any managed unit. A manager who sits in a unit they head is
+    // part of it like anybody else; one who does not is not added here, so a
+    // configured team scope stays exactly the team that was configured.
     const teamIds = new Set<string>();
     const orClauses: Array<Record<string, unknown>> = [];
     if (deptIds.size) orClauses.push({ departmentId: { in: [...deptIds] } });

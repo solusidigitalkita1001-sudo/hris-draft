@@ -788,3 +788,55 @@ Tidak ada kode yang berubah, jadi tidak ada yang perlu dijalankan. Yang bisa
 diperiksa adalah angkanya, dan tiap angka di laporan itu berasal dari
 perbandingan mekanis `schema.prisma` terhadap kedua daftar di
 `shared/database/`.
+## Tugas — scope default yang membocorkan gaji rekan (S-H1)
+
+Role tanpa baris `RoleDataScope` resolve ke filter kosong, dan filter kosong
+dibaca setiap pemanggil sebagai "seluruh perusahaan". Tidak ada seed atau
+migrasi yang pernah menulis baris itu, jadi setiap karyawan memegang predikat
+company-wide; bersama `payroll:read` yang ikut di-seed untuk EMPLOYEE, siapa
+pun bisa membuka daftar gaji, slip, dan rekap PPh21 rekannya. Sekarang
+"tidak dikonfigurasi" berarti "data sendiri saja", dihitung dari seluruh
+himpunan role peminta (role company-wide tetap company-wide, MANAGER menyusut
+ke tim yang ia kepalai), `payroll:read` dicabut dari EMPLOYEE, dan jalur data
+milik sendiri dibuka tanpa permission itu. Daftar absensi dan cuti ikut
+diberi predikat `employeeAccessWhere` — sebelumnya keduanya hanya disempitkan
+oleh rewrite query di middleware company-scope, yang hanya bisa membawa satu
+id karyawan.
+
+### Yang sengaja ditunda
+
+- **Dua test `ewa-access.mysql` yang lulusnya bergantung tanggal** —
+  "creates a valid scoped reservation" dan "serializes overlapping requests".
+  Keduanya gagal sepanjang 1 November 2026 dengan `BadRequestError: Pendapatan
+  EWA belum tersedia pada periode ini`, **juga di `3d368f4`** (dibuktikan
+  dengan men-stash seluruh perubahan lalu menjalankan suite yang sama), lalu
+  lulus sendiri pada 2 November tanpa ada kode yang berubah. Jadi bukan
+  regresi, melainkan fixture yang menaruh absensi pada tanggal berjalan
+  sementara jendela periodenya statis: pada tanggal tertentu tidak ada
+  pendapatan yang bisa dihitung. **Perlu dibereskan terpisah** (buat
+  tanggalnya relatif terhadap periode fixture) — selama dibiarkan, job CI
+  "Real-database integration suites (blocking)" merah pada hari-hari itu.
+- **`resolveManagedEmployeeIds` tidak di-memoize.** Ia sekarang berjalan
+  sekali per resolusi scope, dan sebuah request bisa me-resolve scope lebih
+  dari sekali (middleware, lalu predikat di service). Untuk MANAGER itu empat
+  query pendek per resolusi. Belum ada cache per-request karena belum ada
+  bukti ia terasa; kalau nanti terasa, tempatnya `RequestContext` (bukan
+  cache proses — keanggotaan tim berubah saat org unit berubah).
+- **Dua strategi fixture hidup berdampingan di suite payroll MySQL.** Suite
+  yang subjeknya memang data scope (`employee-salary-read`,
+  `payroll-run-access`, `employee-salary`) menuliskan baris `RoleDataScope`
+  company-wide eksplisit untuk role sintetisnya, sementara suite yang
+  subjeknya mesin payroll (`payroll-calculation`, `payroll-attendance`,
+  `payroll-formula`) cukup memberi aktornya role `HR_MANAGER`. Keduanya benar
+  untuk maksud masing-masing, tapi pembaca baru akan bertanya kenapa beda;
+  menyatukannya butuh helper fixture bersama yang belum ada.
+
+### Status verifikasi
+
+`npx tsc --noEmit` dan `npm run check` bersih. Suite unit + lintas-modul yang
+tersentuh hijau, dan setiap suite MySQL dijalankan satu per satu dengan
+`--runInBand` (lihat `docs/integration-tests.md`). Selain itu ada smoke nyata
+terhadap server berjalan di atas database sekali pakai yang di-seed ulang
+(permission seed berubah, jadi reseed wajib): karyawan 403 di
+`/payroll/employee-salaries` dan di setiap angka milik rekan, 200 di seluruh
+angka miliknya sendiri; manager melihat tim-nya; HR tetap company-wide.
