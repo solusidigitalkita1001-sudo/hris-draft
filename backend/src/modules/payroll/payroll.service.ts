@@ -17,7 +17,7 @@ import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
-import { isConcurrencyFailure } from '@/shared/database/concurrency';
+import { isConcurrencyFailure, withConcurrencyRetry } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
 import { calculatePph21Correction, shouldReconcileAnnualTax } from '@/shared/payroll/pph21-annual';
@@ -472,30 +472,44 @@ export class PayrollService {
     const run = await this.findPayrollRunById(id);
     if (run.companyId !== companyId) throw new NotFoundError('Payroll run not found');
 
-    // The transaction budget matches run creation's, because this waits on the
-    // same company lock a run mid-calculation may hold.
-    const released = await prisma.$transaction(async tx => {
-      // Same company lock as run creation, taken in the same order: a
-      // replacement run cannot read "unclaimed" rows while this void is
-      // mid-flight and then commit having skipped the items it just freed.
-      await tx.$queryRaw`SELECT id FROM companies WHERE id = ${companyId} AND deleted_at IS NULL FOR UPDATE`;
-      const voided = await tx.payrollRun.updateMany({
-        where: { id, companyId, status: 'COMPLETED' },
-        data: {
-          status: 'VOIDED',
-          notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${run.notes ?? ''}`.trim(),
-        },
-      });
-      if (voided.count !== 1) {
-        throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
-      }
-      return {
-        ewa: (await ewaRepository.releasePayrollDeductions(companyId, id, tx)).count,
-        arrears: (await payrollArrearsService.releaseApplied(companyId, id, tx)).count,
-        encashments: (await leaveEncashmentService.releasePaid(companyId, id, tx)).count,
-        loanSnapshots: (await employeeLoanRepository.releaseLoanDeductionSnapshots(companyId, id, tx)).count,
-      };
-    }, { maxWait: 10_000, timeout: 60_000 });
+    // Waiting on the company lock a run mid-calculation holds is a lost race,
+    // not a server error: same translation as run creation, formula publication
+    // and payment batches. Only MySQL's deadlock/lock-wait shapes retry — the
+    // status ConflictError below is a verdict and travels out untouched.
+    const released = await withConcurrencyRetry(
+      // Default isolation is enough precisely because of that lock: every
+      // writer that could race this one — run creation, formula publication,
+      // salary edits — takes the same company row first, so the serialization
+      // comes from the lock rather than from the isolation level. The budget
+      // matches run creation's for the same reason: the wait can be long.
+      () => prisma.$transaction(async tx => {
+        // Same company lock as run creation, taken in the same order: a
+        // replacement run cannot read "unclaimed" rows while this void is
+        // mid-flight and then commit having skipped the items it just freed.
+        const company = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM companies WHERE id = ${companyId} AND deleted_at IS NULL FOR UPDATE`;
+        if (!company.length) throw new NotFoundError('Company not found');
+        // Read the notes under the lock, not before it: prefixing a copy read
+        // outside the transaction would silently drop a concurrent edit.
+        const current = await tx.payrollRun.findFirst({ where: { id, companyId }, select: { notes: true } });
+        const voided = await tx.payrollRun.updateMany({
+          where: { id, companyId, status: 'COMPLETED' },
+          data: {
+            status: 'VOIDED',
+            notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${current?.notes ?? ''}`.trim(),
+          },
+        });
+        if (voided.count !== 1) {
+          throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
+        }
+        return {
+          ewa: (await ewaRepository.releasePayrollDeductions(companyId, id, tx)).count,
+          arrears: (await payrollArrearsService.releaseApplied(companyId, id, tx)).count,
+          encashments: (await leaveEncashmentService.releasePaid(companyId, id, tx)).count,
+          loanSnapshots: (await employeeLoanRepository.releaseLoanDeductionSnapshots(companyId, id, tx)).count,
+        };
+      }, { maxWait: 10_000, timeout: 60_000 }),
+      'Payroll run is being voided concurrently; retry the request',
+    );
     logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason, released });
     return this.findPayrollRunById(id);
   }

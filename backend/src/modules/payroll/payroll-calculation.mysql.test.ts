@@ -470,8 +470,18 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     expect(await mockDatabase.payrollLoanDeductionSnapshot.count({ where: { runId: first.id } })).toBe(0);
     expect((await mockDatabase.loanInstallment.findUniqueOrThrow({ where: { id: installment.id } })).status).toBe('PENDING');
 
-    // The voided run's payslip stays as audit evidence.
+    // The voided run's payslip stays as audit evidence — and stays *readable*
+    // through the HR read path, which deliberately applies no status filter.
+    // The slip still shows every component the dead run computed even though
+    // the claims behind them are free again: it is a record of that run, not a
+    // statement of what is still owed.
     expect(await mockDatabase.payslip.count({ where: { payrollRunId: first.id } })).toBe(1);
+    const audited = await runInRequestContext(context, () => service.findPayslipById(firstSlip.id));
+    expect(audited.id).toBe(firstSlip.id);
+    expect(audited.payrollRunId).toBe(first.id);
+    expect(audited.netPay.toString()).toBe(firstSlip.netPay.toString());
+    expect((audited.components ?? []).map(row => row.name).sort())
+      .toEqual(firstComponents.map(row => row.name).sort());
 
     // The replacement run pays and deducts exactly the same figures, once.
     const second = await run(f);
