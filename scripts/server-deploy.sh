@@ -158,11 +158,22 @@ backup_database() {
 
     log "Dumping database $db_name sebelum perubahan skema"
 
-    # MYSQL_PWD keeps the password out of the process list of a container other
-    # projects also use. --single-transaction snapshots InnoDB without locking,
-    # so no other project's queries are blocked while this runs.
+    # The password must not appear as a command argument anywhere it can be
+    # read from a process list. `docker exec -e MYSQL_PWD=...` still puts the
+    # secret in THIS HOST's `ps auxww` output for the `docker exec` process
+    # itself (verified: the container-internal mysqldump process list is clean,
+    # but the host, shared with four other projects, is not) — so the password
+    # goes into a mode-600 env file instead, and only its path reaches argv.
+    # --single-transaction snapshots InnoDB without locking, so no other
+    # project's queries are blocked while this runs.
+    local pwd_file
+    pwd_file="$(mktemp)"
+    chmod 600 "$pwd_file"
+    printf 'MYSQL_PWD=%s\n' "$db_pass" > "$pwd_file"
+    trap 'rm -f "$pwd_file"' RETURN
+
     dump_to() {
-        docker exec -i -e MYSQL_PWD="$db_pass" "$MYSQL_CONTAINER" \
+        docker exec -i --env-file "$pwd_file" "$MYSQL_CONTAINER" \
             mysqldump --user="$db_user" --single-transaction --quick \
                 --default-character-set=utf8mb4 "$@" "$db_name" \
             | gzip -c > "$target"

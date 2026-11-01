@@ -91,12 +91,19 @@ read -r DB_USER DB_PASS DB_NAME <<<"$(docker exec hris_backend node -e '
   console.log(decodeURIComponent(u.username), decodeURIComponent(u.password),
               decodeURIComponent(u.pathname.slice(1)));')"
 
-# 2. Side-by-side restore.
-docker exec -i -e MYSQL_PWD="$DB_PASS" mysql-db   mysql --user="$DB_USER" -e "CREATE DATABASE \`${DB_NAME}_restore\`"
-gzip -dc "$DUMP" | docker exec -i -e MYSQL_PWD="$DB_PASS" mysql-db   mysql --user="$DB_USER" "${DB_NAME}_restore"
+# 2. Password to a mode-600 env file, not `docker exec -e` — this host is
+#    shared with four other projects, and `-e MYSQL_PWD=...` would put the
+#    password in THIS HOST's `ps auxww` output for the `docker exec`
+#    process itself. Only the file's path reaches argv.
+PWD_FILE="$(mktemp)"; chmod 600 "$PWD_FILE"; printf 'MYSQL_PWD=%s\n' "$DB_PASS" > "$PWD_FILE"
+trap 'rm -f "$PWD_FILE"' EXIT
 
-# 3. Prove it is the data you want BEFORE deciding anything.
-docker exec -i -e MYSQL_PWD="$DB_PASS" mysql-db   mysql --user="$DB_USER" "${DB_NAME}_restore" -e   "SELECT COUNT(*) employees FROM employees;
+# 3. Side-by-side restore.
+docker exec -i --env-file "$PWD_FILE" mysql-db   mysql --user="$DB_USER" -e "CREATE DATABASE \`${DB_NAME}_restore\`"
+gzip -dc "$DUMP" | docker exec -i --env-file "$PWD_FILE" mysql-db   mysql --user="$DB_USER" "${DB_NAME}_restore"
+
+# 4. Prove it is the data you want BEFORE deciding anything.
+docker exec -i --env-file "$PWD_FILE" mysql-db   mysql --user="$DB_USER" "${DB_NAME}_restore" -e   "SELECT COUNT(*) employees FROM employees;
    SELECT COUNT(*) payslips FROM payslips;
    SELECT migration_name, finished_at FROM _prisma_migrations ORDER BY finished_at DESC LIMIT 5;"
 ```
