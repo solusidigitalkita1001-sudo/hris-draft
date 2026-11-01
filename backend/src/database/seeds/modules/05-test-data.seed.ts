@@ -2788,7 +2788,7 @@ export async function seedTestData(): Promise<void> {
   console.log('\n  ✓ Test data seeding completed!');
   console.log('  ─────────────────────────────────────────');
   console.log('  Login credentials:');
-  console.log('  Super Admin: admin@hrms.com / Admin123!');
+  console.log('  Super Admin: admin@hrms.com / (see "Seeding admin user..." output above)');
   console.log('  Employee:     bambang@tech.com / Employee123!');
   console.log('  Employee:     siti@tech.com / Employee123!');
   console.log('  HR Manager:   dewi@tech.com / Employee123!');

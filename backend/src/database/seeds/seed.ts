@@ -7,6 +7,7 @@ import { seedTestData } from './modules/05-test-data.seed';
 import { seedWorkflowDefaults } from './modules/06-workflow-defaults.seed';
 import { seedPayrollReferences } from './modules/07-payroll-reference-tables.seed';
 import { runInSystemContext } from '@/shared/context/RequestContext';
+import { assertTestDataSeedAllowed, ProductionTestDataSeedError } from './modules/test-data-guard';
 
 const prisma = new PrismaClient();
 
@@ -21,9 +22,22 @@ async function seedAll(): Promise<void> {
   await seedRolePermissions();
   await seedAdminUser();
 
-  // Run test data (toggle with SKIP_TEST_DATA env var)
+  // Run test data (toggle with SKIP_TEST_DATA env var). S-M2: this demo data
+  // (shared Employee123! password, admin@hrms.com login shown in the output)
+  // must never land in a production database, so it is hard-refused there —
+  // the refusal is caught so the rest of the seed (already-run admin/roles,
+  // and the workflow/payroll seeds below) still completes.
   if (!process.env.SKIP_TEST_DATA) {
-    await seedTestData();
+    try {
+      assertTestDataSeedAllowed();
+      await seedTestData();
+    } catch (err) {
+      if (err instanceof ProductionTestDataSeedError) {
+        console.warn(`\n  ⚠ ${err.message}\n`);
+      } else {
+        throw err;
+      }
+    }
   }
 
   // Seed default workflow templates for all companies
