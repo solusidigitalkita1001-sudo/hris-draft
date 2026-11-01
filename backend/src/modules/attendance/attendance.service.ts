@@ -363,6 +363,10 @@ export class AttendanceService {
       dayType: context.schedule.dayType,
       workStart: context.schedule.workStart ?? null,
       workEnd: context.schedule.workEnd ?? null,
+      // The clock `workStart`/`workEnd` were read against. Without it a stored
+      // `lateMinutes` cannot be re-derived from the snapshot, which is the
+      // whole point of freezing the schedule on the row.
+      timezone: context.timezone,
       warnings,
     } as Prisma.InputJsonValue;
   }
@@ -512,7 +516,7 @@ export class AttendanceService {
 
     if (data.checkIn && status === AttendanceStatus.PRESENT && context.schedule.workStart) {
       const checkIn = new Date(data.checkIn);
-      const scheduledStart = buildScheduledTime(attendanceDate, context.schedule.workStart);
+      const scheduledStart = buildScheduledTime(attendanceDate, context.schedule.workStart, context.timezone);
       const toleratedStart = new Date(scheduledStart);
       toleratedStart.setMinutes(toleratedStart.getMinutes() + context.policy.lateToleranceMinutes);
 
@@ -820,7 +824,12 @@ export class AttendanceService {
     }
 
     const checkOutTime = new Date(data.checkOut);
-    const scheduledEnd = buildScheduledEndTime(record.date, context.schedule.workStart, context.schedule.workEnd);
+    const scheduledEnd = buildScheduledEndTime(
+      record.date,
+      context.schedule.workStart,
+      context.schedule.workEnd,
+      context.timezone,
+    );
     let earlyLeaveMinutes = 0;
 
     if (scheduledEnd) {

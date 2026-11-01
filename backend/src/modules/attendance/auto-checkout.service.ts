@@ -3,7 +3,7 @@ import { logger } from '@/shared/logger/WinstonLogger';
 import { runInSystemContext } from '@/shared/context/RequestContext';
 import { payrollDate } from '@/shared/payroll/attendance-calendar';
 import { assertPayrollDateOpen } from '@/shared/payroll/payroll-period-guard';
-import { buildScheduledEndTime, minutesBetween } from '@/shared/attendance/scheduled-time';
+import { buildScheduledEndTime, minutesBetween, resolveEffectiveTimezone } from '@/shared/attendance/scheduled-time';
 
 /**
  * `autoCheckoutEnabled` was the last of the dead attendance switches: plumbed
@@ -23,6 +23,12 @@ import { buildScheduledEndTime, minutesBetween } from '@/shared/attendance/sched
  * The instant is composed with `buildScheduledEndTime`, the same helper the
  * late-minutes calculation uses — including its overnight roll-forward, so a
  * 22:00-06:00 shift ends the next morning rather than computing backwards.
+ *
+ * That helper needs the employee's timezone, and this sweep works from rows
+ * rather than from the resolved attendance context, so it reads the timezones
+ * itself: the row's branch, else the company. Taking the server's timezone
+ * instead — which is UTC in the production container — wrote a 17:00 check-out
+ * at 17:00 UTC, i.e. midnight, and billed the extra seven hours as work.
  */
 
 export interface AutoCheckoutResult {
@@ -57,8 +63,19 @@ export async function sweepAutoCheckout(target: Date): Promise<AutoCheckoutResul
       byCompany.set(policy.companyId, entry);
     }
 
-    for (const [companyId, entry] of byCompany) {
-      if (!entry.fallback && ![...entry.branch.values()].some(Boolean)) continue;
+    const enabled = [...byCompany].filter(
+      ([, entry]) => entry.fallback || [...entry.branch.values()].some(Boolean),
+    );
+    const companyTimezones = new Map(
+      enabled.length
+        ? (await prisma.company.findMany({
+            where: { id: { in: enabled.map(([companyId]) => companyId) }, deletedAt: null },
+            select: { id: true, timezone: true },
+          })).map((company) => [company.id, company.timezone])
+        : [],
+    );
+
+    for (const [companyId, entry] of enabled) {
       result.companies += 1;
 
       // Never rewrite attendance inside a period payroll has closed — the
@@ -82,12 +99,26 @@ export async function sweepAutoCheckout(target: Date): Promise<AutoCheckoutResul
         },
       });
 
+      const branchIds = [...new Set(open.map((row) => row.branchId).filter((id): id is string => Boolean(id)))];
+      const branchTimezones = new Map(
+        branchIds.length
+          ? (await prisma.branch.findMany({
+              where: { id: { in: branchIds }, companyId, deletedAt: null },
+              select: { id: true, timezone: true },
+            })).map((branch) => [branch.id, branch.timezone])
+          : [],
+      );
+
       for (const row of open) {
         const perBranch = row.branchId ? entry.branch.get(row.branchId) : undefined;
         if (!(perBranch ?? entry.fallback)) continue;
         result.candidates += 1;
 
-        const scheduledEnd = buildScheduledEndTime(date, row.scheduledWorkStart, row.scheduledWorkEnd);
+        const timezone = resolveEffectiveTimezone(
+          row.branchId ? branchTimezones.get(row.branchId) : null,
+          companyTimezones.get(companyId),
+        );
+        const scheduledEnd = buildScheduledEndTime(date, row.scheduledWorkStart, row.scheduledWorkEnd, timezone);
         if (!scheduledEnd || !row.checkIn) {
           // No schedule on the row means no defensible time to write. Guessing
           // one would invent a work duration, so the row is left for a human
