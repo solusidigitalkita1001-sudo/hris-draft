@@ -73,14 +73,16 @@ describe('own payroll figures without a company-wide payroll permission', () => 
     expect(payroll.calculateEmployeeThr).toHaveBeenCalledWith(SELF, undefined);
   });
 
-  it.each([`/annual-tax-recap/${COLLEAGUE}?year=2026`, `/bukti-potong-1721-a1/${COLLEAGUE}?year=2026`, `/employees/${COLLEAGUE}/thr`])
-  ('refuses %s to a colleague with no payroll permission, before any read', async path => {
-    const response = await request(app()).get(`${BASE}${path}`).expect(403);
-    expect(response.body.message).toMatch(/payroll:read/);
-    expect(recap.build).not.toHaveBeenCalled();
-    expect(recap.buildBuktiPotong).not.toHaveBeenCalled();
-    expect(payroll.calculateEmployeeThr).not.toHaveBeenCalled();
-  });
+  it.each([`/annual-tax-recap/${COLLEAGUE}?year=2026`, `/bukti-potong-1721-a1/${COLLEAGUE}?year=2026`, `/employees/${COLLEAGUE}/thr`])(
+    'refuses %s to a colleague with no payroll permission, before any read',
+    async path => {
+      const response = await request(app()).get(`${BASE}${path}`).expect(403);
+      expect(response.body.message).toMatch(/payroll:read/);
+      expect(recap.build).not.toHaveBeenCalled();
+      expect(recap.buildBuktiPotong).not.toHaveBeenCalled();
+      expect(payroll.calculateEmployeeThr).not.toHaveBeenCalled();
+    },
+  );
 
   it('still demands authentication, and an own-record claim it can verify', async () => {
     await request(app({ authenticated: false })).get(`${BASE}/annual-tax-recap/${SELF}?year=2026`).expect(401);
