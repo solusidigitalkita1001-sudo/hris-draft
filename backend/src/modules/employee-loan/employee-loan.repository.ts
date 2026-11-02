@@ -252,6 +252,24 @@ export class EmployeeLoanRepository {
       orderBy: { dueDate: 'asc' },
     });
   }
+
+  /**
+   * Drop the deduction snapshots a voided run created (P-C2).
+   *
+   * The snapshot row *is* the claim: `findDueInstallmentsForPayroll` skips any
+   * installment that already has one, so a snapshot left behind by a dead run
+   * makes the replacement run skip that installment forever — an installment
+   * the employee never repays. The installment's own status needs no change: it only
+   * becomes PAID at settlement, never at snapshot time.
+   *
+   * By design this leaves the voided payslip showing its `Potongan Pinjaman
+   * Karyawan` component with no snapshot behind it: the slip is audit evidence
+   * of what the dead run computed, while the snapshot is the live claim and has
+   * to go so the replacement run can deduct the installment again.
+   */
+  async releaseLoanDeductionSnapshots(companyId: string, runId: string, database: Prisma.TransactionClient = prisma) {
+    return database.payrollLoanDeductionSnapshot.deleteMany({ where: { companyId, runId } });
+  }
 }
 
 export const employeeLoanRepository = new EmployeeLoanRepository();

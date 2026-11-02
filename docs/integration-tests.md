@@ -49,7 +49,7 @@ synthetic companies in `afterAll`.
 | `advisory-lock.mysql` | `RUN_DB_INTEGRATION=1` | two concurrent operations serialised on one lock key |
 | `ewa-access.mysql` | `EWA_ACCESS_DB_URL` | EWA limit reservation under concurrency and scope |
 | `payroll-attendance.mysql` | `PAYROLL_ATTENDANCE_DB_URL` | scheduled dates shared by review/slip/formula, calendar resolution, lateness, overtime |
-| `payroll-calculation.mysql` | `PAYROLL_CALCULATION_DB_URL` | atomic runs, rollback, Decimal totals, EWA/loan deduction once |
+| `payroll-calculation.mysql` | `PAYROLL_CALCULATION_DB_URL` | atomic runs, rollback, Decimal totals, EWA/loan deduction once, claim release on void |
 | `payroll-formula.mysql` | `PAYROLL_FORMULA_DB_URL` | revision publication, cycles, frozen execution evidence |
 | `payroll-payment.mysql` | `PAYROLL_PAYMENT_DB_URL` | payment ledger versioning and reconciliation |
 | `employee-salary.mysql` | `PAYROLL_SALARY_DB_URL` | salary allocation mutations |
