@@ -86,21 +86,115 @@ Prisma has no down-migrations here, so every new migration ships with a written 
 
 ## 6. Backup + restore drill (synthetic / anonymized data)
 
+This section is the **rehearsal** drill: throwaway or anonymized data only, run by hand, whenever
+you want confidence the restore mechanics work. It used to be the only backup/restore path this
+repo had. It no longer is — **§6a below is the automated production path**, taken unattended on
+every deploy. Keep running this drill anyway: it is the only place that exercises `prisma migrate
+deploy` against *restored* data end-to-end (§6a never does — it only takes the dump).
+
 Prove restore works before you need it:
 
 ```bash
+# Password to a mode-600 file, never -p"$P" on argv — same pattern as
+# scripts/server-deploy.sh and the restore snippet in docs/deploy-rollback.md.
+PWD_FILE="$(mktemp)"; chmod 600 "$PWD_FILE"; printf 'MYSQL_PWD=%s\n' "$P" > "$PWD_FILE"
+trap 'rm -f "$PWD_FILE"' EXIT
+set -a; . "$PWD_FILE"; set +a
+
 # BACKUP (throwaway/anonymized source only)
-mysqldump -h "$H" -u "$U" -p"$P" --single-transaction --routines --triggers "$DB" > backup.sql
+mysqldump -h "$H" -u "$U" --single-transaction --routines --triggers "$DB" > backup.sql
 
 # RESTORE into a fresh DB and verify
-mysql -h "$H" -u "$U" -p"$P" -e "CREATE DATABASE hris_restore_test;"
-mysql -h "$H" -u "$U" -p"$P" hris_restore_test < backup.sql
+mysql -h "$H" -u "$U" -e "CREATE DATABASE hris_restore_test;"
+mysql -h "$H" -u "$U" hris_restore_test < backup.sql
 # then: prisma migrate deploy against hris_restore_test + run §4 spot check
+
+set +a; unset MYSQL_PWD
 ```
+
+No `-p"$P"` anywhere above, including on a throwaway/anonymized source — same credential
+discipline as production, not an exception for this drill. See §6a's note on credential handling
+for why `-p`/`-e MYSQL_PWD=...` are both wrong on this shared host.
 
 Run this drill on a schedule with an anonymized production dump (scrub PII: names, NIK/NPWP, bank,
 face embeddings) and record the date + result here each time — the acceptance is that the restore
 was **actually performed**, not just documented.
+
+## 6a. Automated pre-migration backup (production)
+
+Added for finding I-H4: 85 migrations had been applied against the real database with no dump
+ever taken, and code rollback (`docs/deploy-rollback.md`) only ever undid the app, never the
+schema. `scripts/server-deploy.sh` now takes one automatically, every deploy, before anything
+touches the schema.
+
+**Where it runs, and why the order matters:** STEP 5/9 of `server-deploy.sh`, before STEP 6/9 (the
+`_prisma_migrations` sanitizer, which already issues `CREATE INDEX`/`ALTER TABLE ... MODIFY
+COLUMN`) and before STEP 7/9 (`prisma migrate deploy`). A dump taken after either would not
+describe the database anybody would want back. If the dump cannot be written, fails `gzip -t`, or
+is missing mysqldump's `Dump completed` trailer (a truncated dump — the dangerous case, since it
+restores cleanly while missing rows), the deploy **aborts before the sanitizer runs** — no schema
+change happens on a deploy without a verified backup.
+
+**Where dumps land:** `backups/<database>-<timestamp>-<commit>.sql.gz` inside the deploy
+directory, newest `DB_BACKUP_KEEP` kept (default 7, env-overridable; non-numeric or `0` is
+rejected back to a safe value rather than honored literally — `0` would otherwise delete the dump
+just taken). `backups/` is git-ignored; treat it as confidential as `backend/.env` — it holds live
+employee and payroll data. The filename's commit suffix is the full 40-character SHA
+(`DEPLOY_COMMIT`, set by `deploy.yml` via `git rev-parse HEAD`) on a real deploy; only the
+`git rev-parse --short HEAD` fallback used when `DEPLOY_COMMIT` is unset (e.g. running the script
+by hand) produces the short form — both are valid, just not the same length.
+
+**Env knobs** (full table in `docs/deploy-rollback.md` § Database rollback): `DB_BACKUP_ENABLED`
+(`true`/`false` only — any other value aborts the deploy rather than silently skipping the
+backup), `DB_BACKUP_DIR`, `DB_BACKUP_KEEP` (default `7`), `DB_BACKUP_MIN_FREE_MB` (default `2048`),
+`MYSQL_CONTAINER`.
+
+**Credential handling:** the password reaches `mysqldump` through a mode-600 file passed to
+`docker exec --env-file` (`MYSQL_PWD=...`), never as a command argument — this host is shared with
+four other projects, and `docker exec -e MYSQL_PWD=...` would put the password in that shared
+host's own `ps auxww` output for the `docker exec` process itself, not just inside the container.
+The file is written inside `DB_BACKUP_DIR` (already preflighted for free space above, unlike
+`/tmp`) and explicitly deleted the moment `mysqldump` has run for the last time — *not* left to a
+`RETURN` trap, which does not fire when the deploy aborts via the ERR trap or an external signal
+(verified: neither the prune loop's arithmetic nor a `SIGTERM` from the deploy workflow's
+35-minute timeout triggers it). A best-effort `TERM` trap covers a signal landing mid-dump; a
+stale file from a previously killed run is swept at the start of the next deploy's backup step.
+
+**One dump can become two on a failed deploy:** `deploy.yml`'s auto-rollback re-runs
+`server-deploy.sh` for `PREVIOUS_COMMIT` when the forward deploy fails after the schema was
+already touched — that re-run takes its own STEP 5 dump before retrying, of whatever state the
+failed attempt left behind, consuming one more `DB_BACKUP_KEEP` retention slot. This is intended
+(every schema-touching run gets its own dump) but means a single failed deploy can cost two
+retention slots instead of one.
+
+### Restoring the automated backup (production)
+
+Same side-by-side-first discipline as `docs/deploy-rollback.md` § Restoring — full command listing
+lives there, this is the order of operations:
+
+1. **Stop writes first.** Put the app in maintenance or stop the backend container
+   (`docker compose stop hris_backend` or equivalent) — do not restore into a database the
+   application is actively writing to.
+2. **Locate the dump**: `backups/<database>-<timestamp>-<commit>.sql.gz` on the deploy host,
+   named for the commit that was about to deploy when it was taken.
+3. **Restore side-by-side, not over the live database**: `gunzip`-pipe the dump into a freshly
+   created `<database>_restore` database and run the row-count + `_prisma_migrations` spot check
+   from `docs/deploy-rollback.md` § Restoring — never overwrite the live database as a first move.
+4. **Decide, as a human, what "restored" means here** — this is where it rejoins §7 below:
+   - If the bad migration was **additive**, you likely don't need the data restore at all; fix
+     forward per §7.
+   - If it was **contracting** and forward-fix is impossible, this is the "restore the
+     pre-migration backup and replay from there" step §7 refers to: point the app at the restored
+     database (rename/swap during an announced outage), then `checkout` the commit whose schema
+     matches it and redeploy, per the rollback_ref flow in `docs/deploy-rollback.md`.
+5. **Resume writes** only after the application is confirmed pointed at the correct database and
+   schema/code are back in agreement.
+
+**Status: written but unproven.** The dump is created and verified on every deploy; the restore
+steps above have not been exercised against the real server (no SSH reaches it from where this
+was written). Treat §6a as "ready to use, not yet battle-tested" until someone runs it for real —
+the §6 drill above is the closest rehearsal available today, but it exercises the *mechanism*
+(mysqldump → gunzip → mysql), not this exact restore-into-`_restore`-then-swap procedure.
 
 ## 7. "App rolled back but schema already changed" — recovery
 
@@ -109,7 +203,9 @@ The sharp edge. If a deploy migrated the DB, then the app is rolled back to an o
 - If the migration was **additive** → the old app ignores the new column/table; no action.
 - If the migration was **contracting** → the old app will error against the new schema. Recovery:
   **fix forward** (re-deploy the newer, schema-compatible app) rather than roll the app back. Only
-  if forward-fix is impossible, restore the pre-migration backup (§6) and replay from there.
+  if forward-fix is impossible, restore the pre-migration backup and replay from there — on
+  production this is the automated STEP 5 dump, restored per §6a; against a rehearsal/anonymized
+  copy it is the §6 drill.
 - The deploy workflow's auto-rollback restores **code only** and deliberately never reverts
   migrations (`docs/deploy-rollback.md`), which is why the expand/contract discipline in §5 is
   mandatory.
@@ -126,4 +222,6 @@ separate, explicitly-approved change, and rehearse a clean deploy (§1) without 
 
 - Restoring a real **anonymized production snapshot** (§2, §6) — needs prod dump access.
 - Running the **backup-restore drill for real** and recording the result (§6).
+- Exercising the **automated production restore** (§6a) against the real server at least once —
+  currently written but unproven, same caveat as `docs/deploy-rollback.md`.
 - Retiring the recovery scripts (§8) — needs prod-stability confirmation + a protected-file change.
