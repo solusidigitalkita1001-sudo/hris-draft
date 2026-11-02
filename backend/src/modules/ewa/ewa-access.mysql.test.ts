@@ -152,9 +152,17 @@ withDatabase('EWA access and transitions (isolated real MySQL)', () => {
     await expect(asActor(f, () => service.createRequest({ employeeId: f.person.id, payrollPeriodId: foreign.period.id, amountRequested: 1 }))).rejects.toMatchObject({ statusCode: 404 });
     await expect(runInRequestContext({}, () => service.findById(f.own.id))).rejects.toMatchObject({ statusCode: 403 });
     await expect(runInRequestContext({}, () => service.createRequest({ amountRequested: 1 }))).rejects.toMatchObject({ statusCode: 403 });
-    await scope(f, 'MANAGER_TEAM'); await expect(list(f)).rejects.toMatchObject({ statusCode: 403 });
+    // Nothing was read for any of the refusals above.
+    expect(salaryReads).not.toHaveBeenCalled(); expect(queries).not.toHaveBeenCalled();
+    // A manager scope with no team narrows to the requester instead of denying
+    // them everything, so their own request stays visible and nobody else's is.
+    await scope(f, 'MANAGER_TEAM');
+    expect((await list(f)).map(row => row.id)).toEqual([f.own.id]);
+    await expect(asActor(f, () => service.findById(f.other.id))).rejects.toMatchObject({ statusCode: 404 });
+    salaryReads.mockClear(); queries.mockClear();
     jest.spyOn(administrationService, 'findMyDataScopeByUser').mockRejectedValue(new Error('Injected scope failure'));
     await expect(list(f)).rejects.toThrow('Injected scope failure'); await expect(gross(f)).rejects.toThrow('Injected scope failure');
+    // And a failed scope resolution reads nothing either.
     expect(salaryReads).not.toHaveBeenCalled(); expect(queries).not.toHaveBeenCalled();
   });
 
@@ -200,6 +208,10 @@ withDatabase('EWA access and transitions (isolated real MySQL)', () => {
     await expect(asActor(f, () => service.cancelRequest(f.own.id, ''))).rejects.toMatchObject({ statusCode: 403 });
     await expect(asActor(f, () => service.approveRequest(f.own.id, f.actorId, {}))).rejects.toMatchObject({ statusCode: 403 });
     await expect(asActor(f, () => service.rejectRequest(f.own.id, f.actorId, { rejectReason: 'No' }))).rejects.toMatchObject({ statusCode: 422 });
+    // FINANCE_STAFF is not an HR role, so it cannot approve. The row makes it a
+    // company-wide reader: without one it would be confined to its own records
+    // and the request would simply be invisible (404) before the role is read.
+    await mockDatabase.roleDataScope.create({ data: { companyId: f.companyId, roleCode: 'FINANCE_STAFF', resource: 'ALL', scopeType: 'ALL' } });
     await expect(asActor(f, () => service.approveRequest(f.own.id, f.actorId, {}), { roles: ['FINANCE_STAFF'], employeeId: f.outside.id })).rejects.toMatchObject({ statusCode: 403 });
     const approved = await asActor(f, () => service.approveRequest(f.own.id, f.actorId, {}), { employeeId: f.outside.id });
     expect(approved).toMatchObject({ status: 'APPROVED', approverId: f.actorId });

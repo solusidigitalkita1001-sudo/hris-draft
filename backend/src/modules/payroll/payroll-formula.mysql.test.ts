@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { runInRequestContext } from '@/shared/context/RequestContext';
 import { PrismaClient } from '@prisma/client';
 let mockDatabase: PrismaClient;
-jest.mock('@/shared/database/prisma', () => ({ get prisma() { return mockDatabase; } }));
+// Both exports: the data-scope lookup reaches the default one.
+jest.mock('@/shared/database/prisma', () => ({ __esModule: true, get prisma() { return mockDatabase; }, get default() { return mockDatabase; } }));
 jest.mock('@/shared/events/EventBus', () => ({ eventBus: { publish: jest.fn() } }));
 jest.mock('@/shared/logger/WinstonLogger', () => ({ logger: { info: jest.fn() } }));
 // The payroll calculation reads both settings; a partial mock made the run
@@ -139,7 +140,7 @@ withDatabase('payroll formula revisions (isolated real MySQL)', () => {
     await mockDatabase.employeeSalary.create({ data: { companyId: f.context.companyId, employeeId: employee.id, effectiveDate: new Date('2026-01-01'), baseSalary: '10000000',
       components: { create: { salaryComponentId: f.component.id, amount: '100' } } } });
     const p = await period(f);
-    const run = await runInRequestContext({ user: { id: f.context.actorId, email: 'payroll@example.test', companyId: f.context.companyId, companyScope: [f.context.companyId] } },
+    const run = await runInRequestContext({ user: { id: f.context.actorId, email: 'payroll@example.test', companyId: f.context.companyId, companyScope: [f.context.companyId], roles: ['HR_MANAGER'] } },
       () => new PayrollService().createPayrollRun({ companyId: f.context.companyId, periodId: p.id, name: 'Formula payroll' }, f.context.actorId));
     const slip = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: run.id }, include: { formulaCalculations: true, components: true } });
     expect(slip.netPay.toFixed(2)).toBe('500000.11');
@@ -150,7 +151,7 @@ withDatabase('payroll formula revisions (isolated real MySQL)', () => {
     const future = await draft(f, 'BASE_SALARY / 10', '2026-11-01'); await preview(f, future); await service.publish(f.checker, f.component.id, future.id);
     expect(await mockDatabase.payrollFormulaCalculation.findUniqueOrThrow({ where: { id: slip.formulaCalculations[0].id } })).toEqual(slip.formulaCalculations[0]);
     const before = await period(f, '2026-09-01');
-    const baseline = await runInRequestContext({ user: { id: f.context.actorId, email: 'payroll@example.test', companyId: f.context.companyId, companyScope: [f.context.companyId] } },
+    const baseline = await runInRequestContext({ user: { id: f.context.actorId, email: 'payroll@example.test', companyId: f.context.companyId, companyScope: [f.context.companyId], roles: ['HR_MANAGER'] } },
       () => new PayrollService().createPayrollRun({ companyId: f.context.companyId, periodId: before.id, name: 'Baseline payroll' }, f.context.actorId));
     const earlier = await mockDatabase.payslip.findFirstOrThrow({ where: { payrollRunId: baseline.id }, include: { formulaCalculations: true } });
     expect(earlier.netPay.toFixed(2)).toBe('100.00'); expect(earlier.formulaCalculations).toEqual([]);

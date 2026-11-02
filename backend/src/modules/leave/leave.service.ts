@@ -13,6 +13,7 @@ import {
 } from '@/shared/leave/balance-policy';
 import { workflowEngineRepository } from '@/modules/workflow-engine/workflow-engine.repository';
 import { getCurrentCompanyId, getCurrentRoles, getRequestContext } from '@/shared/context/RequestContext';
+import { employeeAccessWhere } from '@/shared/security/employee-data-scope';
 import type { WorkflowActionDTO } from '@/modules/workflow-engine/workflow-engine.dto';
 
 type WorkflowSource = 'WORKFLOW' | 'LEGACY';
@@ -35,8 +36,16 @@ export class LeaveService {
     return type;
   }
 
+  /**
+   * The list carries the actor's employee predicate. It used to be narrowed
+   * only by the data-scope rewrite in the company-scope middleware, which
+   * carries a single employee id and so collapsed a manager's team into the
+   * manager alone — a manager with `leave:approve` could not see the requests
+   * they are meant to approve, and the rows were never scoped server-side.
+   */
   async findAllLeaveRequests(companyId: string, filters?: any) {
-    return leaveRepository.findAllLeaveRequests(companyId, filters);
+    const employeeScope = await employeeAccessWhere('leave');
+    return leaveRepository.findAllLeaveRequests(companyId, filters, employeeScope);
   }
 
   async findLeaveRequestById(id: string) {
@@ -500,7 +509,10 @@ export class LeaveService {
   }
 
   async getLeaveBalances(employeeId: string) {
-    return leaveRepository.findLeaveBalances(employeeId);
+    const companyId = getCurrentCompanyId();
+    if (!companyId) throw new ForbiddenError('Leave balances require an active company context');
+    const employeeScope = await employeeAccessWhere('leave');
+    return leaveRepository.findLeaveBalances(employeeId, companyId, employeeScope);
   }
 
   async setLeaveBalance(data: CreateLeaveBalanceDTO) {

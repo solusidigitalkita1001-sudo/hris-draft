@@ -60,13 +60,16 @@ function applyParsedFilterToQuery(
   for (const [key, value] of Object.entries(filter)) {
     if (value === undefined || value === null) continue;
 
-    if (key === 'id' && userEmployeeId) {
-      query.employeeId = userEmployeeId;
-      continue;
-    }
-
-    if (key === 'employeeId' && userEmployeeId) {
-      query.employeeId = userEmployeeId;
+    // Both keys name the same person, and every DTO validates `employeeId` as
+    // a single id. A self scope resolves to exactly one — the requester's own.
+    // A team scope resolves to a set, which this query param cannot carry:
+    // writing the requester's own id there would hide the rest of the team
+    // (a manager could not see the attendance or leave they must approve), and
+    // writing the set there fails DTO validation with a 422. It is left alone,
+    // because a team is enforced where it can be expressed in full — the
+    // server-side employee predicate (`employeeAccessWhere`) those reads carry.
+    if (key === 'id' || key === 'employeeId') {
+      if (userEmployeeId && typeof value === 'string') query.employeeId = userEmployeeId;
       continue;
     }
 
