@@ -40,6 +40,31 @@ describe('payroll run type', () => {
     expect(parsed.runType).toBeUndefined();
   });
 
+  it('accepts a holiday date on a THR run and rejects it on any other type', () => {
+    // P-C3: eligibilitas dan prorata THR diukur dari hari raya, yang hampir
+    // tidak pernah jatuh di akhir periode payroll. Tanggal itu tidak punya
+    // arti apa pun untuk run REGULAR/SEVERANCE/CORRECTION, jadi ia ditolak di
+    // sana alih-alih disimpan diam-diam ke kolom yang tidak akan dibaca.
+    const body = {
+      periodId: '11111111-1111-1111-1111-111111111111',
+      companyId: '22222222-2222-2222-2222-222222222222',
+      name: 'Run', thrReferenceDate: '2026-04-21T00:00:00.000Z',
+    };
+    expect(createPayrollRunSchema.safeParse({ ...body, runType: 'THR' }).success).toBe(true);
+    for (const runType of ['REGULAR', 'SEVERANCE', 'CORRECTION', undefined]) {
+      const parsed = createPayrollRunSchema.safeParse({ ...body, runType });
+      expect(parsed.success).toBe(false);
+      expect(!parsed.success && parsed.error.issues[0].path).toEqual(['thrReferenceDate']);
+    }
+    // Dan tetap opsional: run THR tanpa tanggal memakai period.endDate.
+    expect(createPayrollRunSchema.parse({ ...body, thrReferenceDate: undefined, runType: 'THR' }).thrReferenceDate)
+      .toBeUndefined();
+  });
+
+  it('persists the holiday date for a THR run only', () => {
+    expect(repository).toMatch(/thrReferenceDate: data\.runType === 'THR' && data\.thrReferenceDate/);
+  });
+
   it('rejects a run type that is not one of the four', () => {
     expect(createPayrollRunSchema.safeParse({
       periodId: '11111111-1111-1111-1111-111111111111',

@@ -30,7 +30,7 @@ import { calculatePph21 } from '@/shared/payroll/pph21';
 import { buildPayrollJournal } from '@/shared/payroll/journal';
 import { employmentWindow } from '@/shared/payroll/employment-window';
 import { loadPayrollPolicyConfig } from '@/shared/payroll/payroll-policy';
-import { calculateThr } from '@/shared/payroll/thr';
+import { calculateThr, thrEmploymentEligibility } from '@/shared/payroll/thr';
 import { calculateThrTax } from '@/shared/payroll/thr-tax';
 import { AmbiguousSalaryError, selectAsOfSalaries } from '@/shared/payroll/as-of-salary';
 import { monthlyStatutoryWage } from '@/shared/payroll/statutory-wage';
@@ -420,6 +420,29 @@ export class PayrollService {
           if (runType === 'REGULAR' && !period.attendanceReviewedAt) {
             throw new BadRequestError('Attendance harus dikonfirmasi sebelum payroll dihitung.');
           }
+          // Hari raya harus satu tahun dengan periodenya. Hanya di sini
+          // periodenya kelihatan, jadi hanya di sini salah-tahun bisa
+          // ditangkap — dan DTO tidak punya apa pun untuk dibandingkan.
+          //
+          // Salah ketik satu digit tahun tidak akan terlihat di mana pun: ia
+          // menggeser masa kerja SEMUA orang sebanyak satu tahun penuh, lalu
+          // membekukan tabel pajak/BPJS tahun yang salah ke policy snapshot
+          // run itu. Angkanya tetap keluar, tetap bisa di-approve, dan tetap
+          // bisa dicairkan. Lintas bulan sengaja tetap sah: periode Maret
+          // dengan Idulfitri awal April justru kasus yang kolom ini ada untuk
+          // melayani.
+          if (data.thrReferenceDate) {
+            const holiday = payrollDate(new Date(data.thrReferenceDate));
+            const periodYear = payrollDate(new Date(period.endDate)).getUTCFullYear();
+            if (holiday.getUTCFullYear() !== periodYear) {
+              throw new BadRequestError(
+                `Tanggal hari raya ${payrollDateKey(holiday)} berada di tahun `
+                + `${holiday.getUTCFullYear()}, sedangkan periode payroll ini berakhir di tahun `
+                + `${periodYear}; THR dihitung dan dipajaki menurut tahun periodenya, jadi `
+                + 'perbaiki tanggalnya atau pakai periode tahun itu.',
+              );
+            }
+          }
           // One run per period PER TYPE. The old rule knew nothing of types, so
           // paying THR meant voiding the month's salary run. VOIDED runs still
           // free their slot for a fresh, corrected run of the same type.
@@ -696,6 +719,12 @@ export class PayrollService {
     if (!run) throw new NotFoundError('Payroll run not found');
 
     const allSalaryRows = await payrollRepository.findAllEmployeeSalaries(run.companyId, undefined, database);
+    // Deliberately the PERIOD END, not `thrReferenceDate`: which salary row is
+    // in force is a question about the run's period, and moving it to the
+    // holiday would change the upah — and so every THR amount — which this
+    // change does not touch. Siapa yang dibayar berubah di bawah; berapa tidak.
+    // Konsekuensinya dicatat: bila hari raya jatuh setelah periode berakhir,
+    // baris gaji yang baru berlaku setelah periode itu belum ikut terpilih.
     const employeeSalaries = this.asOfSalariesOrConflict(allSalaryRows, run.period.endDate);
 
     const thrComponent = await this.ensureThrEarningComponent(run.companyId, database);
@@ -709,7 +738,11 @@ export class PayrollService {
       );
     }
 
-    const referenceDate = new Date(run.period.endDate);
+    // Hari raya, bukan akhir periode. Permenaker mengukur masa kerja DAN hak
+    // dari tanggal hari raya, yang hampir tidak pernah jatuh di akhir periode
+    // payroll — run THR Maret untuk Idulfitri awal April memakai tanggal yang
+    // salah selama ini. Null → akhir periode, perilaku run yang sudah ada.
+    const referenceDate = new Date(run.thrReferenceDate ?? run.period.endDate);
     const [policy, methodSetting] = await Promise.all([
       loadPayrollPolicyConfig(database, run.companyId, referenceDate.getUTCFullYear()),
       database.companySetting.findUnique({
@@ -725,6 +758,31 @@ export class PayrollService {
 
     for (const salary of employeeSalaries) {
       const employee = salary.employee;
+      // SIAPA sebelum BERAPA — dan sebelum tanggal masuk. Loop ini membayar
+      // setiap baris gaji yang ia muat: karyawan yang resign berbulan-bulan
+      // sebelumnya tetap menerima THR penuh, karena masa kerjanya memang
+      // panjang dan tidak ada satu pun pemeriksaan hubungan kerja di sini.
+      // `calculateThr` tidak bisa menolaknya — ia hanya tahu tanggal masuk.
+      //
+      // Dicek lebih dulu daripada joinDate justru karena tidak butuh joinDate:
+      // orang yang tidak berhak tidak boleh menggagalkan run semua orang lain
+      // hanya karena tanggal masuknya kosong di baris yang sudah tidak dibayar.
+      const eligibility = thrEmploymentEligibility({
+        employmentType: employee?.employmentType,
+        employmentStatus: employee?.employmentStatus,
+        status: employee?.status,
+        lastWorkingDate: employee?.resignations[0]?.lastWorkingDate ?? null,
+        holidayDate: referenceDate,
+      });
+      if (!eligibility.entitled) {
+        // Dicatat, bukan dibuang diam-diam: "kenapa THR saya tidak keluar"
+        // adalah pertanyaan yang harus bisa dijawab dari log.
+        logger.info('THR skipped: no entitlement on the holiday date', {
+          runId, employeeId: salary.employeeId, reason: eligibility.reason,
+        });
+        continue;
+      }
+
       // Tenure decides both eligibility and the prorated fraction, so a
       // missing join date cannot be guessed. Named, so it is fixable.
       if (!employee?.joinDate) {

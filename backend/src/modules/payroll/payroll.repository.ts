@@ -2,6 +2,7 @@ import { ConflictError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
 import { Prisma, PayrollRunStatus } from '@prisma/client';
 import { compileFormula } from '@/shared/payroll/formula';
+import { payrollDate } from '@/shared/payroll/attendance-calendar';
 import {
   CreateSalaryComponentDTO,
   UpdateSalaryComponentDTO,
@@ -192,6 +193,11 @@ export class PayrollRepository {
             taxId: true,
             status: true,
             employmentType: true,
+            // PKWT/PKWTT dan "apakah hubungan kerjanya sudah berakhir":
+            // eligibilitas THR (Permenaker 6/2016) berdiri di atas keduanya,
+            // dan tanpa ini run THR tidak punya cara membedakan karyawan
+            // aktif dari karyawan yang kontraknya sudah habis.
+            employmentStatus: true,
             // The employed slice of the period: a mid-period joiner is owed
             // part of a month, and a leaver is owed the part they worked —
             // which the run used to drop entirely once their status left
@@ -459,6 +465,19 @@ export class PayrollRepository {
         name: data.name,
         runNumber,
         runType: data.runType ?? 'REGULAR',
+        // Hanya run THR yang punya hari raya. Gerbang kedua di atas gerbang
+        // DTO: kalau pemanggil internal melewati validasi, tanggal itu tetap
+        // tidak boleh mendarat di run REGULAR, di mana tidak ada yang akan
+        // pernah membacanya lagi.
+        //
+        // Dinormalkan ke hari kalender UTC lewat `payrollDate`, helper yang
+        // sama yang dipakai jalur kalender absensi: hari raya adalah sebuah
+        // HARI, bukan sebuah saat. Klien yang mengirim 17:00Z tidak boleh
+        // menggeser jendela tenggang 30 hari PKWTT sehari, dan tanggal yang
+        // tersimpan harus bisa dibaca apa adanya di laporan dan audit.
+        thrReferenceDate: data.runType === 'THR' && data.thrReferenceDate
+          ? payrollDate(new Date(data.thrReferenceDate))
+          : null,
         // Diterima createPayrollRunSchema dan ada kolomnya di PayrollRun, tapi
         // tidak pernah ditulis: catatan kenapa sebuah run dibuat hilang tanpa
         // suara, dan tidak ada endpoint lain yang bisa mengisinya.

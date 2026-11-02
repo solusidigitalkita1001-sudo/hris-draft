@@ -86,7 +86,20 @@ export const createPayrollRunSchema = z.object({
    * perilakunya; satu periode boleh punya satu run per jenis.
    */
   runType: z.enum(['REGULAR', 'THR', 'SEVERANCE', 'CORRECTION']).optional(),
-});
+  /**
+   * Tanggal hari raya, untuk run THR saja. Eligibilitas dan prorata masa
+   * kerja (Permenaker 6/2016) diukur dari hari raya, yang hampir tidak pernah
+   * jatuh di akhir periode payroll. Dikosongkan → `period.endDate`, yaitu
+   * perilaku sebelum field ini ada.
+   */
+  thrReferenceDate: z.string().datetime().optional(),
+}).refine(
+  // Ditolak, bukan diabaikan: menyimpannya diam-diam di run REGULAR akan
+  // menaruh tanggal yang tidak pernah dibaca siapa pun di baris run, dan
+  // mengabaikannya tanpa suara membuat pemanggil percaya tanggalnya dipakai.
+  data => data.thrReferenceDate === undefined || data.runType === 'THR',
+  { message: 'thrReferenceDate hanya berlaku untuk run bertipe THR', path: ['thrReferenceDate'] },
+);
 
 export const approvePayrollRunSchema = z.object({
   notes: z.string().optional(),

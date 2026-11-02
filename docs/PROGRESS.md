@@ -789,6 +789,72 @@ diperiksa adalah angkanya, dan tiap angka di laporan itu berasal dari
 perbandingan mekanis `schema.prisma` terhadap kedua daftar di
 `shared/database/`.
 
+## Tugas — THR hanya untuk yang berhak (P-C3), dan dua hal yang ditunda
+
+Run THR membayar setiap baris gaji yang ia muat. Tidak ada satu pun
+pemeriksaan hubungan kerja di loop-nya: bukan `status`, bukan
+`employmentStatus`, bukan resignation yang sudah disetujui. Karyawan yang
+keluar bertahun-tahun lalu tetap menerima THR — justru PENUH, karena masa
+kerjanya panjang dan masa kerja adalah satu-satunya hal yang dilihat.
+Diperbaiki lewat gerbang `thrEmploymentEligibility` (Permenaker 6/2016 Pasal
+2-3 dan 7) plus kolom opsional `payroll_runs.thr_reference_date`, karena hari
+raya hampir tidak pernah jatuh di akhir periode payroll. Rinciannya di laporan
+tugas; yang dicatat di sini adalah dua hal yang SENGAJA tidak diperbaiki,
+supaya keduanya tidak lewat diam-diam.
+
+### Ditunda 1 — pemilihan baris gaji tetap memakai akhir periode
+
+`calculateThrPayroll` memilih baris gaji lewat `asOfSalariesOrConflict(…,
+run.period.endDate)`, bukan `thrReferenceDate`. Tidak diubah karena itu
+pertanyaan tentang **nominal** (baris gaji mana yang berlaku menentukan "upah
+sebulan", yaitu setiap angka THR), sedangkan perbaikan ini tentang **siapa**
+yang dibayar. Mencampur keduanya dalam satu perubahan berarti tidak ada lagi
+cara memisahkan "orang yang tadinya salah dibayar" dari "angka yang bergeser".
+
+Konsekuensinya — perilaku ini sudah ada sebelumnya, tapi kini BISA TERCAPAI
+karena hari raya boleh berada di luar periode:
+
+- Hari raya setelah `period.endDate` + kenaikan gaji yang berlaku di antara
+  keduanya → THR memakai upah lama.
+- Lebih tajam, dan ini **jalur tidak-dibayar yang senyap**: karyawan yang
+  satu-satunya baris gajinya baru berlaku setelah `period.endDate` tidak
+  terpilih sama sekali, jadi tidak dapat THR meski berhak pada hari raya.
+  Tidak ada error, tidak ada baris di payslip — hanya absen dari daftar.
+
+Gerbang tahun yang ditambahkan (hari raya wajib setahun-UTC dengan
+`period.endDate`) membatasi jarak maksimalnya ke dalam satu tahun kalender,
+tapi tidak menghilangkan jalurnya. Mitigasi operasional sekarang: buat run THR
+pada periode yang mencakup hari rayanya.
+
+### Ditunda 2 — rehire dengan resignation lama yang masih menempel
+
+`findAllEmployeeSalaries` mengambil `resignations` APPROVED terakhir
+(`orderBy lastWorkingDate desc take 1`) tanpa melihat apakah orangnya sudah
+masuk lagi. Karyawan yang pernah resign 2024 lalu direkrut ulang 2026 —
+`status` ACTIVE, `employmentStatus` ACTIVE — tetap membawa baris resignation
+2024 itu. Gerbang baru membacanya sebagai hubungan kerja yang sudah berakhir
+jauh di luar tenggang 30 hari, jadi orangnya **di-skip** dengan alasan
+`pkwtt-beyond-grace`, dan satu-satunya jejaknya adalah `logger.info`.
+
+Hukumnya tidak ambigu di sini (orang itu memang berhak); yang ambigu adalah
+datanya. Memperbaikinya berarti memutuskan apa yang membatalkan sebuah
+resignation lama — `employmentStatus` yang kembali ACTIVE, `joinDate` yang
+lebih baru dari `lastWorkingDate`, atau kolom rehire yang belum ada — dan itu
+keputusan tentang model data onboarding, bukan tentang THR. Sesuai aturan
+"kalau ragu di kasus pinggir, pilih yang konservatif", dipilih **tidak
+membayar**: tidak membayar bisa diperbaiki dengan membereskan datanya, uang
+yang sudah keluar tidak bisa ditarik. Tapi arah salahnya perlu diketahui — ini
+false-negative yang menimpa karyawan AKTIF, bukan yang sudah keluar, dan
+korbannya tidak akan tahu selain dari "THR saya tidak keluar".
+
+### Status verifikasi
+
+`payroll-calculation.mysql` 30 test lulus (termasuk 11 kasus eligibilitas,
+gerbang tahun, dan normalisasi hari kalender), `thr.test` + `run-type-guards` +
+`payroll.maker-checker` 34 lulus, jest penuh non-DB 2131 lulus, `tsc --noEmit`
+bersih, dan `prisma migrate diff --from-migrations` melaporkan "No difference
+detected". Kedua hal yang ditunda di atas TIDAK punya test — memang itu
+artinya ditunda; keduanya hidup di dokumen ini sampai ada yang mengerjakannya.
 ## Ditunda — `WORK_DAYS = 0` sesudah potongan alpa diprorata (P-C1)
 
 Perbaikan P-C1 memangkas hari kerja tiap karyawan ke jendela masa kerjanya

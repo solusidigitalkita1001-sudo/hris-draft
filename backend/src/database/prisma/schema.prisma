@@ -501,6 +501,13 @@ model PayrollRun {
   totalNetPay         Decimal                     @default(0) @map("total_net_pay") @db.Decimal(15, 2)
   status              PayrollRunStatus            @default(DRAFT)
   runType             PayrollRunType              @default(REGULAR) @map("run_type")
+  /// Tanggal hari raya untuk run THR (Permenaker 6/2016). Dipakai sebagai
+  /// tanggal acuan masa kerja DAN eligibilitas: hari raya jarang jatuh di
+  /// akhir periode payroll, dan selisih beberapa hari memindahkan seorang
+  /// karyawan yang keluar ke dalam atau ke luar tenggang 30 hari PKWTT.
+  /// Null → pakai `period.endDate`, perilaku sebelum kolom ini ada. Hanya
+  /// diisi untuk run bertipe THR.
+  thrReferenceDate    DateTime?                   @map("thr_reference_date")
   createdBy           String?                     @map("created_by") @db.VarChar(36)
   approvedBy          String?                     @map("approved_by") @db.VarChar(36)
   approvedAt          DateTime?                   @map("approved_at")
