@@ -182,6 +182,22 @@ export class EWARepository {
       if (claimed.count !== 1) throw new ConflictError('EWA changed during payroll calculation; retry after reviewing its status');
     }
   }
+
+  /**
+   * Give back the rows a voided run had claimed (P-C2). Without this the EWA
+   * stays DEDUCTED against a dead run, and the replacement run — which only
+   * looks for `PAID` with no `payrollRunId` — never deducts it: an advance the
+   * company paid out and would never recover from the salary.
+   *
+   * Scoped to one run and to `DEDUCTED`, so a row a *later* run already claimed
+   * is left alone, and running it twice is a no-op.
+   */
+  async releasePayrollDeductions(companyId: string, payrollRunId: string, database: Prisma.TransactionClient = prisma) {
+    return database.earnedWageAccess.updateMany({
+      where: { companyId, payrollRunId, status: 'DEDUCTED' },
+      data: { status: 'PAID', payrollRunId: null, deductedAt: null, amountDeductedPayroll: null },
+    });
+  }
 }
 
 export const ewaRepository = new EWARepository();

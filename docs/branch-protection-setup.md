@@ -1,11 +1,15 @@
 # Branch protection for `main` (Sprint 1 · item #1)
 
-**Why:** a push to `main` triggers an immediate production deploy
-(`.github/workflows/deploy.yml` → SSH → `git reset --hard origin/main` →
-`scripts/server-deploy.sh`). Without a gate, un-tested code reaches production the
-moment it lands on `main`. Branch protection makes CI a hard prerequisite: code can
-only reach `main` through a pull request whose CI checks pass — including for
-administrators.
+**Why:** `.github/workflows/deploy.yml` deploys to production once CI (`ci.yml`)
+finishes successfully for a `push` run on `main` (`workflow_run` trigger), then SSHes
+in and `git reset --hard`s the server to that CI-verified commit —
+`git reset --hard origin/main` only runs as a fallback for an unconditioned manual
+deploy via `workflow_dispatch` with no `rollback_ref`. That gate depends on CI's
+result, but CI only ever runs against whatever has already landed on `main` — branch
+protection is what stops un-reviewed, non-PR code from reaching `main` in the first
+place, so a bad commit never gets the chance to pass CI and deploy. Branch protection
+makes CI a hard prerequisite: code can only reach `main` through a pull request whose
+CI checks pass — including for administrators.
 
 **Who must run this:** a repository **admin** of `solusidigitalkita1001-sudo/hris-draft`.
 Collaborators with only push access (e.g. the current CI author) get HTTP 403; the

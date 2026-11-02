@@ -367,8 +367,17 @@ export class AttendanceService {
     } as Prisma.InputJsonValue;
   }
 
+  /**
+   * The list carries the actor's employee predicate, like the detail read at
+   * `findById` does. It used to be narrowed only by the data-scope rewrite in
+   * the company-scope middleware, which can carry a single employee id and so
+   * collapsed a manager's team into the manager alone — a manager with
+   * `att:approve` could not see the attendance they are meant to approve,
+   * while the rows themselves were never scoped server-side at all.
+   */
   async findAll(companyId: string, filters?: any) {
-    return attendanceRepository.findAll(companyId, filters);
+    const employeeScope = await employeeAccessWhere('attendance');
+    return attendanceRepository.findAll(companyId, filters, employeeScope);
   }
 
   private async selfClock(employeeId: string, companyId: string, now = new Date()) {
@@ -933,8 +942,15 @@ export class AttendanceService {
   }
 
   // Overtime
+  /**
+   * Scoped like the attendance list and the corrections list. The controller
+   * lets a MANAGER call this with no employeeId (`canReadOthers`), so without
+   * the predicate the answer was every overtime request in the company —
+   * including the hours and multiplier behind somebody else's pay.
+   */
   async findAllOvertime(companyId: string, filters?: { employeeId?: string; status?: string }) {
-    return attendanceRepository.findAllOvertime(companyId, filters);
+    const employeeScope = await employeeAccessWhere('attendance');
+    return attendanceRepository.findAllOvertime(companyId, filters, employeeScope);
   }
 
   async findOvertimeById(id: string) {

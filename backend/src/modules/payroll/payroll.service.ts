@@ -17,7 +17,7 @@ import { DomainEvents } from '@/shared/events/events';
 import { logger } from '@/shared/logger/WinstonLogger';
 import { NotFoundError, ConflictError, BadRequestError, ValidationError, ForbiddenError } from '@/shared/exceptions/AppError';
 import { getCurrentCompanyId } from '@/shared/context/RequestContext';
-import { isConcurrencyFailure } from '@/shared/database/concurrency';
+import { isConcurrencyFailure, withConcurrencyRetry } from '@/shared/database/concurrency';
 import { payrollArrearsService } from './payroll-arrears.service';
 import { leaveEncashmentService } from '@/modules/leave/leave-encashment.service';
 import { calculatePph21Correction, shouldReconcileAnnualTax } from '@/shared/payroll/pph21-annual';
@@ -475,23 +475,65 @@ export class PayrollService {
    * its payslips stay as historical evidence with status VOIDED, and the
    * period is freed for a corrected run. Approved/disbursed money can never
    * be voided here — that requires a real adjustment flow.
+   *
+   * Voiding must also hand back every claim the run took while calculating
+   * (P-C2). Creating a REGULAR run marks its EWA as DEDUCTED, its arrears as
+   * APPLIED, its leave encashments as PAID and writes a loan deduction
+   * snapshot per due installment; each of those is what makes the next run
+   * treat the item as already settled. Flipping the status alone left all of
+   * them pinned to a dead run, so the corrected run silently skipped them —
+   * money owed that no run would ever pay again, and for arrears not even
+   * re-registrable because of the unique key per source period.
+   *
+   * Status flip and release share one transaction: either the run is voided
+   * with every claim free, or nothing changed. The releases are scoped by this
+   * run's id, so a THR run (which claims nothing) voids as a clean no-op and a
+   * row some later run claimed is never stolen back.
    */
   async voidPayrollRun(id: string, userId: string, reason?: string) {
     const { companyId, actor } = await companyPayrollAccess(undefined, userId);
     const run = await this.findPayrollRunById(id);
     if (run.companyId !== companyId) throw new NotFoundError('Payroll run not found');
 
-    const voided = await prisma.payrollRun.updateMany({
-      where: { id, companyId, status: 'COMPLETED' },
-      data: {
-        status: 'VOIDED',
-        notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${run.notes ?? ''}`.trim(),
-      },
-    });
-    if (voided.count !== 1) {
-      throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
-    }
-    logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason });
+    // Waiting on the company lock a run mid-calculation holds is a lost race,
+    // not a server error: same translation as run creation, formula publication
+    // and payment batches. Only MySQL's deadlock/lock-wait shapes retry — the
+    // status ConflictError below is a verdict and travels out untouched.
+    const released = await withConcurrencyRetry(
+      // Default isolation is enough precisely because of that lock: every
+      // writer that could race this one — run creation, formula publication,
+      // salary edits — takes the same company row first, so the serialization
+      // comes from the lock rather than from the isolation level. The budget
+      // matches run creation's for the same reason: the wait can be long.
+      () => prisma.$transaction(async tx => {
+        // Same company lock as run creation, taken in the same order: a
+        // replacement run cannot read "unclaimed" rows while this void is
+        // mid-flight and then commit having skipped the items it just freed.
+        const company = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM companies WHERE id = ${companyId} AND deleted_at IS NULL FOR UPDATE`;
+        if (!company.length) throw new NotFoundError('Company not found');
+        // Read the notes under the lock, not before it: prefixing a copy read
+        // outside the transaction would silently drop a concurrent edit.
+        const current = await tx.payrollRun.findFirst({ where: { id, companyId }, select: { notes: true } });
+        const voided = await tx.payrollRun.updateMany({
+          where: { id, companyId, status: 'COMPLETED' },
+          data: {
+            status: 'VOIDED',
+            notes: `[VOID oleh ${actor.id}${reason ? `: ${reason}` : ''}] ${current?.notes ?? ''}`.trim(),
+          },
+        });
+        if (voided.count !== 1) {
+          throw new ConflictError('Hanya run berstatus COMPLETED (belum di-approve) yang dapat di-void');
+        }
+        return {
+          ewa: (await ewaRepository.releasePayrollDeductions(companyId, id, tx)).count,
+          arrears: (await payrollArrearsService.releaseApplied(companyId, id, tx)).count,
+          encashments: (await leaveEncashmentService.releasePaid(companyId, id, tx)).count,
+          loanSnapshots: (await employeeLoanRepository.releaseLoanDeductionSnapshots(companyId, id, tx)).count,
+        };
+      }, { maxWait: 10_000, timeout: 60_000 }),
+      'Payroll run is being voided concurrently; retry the request',
+    );
+    logger.info('Payroll run voided', { runId: id, voidedBy: actor.id, reason, released });
     return this.findPayrollRunById(id);
   }
 

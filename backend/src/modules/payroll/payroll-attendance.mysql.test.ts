@@ -42,6 +42,7 @@ withDatabase('payroll attendance inputs (isolated real MySQL)', () => {
       await mockDatabase.overtimeRequest.deleteMany({ where: { companyId } });
       await mockDatabase.leaveRequest.deleteMany({ where: { companyId } });
       await mockDatabase.leaveType.deleteMany({ where: { companyId } });
+      await mockDatabase.resignation.deleteMany({ where: { companyId } });
       await mockDatabase.employeeSalaryComponent.deleteMany({ where: { employeeSalary: { companyId } } });
       await mockDatabase.employeeSalary.deleteMany({ where: { companyId } });
       await mockDatabase.salaryComponent.deleteMany({ where: { companyId } });
@@ -88,7 +89,9 @@ withDatabase('payroll attendance inputs (isolated real MySQL)', () => {
     }, componentAmounts: {} });
     await formulas.publish({ companyId: f.companyId, actorId: randomUUID() }, f.component.id, version.id);
   }
-  const asActor = <T>(f: Fixture, operation: () => T) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } }, operation);
+  // The maker runs payroll for the whole company, so it holds a company-wide
+  // role: a requester with no role is now confined to their own record.
+  const asActor = <T>(f: Fixture, operation: () => T) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId], roles: ['HR_MANAGER'] } }, operation);
   const run = (f: Fixture) => asActor(f, () => service.createPayrollRun({ companyId: f.companyId, periodId: f.period.id, name: 'Synthetic payroll' }, f.maker));
   const review = (f: Fixture) => asActor(f, () => service.getAttendanceSummaryForPeriod(f.period.id));
   async function expectNoPayroll(f: Fixture) {
@@ -217,6 +220,61 @@ withDatabase('payroll attendance inputs (isolated real MySQL)', () => {
     const evidence = await mockDatabase.payrollFormulaCalculation.findFirstOrThrow({ where: { runId: completed.id } });
     expect(evidence.inputs).toMatchObject({ OVERTIME_HOURS: '0.3' });
     expect(evidence.amount.toFixed(2)).toBe('1000.30');
+  });
+
+  it('counts absence only inside the employed window, so a mid-period joiner or leaver is not penalised twice', async () => {
+    // Earnings are already prorated by the employment window. Counting the days
+    // before a joiner arrived — or after a leaver's last working day — as alpa
+    // charged them a second time for the same absence, and the deduction
+    // overtook the prorated earnings: netPay went negative and the thrown
+    // "deductions exceed earnings" rolled back the WHOLE company's run.
+    const f = await fixture();
+    await mockDatabase.payrollPeriod.update({ where: { id: f.period.id },
+      data: { startDate: new Date('2026-10-01T05:00:00Z'), endDate: new Date('2026-10-31T05:00:00Z') } });
+    await mockDatabase.salaryComponent.update({ where: { id: f.component.id }, data: { isProrated: true } });
+    await mockDatabase.companySetting.updateMany({ where: { companyId: f.companyId, key: 'absence_deduction_daily_basic_percent' }, data: { value: '100' } });
+
+    const joiner = await employee(f, { joinDate: new Date('2026-10-20') });
+    const leaver = await employee(f, { joinDate: new Date('2026-01-05'), status: 'INACTIVE', employmentStatus: 'RESIGNED' });
+    await mockDatabase.resignation.create({ data: { companyId: f.companyId, employeeId: leaver.id,
+      resignDate: new Date('2026-09-20'), lastWorkingDate: new Date('2026-10-10'), status: 'APPROVED' } });
+
+    // Present on every working day inside their own window except one real alpa
+    // (the 22nd for the joiner, the 6th for the leaver).
+    const present = (employeeId: string, days: number[]) => days.map(day => ({
+      companyId: f.companyId, employeeId, date: new Date(`2026-10-${String(day).padStart(2, '0')}`), status: 'PRESENT' as const,
+    }));
+    await mockDatabase.attendance.createMany({ data: [
+      ...present(joiner.id, [20, 21, 23, 26, 27, 28, 29, 30]),
+      ...present(leaver.id, [1, 2, 5, 7, 8, 9]),
+    ] });
+
+    // October 2026 has 22 mon–fri days; 9 of them fall on or after the 20th and
+    // 7 of them on or before the 9th.
+    const summary = (await review(f)).summary;
+    expect(summary[joiner.id]).toEqual({ workDays: 9, present: 8, leave: 0, absent: 1,
+      unpaidLeave: 0, overtime: 0, overtimeWorkday: 0, overtimeHoliday: 0 });
+    expect(summary[leaver.id]).toEqual({ workDays: 7, present: 6, leave: 0, absent: 1,
+      unpaidLeave: 0, overtime: 0, overtimeWorkday: 0, overtimeHoliday: 0 });
+
+    const completed = await run(f);
+    const slipOf = (employeeId: string) => {
+      const slip = completed.payslips.find(row => row.employeeId === employeeId);
+      if (!slip) throw new Error(`Missing payslip for ${employeeId}`);
+      return slip;
+    };
+    // Review and run must report the same numbers, and both must be payable:
+    // joiner 1000 x 12/31 = 387.10 earned, one alpa day = round(1000/22) = 45.
+    expect(slipOf(joiner.id)).toMatchObject({ workDays: 9, presentDays: 8, leaveDays: 0, absentDays: 1 });
+    expect(slipOf(joiner.id).totalEarnings.toFixed(2)).toBe('387.10');
+    expect(slipOf(joiner.id).totalDeductions.toFixed(2)).toBe('45.00');
+    expect(slipOf(joiner.id).netPay.toFixed(2)).toBe('342.10');
+    // Leaver 1000 x 10/31 = 322.58 earned, one alpa day deducted.
+    expect(slipOf(leaver.id)).toMatchObject({ workDays: 7, presentDays: 6, leaveDays: 0, absentDays: 1 });
+    expect(slipOf(leaver.id).totalEarnings.toFixed(2)).toBe('322.58');
+    expect(slipOf(leaver.id).totalDeductions.toFixed(2)).toBe('45.00');
+    expect(slipOf(leaver.id).netPay.toFixed(2)).toBe('277.58');
+    expect(completed.totalNetPay.toFixed(2)).toBe('619.68');
   });
 
   it('rejects ambiguous active calendars and accepts an explicit all-off calendar after correction', async () => {

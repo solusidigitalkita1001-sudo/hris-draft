@@ -50,6 +50,18 @@ describe('the payroll money path is reachable without the super-admin', () => {
     expect(blockFor('HR_MANAGER')).not.toContain("'payroll:disburse'");
   });
 
+  /**
+   * S-H1: EMPLOYEE was seeded with `payroll:read`, which is a company-wide
+   * payroll permission — combined with a role that had no data-scope row, it
+   * let any employee list every colleague's salary. Own payslips, own salary
+   * on the own profile, and the own annual tax recap are reached through
+   * self-service paths that take the employee id from the session, so none of
+   * them needs this grant.
+   */
+  it('does not give the ordinary employee a company-wide payroll permission', () => {
+    expect(seededPayrollPermissions('EMPLOYEE')).toEqual([]);
+  });
+
   it('defines the FINANCE role at company scope', () => {
     expect(roles).toContain("code: 'FINANCE'");
     expect(roles.slice(roles.indexOf("code: 'FINANCE'") - 200, roles.indexOf("code: 'FINANCE'") + 300))

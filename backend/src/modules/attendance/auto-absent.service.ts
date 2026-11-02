@@ -12,8 +12,8 @@ import { assertPayrollDateOpen } from '@/shared/payroll/payroll-period-guard';
  *
  * What this does NOT do is change anybody's pay, and that is a verified fact
  * rather than an intention. Payroll counts a day present only when a row says
- * PRESENT or LATE (`attendance-calendar.ts:113`) and derives absence as
- * `workDays - present - leave` (`:137`), so an ABSENT row neither inflates
+ * PRESENT or LATE (`attendance-calendar.ts:145`) and derives absence as
+ * `workDays - present - leave` (`:169`), so an ABSENT row neither inflates
  * presence nor alters the absent count. The late-deduction path reads
  * `lateMinutes > 0`, which these rows do not have. The value here is
  * visibility: a missing day becomes a record HR can see, question, and that an
@@ -22,9 +22,10 @@ import { assertPayrollDateOpen } from '@/shared/payroll/payroll-period-guard';
  * The predicate is borrowed rather than rebuilt. Asked for a single-day range,
  * `loadPayrollAttendance` already answers exactly the right question: `absent
  * === 1` means the day is a working day on that employee's resolved calendar,
- * they are not present, and no approved leave, business trip or WFH covers it.
- * A second definition of "working day" is how two parts of a payroll system
- * start disagreeing about someone's month.
+ * it falls inside the window they were actually employed for, they are not
+ * present, and no approved leave, business trip or WFH covers it. A second
+ * definition of "working day" is how two parts of a payroll system start
+ * disagreeing about someone's month.
  */
 
 export interface AutoAbsentResult {

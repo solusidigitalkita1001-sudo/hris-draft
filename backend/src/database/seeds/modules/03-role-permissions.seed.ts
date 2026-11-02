@@ -140,7 +140,13 @@ export async function seedRolePermissions(): Promise<void> {
     .map((p) => p.id);
   await assignPermissionsToRole(managerId, managerPerms);
 
-  // EMPLOYEE
+  // EMPLOYEE — self service only. Deliberately WITHOUT `payroll:read`: that
+  // permission authorizes company-wide payroll reads (the salary list, any
+  // payslip, any annual tax recap), and combined with a role that had no data
+  // scope configured it let every employee read every colleague's salary. The
+  // self-service paths need no such grant — they take the employee id from the
+  // session: own payslips (`/payroll/payslips`, `/payroll/payslips/my/*`), the
+  // own salary nested in the own profile, the own THR and the own tax recap.
   const employeeId = roleMap.get('EMPLOYEE')!;
   const employeePerms = permissions
     .filter((p) =>
@@ -152,7 +158,6 @@ export async function seedRolePermissions(): Promise<void> {
         'travel:create', 'travel:read',
         'workflow:read',
         'document:create', 'document:read',
-        'payroll:read',
         'ewa:create', 'ewa:read', 'ewa:update',
         'da:create', 'da:read', 'da:update',
       ].includes(p.code)

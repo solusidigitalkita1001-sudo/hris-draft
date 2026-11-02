@@ -855,3 +855,147 @@ gerbang tahun, dan normalisasi hari kalender), `thr.test` + `run-type-guards` +
 bersih, dan `prisma migrate diff --from-migrations` melaporkan "No difference
 detected". Kedua hal yang ditunda di atas TIDAK punya test — memang itu
 artinya ditunda; keduanya hidup di dokumen ini sampai ada yang mengerjakannya.
+## Ditunda — `WORK_DAYS = 0` sesudah potongan alpa diprorata (P-C1)
+
+Perbaikan P-C1 memangkas hari kerja tiap karyawan ke jendela masa kerjanya
+(`clipWorkingDatesToEmployment` di `shared/payroll/attendance-calendar.ts`)
+sebelum `countPayrollAttendance` menghitung, supaya hari sebelum seseorang
+bergabung dan sesudah hari kerja terakhirnya tidak terhitung alpa di atas
+earnings yang sudah diprorata. Itu memperbaiki potongan dobelnya. Tapi ia juga
+mengubah `workDays` — yang masuk ke formula payroll sebagai input `WORK_DAYS` —
+dan satu bentuk input jadi bisa menjatuhkan run yang sebelumnya bersih.
+
+**Yang berubah.** Sebelum perbaikan, `workDays` selalu seluruh hari kerja
+terjadwal di periode itu (22 untuk Oktober 2026), berapa pun jendela masa kerja
+karyawannya. Sesudahnya, `workDays` adalah hari kerja terjadwal **di dalam**
+jendela — dan bisa **0**.
+
+**Kondisi pemicunya**, ketiganya harus bertemu:
+
+1. Jendela masa kerja seorang karyawan di periode itu tidak memuat satu pun
+   hari kerja terjadwal. Contoh konkret: bergabung Sabtu 31 Oktober 2026 pada
+   periode 1–31 Oktober dengan kalender Senin–Jumat — jendelanya hanya
+   tanggal 31, dan itu bukan hari kerja.
+2. Tenant memublikasikan formula yang membagi dengan `WORK_DAYS` (pola
+   `BASE_SALARY * PRESENT_DAYS / WORK_DAYS`).
+3. `absence_deduction_daily_basic_percent = 0`, sehingga pre-fix tenant itu
+   **tidak** kena potongan alpa dan run-nya selesai bersih.
+
+Maka pre-fix `WORK_DAYS = 22` dan pembagiannya tidak pernah kena; post-fix
+`WORK_DAYS = 0` dan `shared/payroll/formula.ts:111` melempar
+`BadRequestError('Formula: division by zero')` di dalam transaksi run, sehingga
+run SELURUH perusahaan rollback. Jadi untuk bentuk input ini ini **bukan** jalur
+yang sudah ada sebelumnya — framing awal di laporan tugasnya ("jalur itu sudah
+ada, hanya ada satu rute baru ke sana") tidak akurat dan sudah dikoreksi. Yang
+memang sudah ada sebelumnya adalah `workDays = 0` lewat **konfigurasi kalender**
+(kalender semua-libur, atau periode yang seluruhnya hari libur) — bentuk input
+yang berbeda, dan sudah ada test-nya.
+
+Perlu dicatat juga arah sebaliknya: pada tenant dengan
+`absence_deduction_daily_basic_percent > 0`, karyawan yang sama pre-fix justru
+lebih buruk — 22 hari alpa, potongan satu bulan penuh melawan earnings ~1/31
+bulan, `netPay < 0`, dan run perusahaan ikut rollback. Perbaikan ini menukar
+kegagalan di satu konfigurasi dengan kegagalan di konfigurasi lain yang lebih
+sempit, bukan menambah kegagalan bersih.
+
+**Kenapa ditunda.** Jawabannya keputusan produk soal uang, bukan keputusan
+teknis, dan ketiga pilihannya membayar orang dengan jumlah berbeda:
+
+- *clamp* — perlakukan `WORK_DAYS = 0` sebagai nol hari kerja sehingga formula
+  rasio menghasilkan 0; karyawannya dibayar nol untuk periode itu;
+- *divisor unclipped* — bagi dengan hari kerja seluruh periode (22) dan biarkan
+  `isProrated` yang menyusutkan, sehingga pembilangnya tetap jujur;
+- *penolakan bernama* — run gagal dengan pesan yang menyebut karyawannya, bukan
+  "division by zero", supaya HR tahu baris mana yang harus dibetulkan.
+
+Ditunda juga sebagai pekerjaan terpisah supaya perbaikan P-C1 tetap satu
+perubahan yang bisa dibaca; tidak ada yang disembunyikan di dalam commit-nya.
+
+**Satu hal lain yang sengaja dibiarkan**, di commit yang sama: lembur yang
+disetujui dengan tanggal **di luar** jendela masa kerja tetap dibayar, dan tetap
+di band hari kerja (`modules/payroll/payroll-attendance.ts` mengklasifikasi
+lembur terhadap jadwal, bukan terhadap jendela). Secara bentuk ini cermin dari
+potongan dobel yang baru saja diperbaiki — hari di luar jendela yang semestinya
+juga tidak membayar — tapi membuangnya diam-diam berarti mencabut uang yang
+sudah lewat persetujuan, jadi ia menunggu keputusan kebijakan yang sama. Kalau
+klasifikasinya dipindah ke set terpotong tanpa keputusan itu, efeknya bukan
+"tidak dibayar" melainkan **dibayar lebih**: tanggal di luar jendela akan jatuh
+ke band hari libur 2x/3x/4x.
+
+### Status verifikasi
+
+Perilaku `WORK_DAYS = 0` tidak diubah, jadi tidak ada test baru untuknya —
+pelemparan `division by zero`-nya sudah terikat oleh `shared/payroll/formula.test.ts`.
+Yang terikat test baru adalah pemangkasannya sendiri:
+`shared/payroll/attendance-calendar.test.ts` (lima kasus murni, termasuk batas
+inklusif dan identitas saat jendelanya tidak diketahui) dan
+`modules/payroll/payroll-attendance.mysql.test.ts` (joiner tanggal 20 dan leaver
+dengan hari kerja terakhir tanggal 10 terhadap MySQL sungguhan: angka review =
+angka run, dan run-nya commit dengan `netPay` positif alih-alih rollback).
+## Tugas — scope default yang membocorkan gaji rekan (S-H1)
+
+Role tanpa baris `RoleDataScope` resolve ke filter kosong, dan filter kosong
+dibaca setiap pemanggil sebagai "seluruh perusahaan". Tidak ada seed atau
+migrasi yang pernah menulis baris itu, jadi setiap karyawan memegang predikat
+company-wide; bersama `payroll:read` yang ikut di-seed untuk EMPLOYEE, siapa
+pun bisa membuka daftar gaji, slip, dan rekap PPh21 rekannya. Sekarang
+"tidak dikonfigurasi" berarti "data sendiri saja", dihitung dari seluruh
+himpunan role peminta (role company-wide tetap company-wide, MANAGER menyusut
+ke tim yang ia kepalai), `payroll:read` dicabut dari EMPLOYEE, dan jalur data
+milik sendiri dibuka tanpa permission itu. Daftar absensi dan cuti ikut
+diberi predikat `employeeAccessWhere` — sebelumnya keduanya hanya disempitkan
+oleh rewrite query di middleware company-scope, yang hanya bisa membawa satu
+id karyawan.
+
+### Yang sengaja ditunda
+
+- **Dua test `ewa-access.mysql` yang lulusnya bergantung tanggal** —
+  "creates a valid scoped reservation" dan "serializes overlapping requests".
+  Keduanya gagal sepanjang 1 November 2026 dengan `BadRequestError: Pendapatan
+  EWA belum tersedia pada periode ini`, **juga di `3d368f4`** (dibuktikan
+  dengan men-stash seluruh perubahan lalu menjalankan suite yang sama), lalu
+  lulus sendiri pada 2 November tanpa ada kode yang berubah. Jadi bukan
+  regresi, melainkan fixture yang menaruh absensi pada tanggal berjalan
+  sementara jendela periodenya statis: pada tanggal tertentu tidak ada
+  pendapatan yang bisa dihitung. **Perlu dibereskan terpisah** (buat
+  tanggalnya relatif terhadap periode fixture) — selama dibiarkan, job CI
+  "Real-database integration suites (blocking)" merah pada hari-hari itu.
+- **`resolveManagedEmployeeIds` tidak di-memoize.** Ia sekarang berjalan
+  sekali per resolusi scope, dan sebuah request bisa me-resolve scope lebih
+  dari sekali (middleware, lalu predikat di service). Untuk MANAGER itu empat
+  query pendek per resolusi. Belum ada cache per-request karena belum ada
+  bukti ia terasa; kalau nanti terasa, tempatnya `RequestContext` (bukan
+  cache proses — keanggotaan tim berubah saat org unit berubah).
+- **Empat pembacaan sejenis yang masih mengabaikan scope karyawan**, semuanya
+  di luar lingkup tugas ini dan sengaja ditangguhkan. Daftar absensi, daftar
+  koreksi absensi, daftar lembur, daftar cuti, dan saldo cuti sudah membawa
+  predikat `employeeAccessWhere`; yang belum:
+  - `leave.service.ts:findLeaveRequestById` — detail pengajuan cuti hanya
+    memeriksa tenant (`instance.companyId !== currentCompanyId`), tanpa
+    predikat karyawan, jadi pemegang `leave:read` bisa membuka pengajuan siapa
+    pun di perusahaannya lewat id.
+  - `employee-loan.service.ts`, `travel-expense.service.ts`, dan seluruh
+    `modules/permission-request/` tidak memanggil `employeeAccessWhere` sama
+    sekali — daftar pinjaman, klaim perjalanan, dan izin masih seluas tenant
+    untuk siapa pun yang punya permission read-nya.
+  Tenant middleware tetap menjaga batas antar-perusahaan di semuanya; yang
+  belum ada adalah batas antar-karyawan DI DALAM satu perusahaan.
+
+- **Dua strategi fixture hidup berdampingan di suite payroll MySQL.** Suite
+  yang subjeknya memang data scope (`employee-salary-read`,
+  `payroll-run-access`, `employee-salary`) menuliskan baris `RoleDataScope`
+  company-wide eksplisit untuk role sintetisnya, sementara suite yang
+  subjeknya mesin payroll (`payroll-calculation`, `payroll-attendance`,
+  `payroll-formula`) cukup memberi aktornya role `HR_MANAGER`. Keduanya benar
+  untuk maksud masing-masing, tapi pembaca baru akan bertanya kenapa beda;
+  menyatukannya butuh helper fixture bersama yang belum ada.
+
+### Status verifikasi
+
+`npx tsc --noEmit` dan `npm run check` bersih. Suite unit + lintas-modul yang
+tersentuh hijau, dan setiap suite MySQL dijalankan satu per satu dengan
+`--runInBand` (lihat `docs/integration-tests.md`). Selain itu ada smoke nyata
+terhadap server berjalan di atas database sekali pakai yang di-seed ulang
+(permission seed berubah, jadi reseed wajib): karyawan 403 di
+`/payroll/employee-salaries` dan di setiap angka milik rekan, 200 di seluruh
+angka miliknya sendiri; manager melihat tim-nya; HR tetap company-wide.

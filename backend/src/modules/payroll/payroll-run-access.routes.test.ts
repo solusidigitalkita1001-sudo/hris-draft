@@ -63,12 +63,26 @@ describe('payroll run and payslip HTTP boundary', () => {
     expect(response.headers['cache-control']).toBe('no-store');
     for (const operation of Object.values(service)) expect(operation).not.toHaveBeenCalled();
   });
-  it.each([`/runs/${RUN}`, `/periods/${PERIOD}`, `/payslips/${SLIP}`, '/payslips'])('requires authentication and read permission on %s with no-store on errors', async path => {
+  it.each([`/runs/${RUN}`, `/periods/${PERIOD}`, `/payslips/${SLIP}`])('requires authentication and read permission on %s with no-store on errors', async path => {
     for (const authenticated of [false, true]) {
       const response = await request(app({ authenticated, permissions: ['employee:read'] })).get(`${BASE}${path}`).expect(authenticated ? 403 : 401);
       expect(response.headers['cache-control']).toBe('no-store');
     }
     for (const operation of Object.values(service)) expect(operation).not.toHaveBeenCalled();
+  });
+  /**
+   * The own-payslip list used to demand `payroll:read`, a company-wide payroll
+   * permission that the EMPLOYEE role no longer holds (it is what let any
+   * employee read every colleague's payroll data). The route still answers the
+   * caller's own history, and still only to an authenticated caller.
+   */
+  it('keeps /payslips reachable for an employee holding no payroll permission', async () => {
+    const unauthenticated = await request(app({ authenticated: false })).get(`${BASE}/payslips`).expect(401);
+    expect(unauthenticated.headers['cache-control']).toBe('no-store');
+    expect(service.findPayslipsByEmployee).not.toHaveBeenCalled();
+    service.findPayslipsByEmployee.mockResolvedValueOnce([]);
+    await request(app({ permissions: ['employee:read'] })).get(`${BASE}/payslips`).expect(200);
+    expect(service.findPayslipsByEmployee).toHaveBeenCalledWith(EMPLOYEE);
   });
   it('keeps self-service employee identity in the session even when employee query fields are forged', async () => {
     service.findPayslipsByEmployee.mockResolvedValueOnce([]);

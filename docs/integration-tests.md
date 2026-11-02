@@ -1,15 +1,15 @@
 # Real-database integration tests
 
-Nine suites run against a real MySQL database instead of a mocked Prisma
+Several suites run against a real MySQL database instead of a mocked Prisma
 client, because what they check — advisory locks, transaction rollback,
 concurrent runs, `SELECT … FOR UPDATE`, data-scope predicates — is behaviour a
-mock cannot reproduce. They are gated behind environment variables, so
-`npm test` skips them by default and they do not require a database on a
-developer machine that does not have one.
+mock cannot reproduce. The table below is the current list; they are gated
+behind environment variables, so `npm test` skips them by default and they do
+not require a database on a developer machine that does not have one.
 
-Gated is not free: before this pass they had drifted behind the code and four
-of the nine failed. Run them when touching payroll, EWA, salary, or data-scope
-behaviour.
+Gated is not free: before the first pass they had drifted behind the code and
+four of the nine that existed then failed. Run them when touching payroll, EWA,
+salary, or data-scope behaviour.
 
 ## Setup
 
@@ -49,24 +49,31 @@ synthetic companies in `afterAll`.
 | `advisory-lock.mysql` | `RUN_DB_INTEGRATION=1` | two concurrent operations serialised on one lock key |
 | `ewa-access.mysql` | `EWA_ACCESS_DB_URL` | EWA limit reservation under concurrency and scope |
 | `payroll-attendance.mysql` | `PAYROLL_ATTENDANCE_DB_URL` | scheduled dates shared by review/slip/formula, calendar resolution, lateness, overtime |
-| `payroll-calculation.mysql` | `PAYROLL_CALCULATION_DB_URL` | atomic runs, rollback, Decimal totals, EWA/loan deduction once |
+| `payroll-calculation.mysql` | `PAYROLL_CALCULATION_DB_URL` | atomic runs, rollback, Decimal totals, EWA/loan deduction once, claim release on void |
 | `payroll-formula.mysql` | `PAYROLL_FORMULA_DB_URL` | revision publication, cycles, frozen execution evidence |
 | `payroll-payment.mysql` | `PAYROLL_PAYMENT_DB_URL` | payment ledger versioning and reconciliation |
 | `employee-salary.mysql` | `PAYROLL_SALARY_DB_URL` | salary allocation mutations |
 | `employee-salary-read.mysql` | `PAYROLL_SALARY_DB_URL` | salary read access per scope |
 | `payroll-run-access.mysql` | `PAYROLL_ACCESS_DB_URL` | run/payslip access per data scope, maker-checker, tenant intersection |
+| `employee-self-scope.mysql` | `PAYROLL_SALARY_DB_URL` | karyawan tanpa baris scope: gaji/slip/rekap pajak rekan tertutup, miliknya sendiri tetap terbaca |
 | `leave-journey.mysql` | `RUN_DB_INTEGRATION=1` | pengajuan → approval → potongan saldo → pembatalan, termasuk lock baris saldo dan gerbang periode payroll |
 | `reports.mysql` | `RUN_DB_INTEGRATION=1` | agregat headcount/attendance/leave/turnover: angkanya benar dan tidak menghitung baris tenant lain |
 | `decision-notification.mysql` | `RUN_DB_INTEGRATION=1` | notifikasi keputusan approval: satu baris, ke requester, hanya saat keputusan final |
 
 ## In CI
 
-The `Real-database integration suites (blocking)` job runs the nine suites on
+The `Real-database integration suites (blocking)` job runs these suites on
 every push and pull request, against a MySQL service database named
 `hris_payment_integration` so the suites' own local-and-named guard is
 satisfied. It applies the migration chain first, then runs the same selector
 used above with `--runInBand`. A failure blocks the merge — these suites drifted
 precisely because nothing ran them.
+
+The selector is a pattern (`npx jest --runInBand "\.mysql\.test\.ts$"
+"advisory-lock"`), not a list, so a new `*.mysql.test.ts` suite is picked up by
+CI as soon as it exists — provided its gating environment variable is already
+among the job's, as `PAYROLL_SALARY_DB_URL` is. A suite introducing a NEW
+variable has to add it to `ci.yml`, or it will silently skip there.
 
 ## Journey cuti (29 September 2026)
 
@@ -128,6 +135,24 @@ approval menulis satu baris untuk requester dengan `resource`/`action`/
 memutuskan, ia sudah tahu), penolakan membawa catatan approver, dan workflow dua
 tingkat **tidak** menulis apa pun setelah level pertama — requester baru diberi
 tahu ketika keputusannya final.
+
+## Scope default karyawan (1 November 2026)
+
+Role tanpa baris `RoleDataScope` dulu resolve ke filter kosong, dan filter
+kosong dibaca semua pemanggil sebagai "seluruh perusahaan" — padahal tidak ada
+seed atau migrasi yang pernah menulis baris itu. Digabung dengan `payroll:read`
+yang ikut di-seed untuk role EMPLOYEE, setiap karyawan bisa membaca gaji semua
+rekannya. `employee-self-scope.mysql` menguji dua sisinya sekaligus terhadap
+database sungguhan dan **tanpa** satu pun baris scope: angka rekan (gaji, slip,
+THR, rekap PPh21 tahunan, bukti potong, profil) tertutup, sementara angka milik
+sendiri tetap terbaca walau role-nya tidak lagi memegang `payroll:read`; HR
+tetap company-wide dan manager menyusut ke timnya.
+
+Catatan untuk suite yang sudah ada: beberapa fixture memakai role sintetis
+tanpa baris scope dan mengandalkan default company-wide yang lama. Fixture itu
+sekarang menuliskan baris company-wide secara eksplisit (atau memberi aktornya
+role company-wide yang sesungguhnya), karena "tidak dikonfigurasi" tidak lagi
+berarti "boleh semua".
 
 ## What this pass found
 

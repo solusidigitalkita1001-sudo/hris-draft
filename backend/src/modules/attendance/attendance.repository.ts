@@ -3,8 +3,13 @@ import { Prisma } from '@prisma/client';
 import { UpdateAttendanceDTO, CreateOvertimeDTO } from './attendance.dto';
 
 export class AttendanceRepository {
-  async findAll(companyId: string, filters?: { employeeId?: string; date?: string; month?: string; status?: string }) {
+  async findAll(
+    companyId: string,
+    filters?: { employeeId?: string; date?: string; month?: string; status?: string },
+    employeeScope?: Prisma.EmployeeWhereInput,
+  ) {
     const where: Prisma.AttendanceWhereInput = { companyId, deletedAt: null };
+    if (employeeScope) where.employee = employeeScope;
     if (filters?.employeeId) where.employeeId = filters.employeeId;
     if (filters?.status) where.status = filters.status as any;
     if (filters?.date) {
@@ -170,8 +175,13 @@ export class AttendanceRepository {
   }
 
   // Overtime
-  async findAllOvertime(companyId: string, filters?: { employeeId?: string; status?: string }) {
+  async findAllOvertime(
+    companyId: string,
+    filters?: { employeeId?: string; status?: string },
+    employeeScope?: Prisma.EmployeeWhereInput,
+  ) {
     const where: Prisma.OvertimeRequestWhereInput = { companyId, deletedAt: null };
+    if (employeeScope) where.employee = employeeScope;
     if (filters?.employeeId) where.employeeId = filters.employeeId;
     if (filters?.status) where.status = filters.status as any;
     return prisma.overtimeRequest.findMany({

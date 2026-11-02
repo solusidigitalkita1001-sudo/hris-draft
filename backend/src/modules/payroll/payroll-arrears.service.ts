@@ -249,6 +249,22 @@ export class PayrollArrearsService {
       }
     }
   }
+
+  /**
+   * Hand the rows back when the run that applied them is voided (P-C2).
+   *
+   * This is the costliest claim to leave stranded: `@@unique([employeeId,
+   * sourcePeriodId])` means an APPLIED row pointing at a dead run can never be
+   * registered again, so the arrears are simply never paid and only DB surgery
+   * fixes it. Scoped to this run and to APPLIED, so it is idempotent and never
+   * steals a row a later run claimed.
+   */
+  async releaseApplied(companyId: string, runId: string, database: Prisma.TransactionClient = prisma) {
+    return database.payrollArrears.updateMany({
+      where: { companyId, appliedRunId: runId, status: PayrollArrearsStatus.APPLIED },
+      data: { status: PayrollArrearsStatus.PENDING, payslipId: null, appliedRunId: null, appliedAt: null },
+    });
+  }
 }
 
 export const payrollArrearsService = new PayrollArrearsService();
