@@ -103,6 +103,38 @@ export function resolvePayrollWorkingDates(employee: ScheduleEmployee, dates: Da
   return result;
 }
 
+/**
+ * Narrows a resolved schedule to the days the employee was actually employed.
+ *
+ * `resolvePayrollWorkingDates` answers "is this a working day on this
+ * employee's calendar", which for a mid-period joiner or leaver is yes for days
+ * they were not employed on — and `countPayrollAttendance` then derives those
+ * days as `absent`, so the absence deduction charged them for days before they
+ * arrived or after their last working day. Earnings are already prorated by
+ * `employment-window.ts` over the same window, so that was the same absence
+ * billed twice, and large enough to push netPay below zero.
+ *
+ * Boundaries are inclusive and date-only, matching `employment-window.ts` and
+ * the lexicographic `YYYY-MM-DD` comparisons `countPayrollAttendance` already
+ * uses. An unknown boundary (no join date, no approved resignation) clips
+ * nothing, which is how the employment window reads a missing date too.
+ */
+export function clipWorkingDatesToEmployment(
+  workingDates: Set<string>,
+  employment: { joinDate?: Date | null; lastWorkingDate?: Date | null },
+): Set<string> {
+  const from = employment.joinDate ? payrollDateKey(employment.joinDate) : null;
+  const to = employment.lastWorkingDate ? payrollDateKey(employment.lastWorkingDate) : null;
+  if (!from && !to) return workingDates;
+  const result = new Set<string>();
+  for (const key of workingDates) {
+    if (from && key < from) continue;
+    if (to && key > to) continue;
+    result.add(key);
+  }
+  return result;
+}
+
 export function countPayrollAttendance(
   workingDates: Set<string>,
   attendance: { date: Date; status: string }[],

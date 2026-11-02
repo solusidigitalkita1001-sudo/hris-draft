@@ -1,4 +1,4 @@
-import { countPayrollAttendance, payrollDateKey, payrollPeriodDates, resolvePayrollWorkingDates, ScheduleCalendar, ScheduleData, ScheduleEmployee, ScheduleOverride } from './attendance-calendar';
+import { clipWorkingDatesToEmployment, countPayrollAttendance, payrollDateKey, payrollPeriodDates, resolvePayrollWorkingDates, ScheduleCalendar, ScheduleData, ScheduleEmployee, ScheduleOverride } from './attendance-calendar';
 const employee: ScheduleEmployee = { id: 'employee', companyId: 'A', branchId: 'branch', departmentId: 'department', employeeCategory: 'OFFICE', shiftFormulaId: null, shiftStartDate: null };
 const calendar: ScheduleCalendar = { id: 'calendar', companyId: 'A', branchId: null, departmentId: null, year: 2026,
   workDays: { mon: true, tue: { enabled: true, workStart: '09:00' }, wed: true, thu: true, fri: true, sat: false, sun: false }, days: [] };
@@ -127,5 +127,40 @@ describe('unpaid leave and trip/WFH presence (org policy decisions)', () => {
   });
   it('rejects reversed trip ranges', () => {
     expect(() => countPayrollAttendance(work, [], [], [{ startDate: new Date('2026-10-02'), endDate: new Date('2026-10-01') }])).toThrow('invalid date range');
+  });
+});
+
+describe('employment window clipping (P-C1)', () => {
+  const month = new Set(payrollPeriodDates(new Date('2026-10-01'), new Date('2026-10-07')).map(payrollDateKey));
+  const clip = (employment: { joinDate?: Date | null; lastWorkingDate?: Date | null }) =>
+    [...clipWorkingDatesToEmployment(month, employment)];
+
+  it('drops dates before the join date and after the last working date', () => {
+    expect(clip({ joinDate: new Date('2026-10-03') })).toEqual(['2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07']);
+    expect(clip({ lastWorkingDate: new Date('2026-10-03') })).toEqual(['2026-10-01', '2026-10-02', '2026-10-03']);
+    expect(clip({ joinDate: new Date('2026-10-03'), lastWorkingDate: new Date('2026-10-04') })).toEqual(['2026-10-03', '2026-10-04']);
+  });
+
+  it('keeps both boundary days, whatever time component the stored date carries', () => {
+    // Jakarta's date picker stores noon local as 05:00Z; a boundary day must
+    // not fall out of the window because of it.
+    expect(clip({ joinDate: new Date('2026-10-07T05:00:00Z'), lastWorkingDate: new Date('2026-10-07T17:00:00Z') })).toEqual(['2026-10-07']);
+  });
+
+  it('leaves the schedule untouched when no window is known', () => {
+    expect(clipWorkingDatesToEmployment(month, {})).toBe(month);
+    expect(clipWorkingDatesToEmployment(month, { joinDate: null, lastWorkingDate: null })).toBe(month);
+  });
+
+  it('returns nothing when the window misses the period entirely', () => {
+    expect(clip({ joinDate: new Date('2026-11-01') })).toEqual([]);
+    expect(clip({ lastWorkingDate: new Date('2026-09-30') })).toEqual([]);
+    expect(clip({ joinDate: new Date('2026-10-05'), lastWorkingDate: new Date('2026-10-02') })).toEqual([]);
+  });
+
+  it('never counts a clipped day as absent', () => {
+    const working = clipWorkingDatesToEmployment(month, { joinDate: new Date('2026-10-06') });
+    expect(countPayrollAttendance(working, [{ date: new Date('2026-10-06'), status: 'PRESENT' }], []))
+      .toEqual({ workDays: 2, present: 1, leave: 0, unpaidLeave: 0, absent: 1 });
   });
 });
