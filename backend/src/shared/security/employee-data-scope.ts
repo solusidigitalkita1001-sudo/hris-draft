@@ -3,7 +3,6 @@ import { administrationService } from '@/modules/administration/administration.s
 import { getCurrentCompanyId, getCurrentUser, isSystemContext, runInSystemContext } from '@/shared/context/RequestContext';
 import { ForbiddenError, NotFoundError } from '@/shared/exceptions/AppError';
 import prisma from '@/shared/database/prisma';
-import { resolveManagedEmployeeIds } from './manager-team';
 
 /** Server-derived predicate, independent of request query/body fields. */
 export async function employeeAccessWhere(resource = 'employee'): Promise<Prisma.EmployeeWhereInput> {
@@ -13,7 +12,7 @@ export async function employeeAccessWhere(resource = 'employee'): Promise<Prisma
   if (!actor || !companyId) throw new ForbiddenError('Employee access requires an active company context');
   const user: {
     id: string; roles?: string[]; companyId: string; employeeId?: string; companyScope?: string[]; groupId?: string;
-    branchId?: string | null; departmentId?: string | null; subDepartmentId?: string | null; teamEmployeeIds?: string[];
+    branchId?: string | null; departmentId?: string | null; subDepartmentId?: string | null;
   } = { id: actor.id, roles: actor.roles, companyScope: actor.companyScope, companyId, employeeId: actor.employeeId ?? undefined, groupId: actor.groupId ?? undefined };
   const scope = await administrationService.findMyDataScopeByUser(companyId, user, resource);
   // For OWN_* dynamic scopes, resolve the requester's CURRENT org unit once
@@ -25,10 +24,8 @@ export async function employeeAccessWhere(resource = 'employee'): Promise<Prisma
     user.departmentId = self?.departmentId ?? null;
     user.subDepartmentId = self?.subDepartmentId ?? null;
   }
-  // MANAGER_TEAM: resolve the ids the manager heads (self only when they head none).
-  if (actor.employeeId && scope?.scopeType === 'MANAGER_TEAM') {
-    user.teamEmployeeIds = await resolveManagedEmployeeIds(companyId, actor.employeeId);
-  }
+  // MANAGER_TEAM needs no work here: the scope lookup pre-resolves the ids the
+  // manager heads, so every caller filters on the same team.
   // The queried model remains Employee, including when a payroll permission
   // supplies the scope. Self must therefore resolve to id, not employeeId.
   return { ...administrationService.resolveEmployeeFilterForCurrentUser(scope, user, 'employee'), companyId };
@@ -50,21 +47,34 @@ export async function assertEmployeeInScope(employeeId: string, resource = 'empl
   if (!allowed) throw new NotFoundError('Employee not found');
 }
 
-/** Employee-profile access alone does not authorize the nested salary data. */
+/**
+ * Employee-profile access alone does not authorize the nested salary data of
+ * OTHER people: that still takes a payroll permission and the data scope it
+ * resolves to. One's own salary is not other people's data, though, and it is
+ * reachable without `payroll:read` — which the EMPLOYEE role no longer holds,
+ * precisely because it is a company-wide permission.
+ */
 export async function profileSalaryAccessWhere(): Promise<Prisma.EmployeeSalaryWhereInput> {
   const actor = getCurrentUser();
   if (!actor && isSystemContext()) return {};
-  const denied = { id: { in: [] as string[] } };
+  const companyId = getCurrentCompanyId();
+  // Only within a resolved company: an undefined companyId would filter nothing.
+  const own: Prisma.EmployeeSalaryWhereInput | null = actor?.employeeId && companyId
+    ? { companyId, employeeId: actor.employeeId, employee: { deletedAt: null } }
+    : null;
+  /** Without a payroll permission there is exactly one salary to show: one's own. */
+  const ownOnly: Prisma.EmployeeSalaryWhereInput = own ?? { id: { in: [] as string[] } };
   if (!actor?.roles?.includes('SUPER_ADMIN') && !actor?.permissions?.some(permission => ['payroll:read', 'payroll:*'].includes(permission))) {
-    return denied;
+    return ownOnly;
   }
   try {
     const scope = await employeeAccessWhere('payroll');
-    return { companyId: getCurrentCompanyId(), employee: { deletedAt: null, AND: [scope] } };
+    const permitted: Prisma.EmployeeSalaryWhereInput = { companyId, employee: { deletedAt: null, AND: [scope] } };
+    return own ? { OR: [own, permitted] } : permitted;
   } catch (error) {
     // A forbidden payroll subresource does not prevent reading an otherwise
     // authorized employee profile. Other lookup failures still propagate.
-    if (error instanceof ForbiddenError) return denied;
+    if (error instanceof ForbiddenError) return ownOnly;
     throw error;
   }
 }

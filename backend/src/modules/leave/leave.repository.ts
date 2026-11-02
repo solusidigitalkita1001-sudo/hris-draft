@@ -23,8 +23,13 @@ export class LeaveRepository {
   }
 
   // Leave Requests
-  async findAllLeaveRequests(companyId: string, filters?: { employeeId?: string; status?: string; leaveTypeId?: string }) {
+  async findAllLeaveRequests(
+    companyId: string,
+    filters?: { employeeId?: string; status?: string; leaveTypeId?: string },
+    employeeScope?: Prisma.EmployeeWhereInput,
+  ) {
     const where: Prisma.LeaveRequestWhereInput = { companyId, deletedAt: null };
+    if (employeeScope) where.employee = employeeScope;
     if (filters?.employeeId) where.employeeId = filters.employeeId;
     if (filters?.status) where.status = filters.status as any;
     if (filters?.leaveTypeId) where.leaveTypeId = filters.leaveTypeId;
@@ -129,9 +134,20 @@ export class LeaveRepository {
   }
 
   // Leave Balances
-  async findLeaveBalances(employeeId: string) {
+  /**
+   * `employeeId` is a request parameter, and an absent one used to remove the
+   * only condition in this query: every balance the tenant middleware allowed
+   * came back, for everybody. The company and the caller's employee scope are
+   * both server-derived, so an absent employeeId now narrows to whoever the
+   * caller may see rather than to everyone.
+   */
+  async findLeaveBalances(employeeId: string | undefined, companyId: string, employeeScope: Prisma.EmployeeWhereInput) {
     return prisma.leaveBalance.findMany({
-      where: { employeeId },
+      where: {
+        companyId,
+        employee: { deletedAt: null, AND: [employeeScope] },
+        ...(employeeId ? { employeeId } : {}),
+      },
       include: { leaveType: { select: { id: true, name: true, code: true, isPaid: true } } },
     });
   }

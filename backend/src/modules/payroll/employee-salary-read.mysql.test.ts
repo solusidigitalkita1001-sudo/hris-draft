@@ -56,6 +56,12 @@ withDatabase('salary read isolation (isolated real MySQL)', () => {
       components: { create: { salaryComponentId: component.id, amount: '1000.25' } } } });
     const previous = await mockDatabase.employeeSalary.create({ data: { companyId, employeeId: person.id, effectiveDate: new Date('2026-08-01'), baseSalary: '900', isActive: false } });
     const outsideSalary = await mockDatabase.employeeSalary.create({ data: { companyId, employeeId: outside.id, effectiveDate: new Date('2026-09-01'), baseSalary: '2000' } });
+    // Company-wide reach is something a role has to be granted: a role with no
+    // scope row of its own is confined to its own record now (S-H1), so the
+    // cases below that read the whole company say so. The per-test rows the
+    // `scope` helper writes are for the payroll resource and more restrictive,
+    // so they still win the merge over this baseline.
+    await mockDatabase.roleDataScope.create({ data: { companyId, roleCode: 'PAYROLL_READ_TEST', resource: 'ALL', scopeType: 'ALL' } });
     return { companyId, actorId, person, outside, component, salary, previous, outsideSalary, branch, department, subDepartment };
   }
   type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -115,8 +121,13 @@ withDatabase('salary read isolation (isolated real MySQL)', () => {
 
   it('does not expose nested salary through an employee profile without payroll permission', async () => {
     const f = await fixture();
-    const hidden = await asActor(f, () => employees.findById(f.person.id), { permissions: ['employee:read'] });
-    expect(hidden?.id).toBe(f.person.id); expect(hidden?.employeeSalaries).toEqual([]);
+    // Somebody else's salary needs the payroll permission; one's own does not,
+    // because the EMPLOYEE role no longer holds a company-wide `payroll:read`
+    // and every employee may still see what they are paid.
+    const hidden = await asActor(f, () => employees.findById(f.outside.id), { permissions: ['employee:read'] });
+    expect(hidden?.id).toBe(f.outside.id); expect(hidden?.employeeSalaries).toEqual([]);
+    const ownWithoutPayroll = await asActor(f, () => employees.findById(f.person.id), { permissions: ['employee:read'] });
+    expect(ownWithoutPayroll?.employeeSalaries.map(row => row.id)).toEqual([f.salary.id]);
     const permitted = await asActor(f, () => employees.findById(f.person.id));
     expect(permitted?.employeeSalaries.map(row => row.id)).toEqual([f.salary.id]);
     const wildcard = await asActor(f, () => employees.findById(f.person.id), { permissions: ['employee:read', 'payroll:*'] });
@@ -134,12 +145,16 @@ withDatabase('salary read isolation (isolated real MySQL)', () => {
     expect((await asActor(f, () => employees.findById(f.person.id)))?.employeeSalaries).toEqual([]);
   });
 
-  it('fails closed for manager scope, missing actor and scope lookup failures', async () => {
+  it('narrows manager scope to the team, and fails closed for a missing actor or a failed scope lookup', async () => {
     const f = await fixture(); await scope(f, 'MANAGER_TEAM');
-    await expect(list(f)).rejects.toMatchObject({ statusCode: 403 });
-    await expect(detail(f)).rejects.toMatchObject({ statusCode: 403 });
-    await expect(thr(f)).rejects.toMatchObject({ statusCode: 403 });
-    expect((await asActor(f, () => employees.findById(f.person.id)))?.employeeSalaries).toEqual([]);
+    // Heading no unit leaves the manager with their own records — it used to
+    // be a hard denial, which also denied them their own payslip and salary.
+    expect((await list(f)).map(row => row.id).sort()).toEqual([f.salary.id, f.previous.id].sort());
+    expect((await detail(f)).id).toBe(f.salary.id);
+    expect((await thr(f)).monthlyWage).toBe(1000.25);
+    await expect(detail(f, f.outsideSalary.id)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(thr(f, f.outside.id)).rejects.toMatchObject({ statusCode: 404 });
+    expect((await asActor(f, () => employees.findById(f.person.id)))?.employeeSalaries).toHaveLength(1);
     await expect(runInRequestContext({}, () => service.findAllEmployeeSalaries(f.companyId))).rejects.toMatchObject({ statusCode: 403 });
     await expect(runInRequestContext({}, () => service.findEmployeeSalaryById(f.salary.id))).rejects.toMatchObject({ statusCode: 403 });
     await expect(runInRequestContext({}, () => service.calculateEmployeeThr(f.person.id))).rejects.toMatchObject({ statusCode: 403 });

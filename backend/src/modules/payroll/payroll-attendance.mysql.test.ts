@@ -89,7 +89,9 @@ withDatabase('payroll attendance inputs (isolated real MySQL)', () => {
     }, componentAmounts: {} });
     await formulas.publish({ companyId: f.companyId, actorId: randomUUID() }, f.component.id, version.id);
   }
-  const asActor = <T>(f: Fixture, operation: () => T) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } }, operation);
+  // The maker runs payroll for the whole company, so it holds a company-wide
+  // role: a requester with no role is now confined to their own record.
+  const asActor = <T>(f: Fixture, operation: () => T) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId], roles: ['HR_MANAGER'] } }, operation);
   const run = (f: Fixture) => asActor(f, () => service.createPayrollRun({ companyId: f.companyId, periodId: f.period.id, name: 'Synthetic payroll' }, f.maker));
   const review = (f: Fixture) => asActor(f, () => service.getAttendanceSummaryForPeriod(f.period.id));
   async function expectNoPayroll(f: Fixture) {

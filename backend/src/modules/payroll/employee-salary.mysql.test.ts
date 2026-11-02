@@ -35,7 +35,9 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
       await mockDatabase.employeeSalary.deleteMany({ where: { companyId } });
       await mockDatabase.salaryComponent.deleteMany({ where: { companyId } });
       await mockDatabase.workCalendar.deleteMany({ where: { companyId } });
+      await mockDatabase.department.updateMany({ where: { companyId }, data: { headId: null } });
       await mockDatabase.employee.deleteMany({ where: { companyId } });
+      await mockDatabase.department.deleteMany({ where: { companyId } });
       await mockDatabase.branch.deleteMany({ where: { companyId } });
       await mockDatabase.companySetting.deleteMany({ where: { companyId } });
       await mockDatabase.roleDataScope.deleteMany({ where: { companyId } });
@@ -50,6 +52,11 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
     const person = await mockDatabase.employee.create({ data: { companyId, employeeNumber: randomUUID(), firstName: 'Synthetic', lastName: 'Employee', fullName: 'Synthetic Employee' } });
     const component = await mockDatabase.salaryComponent.create({ data: { companyId, code: 'BASE', name: 'Synthetic salary', type: 'ALLOWANCE', amount: '1000', isTaxable: true } });
     const other = await mockDatabase.salaryComponent.create({ data: { companyId, code: 'OTHER', name: 'Synthetic allowance', type: 'ALLOWANCE', amount: '50' } });
+    // Allocating salaries is a company-wide act, and company-wide reach is now
+    // something a role has to be granted: a role with no scope row of its own
+    // is confined to its own record (S-H1). The per-test rows below are more
+    // restrictive, so they still win the merge over this baseline.
+    await mockDatabase.roleDataScope.create({ data: { companyId, roleCode: 'PAYROLL_TEST', resource: 'ALL', scopeType: 'ALL' } });
     return { companyId, actorId, person, component, other };
   }
   type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -230,14 +237,20 @@ withDatabase('salary allocation integrity (isolated real MySQL)', () => {
     expect((await stored(outsideSalary.id)).baseSalary.toString()).toBe('1000');
   });
 
-  it('enforces self scope and fails closed for unavailable manager scope or a missing actor', async () => {
+  it('enforces self and manager scope, and fails closed for a missing actor', async () => {
     const f = await fixture();
     const outside = await mockDatabase.employee.create({ data: { companyId: f.companyId, employeeNumber: randomUUID(), firstName: 'Outside', lastName: 'Scope', fullName: 'Outside Scope' } });
     const scope = await mockDatabase.roleDataScope.create({ data: { companyId: f.companyId, roleCode: 'PAYROLL_TEST', resource: 'payroll', scopeType: 'EMPLOYEE_SELF' } });
     expect((await create(f)).employeeId).toBe(f.person.id);
     await expect(create(f, { employeeId: outside.id })).rejects.toMatchObject({ statusCode: 404 });
+    // A manager heading a team is scoped to that team and is NOT added to it:
+    // the team scope governs writes too, and a manager setting their own pay
+    // is exactly what it must not reach.
     await mockDatabase.roleDataScope.update({ where: { id: scope.id }, data: { scopeType: 'MANAGER_TEAM' } });
-    await expect(create(f, { effectiveDate: '2026-10-01T00:00:00Z' })).rejects.toMatchObject({ statusCode: 403 });
+    const department = await mockDatabase.department.create({ data: { companyId: f.companyId, code: randomUUID(), name: 'Managed', headId: f.person.id } });
+    await mockDatabase.employee.update({ where: { id: outside.id }, data: { departmentId: department.id } });
+    await expect(create(f, { effectiveDate: '2026-10-01T00:00:00Z' })).rejects.toMatchObject({ statusCode: 404 });
+    expect((await create(f, { employeeId: outside.id, effectiveDate: '2026-11-01T00:00:00Z' })).employeeId).toBe(outside.id);
     await expect(runInRequestContext({}, () => service.createEmployeeSalary(input(f)))).rejects.toMatchObject({ statusCode: 403 });
   });
 

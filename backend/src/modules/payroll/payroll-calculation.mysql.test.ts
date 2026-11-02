@@ -87,10 +87,13 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     const row = await mockDatabase.loan.create({ data: { companyId: f.companyId, employeeId, loanTypeId: loanType.id, amount: '30.30', remainingBalance: '30.30', installmentAmount: '30.30', totalInstallments: 1, status: 'ACTIVE', reason: 'Synthetic test' } });
     return mockDatabase.loanInstallment.create({ data: { loanId: row.id, amount: '30.30', dueDate: new Date('2026-10-01') } });
   }
-  const run = (f: Awaited<ReturnType<typeof fixture>>, periodId = f.period.id) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+  // Running payroll is a company-wide act, so the maker holds a company-wide
+  // role. A requester with no role at all is now confined to their own record
+  // (see COMPANY_WIDE_DEFAULT_ROLES) instead of inheriting the whole company.
+  const run = (f: Awaited<ReturnType<typeof fixture>>, periodId = f.period.id) => runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId], roles: ['HR_MANAGER'] } },
     () => service.createPayrollRun({ companyId: f.companyId, periodId, name: 'Synthetic payroll' }, f.maker));
   const runOfType = (f: Awaited<ReturnType<typeof fixture>>, runType: 'THR' | 'SEVERANCE' | 'CORRECTION') =>
-    runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+    runInRequestContext({ user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId], roles: ['HR_MANAGER'] } },
       () => service.createPayrollRun({ companyId: f.companyId, periodId: f.period.id, name: `Synthetic ${runType}`, runType }, f.maker));
   async function expectNoPayroll(f: Awaited<ReturnType<typeof fixture>>) {
     for (const count of [await mockDatabase.payrollRun.count({ where: { companyId: f.companyId } }),
@@ -332,7 +335,7 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     await mockDatabase.payrollPeriod.update({ where: { id: closed.id }, data: { status: 'CLOSED' } });
 
     const registered = await runInRequestContext(
-      { user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+      { user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId], roles: ['HR_MANAGER'] } },
       () => payrollArrearsService.register(f.companyId, { employeeId: person.person.id, sourcePeriodId: closed.id }),
     );
     expect(registered.status).toBe('PENDING');
@@ -364,7 +367,7 @@ withDatabase('atomic payroll calculation (isolated real MySQL)', () => {
     const person = await employee(f);
     await expect(
       runInRequestContext(
-        { user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId] } },
+        { user: { id: f.maker, email: 'payroll@example.test', companyId: f.companyId, companyScope: [f.companyId], roles: ['HR_MANAGER'] } },
         () => payrollArrearsService.register(f.companyId, { employeeId: person.person.id, sourcePeriodId: f.period.id }),
       ),
     ).rejects.toThrow(/closed period only/i);
