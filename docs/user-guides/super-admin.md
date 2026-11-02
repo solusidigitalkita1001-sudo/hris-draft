@@ -2,7 +2,7 @@
 
 Untuk administrator platform: melewati semua pembatasan role/permission, melihat seluruh menu di semua perusahaan, dan memegang dua kendali eksklusif — **matriks metode absensi per karyawan** dan menu **Aset**. Juga role kunci untuk penyiapan awal sistem.
 
-**Akun demo:** admin@hrms.com / Admin123!
+**Akun demo:** admin@hrms.com — password admin di-set saat seed (`SEED_ADMIN_PASSWORD` / dicetak sekali)
 
 ## Menu yang Anda lihat
 
@@ -15,7 +15,7 @@ Pengaturan Menu Access/Data Scope tidak pernah membatasi Super Admin — Anda se
 
 ## Mulai
 
-1. Masuk di http://localhost:5173 dengan admin@hrms.com / Admin123!.
+1. Masuk di http://localhost:5173 dengan admin@hrms.com dan password admin yang di-set saat seed (`SEED_ADMIN_PASSWORD` / dicetak sekali).
 2. Topbar: chip perusahaan aktif (Anda dapat berpindah ke perusahaan mana pun), toggle tema, sakelar bahasa ID | EN (kini mengganti seluruh halaman, termasuk format tanggal), lonceng notifikasi, menu profil (Profile, Settings, Sign out).
    - Data demo sudah berisi **dua perusahaan** dalam grup PT Holding Utama, jadi switcher benar-benar bisa diuji: **PT Teknologi Maju** (TECH) dan **PT Digital Nusantara** (DIGI — 1 cabang DIGI-HQ, departemen Product & Sales, hierarki Direktur → Manager → Staff, 8 karyawan aktif, tanpa akun login sendiri). Akun Anda tidak dibatasi cakupan perusahaan, sehingga keduanya tampil di chip.
 3. Dashboard persona admin: statistik perusahaan aktif, kartu **Approval Menunggu** (judul dokumen + nama pengaju + satu baris ringkas per pengajuan), kartu Administrasi, analitik headcount & turnover.

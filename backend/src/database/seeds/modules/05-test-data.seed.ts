@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { passwordHandler } from '@/shared/security/PasswordHandler';
 import fs from 'fs/promises';
 import path from 'path';
+import { assertTestDataSeedAllowed } from './test-data-guard';
 
 const prisma = new PrismaClient();
 
@@ -82,6 +83,11 @@ function buildCalendarDaysForYear(
 }
 
 export async function seedTestData(): Promise<void> {
+  // Fix-review M4: re-checked here, not just by the caller in seed.ts, so
+  // this function refuses to run against a production environment even if
+  // something ever calls it directly (a script, a test, a future caller)
+  // without going through seed.ts's own guard.
+  assertTestDataSeedAllowed();
   console.log('\n--- Seeding test data ---\n');
   const companyStartedAt = new Date('2024-07-01T09:00:00+07:00');
 
@@ -2788,7 +2794,7 @@ export async function seedTestData(): Promise<void> {
   console.log('\n  ✓ Test data seeding completed!');
   console.log('  ─────────────────────────────────────────');
   console.log('  Login credentials:');
-  console.log('  Super Admin: admin@hrms.com / Admin123!');
+  console.log('  Super Admin: admin@hrms.com / (see "Seeding admin user..." output above)');
   console.log('  Employee:     bambang@tech.com / Employee123!');
   console.log('  Employee:     siti@tech.com / Employee123!');
   console.log('  HR Manager:   dewi@tech.com / Employee123!');

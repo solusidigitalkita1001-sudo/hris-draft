@@ -2,7 +2,7 @@
 
 Untuk administrator grup perusahaan (holding): semua kewenangan Company Admin di seluruh perusahaan dalam grup, ditambah hak RBAC penuh (role, permission, menu access, data scope), rekrutmen, dan siklus payroll dari pembuatan run sampai pencatatan pembayaran.
 
-> **Belum ada akun demo GROUP_ADMIN.** Untuk mencobanya: login sebagai Super Admin (admin@hrms.com / Admin123!) → Administrasi → Pengguna → buat/edit pengguna → centang role GROUP_ADMIN.
+> **Belum ada akun demo GROUP_ADMIN.** Untuk mencobanya: login sebagai Super Admin (admin@hrms.com, password admin di-set saat seed — `SEED_ADMIN_PASSWORD` / dicetak sekali) → Administrasi → Pengguna → buat/edit pengguna → centang role GROUP_ADMIN.
 
 ## Menu yang Anda lihat
 

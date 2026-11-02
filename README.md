@@ -65,11 +65,26 @@ docs/       - Architecture and design documentation
 
 5. Open http://localhost:5173
 
-### Default Credentials
-- Email: admin@hrms.com
-- Password: Admin123!
+### Admin Credentials
 
-**Change the default password immediately in production!**
+The seed no longer ships a fixed admin password. It creates
+`admin@hrms.com` with `mustChangePassword: true` (the UI shows a
+change-password notice on next login — this is not a server-side gate that
+blocks other requests) and resolves its password like this:
+
+- Set `SEED_ADMIN_PASSWORD` before seeding to pin a known password (e.g. for
+  provisioning scripts). It must satisfy the repo's password policy, and must
+  not have leading/trailing whitespace — both are rejected outright, not
+  silently fixed up.
+- Leave it unset (or blank) and the seed generates a cryptographically
+  random password, printed **once** to the console when the admin user is
+  created. Save it immediately — it is never shown again.
+- If `admin@hrms.com` already exists, the seed leaves it untouched and
+  `SEED_ADMIN_PASSWORD` is ignored for that run (logged explicitly).
+
+Demo/test data (seeded unless `SKIP_TEST_DATA` is set, and always refused
+when `NODE_ENV=production`) still uses the shared `Employee123!` password for
+its sample employees — that data only exists for local dev/demo and e2e.
 
 ## Project Structure
 

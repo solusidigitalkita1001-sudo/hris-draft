@@ -20,7 +20,7 @@ Aplikasi berjalan di **http://localhost:5173**.
 
 | Role | Email | Kata sandi |
 |---|---|---|
-| SUPER_ADMIN | admin@hrms.com | Admin123! |
+| SUPER_ADMIN | admin@hrms.com | password admin di-set saat seed (`SEED_ADMIN_PASSWORD` / dicetak sekali) |
 | COMPANY_ADMIN | rudi@tech.com | Employee123! |
 | HR_MANAGER | dewi@tech.com | Employee123! |
 | HR_STAFF | rina@tech.com | Employee123! |
