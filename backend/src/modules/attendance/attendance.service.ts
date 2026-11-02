@@ -363,6 +363,13 @@ export class AttendanceService {
       dayType: context.schedule.dayType,
       workStart: context.schedule.workStart ?? null,
       workEnd: context.schedule.workEnd ?? null,
+      // The clock `workStart`/`workEnd` were read against. Purely forensic:
+      // nothing reads it back, and it is not frozen — checkout re-stamps the
+      // snapshot from a freshly resolved context, so the row records the last
+      // context resolved rather than the one check-in was judged by. It is
+      // still worth writing, because a stored `lateMinutes` with no record of
+      // the clock behind it cannot be explained to the person it was taken off.
+      timezone: context.timezone,
       warnings,
     } as Prisma.InputJsonValue;
   }
@@ -521,7 +528,7 @@ export class AttendanceService {
 
     if (data.checkIn && status === AttendanceStatus.PRESENT && context.schedule.workStart) {
       const checkIn = new Date(data.checkIn);
-      const scheduledStart = buildScheduledTime(attendanceDate, context.schedule.workStart);
+      const scheduledStart = buildScheduledTime(attendanceDate, context.schedule.workStart, context.timezone);
       const toleratedStart = new Date(scheduledStart);
       toleratedStart.setMinutes(toleratedStart.getMinutes() + context.policy.lateToleranceMinutes);
 
@@ -829,7 +836,12 @@ export class AttendanceService {
     }
 
     const checkOutTime = new Date(data.checkOut);
-    const scheduledEnd = buildScheduledEndTime(record.date, context.schedule.workStart, context.schedule.workEnd);
+    const scheduledEnd = buildScheduledEndTime(
+      record.date,
+      context.schedule.workStart,
+      context.schedule.workEnd,
+      context.timezone,
+    );
     let earlyLeaveMinutes = 0;
 
     if (scheduledEnd) {

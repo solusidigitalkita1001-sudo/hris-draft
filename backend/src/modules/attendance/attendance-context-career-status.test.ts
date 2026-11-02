@@ -24,10 +24,14 @@ jest.mock('@/shared/database/prisma', () => {
     },
     branch: {
       findFirst: jest.fn(async ({ where }: { where: Row }) => ({
-        id: where.id, name: String(where.id), code: String(where.id), latitude: null, longitude: null,
+        id: where.id, name: String(where.id), code: String(where.id),
+        latitude: null, longitude: null, timezone: 'Asia/Jakarta',
       })),
     },
     department: { findFirst: jest.fn(async () => null) },
+    // The resolved context now carries the timezone the schedule is written
+    // in; see attendance-context.timezone.test.ts.
+    company: { findFirst: jest.fn(async () => ({ timezone: 'Asia/Jakarta' })) },
     branchAttendancePolicy: { findFirst: jest.fn(async () => null) },
   };
   return { __esModule: true, default: client, prisma: client };

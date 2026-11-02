@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { BadRequestError, NotFoundError } from '@/shared/exceptions/AppError';
 import { prisma } from '@/shared/database/prisma';
+import { resolveEffectiveTimezone } from '@/shared/attendance/scheduled-time';
 import {
   ResolvedEmployeeDaySchedule,
   WorkCalendarResolutionContext,
@@ -44,6 +45,13 @@ export interface AttendanceContextResolution {
     longitude: number | null;
   } | null;
   departmentId: string | null;
+  /**
+   * The timezone the employee's schedule is written in: their branch's, else
+   * the company's. Composing `08:00` into an instant needs it, and taking the
+   * server process timezone instead made every schedule seven hours wrong in
+   * production, where the container runs UTC.
+   */
+  timezone: string;
   calendarId: string | null;
   schedule: ResolvedEmployeeDaySchedule;
   policy: ResolvedAttendancePolicy;
@@ -157,11 +165,11 @@ export class AttendanceContextService {
     const rawBranchId = latestCareer?.toBranchId ?? employee.branchId ?? null;
     const rawDepartmentId = latestCareer?.toDepartmentId ?? employee.departmentId ?? null;
 
-    const [resolvedBranch, resolvedDepartment] = await Promise.all([
+    const [resolvedBranch, resolvedDepartment, resolvedCompany] = await Promise.all([
       rawBranchId
         ? prisma.branch.findFirst({
             where: { id: rawBranchId, companyId: resolvedCompanyId, deletedAt: null },
-            select: { id: true, name: true, code: true, latitude: true, longitude: true },
+            select: { id: true, name: true, code: true, latitude: true, longitude: true, timezone: true },
           })
         : null,
       rawDepartmentId
@@ -170,6 +178,10 @@ export class AttendanceContextService {
             select: { id: true },
           })
         : null,
+      prisma.company.findFirst({
+        where: { id: resolvedCompanyId, deletedAt: null },
+        select: { timezone: true },
+      }),
     ]);
 
     if (rawBranchId && !resolvedBranch) {
@@ -214,6 +226,7 @@ export class AttendanceContextService {
           }
         : null,
       departmentId: resolvedDepartment?.id ?? null,
+      timezone: resolveEffectiveTimezone(resolvedBranch?.timezone, resolvedCompany?.timezone),
       calendarId: schedule.calendarId,
       schedule,
       policy: buildFallbackPolicy(effectivePolicy, resolvedBranch),
